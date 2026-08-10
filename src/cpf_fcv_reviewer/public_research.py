@@ -14,7 +14,7 @@ class CurrentContextClaim(BaseModel):
 
     claim_id: str
     text: str
-    source_url: str | None = None
+    source_url: str | None
     source_date: date
     source_type: str
     relevance: str
@@ -34,7 +34,7 @@ def retain_public_claims(
         elif not _is_public_http_url(claim.source_url):
             rejected[claim.claim_id] = "public source URL is required"
         elif not claim.relevance.strip():
-            rejected[claim.claim_id] = "relevance is required"
+            rejected[claim.claim_id] = "material relevance is required"
         else:
             retained.append(claim)
 
@@ -50,7 +50,7 @@ def _is_public_http_url(url: str | None) -> bool:
 
 
 class PublicResearchGateway(Protocol):
-    def search(self, question: str) -> str: ...
+    def search(self, prompt: str) -> str: ...
 
 
 class AnthropicPublicResearchGateway:
@@ -58,7 +58,7 @@ class AnthropicPublicResearchGateway:
         self._client = Anthropic(api_key=api_key)
         self._model_id = model_id
 
-    def search(self, question: str) -> str:
+    def search(self, prompt: str) -> str:
         response = self._client.beta.messages.create(
             model=self._model_id,
             max_tokens=5000,
@@ -72,16 +72,16 @@ class AnthropicPublicResearchGateway:
             messages=[
                 {
                     "role": "user",
-                    "content": f"{load_public_research_prompt()}\n\nQuestion: {question}",
+                    "content": prompt,
                 }
             ],
             betas=["web-search-2025-03-05"],
         )
         return "\n".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"
-        )
+        ).strip()
 
 
-def load_public_research_prompt() -> str:
+def load_research_prompt() -> str:
     prompt_path = Path(__file__).parents[2] / "prompts" / "public_research.md"
     return prompt_path.read_text(encoding="utf-8")
