@@ -3,7 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    StrictBool,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 
 class RegistryUnavailable(RuntimeError):
@@ -64,7 +71,7 @@ class RegistryBundle(BaseModel):
     owner: str
     approved_at: datetime
     expires_at: datetime
-    synthetic: bool
+    synthetic: StrictBool
     entries: tuple[RegistryEntry, ...]
 
     @field_validator("bundle_id", "version", "owner")
@@ -97,10 +104,16 @@ def load_registry_bundle(
     allow_synthetic: bool,
     now: datetime | None = None,
 ) -> RegistryBundle:
-    if not path.exists():
-        raise RegistryUnavailable("Approved registry bundle is unavailable.")
     try:
+        if type(allow_synthetic) is not bool:
+            raise RegistryUnavailable("Approved registry bundle is invalid.")
+        if now is not None and (now.tzinfo is None or now.utcoffset() is None):
+            raise RegistryUnavailable("Approved registry bundle is invalid.")
+        if not path.exists():
+            raise RegistryUnavailable("Approved registry bundle is unavailable.")
         bundle = RegistryBundle.model_validate_json(path.read_text(encoding="utf-8"))
+    except RegistryUnavailable:
+        raise
     except (OSError, UnicodeDecodeError, ValidationError):
         raise RegistryUnavailable("Approved registry bundle is invalid.") from None
     if bundle.synthetic and not allow_synthetic:

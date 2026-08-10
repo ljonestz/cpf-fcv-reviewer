@@ -1,5 +1,6 @@
 import copy
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -143,3 +144,38 @@ def test_hydrated_referrals_are_immutable_dict_compatible_and_json_serializable(
         referral["approved_text"] = "Replacement"
     assert json.loads(json.dumps(referral)) == dict(referral)
     assert copy.deepcopy(referral) == referral
+
+
+def test_registry_rejects_string_synthetic_flag(tmp_path):
+    data = registry_data()
+    data["synthetic"] = "false"
+
+    with pytest.raises(RegistryUnavailable, match="^Approved registry bundle is invalid\\.$"):
+        load_registry_bundle(write_bundle(tmp_path, data), allow_synthetic=True)
+
+
+@pytest.mark.parametrize("allow_synthetic", ["false", 0, None])
+def test_registry_rejects_non_bool_synthetic_permission(tmp_path, allow_synthetic):
+    with pytest.raises(RegistryUnavailable, match="^Approved registry bundle is invalid\\.$"):
+        load_registry_bundle(
+            write_bundle(tmp_path, registry_data()), allow_synthetic=allow_synthetic
+        )
+
+
+def test_registry_rejects_naive_now(tmp_path):
+    with pytest.raises(RegistryUnavailable, match="^Approved registry bundle is invalid\\.$"):
+        load_registry_bundle(
+            write_bundle(tmp_path, registry_data()),
+            allow_synthetic=True,
+            now=datetime(2026, 8, 10),
+        )
+
+
+def test_registry_normalizes_existence_check_error(monkeypatch):
+    def raising_exists(self):
+        raise OSError("unavailable path")
+
+    monkeypatch.setattr(Path, "exists", raising_exists)
+
+    with pytest.raises(RegistryUnavailable, match="^Approved registry bundle is invalid\\.$"):
+        load_registry_bundle(FIXTURE, allow_synthetic=True)
