@@ -53,12 +53,11 @@ class VolatileSessionStore:
                 raise SessionExpired(session_id)
             return state
 
-    def update(self, session_id: str, payload: dict) -> SessionState:
+    def update(self, session_id: str, **values) -> None:
         with self._lock:
             state = self.get(session_id)
-            state.payload.update(payload)
+            state.payload.update(values)
             state.expires_at = self._clock() + self._ttl
-            return state
 
     def emit(self, session_id: str, event_type: str, data: dict) -> None:
         with self._lock:
