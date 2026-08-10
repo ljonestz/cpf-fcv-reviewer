@@ -318,3 +318,54 @@ def test_allows_ordinary_domains_with_numeric_subdomains():
 
     assert len(retained) == 1
     assert rejected == {}
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "https://224.0.0.1/context-update",
+        "https://239.255.255.250/context-update",
+        "https://[ff02::1]/context-update",
+    ],
+)
+def test_rejects_multicast_literal_source_urls(source_url: str):
+    retained, rejected = retain_public_claims((_claim(source_url=source_url),))
+
+    assert retained == ()
+    assert rejected == {"claim-1": "public source URL is required"}
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "https://example.org/context\nupdate",
+        "https://example.org/context\rupdate",
+        "https://example.org/context\tupdate",
+        "https://example.org/context\x00update",
+    ],
+)
+def test_rejects_source_urls_containing_c0_controls(source_url: str):
+    retained, rejected = retain_public_claims((_claim(source_url=source_url),))
+
+    assert retained == ()
+    assert rejected == {"claim-1": "public source URL is required"}
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "https://source.example/context-update",
+        "https://source.onion/context-update",
+        "https://source.localhost/context-update",
+        "https://source.local/context-update",
+        "https://source.internal/context-update",
+        "https://source.home.arpa/context-update",
+        "https://source.test/context-update",
+        "https://source.invalid/context-update",
+    ],
+)
+def test_rejects_all_special_use_hostname_suffixes(source_url: str):
+    retained, rejected = retain_public_claims((_claim(source_url=source_url),))
+
+    assert retained == ()
+    assert rejected == {"claim-1": "public source URL is required"}

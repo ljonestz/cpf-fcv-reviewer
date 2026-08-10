@@ -35,6 +35,8 @@ class CurrentContextClaim(BaseModel):
     def normalizes_source_url(cls, value: str | None) -> str | None:
         if value is None:
             return None
+        if any(ord(character) < 32 for character in value):
+            return value
         return value.strip()
 
 
@@ -68,6 +70,9 @@ def _is_public_http_url(url: str | None) -> bool:
     if url is None:
         return False
 
+
+    if any(ord(character) < 32 for character in url):
+        return False
     try:
         parsed = urlparse(url)
         hostname = parsed.hostname
@@ -86,7 +91,16 @@ def _is_public_http_url(url: str | None) -> bool:
     normalized_hostname = hostname.rstrip(".").lower()
 
     try:
-        return ip_address(normalized_hostname).is_global
+        address = ip_address(normalized_hostname)
+        return (
+            address.is_global
+            and not address.is_multicast
+            and not address.is_reserved
+            and not address.is_unspecified
+            and not address.is_loopback
+            and not address.is_link_local
+            and not address.is_private
+        )
     except ValueError:
         if _is_legacy_numeric_authority(normalized_hostname):
             return False
@@ -106,7 +120,16 @@ def _is_legacy_numeric_authority(hostname: str) -> bool:
 
 
 def _is_valid_public_hostname(hostname: str) -> bool:
-    special_suffixes = (".local", ".localhost", ".internal", ".home.arpa", ".test", ".invalid")
+    special_suffixes = (
+        ".example",
+        ".invalid",
+        ".local",
+        ".localhost",
+        ".internal",
+        ".home.arpa",
+        ".onion",
+        ".test",
+    )
     if "." not in hostname or len(hostname) > 253 or hostname.endswith(special_suffixes):
         return False
 
