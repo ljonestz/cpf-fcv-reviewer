@@ -88,7 +88,21 @@ def _is_public_http_url(url: str | None) -> bool:
     try:
         return ip_address(normalized_hostname).is_global
     except ValueError:
+        if _is_legacy_numeric_authority(normalized_hostname):
+            return False
         return _is_valid_public_hostname(normalized_hostname)
+
+
+def _is_legacy_numeric_authority(hostname: str) -> bool:
+    return all(
+        label.isdecimal()
+        or (
+            label.startswith("0x")
+            and len(label) > 2
+            and all(character in "0123456789abcdef" for character in label[2:])
+        )
+        for label in hostname.split(".")
+    )
 
 
 def _is_valid_public_hostname(hostname: str) -> bool:

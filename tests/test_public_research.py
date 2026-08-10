@@ -296,3 +296,25 @@ def test_public_research_prompt_specifies_authority_field_constraints():
 
     for term in expected_terms:
         assert term in prompt
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "https://127.1/context-update",
+        "https://0177.0.0.1/context-update",
+        "https://0x7f.0.0.1/context-update",
+    ],
+)
+def test_rejects_dotted_legacy_numeric_source_authorities(source_url: str):
+    retained, rejected = retain_public_claims((_claim(source_url=source_url),))
+
+    assert retained == ()
+    assert rejected == {"claim-1": "public source URL is required"}
+
+
+def test_allows_ordinary_domains_with_numeric_subdomains():
+    retained, rejected = retain_public_claims((_claim(source_url="https://2026.example.org/update"),))
+
+    assert len(retained) == 1
+    assert rejected == {}
