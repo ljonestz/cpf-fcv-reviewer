@@ -2,7 +2,14 @@ from cpf_fcv_reviewer.app import create_app
 
 
 def test_health_reports_release_without_secrets():
-    app = create_app({"TESTING": True, "APP_RELEASE": "test-release"})
+    api_key = "sentinel-api-key-must-not-leak"
+    app = create_app(
+        {
+            "TESTING": True,
+            "APP_RELEASE": "test-release",
+            "ANTHROPIC_API_KEY": api_key,
+        }
+    )
     response = app.test_client().get("/health")
 
     assert response.status_code == 200
@@ -11,7 +18,7 @@ def test_health_reports_release_without_secrets():
         "release": "test-release",
         "storage": "volatile",
     }
-    assert "ANTHROPIC_API_KEY" not in response.get_data(as_text=True)
+    assert api_key not in response.get_data(as_text=True)
 
 
 def test_production_requires_api_key(monkeypatch):
@@ -23,3 +30,19 @@ def test_production_requires_api_key(monkeypatch):
         assert str(exc) == "ANTHROPIC_API_KEY is required outside tests."
     else:
         raise AssertionError("create_app must fail closed without an API key")
+
+
+def test_production_rejects_whitespace_only_api_key():
+    try:
+        create_app({"TESTING": False, "ANTHROPIC_API_KEY": "   "})
+    except RuntimeError as exc:
+        assert str(exc) == "ANTHROPIC_API_KEY is required outside tests."
+    else:
+        raise AssertionError("create_app must reject a whitespace-only API key")
+
+
+def test_session_ttl_override_skips_malformed_environment_value(monkeypatch):
+    monkeypatch.setenv("SESSION_TTL_SECONDS", "not-an-integer")
+    app = create_app({"TESTING": True, "SESSION_TTL_SECONDS": 120})
+
+    assert app.config["SESSION_TTL_SECONDS"] == 120
