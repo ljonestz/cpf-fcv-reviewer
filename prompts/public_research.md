@@ -15,4 +15,13 @@ may be used.
 Distinguish source-supported fact from interpretation. Treat conflict-sensitive issues with
 caution and represent credible disagreement rather than overstating certainty.
 
-Return only a JSON array of `CurrentContextClaim` objects.
+Return JSON array only. Every `CurrentContextClaim` object must include:
+
+- claim_id: string
+- text: string
+- source_url: string or null
+- source_date: date
+- source_type: string
+- relevance: string
+- relationship: corroborates | qualifies | contradicts | unresolved
+- licensed_data_required: boolean

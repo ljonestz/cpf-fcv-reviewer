@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Literal, Protocol
 from urllib.parse import urlparse
 
 from anthropic import Anthropic
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
 
 class CurrentContextClaim(BaseModel):
@@ -19,7 +21,21 @@ class CurrentContextClaim(BaseModel):
     source_type: str
     relevance: str
     relationship: Literal["corroborates", "qualifies", "contradicts", "unresolved"]
-    licensed_data_required: bool
+    licensed_data_required: StrictBool
+
+    @field_validator("claim_id", "text", "source_type")
+    @classmethod
+    def requires_nonblank_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Current-context claim text fields cannot be blank.")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def normalizes_source_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip()
 
 
 def retain_public_claims(
@@ -27,9 +43,16 @@ def retain_public_claims(
 ) -> tuple[tuple[CurrentContextClaim, ...], dict[str, str]]:
     retained: list[CurrentContextClaim] = []
     rejected: dict[str, str] = {}
+    duplicate_claim_ids = {
+        claim_id
+        for claim_id, count in Counter(claim.claim_id for claim in claims).items()
+        if count > 1
+    }
 
     for claim in claims:
-        if claim.licensed_data_required:
+        if claim.claim_id in duplicate_claim_ids:
+            rejected[claim.claim_id] = "duplicate claim ID is not permitted"
+        elif claim.licensed_data_required:
             rejected[claim.claim_id] = "licensed data is not permitted"
         elif not _is_public_http_url(claim.source_url):
             rejected[claim.claim_id] = "public source URL is required"
@@ -45,8 +68,28 @@ def _is_public_http_url(url: str | None) -> bool:
     if url is None:
         return False
 
-    parsed = urlparse(url.strip())
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+    except ValueError:
+        return False
+
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        return False
+
+    normalized_hostname = hostname.rstrip(".").lower()
+    if normalized_hostname == "localhost" or normalized_hostname.endswith(".local"):
+        return False
+
+    try:
+        return ip_address(normalized_hostname).is_global
+    except ValueError:
+        return True
 
 
 class PublicResearchGateway(Protocol):
