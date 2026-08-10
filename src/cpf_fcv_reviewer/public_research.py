@@ -98,6 +98,7 @@ def _is_public_http_url(url: str | None) -> bool:
             and not address.is_reserved
             and not address.is_unspecified
             and not address.is_loopback
+            and not getattr(address, "is_site_local", False)
             and not address.is_link_local
             and not address.is_private
         )

@@ -369,3 +369,10 @@ def test_rejects_all_special_use_hostname_suffixes(source_url: str):
 
     assert retained == ()
     assert rejected == {"claim-1": "public source URL is required"}
+
+
+def test_rejects_deprecated_ipv6_site_local_source_url():
+    retained, rejected = retain_public_claims((_claim(source_url="https://[fec0::1]/context-update"),))
+
+    assert retained == ()
+    assert rejected == {"claim-1": "public source URL is required"}
