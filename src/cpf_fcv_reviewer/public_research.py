@@ -28,7 +28,7 @@ class CurrentContextClaim(BaseModel):
     def requires_nonblank_text(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("Current-context claim text fields cannot be blank.")
-        return value
+        return value.strip()
 
     @field_validator("source_url")
     @classmethod
@@ -71,6 +71,7 @@ def _is_public_http_url(url: str | None) -> bool:
     try:
         parsed = urlparse(url)
         hostname = parsed.hostname
+        _ = parsed.port
     except ValueError:
         return False
 
@@ -83,13 +84,27 @@ def _is_public_http_url(url: str | None) -> bool:
         return False
 
     normalized_hostname = hostname.rstrip(".").lower()
-    if normalized_hostname == "localhost" or normalized_hostname.endswith(".local"):
-        return False
 
     try:
         return ip_address(normalized_hostname).is_global
     except ValueError:
-        return True
+        return _is_valid_public_hostname(normalized_hostname)
+
+
+def _is_valid_public_hostname(hostname: str) -> bool:
+    special_suffixes = (".local", ".localhost", ".internal", ".home.arpa", ".test", ".invalid")
+    if "." not in hostname or len(hostname) > 253 or hostname.endswith(special_suffixes):
+        return False
+
+    return all(
+        label
+        and len(label) <= 63
+        and label.isascii()
+        and label[0].isalnum()
+        and label[-1].isalnum()
+        and all(character.isalnum() or character == "-" for character in label)
+        for label in hostname.split(".")
+    )
 
 
 class PublicResearchGateway(Protocol):

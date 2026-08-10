@@ -17,11 +17,11 @@ caution and represent credible disagreement rather than overstating certainty.
 
 Return JSON array only. Every `CurrentContextClaim` object must include:
 
-- claim_id: string
-- text: string
-- source_url: string or null
-- source_date: date
-- source_type: string
-- relevance: string
+- claim_id: unique nonblank string
+- text: nonblank string
+- source_url: public HTTP(S) URL or null
+- source_date: ISO YYYY-MM-DD date
+- source_type: nonblank string
+- relevance: nonblank string
 - relationship: corroborates | qualifies | contradicts | unresolved
 - licensed_data_required: boolean

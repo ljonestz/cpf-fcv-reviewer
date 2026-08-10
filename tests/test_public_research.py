@@ -204,15 +204,94 @@ def test_public_research_prompt_enumerates_the_json_contract():
     prompt = public_research.load_research_prompt()
 
     expected_terms = (
-        "claim_id: string",
-        "text: string",
-        "source_url: string or null",
-        "source_date: date",
-        "source_type: string",
-        "relevance: string",
+        "claim_id:",
+        "text:",
+        "source_url:",
+        "source_date:",
+        "source_type:",
+        "relevance:",
         "relationship: corroborates | qualifies | contradicts | unresolved",
         "licensed_data_required: boolean",
         "JSON array only",
+    )
+
+    for term in expected_terms:
+        assert term in prompt
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "https://foo.localhost/context-update",
+        "https://intranet/context-update",
+        "https://2130706433/context-update",
+        "https://0x7f000001/context-update",
+        "https://example..org/context-update",
+        "https://example.org:99999/context-update",
+        "https://-bad.example.org/context-update",
+        "https://bad-.example.org/context-update",
+        "https://bad_.example.org/context-update",
+        "https://service.internal/context-update",
+        "https://service.home.arpa/context-update",
+        "https://example.test/context-update",
+        "https://example.invalid/context-update",
+    ],
+)
+def test_rejects_non_fqdn_and_special_use_public_source_urls(source_url: str):
+    retained, rejected = retain_public_claims((_claim(source_url=source_url),))
+
+    assert retained == ()
+    assert rejected == {"claim-1": "public source URL is required"}
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "https://example.org/context-update",
+        "https://subdomain.example.org/context-update",
+        "https://8.8.8.8/context-update",
+    ],
+)
+def test_accepts_fqdn_and_global_literal_ip_source_urls(source_url: str):
+    retained, rejected = retain_public_claims((_claim(source_url=source_url),))
+
+    assert len(retained) == 1
+    assert rejected == {}
+
+
+def test_normalizes_claim_identity_and_required_text_fields():
+    claim = _claim(
+        claim_id="  normalized-id  ",
+        text="  A normalized claim.  ",
+        source_type="  public analysis  ",
+    )
+
+    assert claim.claim_id == "normalized-id"
+    assert claim.text == "A normalized claim."
+    assert claim.source_type == "public analysis"
+
+
+def test_duplicate_detection_uses_normalized_claim_ids():
+    first = _claim(claim_id=" duplicate-id ")
+    second = _claim(claim_id="duplicate-id")
+
+    retained, rejected = retain_public_claims((first, second))
+
+    assert retained == ()
+    assert rejected == {"duplicate-id": "duplicate claim ID is not permitted"}
+
+
+def test_public_research_prompt_specifies_authority_field_constraints():
+    prompt = public_research.load_research_prompt()
+
+    expected_terms = (
+        "claim_id: unique nonblank string",
+        "text: nonblank string",
+        "source_url: public HTTP(S) URL or null",
+        "source_date: ISO YYYY-MM-DD date",
+        "source_type: nonblank string",
+        "relevance: nonblank string",
+        "licensed_data_required: boolean",
     )
 
     for term in expected_terms:
