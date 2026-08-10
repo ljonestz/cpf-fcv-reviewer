@@ -1,5 +1,13 @@
 .env
+.env.*
+!.env.example
+.flaskenv
 *.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
 *credentials*
 __pycache__/
 *.pyc
