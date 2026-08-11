@@ -41,9 +41,15 @@ def segments_from_pdf_pages(name: str, pages: list[str]) -> ExtractedDocument:
     return ExtractedDocument(name, tuple(segments), tuple(warnings))
 
 
-def extract_pdf_bytes(data: bytes, name: str) -> ExtractedDocument:
+def extract_pdf_bytes(
+    data: bytes,
+    name: str,
+    *,
+    max_pages: int | None = None,
+) -> ExtractedDocument:
     reader = PdfReader(BytesIO(data))
-    return segments_from_pdf_pages(name, [(page.extract_text() or "") for page in reader.pages])
+    pages = reader.pages if max_pages is None else reader.pages[:max_pages]
+    return segments_from_pdf_pages(name, [(page.extract_text() or "") for page in pages])
 
 
 def extract_docx_bytes(data: bytes, name: str) -> ExtractedDocument:
@@ -108,10 +114,15 @@ def extract_text_bytes(data: bytes, name: str) -> ExtractedDocument:
     return ExtractedDocument(name, (segment,) if text else (), ())
 
 
-def extract_document(data: bytes, name: str) -> ExtractedDocument:
+def extract_document(
+    data: bytes,
+    name: str,
+    *,
+    max_pdf_pages: int | None = None,
+) -> ExtractedDocument:
     suffix = Path(name).suffix.lower()
     if suffix == ".pdf":
-        return extract_pdf_bytes(data, name)
+        return extract_pdf_bytes(data, name, max_pages=max_pdf_pages)
     if suffix == ".docx":
         return extract_docx_bytes(data, name)
     if suffix in {".txt", ".md"}:

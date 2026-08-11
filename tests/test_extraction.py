@@ -1,10 +1,13 @@
 from io import BytesIO
+from types import SimpleNamespace
 
 import pytest
 from docx import Document
 
+from cpf_fcv_reviewer import extraction
 from cpf_fcv_reviewer.extraction import (
     extract_docx_bytes,
+    extract_pdf_bytes,
     require_readable_primary,
     segments_from_pdf_pages,
 )
@@ -44,6 +47,30 @@ def test_pdf_segments_use_real_page_numbers_only():
 
     assert [segment.page for segment in extracted.segments] == [1, 3]
     assert "page 2 extracted no text" in extracted.warnings
+
+
+def test_pdf_extraction_can_bound_pages_before_extracting_text(monkeypatch):
+    calls = []
+
+    class FakePage:
+        def __init__(self, page_number):
+            self.page_number = page_number
+
+        def extract_text(self):
+            calls.append(self.page_number)
+            return f"Page {self.page_number}"
+
+    pages = [FakePage(index) for index in range(1, 6)]
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda stream: SimpleNamespace(pages=pages),
+    )
+
+    extracted = extract_pdf_bytes(b"pdf", "supporting.pdf", max_pages=2)
+
+    assert calls == [1, 2]
+    assert [segment.page for segment in extracted.segments] == [1, 2]
 
 
 def test_empty_primary_is_rejected():

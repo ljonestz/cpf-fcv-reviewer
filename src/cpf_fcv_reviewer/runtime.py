@@ -72,7 +72,7 @@ def build_runtime_services(config: dict) -> dict:
         primary_document = extract_document(primary["bytes"], primary["name"])
         require_readable_primary(primary_document)
         supporting_documents = tuple(
-            extract_document(item["bytes"], item["name"])
+            extract_document(item["bytes"], item["name"], max_pdf_pages=2)
             for item in payload.get("supporting", ())
         )
         context["primary_document"] = primary_document
