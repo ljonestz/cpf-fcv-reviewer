@@ -165,12 +165,14 @@ def test_repair_keeps_authoritative_metadata_out_of_the_model_schema_and_payload
     repaired = ReviewEngine(gateway).repair(
         result_for(meta),
         [{"code": "example", "message": "Repair the draft."}],
+        forbidden_phrases=("complies with",),
     )
 
     prompt_name, payload, output_type = gateway.calls[0]
     assert prompt_name == "repair"
     assert output_type is ReviewDraft
     assert "metadata" not in payload["draft"]
+    assert payload["forbidden_phrases"] == ("complies with",)
     assert repaired.metadata.repair_count == 1
     assert repaired.metadata.run_id == meta.run_id
 

@@ -16,6 +16,8 @@ from .registry import RegistryUnavailable, load_registry_bundle
 from .review_engine import ReviewEngine
 from .sources import choose_authoritative_source
 from .validators import (
+    matched_prohibited_policy_phrases,
+    result_text,
     validate_priority_questions,
     validate_reproducibility_metadata,
     validate_review,
@@ -219,7 +221,14 @@ def build_runtime_services(config: dict) -> dict:
     def repair(context, issues):
         if "result" not in context:
             return context
-        context["result"] = review_engine.repair(context["result"], issues)
+        context["result"] = review_engine.repair(
+            context["result"],
+            issues,
+            forbidden_phrases=matched_prohibited_policy_phrases(
+                result_text(context["result"]),
+                prohibited_terms,
+            ),
+        )
         context["validation_issues"] = review_validation_issues(context)
         return context
 

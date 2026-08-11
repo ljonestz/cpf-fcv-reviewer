@@ -57,12 +57,19 @@ class ReviewEngine:
         )
         return ReviewResult(metadata=evidence_pack.metadata, **draft.model_dump())
 
-    def repair(self, result: ReviewResult, issues: list[dict]) -> ReviewResult:
+    def repair(
+        self,
+        result: ReviewResult,
+        issues: list[dict],
+        *,
+        forbidden_phrases: tuple[str, ...] = (),
+    ) -> ReviewResult:
         draft = self.gateway.generate(
             prompt_name="repair",
             payload={
                 "draft": result.model_dump(mode="json", exclude={"metadata"}),
                 "validation_issues": issues,
+                "forbidden_phrases": forbidden_phrases,
             },
             output_type=ReviewDraft,
         )

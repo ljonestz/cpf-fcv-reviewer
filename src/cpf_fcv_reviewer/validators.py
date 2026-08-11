@@ -96,6 +96,25 @@ def assert_no_unsupported_policy_claims(text: str, prohibited_terms: set[str]) -
         raise ValueError("Unsupported policy or determination language.")
 
 
+def matched_prohibited_policy_phrases(
+    text: str,
+    prohibited_terms: set[str],
+) -> tuple[str, ...]:
+    """Return only forbidden phrases present in model-authored review text."""
+    lowered = text.casefold()
+    matches = [
+        match.group(0)
+        for pattern in DETERMINATION_PATTERNS
+        for match in re.finditer(pattern, lowered)
+    ]
+    matches.extend(
+        term.casefold()
+        for term in sorted(prohibited_terms, key=str.casefold)
+        if term.casefold() in lowered
+    )
+    return tuple(dict.fromkeys(matches))
+
+
 def validate_review(
     result: ReviewResult,
     *,

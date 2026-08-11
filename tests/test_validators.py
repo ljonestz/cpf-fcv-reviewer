@@ -1,5 +1,8 @@
 from datetime import UTC, datetime
 
+import pytest
+
+from cpf_fcv_reviewer import validators
 from cpf_fcv_reviewer.contracts import (
     DiagnosticMode,
     EvidenceLocator,
@@ -10,7 +13,10 @@ from cpf_fcv_reviewer.contracts import (
     RunMetadata,
     SensitivityCategory,
 )
-from cpf_fcv_reviewer.validators import validate_review, validate_stage_behavior
+from cpf_fcv_reviewer.validators import (
+    validate_review,
+    validate_stage_behavior,
+)
 
 
 def metadata():
@@ -70,6 +76,24 @@ def test_finalization_rejects_wholesale_redesign():
     )
 
     assert issues[0].code == "stage_overreach"
+
+
+def test_repair_can_receive_exact_forbidden_phrases_without_source_content():
+    assert hasattr(validators, "matched_prohibited_policy_phrases")
+    matches = validators.matched_prohibited_policy_phrases(
+        "The draft complies with an internal threshold.",
+        {"internal threshold"},
+    )
+
+    assert matches == ("complies with", "internal threshold")
+
+
+def test_registry_only_prohibited_phrase_is_rejected():
+    with pytest.raises(ValueError, match="Unsupported policy"):
+        validators.assert_no_unsupported_policy_claims(
+            "The draft relies on an internal threshold.",
+            {"internal threshold"},
+        )
 
 
 def test_recommendation_and_priority_question_are_traceable_and_validated():
