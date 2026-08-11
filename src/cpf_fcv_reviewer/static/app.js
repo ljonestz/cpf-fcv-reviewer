@@ -1,12 +1,23 @@
 const form = document.querySelector("#review-form");
+const landingView = document.querySelector("#landing-view");
+const landingNotice = document.querySelector("#landing-notice");
+const reviewWorkspace = document.querySelector("#review-workspace");
 const progress = document.querySelector("#progress");
 const results = document.querySelector("#results");
 const corrections = document.querySelector("#corrections");
 const actions = document.querySelector("#actions");
+const returnToIntake = document.querySelector("#return-to-intake");
 const guidance = document.querySelector("#guidance");
 const questionPanel = document.querySelector("#priority-questions");
 const questionList = document.querySelector("#priority-question-list");
+const submitCorrection = document.querySelector("#submit-correction");
 let assessmentId = sessionStorage.getItem("cpf_fcv_assessment_id") || "";
+let activeEventSource;
+let operationEpoch = 0;
+let resetPending = false;
+const RESULT_RETRY_LIMIT = 3;
+const RESULT_RETRY_DELAY_MS = 250;
+const SOURCE_ERROR_LIMIT = 2;
 
 const sensitivityLabels = {
   direct: "Suitable to state directly",
@@ -21,6 +32,42 @@ const failureLabels = {
   document_unreadable: "The primary document could not be read.",
   review_failed: "The review could not be completed.",
 };
+
+function showLanding(notice = "") {
+  landingView.hidden = false;
+  reviewWorkspace.hidden = true;
+  returnToIntake.hidden = true;
+  landingNotice.textContent = notice;
+  landingNotice.hidden = !notice;
+}
+
+function showProgress() {
+  landingView.hidden = true;
+  landingNotice.hidden = true;
+  reviewWorkspace.hidden = false;
+  progress.hidden = false;
+  results.hidden = true;
+  corrections.hidden = true;
+  actions.hidden = true;
+  returnToIntake.hidden = true;
+}
+
+function showResults() {
+  landingView.hidden = true;
+  reviewWorkspace.hidden = false;
+  progress.hidden = true;
+  results.hidden = false;
+  corrections.hidden = false;
+  actions.hidden = false;
+  returnToIntake.hidden = true;
+  submitCorrection.disabled = false;
+}
+
+function showRecoverableFailure(message) {
+  showProgress();
+  progress.textContent = message;
+  returnToIntake.hidden = false;
+}
 
 function text(tag, value, className = "") {
   const node = document.createElement(tag);
@@ -139,74 +186,139 @@ function renderResult(result) {
     }
     results.append(list);
   }
-  results.hidden = false;
-  corrections.hidden = false;
-  actions.hidden = false;
+  showResults();
 }
 
-async function loadResult(resultUrl) {
+function isActiveSource(source) {
+  return activeEventSource === source;
+}
+
+function isCurrentOperation(operation) {
+  return operation === operationEpoch;
+}
+
+function closeActiveSource(source) {
+  if (!isActiveSource(source)) return false;
+  source.close();
+  activeEventSource = undefined;
+  return true;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function loadResult(resultUrl, operation, attempt = 1) {
   const response = await fetch(resultUrl);
-  if (response.status === 202) return;
+  if (!isCurrentOperation(operation)) return null;
+  if (response.status === 202) {
+    if (attempt >= RESULT_RETRY_LIMIT) throw new Error("Review result is unavailable.");
+    await delay(RESULT_RETRY_DELAY_MS);
+    if (!isCurrentOperation(operation)) return null;
+    return loadResult(resultUrl, operation, attempt + 1);
+  }
   if (!response.ok) throw new Error("Review result is unavailable.");
-  renderResult(await response.json());
+  const result = await response.json();
+  return isCurrentOperation(operation) ? result : null;
 }
 
-function watchEvents(eventUrl, resultUrl) {
+function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
+  activeEventSource?.close();
   const source = new EventSource(eventUrl);
+  activeEventSource = source;
+  let sourceErrors = 0;
   source.addEventListener("step_start", (event) => {
+    if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
     const data = JSON.parse(event.data);
     progress.textContent = `Working: ${data.step}`;
   });
   source.addEventListener("run_complete", async () => {
-    source.close();
+    if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
     progress.textContent = "Review complete";
-    await loadResult(resultUrl);
+    try {
+      const result = await loadResult(resultUrl, operation);
+      if (!isCurrentOperation(operation) || !result) return;
+      renderResult(result);
+    } catch (_error) {
+      if (isCurrentOperation(operation)) {
+        showRecoverableFailure("The review result is unavailable. Return to intake and try again.");
+      }
+    }
   });
   source.addEventListener("run_failed", (event) => {
-    source.close();
+    if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
     const data = JSON.parse(event.data);
     const label = failureLabels[data.error] || failureLabels.review_failed;
-    progress.textContent = `Review stopped: ${label}`;
+    showRecoverableFailure(`Review stopped: ${label}`);
   });
   source.addEventListener("expired", () => {
-    source.close();
-    progress.textContent = "This volatile review session expired. Upload again.";
+    if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
+    showRecoverableFailure("This volatile review session expired. Upload again.");
   });
+  source.onerror = () => {
+    if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
+    sourceErrors += 1;
+    if (sourceErrors >= SOURCE_ERROR_LIMIT && closeActiveSource(source)) {
+      showRecoverableFailure("The review connection was interrupted. Return to intake and try again.");
+    }
+  };
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  progress.hidden = false;
+  resetPending = false;
+  const operation = ++operationEpoch;
+  showProgress();
   progress.textContent = "Uploading and validating";
-  const response = await fetch("/api/reviews", {
-    method: "POST",
-    body: new FormData(form),
-  });
-  if (!response.ok) {
-    progress.textContent = "The review could not start.";
-    return;
+  try {
+    const response = await fetch("/api/reviews", {
+      method: "POST",
+      body: new FormData(form),
+    });
+    if (!isCurrentOperation(operation)) return;
+    if (!response.ok) {
+      showRecoverableFailure("The review could not start. Return to intake and try again.");
+      return;
+    }
+    const created = await response.json();
+    if (!isCurrentOperation(operation)) return;
+    assessmentId = created.assessment_id;
+    sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
+    watchEvents(created.event_url, created.result_url, operation);
+  } catch (_error) {
+    if (!isCurrentOperation(operation)) return;
+    showRecoverableFailure("The review could not start. Return to intake and try again.");
   }
-  const created = await response.json();
-  assessmentId = created.assessment_id;
-  sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
-  watchEvents(created.event_url, created.result_url);
 });
 
-document.querySelector("#submit-correction").addEventListener("click", async () => {
+submitCorrection.addEventListener("click", async () => {
   const correction = document.querySelector("#correction-text").value.trim();
-  if (!correction || !assessmentId) return;
-  const response = await fetch(`/api/reviews/${assessmentId}/corrections`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({text: correction}),
-  });
-  if (response.ok) {
+  if (!correction || !assessmentId || resetPending || submitCorrection.disabled) return;
+  const operation = ++operationEpoch;
+  submitCorrection.disabled = true;
+  try {
+    const response = await fetch(`/api/reviews/${assessmentId}/corrections`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text: correction}),
+    });
+    if (!isCurrentOperation(operation)) return;
+    if (!response.ok) {
+      showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
+      return;
+    }
     const child = await response.json();
+    if (!isCurrentOperation(operation)) return;
     assessmentId = child.assessment_id;
     sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
-    progress.hidden = false;
+    showProgress();
     progress.textContent = "User-provided correction saved; rerun requested.";
-    watchEvents(child.event_url, child.result_url);
+    watchEvents(child.event_url, child.result_url, operation);
+  } catch (_error) {
+    if (!isCurrentOperation(operation)) return;
+    showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
+  } finally {
+    if (!corrections.hidden) submitCorrection.disabled = false;
   }
 });
 
@@ -215,13 +327,48 @@ document.querySelector("#export-docx").addEventListener("click", () => {
 });
 
 document.querySelector("#reset-review").addEventListener("click", async () => {
-  if (assessmentId) await fetch(`/api/reviews/${assessmentId}`, {method: "DELETE"});
+  const resetEpoch = ++operationEpoch;
+  const assessmentToPurge = assessmentId;
+  resetPending = true;
+  activeEventSource?.close();
+  activeEventSource = undefined;
   sessionStorage.removeItem("cpf_fcv_assessment_id");
   assessmentId = "";
   results.replaceChildren();
-  results.hidden = true;
+  progress.replaceChildren();
+  form.reset();
+  document.querySelector("#correction-text").value = "";
   corrections.hidden = true;
   actions.hidden = true;
-  progress.hidden = true;
-  form.reset();
+  submitCorrection.disabled = true;
+  showLanding();
+  let purgeConfirmed = !assessmentToPurge;
+  try {
+    if (assessmentToPurge) {
+      const response = await fetch(`/api/reviews/${assessmentToPurge}`, {method: "DELETE"});
+      purgeConfirmed = response.ok;
+    }
+  } catch (_error) {
+    purgeConfirmed = false;
+  } finally {
+    if (isCurrentOperation(resetEpoch)) {
+      const notice = purgeConfirmed
+        ? ""
+        : "The review was cleared from this browser, but server purge was not confirmed. Any remaining volatile state will expire.";
+      showLanding(notice);
+      resetPending = false;
+    }
+  }
 });
+
+returnToIntake.addEventListener("click", () => {
+  showLanding();
+});
+
+if (window.__CPF_FCV_REVIEWER_TEST__) {
+  window.__cpfFcvReviewerTestHooks = {
+    getActiveSource: () => activeEventSource,
+    setAssessmentId: (value) => { assessmentId = value; },
+    watchEvents,
+  };
+}

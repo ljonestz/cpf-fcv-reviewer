@@ -16,6 +16,7 @@
   <main>
     <section id="landing-view" aria-labelledby="landing-title">
       <h2 id="landing-title">Start an FCV review</h2>
+      <p id="landing-notice" role="status" aria-live="polite" hidden></p>
       <ol class="steps" aria-label="How the review works">
         <li>Add the draft</li>
         <li>Add context</li>
@@ -58,21 +59,24 @@
       </form>
     </section>
 
-    <section id="progress" hidden aria-live="polite"></section>
-    <section id="results" hidden></section>
+    <section id="review-workspace" hidden aria-label="Review workspace">
+      <section id="progress" hidden aria-live="polite"></section>
+      <button id="return-to-intake" type="button" hidden>Return to intake</button>
+      <section id="results" hidden aria-live="polite"></section>
 
-    <section id="corrections" hidden>
-      <h2>Add context or correct a finding</h2>
-      <p>Corrections remain labelled as user-provided unless independently supported by evidence.</p>
-      <label for="correction-text">Correction or additional context</label>
-      <textarea id="correction-text"></textarea>
-      <button id="submit-correction" type="button">Add correction and rerun</button>
+      <section id="corrections" hidden>
+        <h2>Add context or correct a finding</h2>
+        <p>Corrections remain labelled as user-provided unless independently supported by evidence.</p>
+        <label for="correction-text">Correction or additional context</label>
+        <textarea id="correction-text"></textarea>
+        <button id="submit-correction" type="button">Add correction and rerun</button>
+      </section>
+
+      <nav id="actions" hidden aria-label="Review actions">
+        <button id="export-docx" type="button">Export Word note</button>
+        <button id="reset-review" type="button">Start a new review</button>
+      </nav>
     </section>
-
-    <nav id="actions" hidden>
-      <button id="export-docx" type="button">Export Word note</button>
-      <button id="reset-review" type="button">Reset and purge review</button>
-    </nav>
   </main>
   <script src="/static/app.js"></script>
 </body>

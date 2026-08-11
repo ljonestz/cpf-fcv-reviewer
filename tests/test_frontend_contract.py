@@ -101,3 +101,27 @@ def test_browser_renders_recommendations_priority_responses_and_limitations():
     assert "result.priority_question_responses" in javascript
     assert 'text("h2", "Limitations")' in javascript
     assert "result.limitations" in javascript
+
+
+def test_interface_transitions_between_landing_progress_and_results():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'id="review-workspace" hidden' in html
+    assert 'id="return-to-intake"' in html
+    assert "function showLanding" in javascript
+    assert "function showProgress" in javascript
+    assert "function showResults" in javascript
+    assert "showProgress();" in javascript
+    assert "showResults();" in javascript
+    assert "showLanding();" in javascript
+    assert "Start a new review" in html
+
+
+def test_return_to_intake_respects_the_hidden_attribute_and_landing_has_notice():
+    html = HTML.read_text(encoding="utf-8")
+    css = Path("src/cpf_fcv_reviewer/static/styles.css").read_text(encoding="utf-8")
+
+    assert 'id="landing-notice"' in html
+    assert 'aria-live="polite"' in html
+    assert "#return-to-intake { display: block; }" not in css
