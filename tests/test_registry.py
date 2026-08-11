@@ -1,6 +1,7 @@
 import copy
 import json
-from datetime import datetime
+from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,10 @@ from cpf_fcv_reviewer.registry import (
 )
 
 FIXTURE = Path("tests/fixtures/registry_bundle.synthetic.json")
+PUBLIC_BUNDLE = Path("registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.0.0.json")
+PUBLIC_BUNDLE_HASH = Path(
+    "registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.0.0.sha256"
+)
 
 
 def registry_data() -> dict:
@@ -179,3 +184,25 @@ def test_registry_normalizes_existence_check_error(monkeypatch):
 
     with pytest.raises(RegistryUnavailable, match="^Approved registry bundle is invalid\\.$"):
         load_registry_bundle(FIXTURE, allow_synthetic=True)
+
+
+def test_checked_in_public_guardrail_bundle_is_valid_and_hash_pinned():
+    expected_hash = PUBLIC_BUNDLE_HASH.read_text(encoding="utf-8").strip()
+    assert sha256(PUBLIC_BUNDLE.read_bytes()).hexdigest() == expected_hash
+
+    bundle = load_registry_bundle(
+        PUBLIC_BUNDLE,
+        allow_synthetic=False,
+        now=datetime(2026, 8, 12, tzinfo=UTC),
+        expected_hash=expected_hash,
+    )
+
+    assert bundle.bundle_id == "cpf-fcv-reviewer-public-guardrails"
+    assert bundle.version == "1.0.0"
+    assert bundle.synthetic is False
+    assert tuple(entry.entry_id for entry in bundle.entries) == (
+        "PUB-GUARD-001",
+        "PUB-GUARD-002",
+        "PUB-GUARD-003",
+        "PUB-GUARD-004",
+    )

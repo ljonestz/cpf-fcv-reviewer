@@ -1,0 +1,2 @@
+registry_bundles/*.json -text
+registry_bundles/*.sha256 -text

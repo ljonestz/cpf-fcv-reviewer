@@ -1,0 +1,58 @@
+{
+  "bundle_id": "cpf-fcv-reviewer-public-guardrails",
+  "version": "1.0.0",
+  "owner": "Lindsey Jones — CPF FCV Reviewer prototype owner",
+  "approved_at": "2026-08-11T19:01:13.120000+02:00",
+  "expires_at": "2027-08-11T23:59:59+02:00",
+  "synthetic": false,
+  "entries": [
+    {
+      "entry_id": "PUB-GUARD-001",
+      "approved_text": "This is the public prototype of the CPF FCV Reviewer. It provides advisory review support using information suitable for public use. A separate internal ITS version may support more detailed consideration of OPCS-specific policies and processes.",
+      "prohibited_terms": [
+        "officially approved",
+        "OPCS-approved",
+        "formal policy advice",
+        "legal clearance complete",
+        "official determination"
+      ]
+    },
+    {
+      "entry_id": "PUB-GUARD-002",
+      "approved_text": "The public prototype must use only publicly available or explicitly approved non-confidential information. It must not disclose, summarize, combine, or infer non-public guidance, internal procedures, approval routes, thresholds, deliberations, source metadata, or operational information.",
+      "prohibited_terms": [
+        "based on internal guidance",
+        "internal procedure requires",
+        "internal threshold",
+        "restricted source",
+        "internal clearance route"
+      ]
+    },
+    {
+      "entry_id": "PUB-GUARD-003",
+      "approved_text": "Outputs are advisory and require human review. The public prototype must not make or imply official determinations about policy applicability, compliance, eligibility, endorsement, clearance, classification, allocation, access, or country status.",
+      "prohibited_terms": [
+        "policy applies",
+        "complies with",
+        "eligible for",
+        "endorsed by",
+        "has cleared",
+        "officially classified as",
+        "allocation approved",
+        "access granted",
+        "country status confirmed"
+      ]
+    },
+    {
+      "entry_id": "PUB-GUARD-004",
+      "approved_text": "When a question depends on internal policy or procedure, the public prototype must state that the matter is outside its scope and refer the user to appropriate World Bank staff. It must not explain or infer the internal process.",
+      "prohibited_terms": [
+        "internal process requires",
+        "OPCS has cleared",
+        "approved under internal rules",
+        "meets internal criteria",
+        "internal approval confirmed"
+      ]
+    }
+  ]
+}
