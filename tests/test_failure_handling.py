@@ -98,9 +98,15 @@ def test_background_failure_logs_only_exception_type_and_http_status(caplog):
     class ProviderFailure(RuntimeError):
         status_code = 404
 
+    class TransportFailure(RuntimeError):
+        pass
+
     class FailingOrchestrator:
         def run(self, context, emit):
-            raise ProviderFailure(secret)
+            try:
+                raise TransportFailure(secret)
+            except TransportFailure as exc:
+                raise ProviderFailure(secret) from exc
 
     app = create_app({"TESTING": True, "START_BACKGROUND_RUNS": False})
     app.extensions["review_orchestrator"] = FailingOrchestrator()
@@ -118,5 +124,6 @@ def test_background_failure_logs_only_exception_type_and_http_status(caplog):
         run_assessment(app, created["assessment_id"])
 
     assert "ProviderFailure" in caplog.text
+    assert "cause_chain=TransportFailure" in caplog.text
     assert "status_code=404" in caplog.text
     assert secret not in caplog.text

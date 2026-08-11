@@ -255,10 +255,16 @@ def run_assessment(app, assessment_id):
             return
         except Exception as exc:
             status_code = getattr(exc, "status_code", None)
+            cause_types = []
+            cause = exc.__cause__
+            while cause is not None and len(cause_types) < 3:
+                cause_types.append(type(cause).__name__)
+                cause = cause.__cause__
             current_app.logger.error(
-                "review_run_failed error_type=%s status_code=%s",
+                "review_run_failed error_type=%s status_code=%s cause_chain=%s",
                 type(exc).__name__,
                 status_code if isinstance(status_code, int) else "none",
+                ">".join(cause_types) or "none",
             )
             try:
                 store().update(assessment_id, status="failed")
