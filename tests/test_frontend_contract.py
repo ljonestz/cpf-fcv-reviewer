@@ -39,6 +39,28 @@ def test_index_route_serves_the_interface():
     assert 'id="review-form"' in response.get_data(as_text=True)
 
 
+def test_guided_landing_separates_essential_and_optional_inputs():
+    html = HTML.read_text(encoding="utf-8")
+
+    assert 'id="landing-view"' in html
+    assert 'aria-label="How the review works"' in html
+    assert "<li>Add the draft</li>" in html
+    assert "<li>Add context</li>" in html
+    assert "<li>Review options</li>" in html
+    assert "1. Add the draft" not in html
+    assert "2. Add context" not in html
+    assert "3. Review options" not in html
+    assert '<label for="country">Country <span aria-hidden="true">*</span></label>' in html
+    assert (
+        '<label for="review-stage">Review stage '
+        '<span aria-hidden="true">*</span></label>' in html
+    )
+    assert '<label for="cpf">CPF or CEN <span aria-hidden="true">*</span></label>' in html
+    assert '<details id="optional-inputs">' in html
+    assert "Supporting documents and specific questions (optional)" in html
+    assert "held only for this session" in html
+
+
 def test_browser_state_is_session_only_and_reset_clears_assessment_id():
     javascript = JS.read_text(encoding="utf-8")
 

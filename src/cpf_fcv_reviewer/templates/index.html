@@ -10,30 +10,53 @@
   <header>
     <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
     <h1>Strengthen the FCV framing of a CPF or CEN</h1>
+    <p class="purpose">Get an evidence-linked advisory review and practical options to strengthen the draft.</p>
     <p class="advisory">Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification.</p>
   </header>
   <main>
-    <form id="review-form">
-      <label>Country <input id="country" name="country" required></label>
-      <label>Review stage
-        <select id="review-stage" name="review_stage" required>
-          <option value="early_drafting">Early drafting</option>
-          <option value="concept_review">Concept review</option>
-          <option value="decision_review">Decision review</option>
-          <option value="roc_oc">ROC / OC</option>
-          <option value="finalization">Finalization</option>
-          <option value="response_to_comments">Response to comments</option>
-        </select>
-      </label>
-      <label>CPF or CEN <input id="cpf" name="cpf" type="file" accept=".pdf,.docx,.txt,.md" required></label>
-      <label>Supporting package <input id="supporting" name="supporting" type="file" accept=".pdf,.docx,.txt,.md" multiple></label>
-      <label>Analysis guidance <textarea id="guidance" name="guidance"></textarea></label>
-      <fieldset id="priority-questions" hidden>
-        <legend>Questions requiring a dedicated response</legend>
-        <div id="priority-question-list"></div>
-      </fieldset>
-      <button type="submit">Run review</button>
-    </form>
+    <section id="landing-view" aria-labelledby="landing-title">
+      <h2 id="landing-title">Start an FCV review</h2>
+      <ol class="steps" aria-label="How the review works">
+        <li>Add the draft</li>
+        <li>Add context</li>
+        <li>Review options</li>
+      </ol>
+      <form id="review-form" class="form-card">
+        <p class="helper"><span aria-hidden="true">*</span> Required. Your files and review are held only for this session.</p>
+        <div class="field-grid">
+          <div>
+            <label for="country">Country <span aria-hidden="true">*</span></label>
+            <input id="country" name="country" required>
+          </div>
+          <div>
+            <label for="review-stage">Review stage <span aria-hidden="true">*</span></label>
+            <select id="review-stage" name="review_stage" required>
+              <option value="early_drafting">Early drafting</option>
+              <option value="concept_review">Concept review</option>
+              <option value="decision_review">Decision review</option>
+              <option value="roc_oc">ROC / OC</option>
+              <option value="finalization">Finalization</option>
+              <option value="response_to_comments">Response to comments</option>
+            </select>
+          </div>
+        </div>
+        <label for="cpf">CPF or CEN <span aria-hidden="true">*</span></label>
+        <input id="cpf" name="cpf" type="file" accept=".pdf,.docx,.txt,.md" required>
+
+        <details id="optional-inputs">
+          <summary>Supporting documents and specific questions (optional)</summary>
+          <label for="supporting">Supporting package</label>
+          <input id="supporting" name="supporting" type="file" accept=".pdf,.docx,.txt,.md" multiple>
+          <label for="guidance">Analysis guidance</label>
+          <textarea id="guidance" name="guidance"></textarea>
+          <fieldset id="priority-questions" hidden>
+            <legend>Questions requiring a dedicated response</legend>
+            <div id="priority-question-list"></div>
+          </fieldset>
+        </details>
+        <button type="submit">Run FCV review</button>
+      </form>
+    </section>
 
     <section id="progress" hidden aria-live="polite"></section>
     <section id="results" hidden></section>
