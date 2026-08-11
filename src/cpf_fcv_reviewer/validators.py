@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .contracts import DiagnosticMode, ReviewResult
+from .contracts import DiagnosticMode, ReviewResult, RunMetadata
 
 DETERMINATION_PATTERNS = (
     r"\beligible for\b",
@@ -30,6 +30,42 @@ FINALIZATION_OVERREACH_TERMS = (
 class ValidationIssue:
     code: str
     message: str
+
+
+def validate_reproducibility_metadata(
+    metadata: RunMetadata,
+) -> tuple[ValidationIssue, ...]:
+    def is_sha256(value: str) -> bool:
+        return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
+
+    invalid: list[str] = []
+    source_scan_at = metadata.source_scan_at
+    if (
+        source_scan_at is None
+        or source_scan_at.tzinfo is None
+        or source_scan_at.utcoffset() is None
+    ):
+        invalid.append("source_scan_at")
+    if not metadata.document_fingerprints or any(
+        not is_sha256(value) for value in metadata.document_fingerprints.values()
+    ):
+        invalid.append("document_fingerprints")
+    if not is_sha256(metadata.registry_bundle_hash):
+        invalid.append("registry_bundle_hash")
+    if not is_sha256(metadata.guidance_hash):
+        invalid.append("guidance_hash")
+    if not metadata.prompt_hashes or any(
+        not is_sha256(value) for value in metadata.prompt_hashes.values()
+    ):
+        invalid.append("prompt_hashes")
+    if not invalid:
+        return ()
+    return (
+        ValidationIssue(
+            "incomplete_reproducibility_metadata",
+            f"Missing or invalid reproducibility fields: {', '.join(invalid)}",
+        ),
+    )
 
 
 def result_text(result: ReviewResult) -> str:
@@ -100,6 +136,7 @@ def validate_review(
                     f"{recommendation.recommendation_id} cannot be ready-to-paste.",
                 )
             )
+        issues.extend(validate_stage_behavior(result.metadata.review_stage, recommendation.action))
 
     for response in result.priority_question_responses:
         _append_unknown_evidence_issue(
@@ -132,9 +169,7 @@ def validate_priority_questions(
             )
         )
 
-    duplicates = sorted(
-        question for question in confirmed if response_counts.get(question, 0) > 1
-    )
+    duplicates = sorted(question for question in confirmed if response_counts.get(question, 0) > 1)
     if duplicates:
         issues.append(
             ValidationIssue(

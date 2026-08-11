@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
+from secrets import compare_digest
 
 from pydantic import (
     BaseModel,
@@ -103,6 +105,7 @@ def load_registry_bundle(
     *,
     allow_synthetic: bool,
     now: datetime | None = None,
+    expected_hash: str | None = None,
 ) -> RegistryBundle:
     try:
         if type(allow_synthetic) is not bool:
@@ -111,7 +114,18 @@ def load_registry_bundle(
             raise RegistryUnavailable("Approved registry bundle is invalid.")
         if not path.exists():
             raise RegistryUnavailable("Approved registry bundle is unavailable.")
-        bundle = RegistryBundle.model_validate_json(path.read_text(encoding="utf-8"))
+        bundle_bytes = path.read_bytes()
+        if expected_hash is not None:
+            normalized_hash = (
+                expected_hash.strip().lower() if isinstance(expected_hash, str) else ""
+            )
+            if (
+                len(normalized_hash) != 64
+                or any(character not in "0123456789abcdef" for character in normalized_hash)
+                or not compare_digest(sha256(bundle_bytes).hexdigest(), normalized_hash)
+            ):
+                raise RegistryUnavailable("Approved registry bundle hash mismatch.")
+        bundle = RegistryBundle.model_validate_json(bundle_bytes)
     except RegistryUnavailable:
         raise
     except (OSError, UnicodeDecodeError, ValidationError):

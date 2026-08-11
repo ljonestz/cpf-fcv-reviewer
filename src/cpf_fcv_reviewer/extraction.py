@@ -10,6 +10,10 @@ from docx.text.paragraph import Paragraph
 from pypdf import PdfReader
 
 
+class DocumentUnreadable(ValueError):
+    """Raised when the required primary document contains too little text."""
+
+
 @dataclass(frozen=True)
 class ExtractedSegment:
     text: str
@@ -90,12 +94,12 @@ def extract_docx_bytes(data: bytes, name: str) -> ExtractedDocument:
         )
 
     return ExtractedDocument(name, tuple(segments), tuple(warnings))
+
+
 def require_readable_primary(document: ExtractedDocument) -> None:
-
-
     character_count = sum(len(segment.text) for segment in document.segments)
     if character_count < 100:
-        raise ValueError("Primary CPF/CEN is unreadable or contains too little text.")
+        raise DocumentUnreadable("Primary CPF/CEN is unreadable or contains too little text.")
 
 
 def extract_text_bytes(data: bytes, name: str) -> ExtractedDocument:

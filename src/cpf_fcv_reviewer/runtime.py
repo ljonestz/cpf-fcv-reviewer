@@ -10,7 +10,11 @@ from .public_research import AnthropicPublicResearchGateway
 from .registry import RegistryUnavailable, load_registry_bundle
 from .review_engine import ReviewEngine
 from .sources import choose_authoritative_source
-from .validators import validate_priority_questions, validate_review
+from .validators import (
+    validate_priority_questions,
+    validate_reproducibility_metadata,
+    validate_review,
+)
 
 STEP_NAMES = (
     "extract",
@@ -66,10 +70,8 @@ def build_runtime_services(config: dict) -> dict:
         )
         confirmed = tuple(context.get("payload", {}).get("priority_questions", ()))
         issues.extend(validate_priority_questions(confirmed, context["result"]))
-        return [
-            {"code": issue.code, "message": issue.message}
-            for issue in issues
-        ]
+        issues.extend(validate_reproducibility_metadata(context["result"].metadata))
+        return [{"code": issue.code, "message": issue.message} for issue in issues]
 
     def mark_step(name):
         def step(context):

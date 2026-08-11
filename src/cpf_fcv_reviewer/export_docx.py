@@ -190,11 +190,30 @@ def build_docx(
         ("Model", metadata.model_id),
         ("Diagnostic mode", metadata.diagnostic_mode.value),
         ("Repair count", str(metadata.repair_count)),
+        (
+            "Source scan",
+            metadata.source_scan_at.isoformat()
+            if metadata.source_scan_at is not None
+            else "Not recorded",
+        ),
+        ("Output language", metadata.output_language),
+        ("Registry bundle hash", metadata.registry_bundle_hash),
+        ("Guidance hash", metadata.guidance_hash),
     ):
         document.add_paragraph(f"{label}: {value}")
 
+    if metadata.parent_run_id is not None:
+        document.add_paragraph(f"Parent run: {metadata.parent_run_id}")
     for registry_name, version in sorted(metadata.registry_versions.items()):
         document.add_paragraph(f"Registry {registry_name}: {version}")
+    for document_name, fingerprint in sorted(metadata.document_fingerprints.items()):
+        document.add_paragraph(f"Document {document_name}: {fingerprint}")
+    for prompt_name, prompt_digest in sorted(metadata.prompt_hashes.items()):
+        document.add_paragraph(f"Prompt {prompt_name}: {prompt_digest}")
+    for outcome in metadata.validation_outcomes:
+        document.add_paragraph(f"Validation: {outcome}")
+    for correction_id in metadata.correction_ids:
+        document.add_paragraph(f"Correction: {correction_id}")
 
     stream = BytesIO()
     document.save(stream)

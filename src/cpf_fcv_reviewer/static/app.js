@@ -15,6 +15,13 @@ const sensitivityLabels = {
   withhold: "Do not suggest for inclusion without guidance",
 };
 
+const failureLabels = {
+  model_timeout: "The model timed out. Try the review again.",
+  registry_unavailable: "The approved registry is unavailable.",
+  document_unreadable: "The primary document could not be read.",
+  review_failed: "The review could not be completed.",
+};
+
 function text(tag, value, className = "") {
   const node = document.createElement(tag);
   node.textContent = value;
@@ -92,7 +99,8 @@ function watchEvents(eventUrl, resultUrl) {
   source.addEventListener("run_failed", (event) => {
     source.close();
     const data = JSON.parse(event.data);
-    progress.textContent = `Review stopped: ${data.message}`;
+    const label = failureLabels[data.error] || failureLabels.review_failed;
+    progress.textContent = `Review stopped: ${label}`;
   });
   source.addEventListener("expired", () => {
     source.close();

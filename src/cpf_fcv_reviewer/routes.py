@@ -14,6 +14,7 @@ from .export_docx import build_docx
 from .priority_questions import detect_priority_questions
 from .registry import hydrate_referrals
 from .session_store import SessionExpired
+from .validators import validate_reproducibility_metadata
 
 bp = Blueprint("reviews", __name__)
 
@@ -96,7 +97,13 @@ def review_result(assessment_id):
     result = state.payload.get("result")
     if result is None:
         return jsonify(status=state.payload.get("status", "created")), 202
-    return jsonify(result)
+    try:
+        validated_result = ReviewResult.model_validate(result)
+    except ValueError:
+        return jsonify(error="Review result is invalid."), 409
+    if validate_reproducibility_metadata(validated_result.metadata):
+        return jsonify(error="Reproducibility metadata is incomplete."), 409
+    return jsonify(validated_result.model_dump(mode="json"))
 
 
 @bp.get("/api/reviews/<assessment_id>/export.docx")
@@ -112,20 +119,28 @@ def export_review(assessment_id):
     if not isinstance(evidence_payload, dict):
         return jsonify(error="Traceable evidence is unavailable."), 409
 
-    result = ReviewResult.model_validate(result_payload)
+    try:
+        result = ReviewResult.model_validate(result_payload)
+    except ValueError:
+        return jsonify(error="Review result is invalid."), 409
+    if validate_reproducibility_metadata(result.metadata):
+        return jsonify(error="Reproducibility metadata is incomplete."), 409
     evidence = {
         evidence_id: EvidenceItem.model_validate(item)
         for evidence_id, item in evidence_payload.items()
     }
     bundle = current_app.extensions["registry_bundle"]
-    data = build_docx(
-        result,
-        evidence=evidence,
-        hydrated_referrals=hydrate_referrals(
-            result.institutional_referral_ids,
-            bundle,
-        ),
-    )
+    try:
+        data = build_docx(
+            result,
+            evidence=evidence,
+            hydrated_referrals=hydrate_referrals(
+                result.institutional_referral_ids,
+                bundle,
+            ),
+        )
+    except Exception:
+        return jsonify(error="DOCX export failed."), 500
     return send_file(
         BytesIO(data),
         mimetype=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),

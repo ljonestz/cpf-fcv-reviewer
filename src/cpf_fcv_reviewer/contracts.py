@@ -157,8 +157,23 @@ class RunMetadata(FrozenModel):
     prompt_bundle_version: str
     registry_versions: dict[str, str]
     model_id: str
+    source_scan_at: datetime | None = None
+    output_language: Literal["en"] = "en"
+    document_fingerprints: dict[str, str] = Field(
+        default_factory=lambda: ImmutableRegistryVersions({})
+    )
+    registry_bundle_hash: str = ""
+    guidance_hash: str = ""
+    prompt_hashes: dict[str, str] = Field(default_factory=lambda: ImmutableRegistryVersions({}))
+    validation_outcomes: tuple[str, ...] = ()
+    correction_ids: tuple[str, ...] = ()
     parent_run_id: str | None = None
     repair_count: int = Field(default=0, ge=0, le=1)
+
+    @field_validator("document_fingerprints", "prompt_hashes")
+    @classmethod
+    def freezes_content_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        return ImmutableRegistryVersions(value)
 
     @field_validator("registry_versions")
     @classmethod

@@ -27,6 +27,16 @@ def make_valid_result():
         prompt_bundle_version="1.0.0",
         registry_versions={"opcs": "1.0.0-test"},
         model_id="fake-model",
+        source_scan_at=datetime(2026, 8, 10, tzinfo=UTC),
+        output_language="en",
+        document_fingerprints={"CPF.docx": "a" * 64},
+        registry_bundle_hash="b" * 64,
+        guidance_hash="c" * 64,
+        prompt_hashes={"review": "d" * 64},
+        validation_outcomes=(
+            "contract_valid",
+            "policy_guardrails_passed",
+        ),
     )
     locator = EvidenceLocator(
         document_title="CPF.docx",

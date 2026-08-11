@@ -2,9 +2,25 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from .extraction import DocumentUnreadable
+from .registry import RegistryUnavailable
+
 Emitter = Callable[[str, dict], None]
 Step = Callable[[dict], dict]
 Repair = Callable[[dict, list], dict]
+
+SAFE_FAILURES = {
+    TimeoutError: "model_timeout",
+    RegistryUnavailable: "registry_unavailable",
+    DocumentUnreadable: "document_unreadable",
+}
+
+
+def safe_failure_code(error: Exception) -> str:
+    for error_type, code in SAFE_FAILURES.items():
+        if isinstance(error, error_type):
+            return code
+    return "review_failed"
 
 
 class ReviewOrchestrator:
@@ -36,8 +52,7 @@ class ReviewOrchestrator:
             emit("run_complete", {"repair_count": int(repaired)})
             return context
         except Exception as exc:
-            emit(
-                "run_failed",
-                {"error_type": type(exc).__name__, "message": str(exc)},
-            )
+            context.clear()
+            context["status"] = "failed"
+            emit("run_failed", {"error": safe_failure_code(exc)})
             raise
