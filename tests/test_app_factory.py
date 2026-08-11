@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from cpf_fcv_reviewer.app import create_app
 
 
@@ -46,3 +48,11 @@ def test_session_ttl_override_skips_malformed_environment_value(monkeypatch):
     app = create_app({"TESTING": True, "SESSION_TTL_SECONDS": 120})
 
     assert app.config["SESSION_TTL_SECONDS"] == 120
+
+
+def test_render_uses_threaded_worker_without_late_ssl_monkey_patch():
+    procfile = Path("Procfile").read_text(encoding="utf-8")
+
+    assert "--worker-class gthread" in procfile
+    assert "--threads 4" in procfile
+    assert "gevent" not in procfile
