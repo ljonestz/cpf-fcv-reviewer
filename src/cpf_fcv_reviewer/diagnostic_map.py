@@ -5,10 +5,32 @@ from collections import Counter
 from .contracts import DiagnosticEntry
 
 
+def validate_diagnostic_entry_ids(entries: tuple[DiagnosticEntry, ...]) -> None:
+    entry_counts = Counter(entry.entry_id for entry in entries)
+    duplicate_entry_ids = [item for item, count in entry_counts.items() if count > 1]
+    if duplicate_entry_ids:
+        raise ValueError(
+            "Duplicate diagnostic entry identifiers: "
+            f"{', '.join(duplicate_entry_ids)}"
+        )
+
+
 def validate_diagnostic_coverage(
     material_evidence_ids: tuple[str, ...],
     entries: tuple[DiagnosticEntry, ...],
 ) -> None:
+    material_counts = Counter(material_evidence_ids)
+    duplicate_material_ids = [
+        item for item, count in material_counts.items() if count > 1
+    ]
+    if duplicate_material_ids:
+        raise ValueError(
+            "Duplicate material evidence identifiers: "
+            f"{', '.join(duplicate_material_ids)}"
+        )
+
+    validate_diagnostic_entry_ids(entries)
+
     mapped = Counter(
         evidence_id
         for entry in entries
@@ -24,18 +46,19 @@ def validate_diagnostic_coverage(
         )
 
 
-def priority_key(entry: DiagnosticEntry) -> tuple[int, int, str]:
+def priority_key(entry: DiagnosticEntry) -> tuple[int, int, str, str]:
     group_rank = {
         "principal_driver": 0,
-        "resilience_opportunity": 1,
-        "delivery_risk": 2,
-        "contextual_condition": 3,
+        "delivery_risk": 1,
+        "contextual_condition": 2,
+        "resilience_opportunity": 3,
     }
     materiality_rank = {"high": 0, "medium": 1, "low": 2}
     return (
         group_rank[entry.group],
         materiality_rank[entry.materiality],
         entry.short_name.casefold(),
+        entry.entry_id,
     )
 
 
