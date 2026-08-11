@@ -28,6 +28,10 @@
       <label>CPF or CEN <input id="cpf" name="cpf" type="file" accept=".pdf,.docx,.txt,.md" required></label>
       <label>Supporting package <input id="supporting" name="supporting" type="file" accept=".pdf,.docx,.txt,.md" multiple></label>
       <label>Analysis guidance <textarea id="guidance" name="guidance"></textarea></label>
+      <fieldset id="priority-questions" hidden>
+        <legend>Questions requiring a dedicated response</legend>
+        <div id="priority-question-list"></div>
+      </fieldset>
       <button type="submit">Run review</button>
     </form>
 

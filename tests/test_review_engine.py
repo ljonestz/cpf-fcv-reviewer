@@ -105,26 +105,41 @@ def test_unsupported_review_stage_is_rejected_before_gateway_call():
     assert gateway.calls == []
 
 
-def test_priority_question_response_is_preserved_in_review_result():
+def test_each_confirmed_priority_question_has_one_direct_or_limited_response():
     meta = metadata()
-    response = PriorityQuestionResponse(
-        question_id="pq-1",
-        question="Is the implementation assumption confirmed?",
-        direct_answer="The supplied evidence does not confirm it.",
-        evidence_ids=("ev-1",),
-        confidence="low",
-        limitation="Confirmation is needed from the country team.",
+    questions = (
+        "Is the implementation assumption confirmed?",
+        "Is the partnership logic credible?",
+    )
+    responses = (
+        PriorityQuestionResponse(
+            question_id="pq-1",
+            question=questions[0],
+            direct_answer="The supplied evidence confirms the stated assumption.",
+            evidence_ids=(),
+            confidence="medium",
+        ),
+        PriorityQuestionResponse(
+            question_id="pq-2",
+            question=questions[1],
+            direct_answer="The supplied evidence does not confirm it.",
+            evidence_ids=(),
+            confidence="low",
+            limitation="Confirmation is needed from the country team.",
+        ),
     )
     expected = result_for(meta).model_copy(
-        update={"priority_question_responses": (response,)}
+        update={"priority_question_responses": responses}
     )
     gateway = FakeGateway(expected)
 
     actual = ReviewEngine(gateway).review(
-        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=()),
+        priority_questions=questions,
     )
 
-    assert actual.priority_question_responses == (response,)
+    assert actual.priority_question_responses == responses
+    assert responses[1].limitation == "Confirmation is needed from the country team."
 
 
 class FakeMessages:
@@ -177,3 +192,19 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
 def test_anthropic_gateway_rejects_empty_or_non_text_response(monkeypatch, content):
     client = FakeAnthropicClient(SimpleNamespace(content=content))
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+
+
+def test_confirmed_priority_questions_are_injected_into_review_payload():
+    meta = metadata()
+    gateway = FakeGateway(result_for(meta))
+    questions = (
+        "Does the results framework track geographic distribution?",
+        "Is the partnership logic credible?",
+    )
+
+    ReviewEngine(gateway).review(
+        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=()),
+        priority_questions=questions,
+    )
+
+    assert gateway.calls[0][1]["priority_questions"] == questions

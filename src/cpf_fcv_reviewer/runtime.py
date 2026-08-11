@@ -10,7 +10,7 @@ from .public_research import AnthropicPublicResearchGateway
 from .registry import RegistryUnavailable, load_registry_bundle
 from .review_engine import ReviewEngine
 from .sources import choose_authoritative_source
-from .validators import validate_review
+from .validators import validate_priority_questions, validate_review
 
 STEP_NAMES = (
     "extract",
@@ -57,13 +57,18 @@ def build_runtime_services(config: dict) -> dict:
 
     def review_validation_issues(context):
         evidence_ids = {item.evidence_id for item in context["evidence_pack"].evidence}
-        return [
-            {"code": issue.code, "message": issue.message}
-            for issue in validate_review(
+        issues = list(
+            validate_review(
                 context["result"],
                 evidence_ids=evidence_ids,
                 prohibited_terms=prohibited_terms,
             )
+        )
+        confirmed = tuple(context.get("payload", {}).get("priority_questions", ()))
+        issues.extend(validate_priority_questions(confirmed, context["result"]))
+        return [
+            {"code": issue.code, "message": issue.message}
+            for issue in issues
         ]
 
     def mark_step(name):
@@ -74,7 +79,11 @@ def build_runtime_services(config: dict) -> dict:
                     context["source_candidates"]
                 )
             if name == "review" and "evidence_pack" in context:
-                context["result"] = review_engine.review(context["evidence_pack"])
+                confirmed = tuple(context.get("payload", {}).get("priority_questions", ()))
+                context["result"] = review_engine.review(
+                    context["evidence_pack"],
+                    priority_questions=confirmed,
+                )
             if name == "research":
                 context["public_research_gateway"] = research_gateway
             if name == "validate" and {

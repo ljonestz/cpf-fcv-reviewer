@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from cpf_fcv_reviewer.app import create_app
+from cpf_fcv_reviewer.contracts import EvidencePack
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.runtime import build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
@@ -137,3 +138,29 @@ def test_runtime_cannot_report_completion_without_a_review_result(monkeypatch):
 
     assert events[-1][0] == "run_failed"
     assert not any(kind == "run_complete" for kind, _ in events)
+
+
+def test_runtime_validation_requires_confirmed_priority_response(
+    monkeypatch,
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    services = _runtime_services(monkeypatch)
+    validate = dict(services["review_orchestrator"].steps)["validate"]
+    context = {
+        "result": result,
+        "evidence_pack": EvidencePack(
+            metadata=result.metadata,
+            evidence=tuple(evidence.values()),
+            diagnostic_entries=(),
+        ),
+        "payload": {
+            "priority_questions": ("Is the partnership logic credible?",),
+        },
+    }
+
+    validated = validate(context)
+
+    assert "missing_priority_response" in {
+        issue["code"] for issue in validated["validation_issues"]
+    }

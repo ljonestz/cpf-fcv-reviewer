@@ -3,6 +3,9 @@ const progress = document.querySelector("#progress");
 const results = document.querySelector("#results");
 const corrections = document.querySelector("#corrections");
 const actions = document.querySelector("#actions");
+const guidance = document.querySelector("#guidance");
+const questionPanel = document.querySelector("#priority-questions");
+const questionList = document.querySelector("#priority-question-list");
 let assessmentId = sessionStorage.getItem("cpf_fcv_assessment_id") || "";
 
 const sensitivityLabels = {
@@ -18,6 +21,34 @@ function text(tag, value, className = "") {
   if (className) node.className = className;
   return node;
 }
+
+function detectedQuestions(value) {
+  const questions = new Map();
+  for (const line of value.split(/\r?\n/)) {
+    const clean = line.trim().replace(/^[-*]\s*/, "").trim();
+    if (!clean.endsWith("?")) continue;
+    const key = clean.toLocaleLowerCase();
+    if (!questions.has(key)) questions.set(key, clean);
+  }
+  return [...questions.values()];
+}
+
+function renderPriorityQuestions() {
+  questionList.replaceChildren();
+  for (const question of detectedQuestions(guidance.value)) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.name = "priority_questions";
+    checkbox.value = question;
+    checkbox.checked = true;
+    label.append(checkbox, document.createTextNode(question));
+    questionList.append(label);
+  }
+  questionPanel.hidden = questionList.children.length === 0;
+}
+
+guidance.addEventListener("input", renderPriorityQuestions);
 
 function renderResult(result) {
   results.replaceChildren();
@@ -96,8 +127,12 @@ document.querySelector("#submit-correction").addEventListener("click", async () 
     body: JSON.stringify({text: correction}),
   });
   if (response.ok) {
+    const child = await response.json();
+    assessmentId = child.assessment_id;
+    sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
     progress.hidden = false;
     progress.textContent = "User-provided correction saved; rerun requested.";
+    watchEvents(child.event_url, child.result_url);
   }
 });
 

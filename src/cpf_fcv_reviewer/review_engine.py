@@ -35,7 +35,12 @@ class ReviewEngine:
     def __init__(self, gateway: ModelGateway):
         self.gateway = gateway
 
-    def review(self, evidence_pack: EvidencePack) -> ReviewResult:
+    def review(
+        self,
+        evidence_pack: EvidencePack,
+        *,
+        priority_questions: tuple[str, ...] = (),
+    ) -> ReviewResult:
         stage = evidence_pack.metadata.review_stage
         try:
             stage_rule = STAGE_RULES[stage]
@@ -46,6 +51,7 @@ class ReviewEngine:
             payload={
                 "evidence_pack": evidence_pack.model_dump(mode="json"),
                 "stage_rule": stage_rule,
+                "priority_questions": priority_questions,
             },
             output_type=ReviewResult,
         )

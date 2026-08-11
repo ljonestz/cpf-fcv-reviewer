@@ -51,7 +51,7 @@ def test_reset_removes_active_review():
     assert client.get(created["result_url"]).status_code == 410
 
 
-def test_correction_is_labelled_and_persisted_in_volatile_state():
+def test_correction_is_labelled_and_persisted_in_child_state():
     app = make_app()
     client = app.test_client()
     created = create_review(client)
@@ -65,10 +65,12 @@ def test_correction_is_labelled_and_persisted_in_volatile_state():
     )
 
     assert response.status_code == 201
-    assert response.get_json()["label"] == "User-provided correction"
-    state = app.extensions["session_store"].get(created["assessment_id"])
-    assert state.payload["corrections"] == [response.get_json()]
-    assert state.payload["status"] == "rerun_requested"
+    child = response.get_json()
+    state = app.extensions["session_store"].get(child["assessment_id"])
+    assert state.payload["corrections"][-1]["label"] == "User-provided correction"
+    assert state.payload["corrections"][-1]["text"] == "Correct the delivery-risk description."
+    assert state.payload["parent_assessment_id"] == created["assessment_id"]
+    assert state.payload["status"] == "created"
 
 
 def test_blank_correction_is_rejected_without_mutating_state():

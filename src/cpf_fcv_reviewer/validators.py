@@ -114,6 +114,37 @@ def validate_review(
     return tuple(issues)
 
 
+def validate_priority_questions(
+    confirmed: tuple[str, ...],
+    result: ReviewResult,
+) -> tuple[ValidationIssue, ...]:
+    response_counts: dict[str, int] = {}
+    for response in result.priority_question_responses:
+        response_counts[response.question] = response_counts.get(response.question, 0) + 1
+
+    issues: list[ValidationIssue] = []
+    missing = sorted(question for question in confirmed if response_counts.get(question, 0) == 0)
+    if missing:
+        issues.append(
+            ValidationIssue(
+                "missing_priority_response",
+                f"Missing priority responses: {missing}",
+            )
+        )
+
+    duplicates = sorted(
+        question for question in confirmed if response_counts.get(question, 0) > 1
+    )
+    if duplicates:
+        issues.append(
+            ValidationIssue(
+                "duplicate_priority_response",
+                f"Duplicate priority responses: {duplicates}",
+            )
+        )
+    return tuple(issues)
+
+
 def _append_unknown_evidence_issue(
     issues: list[ValidationIssue],
     item_id: str,

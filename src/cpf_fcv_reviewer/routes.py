@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from io import BytesIO
 from threading import Thread
 from time import sleep
+from uuid import uuid4
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
 from .contracts import EvidenceItem, ReviewResult
 from .export_docx import build_docx
+from .priority_questions import detect_priority_questions
 from .registry import hydrate_referrals
 from .session_store import SessionExpired
 
@@ -33,6 +36,9 @@ def create_review():
             for item in request.files.getlist("supporting")
         ],
         "guidance": request.form.get("guidance", "").strip(),
+        "priority_questions": detect_priority_questions(
+            "\n".join(request.form.getlist("priority_questions"))
+        ),
         "corrections": [],
         "status": "created",
     }
@@ -130,27 +136,48 @@ def export_review(assessment_id):
 
 @bp.post("/api/reviews/<assessment_id>/corrections")
 def add_correction(assessment_id):
+    try:
+        parent = store().get(assessment_id)
+    except SessionExpired:
+        return jsonify(error="Assessment expired."), 410
+
     body = request.get_json(silent=True) or {}
     text = body.get("text", "")
     if not isinstance(text, str) or not text.strip():
         return jsonify(error="Correction text is required."), 400
-    correction = {
-        "label": "User-provided correction",
-        "text": text.strip(),
-        "affected_finding_id": body.get("affected_finding_id"),
-        "rationale": body.get("rationale"),
-    }
-    try:
-        state = store().get(assessment_id)
-    except SessionExpired:
-        return jsonify(error="Assessment expired."), 410
-    corrections = [*state.payload.get("corrections", ()), correction]
-    store().update(
-        assessment_id,
-        corrections=corrections,
-        status="rerun_requested",
+
+    child_payload = dict(parent.payload)
+    child_payload["corrections"] = list(parent.payload.get("corrections", ()))
+    child_payload["corrections"].append(
+        {
+            "correction_id": uuid4().hex,
+            "created_at": datetime.now(UTC).isoformat(),
+            "label": "User-provided correction",
+            "text": text.strip(),
+            "affected_finding_id": body.get("affected_finding_id"),
+            "rationale": body.get("rationale"),
+            "independently_supported": False,
+        }
     )
-    return jsonify(correction), 201
+    child_payload["parent_assessment_id"] = assessment_id
+    child_payload["status"] = "created"
+    child_payload.pop("result", None)
+    child_payload.pop("evidence_by_id", None)
+
+    child_id = store().create(child_payload)
+    if current_app.config["START_BACKGROUND_RUNS"]:
+        app = current_app._get_current_object()
+        Thread(target=run_assessment, args=(app, child_id), daemon=True).start()
+    base = f"/api/reviews/{child_id}"
+    return (
+        jsonify(
+            assessment_id=child_id,
+            parent_assessment_id=assessment_id,
+            event_url=f"{base}/events",
+            result_url=f"{base}/result",
+        ),
+        201,
+    )
 
 
 @bp.delete("/api/reviews/<assessment_id>")
