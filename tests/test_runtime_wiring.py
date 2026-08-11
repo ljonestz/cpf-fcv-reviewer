@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from cpf_fcv_reviewer.app import create_app
-from cpf_fcv_reviewer.contracts import EvidencePack
+from cpf_fcv_reviewer.contracts import EvidencePack, Finding, ReviewResult
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.runtime import build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
@@ -164,3 +164,125 @@ def test_runtime_validation_requires_confirmed_priority_response(
     assert "missing_priority_response" in {
         issue["code"] for issue in validated["validation_issues"]
     }
+
+
+def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
+    class FakeGateway:
+        def __init__(self, api_key, model_id):
+            self.model_id = model_id
+
+        def generate(self, *, prompt_name, payload, output_type):
+            pack = EvidencePack.model_validate(payload["evidence_pack"])
+            evidence_id = pack.evidence[0].evidence_id
+            return ReviewResult(
+                metadata=pack.metadata,
+                executive_judgment="The draft identifies a material delivery constraint.",
+                diagnostic_title="Limited FCV diagnostic-framing assessment",
+                findings=(
+                    Finding(
+                        finding_id="finding-1",
+                        title="Delivery constraint",
+                        narrative="The constraint is described in the uploaded draft.",
+                        status="needs_strengthening",
+                        evidence_ids=(evidence_id,),
+                        sensitivity="cautious",
+                    ),
+                ),
+                recommendations=(),
+                limitations=("No current RRA was supplied.",),
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FakeGateway,
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+    )
+    events = []
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "run-1",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "cpf": {
+                    "name": "benin-cpf.txt",
+                    "bytes": b"Material FCV delivery constraint. " * 20,
+                },
+                "supporting": [],
+                "guidance": "",
+                "priority_questions": (),
+                "corrections": [],
+            },
+        },
+        lambda kind, data: events.append((kind, data)),
+    )
+
+    assert context["evidence_pack"].evidence
+    assert context["result"].findings[0].evidence_ids == (
+        context["evidence_pack"].evidence[0].evidence_id,
+    )
+    assert events[-1][0] == "run_complete"
+
+
+def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypatch):
+    captured = {}
+
+    class FakeGateway:
+        def __init__(self, api_key, model_id):
+            self.model_id = model_id
+
+        def generate(self, *, prompt_name, payload, output_type):
+            pack = EvidencePack.model_validate(payload["evidence_pack"])
+            captured["pack"] = pack
+            return ReviewResult(
+                metadata=pack.metadata,
+                executive_judgment="The draft requires cautious review.",
+                diagnostic_title="Limited FCV diagnostic-framing assessment",
+                findings=(),
+                recommendations=(),
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FakeGateway,
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+    )
+    corrections = [
+        {
+            "correction_id": f"correction-{index:02d}",
+            "created_at": "2026-08-11T18:00:00+00:00",
+            "text": "x" * 5000,
+            "independently_supported": False,
+        }
+        for index in range(25)
+    ]
+
+    services["review_orchestrator"].run(
+        {
+            "assessment_id": "run-with-corrections",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "cpf": {
+                    "name": "benin-cpf.txt",
+                    "bytes": b"Material FCV delivery constraint. " * 20,
+                },
+                "supporting": [],
+                "guidance": "",
+                "priority_questions": (),
+                "corrections": corrections,
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    pack = captured["pack"]
+    assert len(pack.user_corrections) == 20
+    assert all(len(item.text) <= 2000 for item in pack.user_corrections)
+    assert len(pack.metadata.correction_ids) == 25
