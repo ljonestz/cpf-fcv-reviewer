@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 
 from .config import build_config
 from .routes import bp as review_blueprint
@@ -21,6 +21,10 @@ def create_app(
         ttl_seconds=app.config["SESSION_TTL_SECONDS"]
     )
     app.register_blueprint(review_blueprint)
+
+    @app.get("/")
+    def index():
+        return render_template("index.html")
 
     @app.get("/health")
     def health():
