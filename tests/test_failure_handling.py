@@ -1,10 +1,14 @@
+import logging
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 
+from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.extraction import DocumentUnreadable, require_readable_primary
 from cpf_fcv_reviewer.orchestrator import ReviewOrchestrator, safe_failure_code
 from cpf_fcv_reviewer.registry import RegistryUnavailable
+from cpf_fcv_reviewer.routes import run_assessment
 
 
 @pytest.mark.parametrize(
@@ -86,3 +90,33 @@ def test_frontend_uses_only_safe_failure_codes():
     javascript = Path("src/cpf_fcv_reviewer/static/app.js").read_text(encoding="utf-8")
     assert "failureLabels[data.error]" in javascript
     assert "data.message" not in javascript
+
+
+def test_background_failure_logs_only_exception_type_and_http_status(caplog):
+    secret = "TOP-SECRET-PROVIDER-DETAIL"
+
+    class ProviderFailure(RuntimeError):
+        status_code = 404
+
+    class FailingOrchestrator:
+        def run(self, context, emit):
+            raise ProviderFailure(secret)
+
+    app = create_app({"TESTING": True, "START_BACKGROUND_RUNS": False})
+    app.extensions["review_orchestrator"] = FailingOrchestrator()
+    created = app.test_client().post(
+        "/api/reviews",
+        data={
+            "country": "Benin",
+            "review_stage": "finalization",
+            "cpf": (BytesIO(b"Readable public CPF text " * 20), "public-cpf.txt"),
+        },
+        content_type="multipart/form-data",
+    ).get_json()
+
+    with caplog.at_level(logging.ERROR):
+        run_assessment(app, created["assessment_id"])
+
+    assert "ProviderFailure" in caplog.text
+    assert "status_code=404" in caplog.text
+    assert secret not in caplog.text

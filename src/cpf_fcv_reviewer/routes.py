@@ -253,7 +253,13 @@ def run_assessment(app, assessment_id):
             )
         except SessionExpired:
             return
-        except Exception:
+        except Exception as exc:
+            status_code = getattr(exc, "status_code", None)
+            current_app.logger.error(
+                "review_run_failed error_type=%s status_code=%s",
+                type(exc).__name__,
+                status_code if isinstance(status_code, int) else "none",
+            )
             try:
                 store().update(assessment_id, status="failed")
             except SessionExpired:
