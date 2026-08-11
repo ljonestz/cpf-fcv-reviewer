@@ -174,6 +174,15 @@ class EvidencePack(FrozenModel):
     warnings: tuple[str, ...] = ()
 
 
+class PriorityQuestionResponse(FrozenModel):
+    question_id: str
+    question: str
+    direct_answer: str
+    evidence_ids: tuple[str, ...]
+    confidence: Literal["high", "medium", "low"]
+    limitation: str | None = None
+
+
 class ReviewResult(FrozenModel):
     metadata: RunMetadata
     executive_judgment: str
@@ -181,4 +190,5 @@ class ReviewResult(FrozenModel):
     findings: tuple[Finding, ...]
     recommendations: tuple[Recommendation, ...]
     institutional_referral_ids: tuple[str, ...] = ()
+    priority_question_responses: tuple[PriorityQuestionResponse, ...] = ()
     limitations: tuple[str, ...] = ()

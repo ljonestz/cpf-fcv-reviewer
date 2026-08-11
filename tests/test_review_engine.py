@@ -1,0 +1,179 @@
+import json
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
+import pytest
+
+from cpf_fcv_reviewer import model_gateway
+from cpf_fcv_reviewer.contracts import (
+    DiagnosticMode,
+    EvidencePack,
+    PriorityQuestionResponse,
+    ReviewResult,
+    RunMetadata,
+)
+from cpf_fcv_reviewer.model_gateway import AnthropicModelGateway
+from cpf_fcv_reviewer.review_engine import STAGE_RULES, ReviewEngine
+
+
+class FakeGateway:
+    def __init__(self, result: ReviewResult):
+        self.result = result
+        self.calls = []
+
+    def generate(self, *, prompt_name, payload, output_type):
+        self.calls.append((prompt_name, payload, output_type))
+        return self.result
+
+
+def metadata(
+    mode: DiagnosticMode = DiagnosticMode.LIMITED_FRAMING,
+    stage: str = "finalization",
+) -> RunMetadata:
+    return RunMetadata(
+        run_id="run-1",
+        created_at=datetime.now(UTC),
+        review_stage=stage,
+        diagnostic_mode=mode,
+        app_release="0.1.0",
+        schema_version="1.0.0",
+        rubric_version="1.0.0",
+        prompt_bundle_version="1.0.0",
+        registry_versions={"fcv_strategy": "1.0.0"},
+        model_id="fake",
+    )
+
+
+def result_for(meta: RunMetadata) -> ReviewResult:
+    return ReviewResult(
+        metadata=meta,
+        executive_judgment="Evidence is limited.",
+        diagnostic_title="Limited FCV diagnostic-framing assessment",
+        findings=(),
+        recommendations=(),
+        limitations=("No RRA or accepted equivalent was available.",),
+    )
+
+
+def test_limited_mode_has_non_alignment_title_and_uses_review_prompt():
+    meta = metadata()
+    gateway = FakeGateway(result_for(meta))
+
+    result = ReviewEngine(gateway).review(
+        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+    )
+
+    assert result.diagnostic_title == "Limited FCV diagnostic-framing assessment"
+    assert gateway.calls[0][0] == "review"
+    assert gateway.calls[0][2] is ReviewResult
+
+
+def test_finalization_stage_rule_and_serialized_evidence_pack_are_injected():
+    meta = metadata()
+    evidence_pack = EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+    gateway = FakeGateway(result_for(meta))
+
+    ReviewEngine(gateway).review(evidence_pack)
+
+    payload = gateway.calls[0][1]
+    assert "targeted, high-value edits" in payload["stage_rule"]
+    assert payload["evidence_pack"] == evidence_pack.model_dump(mode="json")
+    assert payload["evidence_pack"]["metadata"]["diagnostic_mode"] == "limited_framing"
+
+
+@pytest.mark.parametrize("stage", sorted(STAGE_RULES))
+def test_every_supported_review_stage_injects_its_rule(stage):
+    meta = metadata(stage=stage)
+    gateway = FakeGateway(result_for(meta))
+
+    ReviewEngine(gateway).review(
+        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+    )
+
+    assert gateway.calls[0][1]["stage_rule"] == STAGE_RULES[stage]
+
+
+def test_unsupported_review_stage_is_rejected_before_gateway_call():
+    meta = metadata(stage="unsupported")
+    gateway = FakeGateway(result_for(meta))
+
+    with pytest.raises(ValueError, match="Unsupported review stage: unsupported"):
+        ReviewEngine(gateway).review(
+            EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+        )
+
+    assert gateway.calls == []
+
+
+def test_priority_question_response_is_preserved_in_review_result():
+    meta = metadata()
+    response = PriorityQuestionResponse(
+        question_id="pq-1",
+        question="Is the implementation assumption confirmed?",
+        direct_answer="The supplied evidence does not confirm it.",
+        evidence_ids=("ev-1",),
+        confidence="low",
+        limitation="Confirmation is needed from the country team.",
+    )
+    expected = result_for(meta).model_copy(
+        update={"priority_question_responses": (response,)}
+    )
+    gateway = FakeGateway(expected)
+
+    actual = ReviewEngine(gateway).review(
+        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+    )
+
+    assert actual.priority_question_responses == (response,)
+
+
+class FakeMessages:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.response
+
+
+class FakeAnthropicClient:
+    def __init__(self, response):
+        self.messages = FakeMessages(response)
+
+
+def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
+    meta = metadata()
+    expected = result_for(meta)
+    response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=expected.model_dump_json())]
+    )
+    client = FakeAnthropicClient(response)
+    monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+    gateway = AnthropicModelGateway("test-key", "test-model")
+
+    actual = gateway.generate(
+        prompt_name="review",
+        payload={"accented": "Résilience"},
+        output_type=ReviewResult,
+    )
+
+    assert actual == expected
+    call = client.messages.calls[0]
+    assert call["model"] == "test-model"
+    assert call["max_tokens"] == 12000
+    assert call["system"].startswith("Version: 1.0.0")
+    assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        [],
+        [SimpleNamespace(type="tool_use", text=None)],
+        [SimpleNamespace(type="text", text="   ")],
+    ],
+)
+def test_anthropic_gateway_rejects_empty_or_non_text_response(monkeypatch, content):
+    client = FakeAnthropicClient(SimpleNamespace(content=content))
+    monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
