@@ -103,7 +103,32 @@ def review_result(assessment_id):
         return jsonify(error="Review result is invalid."), 409
     if validate_reproducibility_metadata(validated_result.metadata):
         return jsonify(error="Reproducibility metadata is incomplete."), 409
-    return jsonify(validated_result.model_dump(mode="json"))
+    evidence_payload = state.payload.get("evidence_by_id", {})
+    if not isinstance(evidence_payload, dict):
+        return jsonify(error="Traceable evidence is invalid."), 409
+    try:
+        validated_evidence = {
+            evidence_id: EvidenceItem.model_validate(item).model_dump(mode="json")
+            for evidence_id, item in evidence_payload.items()
+        }
+    except ValueError:
+        return jsonify(error="Traceable evidence is invalid."), 409
+    if any(
+        evidence_id != item["evidence_id"]
+        for evidence_id, item in validated_evidence.items()
+    ):
+        return jsonify(error="Traceable evidence is invalid."), 409
+    evidence_ids = set(validated_evidence)
+    if any(
+        evidence_id not in evidence_ids
+        for finding in validated_result.findings
+        for evidence_id in finding.evidence_ids
+    ):
+        return jsonify(error="Traceable evidence is invalid."), 409
+
+    response_payload = validated_result.model_dump(mode="json")
+    response_payload["evidence_by_id"] = validated_evidence
+    return jsonify(response_payload)
 
 
 @bp.get("/api/reviews/<assessment_id>/export.docx")

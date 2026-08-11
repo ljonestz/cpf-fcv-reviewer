@@ -103,3 +103,67 @@ def test_event_stream_stops_after_terminal_event():
     assert response.status_code == 200
     assert response.mimetype == "text/event-stream"
     assert "event: run_complete" in response.get_data(as_text=True)
+
+
+def test_result_includes_validated_traceable_evidence_for_browser_expansion(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    app = make_app()
+    assessment_id = app.extensions["session_store"].create(
+        {
+            "status": "complete",
+            "result": result.model_dump(mode="json"),
+            "evidence_by_id": {
+                evidence_id: item.model_dump(mode="json")
+                for evidence_id, item in evidence.items()
+            },
+        }
+    )
+
+    response = app.test_client().get(f"/api/reviews/{assessment_id}/result")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["evidence_by_id"]["ev-1"]["locator"]["heading"] == "Results framework"
+    assert payload["evidence_by_id"]["ev-1"]["locator"]["excerpt"]
+
+
+def test_result_rejects_evidence_mapping_key_that_differs_from_item_id(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    app = make_app()
+    assessment_id = app.extensions["session_store"].create(
+        {
+            "status": "complete",
+            "result": result.model_dump(mode="json"),
+            "evidence_by_id": {
+                "ev-1": evidence["ev-1"]
+                .model_copy(update={"evidence_id": "ev-2"})
+                .model_dump(mode="json"),
+            },
+        }
+    )
+
+    response = app.test_client().get(f"/api/reviews/{assessment_id}/result")
+
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "Traceable evidence is invalid."}
+
+
+def test_result_rejects_finding_with_unavailable_cited_evidence(make_valid_result):
+    result, _ = make_valid_result
+    app = make_app()
+    assessment_id = app.extensions["session_store"].create(
+        {
+            "status": "complete",
+            "result": result.model_dump(mode="json"),
+            "evidence_by_id": {},
+        }
+    )
+
+    response = app.test_client().get(f"/api/reviews/{assessment_id}/result")
+
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "Traceable evidence is invalid."}

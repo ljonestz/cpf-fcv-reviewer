@@ -56,3 +56,26 @@ def test_result_rendering_uses_text_content_with_sensitivity_and_evidence_labels
     assert "Frame cautiously" in javascript
     assert "Confirm with country team or FCV specialist" in javascript
     assert "evidence_ids" in javascript
+
+
+def test_browser_evidence_is_expandable_and_uses_validated_locator_content():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'document.createElement("details")' in javascript
+    assert 'text("summary", `Evidence: ${evidenceId}`)' in javascript
+    assert "result.evidence_by_id" in javascript
+    assert "locator.document_title" in javascript
+    assert "locator.excerpt" in javascript
+    assert "innerHTML" not in javascript
+
+
+def test_browser_renders_recommendations_priority_responses_and_limitations():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'text("h2", "Practical options")' in javascript
+    assert "result.recommendations" in javascript
+    assert "recommendation.target_locator" in javascript
+    assert 'text("h2", "Priority questions")' in javascript
+    assert "result.priority_question_responses" in javascript
+    assert 'text("h2", "Limitations")' in javascript
+    assert "result.limitations" in javascript

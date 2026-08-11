@@ -57,6 +57,28 @@ function renderPriorityQuestions() {
 
 guidance.addEventListener("input", renderPriorityQuestions);
 
+function renderEvidence(result, evidenceId) {
+  const details = document.createElement("details");
+  details.append(text("summary", `Evidence: ${evidenceId}`));
+  const item = result.evidence_by_id?.[evidenceId];
+  const locator = item?.locator;
+  if (!locator) {
+    details.append(text("p", "Traceable evidence detail is unavailable."));
+    return details;
+  }
+  const coordinate = [
+    locator.document_title,
+    locator.page ? `page ${locator.page}` : "",
+    locator.heading || "",
+    locator.element || "",
+  ].filter(Boolean).join(" | ");
+  details.append(
+    text("p", coordinate, "evidence-locator"),
+    text("p", locator.excerpt, "evidence-excerpt"),
+  );
+  return details;
+}
+
 function renderResult(result) {
   results.replaceChildren();
   results.append(
@@ -69,9 +91,53 @@ function renderResult(result) {
       text("h3", finding.title),
       text("p", finding.narrative),
       text("p", sensitivityLabels[finding.sensitivity], "sensitivity"),
-      text("p", `Evidence: ${finding.evidence_ids.join(", ")}`, "evidence"),
     );
+    for (const evidenceId of finding.evidence_ids) {
+      article.append(renderEvidence(result, evidenceId));
+    }
     results.append(article);
+  }
+  if (result.recommendations.length) {
+    results.append(text("h2", "Practical options"));
+    for (const recommendation of result.recommendations) {
+      const article = document.createElement("article");
+      const locator = recommendation.target_locator;
+      const target = [
+        locator.document_title,
+        locator.page ? `page ${locator.page}` : "",
+        locator.heading || "",
+        locator.element || "",
+      ].filter(Boolean).join(" | ");
+      article.append(
+        text("h3", recommendation.action),
+        text("p", recommendation.why_it_matters),
+        text("p", `Target: ${target}`, "evidence-locator"),
+        text("p", sensitivityLabels[recommendation.sensitivity], "sensitivity"),
+      );
+      results.append(article);
+    }
+  }
+  if (result.priority_question_responses.length) {
+    results.append(text("h2", "Priority questions"));
+    for (const response of result.priority_question_responses) {
+      const article = document.createElement("article");
+      article.append(
+        text("h3", response.question),
+        text("p", response.direct_answer),
+      );
+      if (response.limitation) {
+        article.append(text("p", `Limitation: ${response.limitation}`, "sensitivity"));
+      }
+      results.append(article);
+    }
+  }
+  if (result.limitations.length) {
+    results.append(text("h2", "Limitations"));
+    const list = document.createElement("ul");
+    for (const limitation of result.limitations) {
+      list.append(text("li", limitation));
+    }
+    results.append(list);
   }
   results.hidden = false;
   corrections.hidden = false;
