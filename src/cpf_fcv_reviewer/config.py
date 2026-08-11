@@ -8,6 +8,10 @@ def build_config(overrides: dict | None = None) -> dict:
     config = {
         "APP_RELEASE": os.getenv("APP_RELEASE", "dev"),
         "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
+        "ANTHROPIC_MODEL_ID": os.getenv("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
+        "REGISTRY_BUNDLE_PATH": os.getenv("REGISTRY_BUNDLE_PATH", ""),
+        "REGISTRY_BUNDLE_SHA256": os.getenv("REGISTRY_BUNDLE_SHA256", ""),
+        "ALLOW_SYNTHETIC_REGISTRY": False,
         "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
         "SESSION_TTL_SECONDS": (
             overrides["SESSION_TTL_SECONDS"]
