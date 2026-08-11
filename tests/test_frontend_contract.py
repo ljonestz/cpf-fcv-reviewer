@@ -28,6 +28,8 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
     ):
         assert prohibited_determination in html
     assert '<label for="correction-text">' in html
+    assert "public version" in html.lower()
+    assert "internal ITS version" in html
 
 
 def test_index_route_serves_the_interface():
