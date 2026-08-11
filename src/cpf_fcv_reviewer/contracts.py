@@ -207,3 +207,15 @@ class ReviewResult(FrozenModel):
     institutional_referral_ids: tuple[str, ...] = ()
     priority_question_responses: tuple[PriorityQuestionResponse, ...] = ()
     limitations: tuple[str, ...] = ()
+
+
+class ReviewDraft(FrozenModel):
+    """Model-authored review content; authoritative run metadata is attached locally."""
+
+    executive_judgment: str
+    diagnostic_title: str
+    findings: tuple[Finding, ...]
+    recommendations: tuple[Recommendation, ...]
+    institutional_referral_ids: tuple[str, ...]
+    priority_question_responses: tuple[PriorityQuestionResponse, ...]
+    limitations: tuple[str, ...]

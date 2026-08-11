@@ -219,14 +219,7 @@ def build_runtime_services(config: dict) -> dict:
     def repair(context, issues):
         if "result" not in context:
             return context
-        context["result"] = model_gateway.generate(
-            prompt_name="repair",
-            payload={
-                "draft": context["result"].model_dump(mode="json"),
-                "validation_issues": issues,
-            },
-            output_type=type(context["result"]),
-        )
+        context["result"] = review_engine.repair(context["result"], issues)
         context["validation_issues"] = review_validation_issues(context)
         return context
 

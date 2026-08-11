@@ -261,7 +261,9 @@ def test_french_evidence_remains_verbatim_while_review_output_is_english():
     class CapturingGateway:
         def generate(self, **kwargs):
             self.kwargs = kwargs
-            return _result()
+            return kwargs["output_type"].model_validate(
+                _result().model_dump(exclude={"metadata"})
+            )
 
     gateway = CapturingGateway()
     ReviewEngine(gateway).review(pack)
@@ -284,7 +286,9 @@ def test_uploaded_and_guidance_prompt_injections_are_isolated_as_untrusted_conte
     class CapturingGateway:
         def generate(self, **kwargs):
             self.kwargs = kwargs
-            return _result()
+            return kwargs["output_type"].model_validate(
+                _result().model_dump(exclude={"metadata"})
+            )
 
     gateway = CapturingGateway()
     ReviewEngine(gateway).review(pack, priority_questions=(hostile,))

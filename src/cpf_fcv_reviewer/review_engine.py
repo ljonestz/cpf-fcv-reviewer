@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .contracts import EvidencePack, ReviewResult
+from .contracts import EvidencePack, ReviewDraft, ReviewResult
 from .model_gateway import ModelGateway
 
 STAGE_RULES = {
@@ -46,12 +46,25 @@ class ReviewEngine:
             stage_rule = STAGE_RULES[stage]
         except KeyError as exc:
             raise ValueError(f"Unsupported review stage: {stage}") from exc
-        return self.gateway.generate(
+        draft = self.gateway.generate(
             prompt_name="review",
             payload={
                 "evidence_pack": evidence_pack.model_dump(mode="json"),
                 "stage_rule": stage_rule,
                 "priority_questions": priority_questions,
             },
-            output_type=ReviewResult,
+            output_type=ReviewDraft,
         )
+        return ReviewResult(metadata=evidence_pack.metadata, **draft.model_dump())
+
+    def repair(self, result: ReviewResult, issues: list[dict]) -> ReviewResult:
+        draft = self.gateway.generate(
+            prompt_name="repair",
+            payload={
+                "draft": result.model_dump(mode="json", exclude={"metadata"}),
+                "validation_issues": issues,
+            },
+            output_type=ReviewDraft,
+        )
+        metadata = result.metadata.model_copy(update={"repair_count": 1})
+        return ReviewResult(metadata=metadata, **draft.model_dump())

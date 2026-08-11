@@ -47,3 +47,12 @@ def test_diagnostic_map_prompt_preserves_evidence_boundaries():
 
     assert "Preserve every supplied material evidence identifier exactly once" in prompt
     assert "Do not convert contextual background into a programming requirement" in prompt
+
+
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_review_prompts_request_content_only_and_omit_application_metadata(name):
+    prompt = load_prompt(name)
+
+    assert "ReviewDraft" in prompt
+    assert "application-owned" in prompt
+    assert "omit metadata" in prompt

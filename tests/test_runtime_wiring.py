@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from cpf_fcv_reviewer.app import create_app
-from cpf_fcv_reviewer.contracts import EvidencePack, Finding, ReviewResult
+from cpf_fcv_reviewer.contracts import EvidencePack, Finding
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.runtime import build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
@@ -174,8 +174,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
         def generate(self, *, prompt_name, payload, output_type):
             pack = EvidencePack.model_validate(payload["evidence_pack"])
             evidence_id = pack.evidence[0].evidence_id
-            return ReviewResult(
-                metadata=pack.metadata,
+            return output_type(
                 executive_judgment="The draft identifies a material delivery constraint.",
                 diagnostic_title="Limited FCV diagnostic-framing assessment",
                 findings=(
@@ -189,6 +188,8 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                     ),
                 ),
                 recommendations=(),
+                institutional_referral_ids=(),
+                priority_question_responses=(),
                 limitations=("No current RRA was supplied.",),
             )
 
@@ -237,12 +238,14 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
         def generate(self, *, prompt_name, payload, output_type):
             pack = EvidencePack.model_validate(payload["evidence_pack"])
             captured["pack"] = pack
-            return ReviewResult(
-                metadata=pack.metadata,
+            return output_type(
                 executive_judgment="The draft requires cautious review.",
                 diagnostic_title="Limited FCV diagnostic-framing assessment",
                 findings=(),
                 recommendations=(),
+                institutional_referral_ids=(),
+                priority_question_responses=(),
+                limitations=(),
             )
 
     monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)

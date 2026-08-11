@@ -9,6 +9,7 @@ from cpf_fcv_reviewer.contracts import (
     DiagnosticMode,
     EvidencePack,
     PriorityQuestionResponse,
+    ReviewDraft,
     ReviewResult,
     RunMetadata,
 )
@@ -17,7 +18,7 @@ from cpf_fcv_reviewer.review_engine import STAGE_RULES, ReviewEngine
 
 
 class FakeGateway:
-    def __init__(self, result: ReviewResult):
+    def __init__(self, result):
         self.result = result
         self.calls = []
 
@@ -55,9 +56,13 @@ def result_for(meta: RunMetadata) -> ReviewResult:
     )
 
 
+def draft_for(meta: RunMetadata) -> ReviewDraft:
+    return ReviewDraft.model_validate(result_for(meta).model_dump(exclude={"metadata"}))
+
+
 def test_limited_mode_has_non_alignment_title_and_uses_review_prompt():
     meta = metadata()
-    gateway = FakeGateway(result_for(meta))
+    gateway = FakeGateway(draft_for(meta))
 
     result = ReviewEngine(gateway).review(
         EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
@@ -65,13 +70,24 @@ def test_limited_mode_has_non_alignment_title_and_uses_review_prompt():
 
     assert result.diagnostic_title == "Limited FCV diagnostic-framing assessment"
     assert gateway.calls[0][0] == "review"
-    assert gateway.calls[0][2] is ReviewResult
+    assert gateway.calls[0][2] is ReviewDraft
+
+
+def test_model_output_schema_excludes_authoritative_run_metadata():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+
+    ReviewEngine(gateway).review(
+        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+    )
+
+    assert gateway.calls[0][2].__name__ == "ReviewDraft"
 
 
 def test_finalization_stage_rule_and_serialized_evidence_pack_are_injected():
     meta = metadata()
     evidence_pack = EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
-    gateway = FakeGateway(result_for(meta))
+    gateway = FakeGateway(draft_for(meta))
 
     ReviewEngine(gateway).review(evidence_pack)
 
@@ -84,7 +100,7 @@ def test_finalization_stage_rule_and_serialized_evidence_pack_are_injected():
 @pytest.mark.parametrize("stage", sorted(STAGE_RULES))
 def test_every_supported_review_stage_injects_its_rule(stage):
     meta = metadata(stage=stage)
-    gateway = FakeGateway(result_for(meta))
+    gateway = FakeGateway(draft_for(meta))
 
     ReviewEngine(gateway).review(
         EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
@@ -128,7 +144,7 @@ def test_each_confirmed_priority_question_has_one_direct_or_limited_response():
             limitation="Confirmation is needed from the country team.",
         ),
     )
-    expected = result_for(meta).model_copy(
+    expected = draft_for(meta).model_copy(
         update={"priority_question_responses": responses}
     )
     gateway = FakeGateway(expected)
@@ -140,6 +156,23 @@ def test_each_confirmed_priority_question_has_one_direct_or_limited_response():
 
     assert actual.priority_question_responses == responses
     assert responses[1].limitation == "Confirmation is needed from the country team."
+
+
+def test_repair_keeps_authoritative_metadata_out_of_the_model_schema_and_payload():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+
+    repaired = ReviewEngine(gateway).repair(
+        result_for(meta),
+        [{"code": "example", "message": "Repair the draft."}],
+    )
+
+    prompt_name, payload, output_type = gateway.calls[0]
+    assert prompt_name == "repair"
+    assert output_type is ReviewDraft
+    assert "metadata" not in payload["draft"]
+    assert repaired.metadata.repair_count == 1
+    assert repaired.metadata.run_id == meta.run_id
 
 
 class FakeMessages:
@@ -195,7 +228,7 @@ def test_anthropic_gateway_rejects_missing_parsed_output(monkeypatch):
 
 def test_confirmed_priority_questions_are_injected_into_review_payload():
     meta = metadata()
-    gateway = FakeGateway(result_for(meta))
+    gateway = FakeGateway(draft_for(meta))
     questions = (
         "Does the results framework track geographic distribution?",
         "Is the partnership logic credible?",
