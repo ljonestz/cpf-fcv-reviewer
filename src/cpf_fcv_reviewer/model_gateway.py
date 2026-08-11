@@ -33,7 +33,7 @@ class AnthropicModelGateway:
         payload: dict,
         output_type: type[OutputModel],
     ) -> OutputModel:
-        response = self.client.messages.create(
+        response = self.client.messages.parse(
             model=self.model_id,
             max_tokens=12000,
             system=load_prompt(prompt_name),
@@ -43,14 +43,9 @@ class AnthropicModelGateway:
                     "content": json.dumps(payload, ensure_ascii=False),
                 }
             ],
+            output_format=output_type,
         )
-        text_parts = (
-            block.text
-            for block in response.content
-            if getattr(block, "type", None) == "text"
-            and isinstance(getattr(block, "text", None), str)
-        )
-        text = "\n".join(part for part in text_parts if part.strip()).strip()
-        if not text:
-            raise ValueError("Anthropic response contained no text content.")
-        return output_type.model_validate_json(text)
+        parsed = getattr(response, "parsed_output", None)
+        if not isinstance(parsed, output_type):
+            raise ValueError("Anthropic response contained no parsed output.")
+        return parsed

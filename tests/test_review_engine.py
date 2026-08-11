@@ -147,7 +147,7 @@ class FakeMessages:
         self.response = response
         self.calls = []
 
-    def create(self, **kwargs):
+    def parse(self, **kwargs):
         self.calls.append(kwargs)
         return self.response
 
@@ -160,9 +160,7 @@ class FakeAnthropicClient:
 def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     meta = metadata()
     expected = result_for(meta)
-    response = SimpleNamespace(
-        content=[SimpleNamespace(type="text", text=expected.model_dump_json())]
-    )
+    response = SimpleNamespace(parsed_output=expected)
     client = FakeAnthropicClient(response)
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
     gateway = AnthropicModelGateway("test-key", "test-model")
@@ -178,20 +176,21 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
     assert call["system"].startswith("Version: 1.0.0")
+    assert call["output_format"] is ReviewResult
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
 
-@pytest.mark.parametrize(
-    "content",
-    [
-        [],
-        [SimpleNamespace(type="tool_use", text=None)],
-        [SimpleNamespace(type="text", text="   ")],
-    ],
-)
-def test_anthropic_gateway_rejects_empty_or_non_text_response(monkeypatch, content):
-    client = FakeAnthropicClient(SimpleNamespace(content=content))
+def test_anthropic_gateway_rejects_missing_parsed_output(monkeypatch):
+    client = FakeAnthropicClient(SimpleNamespace(parsed_output=None))
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+    gateway = AnthropicModelGateway("test-key", "test-model")
+
+    with pytest.raises(ValueError, match="no parsed output"):
+        gateway.generate(
+            prompt_name="review",
+            payload={"input": "bounded"},
+            output_type=ReviewResult,
+        )
 
 
 def test_confirmed_priority_questions_are_injected_into_review_payload():
