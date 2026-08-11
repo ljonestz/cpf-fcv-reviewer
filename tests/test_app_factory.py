@@ -56,3 +56,7 @@ def test_render_uses_threaded_worker_without_late_ssl_monkey_patch():
     assert "--worker-class gthread" in procfile
     assert "--threads 4" in procfile
     assert "gevent" not in procfile
+
+
+def test_render_python_matches_the_validated_runtime_line():
+    assert Path(".python-version").read_text(encoding="utf-8").strip() == "3.13"
