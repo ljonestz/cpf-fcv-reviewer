@@ -179,8 +179,8 @@ def review_result(assessment_id):
     evidence_ids = set(validated_evidence)
     if any(
         evidence_id not in evidence_ids
-        for finding in validated_result.findings
-        for evidence_id in finding.evidence_ids
+        for area in validated_result.priority_areas
+        for evidence_id in area.evidence_ids
     ):
         return jsonify(error="Traceable evidence is invalid."), 409
 

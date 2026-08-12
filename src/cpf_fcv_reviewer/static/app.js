@@ -27,13 +27,6 @@ const RESULT_RETRY_LIMIT = 3;
 const RESULT_RETRY_DELAY_MS = 250;
 const SOURCE_ERROR_LIMIT = 2;
 
-const sensitivityLabels = {
-  direct: "Suitable to state directly",
-  cautious: "Frame cautiously",
-  confirm: "Confirm with country team or FCV specialist",
-  withhold: "Do not suggest for inclusion without guidance",
-};
-
 const failureLabels = {
   model_timeout: "The model timed out. Try the review again.",
   registry_unavailable: "The approved registry is unavailable.",
@@ -200,87 +193,92 @@ processDialog.addEventListener("click", (event) => {
   }
 });
 
-function renderEvidence(result, evidenceId) {
-  const details = document.createElement("details");
-  details.append(text("summary", `Evidence: ${evidenceId}`));
-  const item = result.evidence_by_id?.[evidenceId];
-  const locator = item?.locator;
-  if (!locator) {
-    details.append(text("p", "Traceable evidence detail is unavailable."));
-    return details;
-  }
-  const coordinate = [
+function labelledParagraph(label, value, className) {
+  const paragraph = document.createElement("p");
+  paragraph.className = className;
+  const lead = document.createElement("strong");
+  lead.textContent = `${label}. `;
+  paragraph.append(lead, document.createTextNode(value));
+  return paragraph;
+}
+
+function locatorLabel(locator) {
+  return [
     locator.document_title,
     locator.page ? `page ${locator.page}` : "",
     locator.heading || "",
     locator.element || "",
   ].filter(Boolean).join(" | ");
-  details.append(
-    text("p", coordinate, "evidence-locator"),
-    text("p", locator.excerpt, "evidence-excerpt"),
-  );
+}
+
+function renderEvidenceGroup(result, evidenceIds) {
+  const details = document.createElement("details");
+  details.className = "evidence-group";
+  details.append(text("summary", "Evidence and document locations"));
+  for (const evidenceId of evidenceIds) {
+    const item = result.evidence_by_id?.[evidenceId];
+    if (!item) continue;
+    const excerpt = item.locator && item.locator.excerpt || item.text;
+    details.append(
+      text("p", locatorLabel(item.locator), "evidence-locator"),
+      text("p", excerpt, "evidence-excerpt"),
+    );
+  }
   return details;
 }
 
 function renderResult(result) {
   results.replaceChildren();
-  results.append(
-    text("h2", result.executive_judgment),
-    text("h3", result.diagnostic_title),
-  );
-  for (const finding of result.findings) {
-    const article = document.createElement("article");
-    article.append(
-      text("h3", finding.title),
-      text("p", finding.narrative),
-      text("p", sensitivityLabels[finding.sensitivity], "sensitivity"),
+  results.append(text("h2", "Overall read"), text("p", result.overall_read, "overall-read"));
+
+  const summary = document.createElement("ol");
+  for (const item of result.revision_summary) {
+    const link = document.createElement("a");
+    link.href = `#${item.priority_area_id}`;
+    link.textContent = item.action;
+    const row = document.createElement("li");
+    row.append(link);
+    summary.append(row);
+  }
+  results.append(text("h2", "What to revise"), summary);
+
+  results.append(text("h2", "Priority areas for strengthening"));
+  for (const area of result.priority_areas) {
+    const section = document.createElement("section");
+    section.id = area.priority_area_id;
+    section.className = "priority-area";
+    section.append(
+      text("h3", area.heading),
+      text("p", area.assessment),
+      text("p", area.why_it_matters),
+      labelledParagraph("Recommended action", area.recommended_action, "recommended-action"),
+      labelledParagraph("Target", locatorLabel(area.target_locator), "target-location"),
     );
-    for (const evidenceId of finding.evidence_ids) {
-      article.append(renderEvidence(result, evidenceId));
-    }
-    results.append(article);
-  }
-  if (result.recommendations.length) {
-    results.append(text("h2", "Practical options"));
-    for (const recommendation of result.recommendations) {
-      const article = document.createElement("article");
-      const locator = recommendation.target_locator;
-      const target = [
-        locator.document_title,
-        locator.page ? `page ${locator.page}` : "",
-        locator.heading || "",
-        locator.element || "",
-      ].filter(Boolean).join(" | ");
-      article.append(
-        text("h3", recommendation.action),
-        text("p", recommendation.why_it_matters),
-        text("p", `Target: ${target}`, "evidence-locator"),
-        text("p", sensitivityLabels[recommendation.sensitivity], "sensitivity"),
+    if (area.comment_reference) {
+      section.append(
+        labelledParagraph("Comment addressed", area.comment_reference, "comment-reference"),
       );
-      results.append(article);
     }
+    section.append(renderEvidenceGroup(result, area.evidence_ids));
+    results.append(section);
   }
-  if (result.priority_question_responses.length) {
-    results.append(text("h2", "Priority questions"));
-    for (const response of result.priority_question_responses) {
-      const article = document.createElement("article");
-      article.append(
-        text("h3", response.question),
-        text("p", response.direct_answer),
-      );
-      if (response.limitation) {
-        article.append(text("p", `Limitation: ${response.limitation}`, "sensitivity"));
-      }
-      results.append(article);
-    }
-  }
+
+  results.append(text("h2", "Limitations and document coverage"));
   if (result.limitations.length) {
-    results.append(text("h2", "Limitations"));
     const list = document.createElement("ul");
     for (const limitation of result.limitations) {
       list.append(text("li", limitation));
     }
     results.append(list);
+  }
+  const coverage = result.document_coverage;
+  if (coverage) {
+    results.append(
+      labelledParagraph("Primary document", coverage.primary_document, "coverage-primary"),
+      labelledParagraph("Package documents", coverage.package_documents.join(", ") || "None supplied", "coverage-package"),
+      labelledParagraph("Context documents", coverage.context_documents.join(", ") || "None supplied", "coverage-context"),
+      labelledParagraph("Coverage note", coverage.coverage_note, "coverage-note"),
+    );
   }
   showResults();
 }

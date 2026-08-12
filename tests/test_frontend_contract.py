@@ -108,37 +108,56 @@ def test_browser_state_is_session_only_and_reset_clears_assessment_id():
     assert 'sessionStorage.removeItem("cpf_fcv_assessment_id")' in javascript
 
 
-def test_result_rendering_uses_text_content_with_sensitivity_and_evidence_labels():
+def test_result_rendering_uses_connected_note_sections_and_safe_text_content():
     javascript = JS.read_text(encoding="utf-8")
 
+    for fragment in (
+        'text("h2", "Overall read")',
+        'text("h2", "What to revise")',
+        'text("h2", "Priority areas for strengthening")',
+        'text("h2", "Limitations and document coverage")',
+        "result.revision_summary",
+        "result.priority_areas",
+        "area.assessment",
+        "area.why_it_matters",
+        "area.recommended_action",
+        "area.target_locator",
+        "area.comment_reference",
+        "result.document_coverage",
+        "coverage.primary_document",
+        "coverage.package_documents",
+        "coverage.context_documents",
+        "coverage.coverage_note",
+    ):
+        assert fragment in javascript
     assert "textContent" in javascript
     assert "innerHTML" not in javascript
-    assert "Frame cautiously" in javascript
-    assert "Confirm with country team or FCV specialist" in javascript
-    assert "evidence_ids" in javascript
 
 
 def test_browser_evidence_is_expandable_and_uses_validated_locator_content():
     javascript = JS.read_text(encoding="utf-8")
 
     assert 'document.createElement("details")' in javascript
-    assert 'text("summary", `Evidence: ${evidenceId}`)' in javascript
+    assert 'text("summary", "Evidence and document locations")' in javascript
     assert "result.evidence_by_id" in javascript
     assert "locator.document_title" in javascript
     assert "locator.excerpt" in javascript
+    assert "evidenceId" in javascript
+    assert "Evidence and document locations" in javascript
+    assert "text(\"summary\", `Evidence:" not in javascript
     assert "innerHTML" not in javascript
 
 
-def test_browser_renders_recommendations_priority_responses_and_limitations():
+def test_browser_omits_legacy_result_collections_and_question_section():
     javascript = JS.read_text(encoding="utf-8")
 
-    assert 'text("h2", "Practical options")' in javascript
-    assert "result.recommendations" in javascript
-    assert "recommendation.target_locator" in javascript
-    assert 'text("h2", "Priority questions")' in javascript
-    assert "result.priority_question_responses" in javascript
-    assert 'text("h2", "Limitations")' in javascript
-    assert "result.limitations" in javascript
+    for obsolete in (
+        "result.findings",
+        "result.recommendations",
+        "result.priority_question_responses",
+        'text("h2", "Priority questions")',
+    ):
+        assert obsolete not in javascript
 
 
 def test_interface_transitions_between_landing_progress_and_results():

@@ -74,7 +74,24 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         global.FormData = class {};
         class FakeSource { constructor() { this.listeners = {}; this.closed = false; FakeSource.all.push(this); } addEventListener(t, fn) { (this.listeners[t] ||= []).push(fn); } close(){this.closed=true;} async emit(t, data="{}") { for (const fn of this.listeners[t] || []) await fn({data}); } error(){this.onerror?.();} }
         FakeSource.all = []; global.EventSource = FakeSource;
-        const complete = { executive_judgment:"Judgment", diagnostic_title:"Diagnostic", findings:[], recommendations:[], priority_question_responses:[], limitations:[] };
+        const complete = {
+          overall_read: "The draft has a sound foundation.",
+          revision_summary: [{priority_area_id: "pa-1", action: "Clarify the delivery pathway."}],
+          priority_areas: [{
+            priority_area_id: "pa-1", heading: "Delivery pathway",
+            assessment: "The pathway is not yet explicit.",
+            why_it_matters: "Readers cannot follow implementation logic.",
+            recommended_action: "Add a short explanation of the pathway.",
+            target_locator: {document_title: "CPF.docx", page: 4, heading: "Results"},
+            evidence_ids: ["ev-1"], comment_reference: "QER comment 3"
+          }],
+          limitations: ["The RRA was not supplied."],
+          document_coverage: {
+            primary_document: "CPF.docx", package_documents: [], context_documents: [],
+            coverage_note: "The review covers the supplied CPF."
+          },
+          evidence_by_id: {"ev-1": {locator: {document_title: "CPF.docx", page: 4, heading: "Results", excerpt: "The programme will deliver results."}}}
+        };
         let responses = [{status:202, ok:true}, {status:200, ok:true, json:async()=>complete}];
         let calls = 0; global.fetch = async () => { calls++; return responses.shift() || {status:200, ok:true, json:async()=>complete}; };
         (async () => {
@@ -82,6 +99,30 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         const hooks = window.__cpfFcvReviewerTestHooks;
         hooks.watchEvents("one", "result"); const one = FakeSource.all[0]; one.error(); await one.emit("run_complete"); one.error();
         if (calls !== 2 || nodes["#results"].hidden) throw Error("202 result did not retry to completion");
+        const findByHref = (root, href) => {
+          if (!root || typeof root !== "object") return null;
+          if (root.href === href) return root;
+          for (const child of root.children || []) {
+            const match = findByHref(child, href);
+            if (match) return match;
+          }
+          return null;
+        };
+        const summaryLink = findByHref(nodes["#results"], "#pa-1");
+        if (!summaryLink) throw Error("revision summary did not link to its priority area");
+        const collectText = (root) => [
+          root && typeof root.textContent === "string" ? root.textContent : "",
+          ...(root?.children || []).flatMap(collectText),
+        ].join(" ");
+        const renderedText = collectText(nodes["#results"]);
+        for (const visibleText of [
+          "Evidence and document locations",
+          "CPF.docx | page 4 | Results",
+          "The programme will deliver results.",
+        ]) {
+          if (!renderedText.includes(visibleText)) throw Error(`result omitted ${visibleText}`);
+        }
+        if (renderedText.includes("ev-1")) throw Error("internal evidence ID was rendered");
         hooks.watchEvents("old", "old-result"); const old = FakeSource.all[1]; hooks.watchEvents("new", "new-result"); const newer = FakeSource.all[2]; await old.emit("run_failed", JSON.stringify({error:"review_failed"}));
         if (hooks.getActiveSource() !== newer) throw Error("stale stream mutated active stream");
         newer.error(); newer.error(); if (nodes["#return-to-intake"].hidden) throw Error("transport failure was not recoverable");

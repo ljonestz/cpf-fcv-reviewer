@@ -372,7 +372,7 @@ def test_result_rejects_evidence_mapping_key_that_differs_from_item_id(
     assert response.get_json() == {"error": "Traceable evidence is invalid."}
 
 
-def test_result_rejects_finding_with_unavailable_cited_evidence(make_valid_result):
+def test_result_rejects_priority_area_with_unavailable_cited_evidence(make_valid_result):
     result, _ = make_valid_result
     app = make_app()
     assessment_id = app.extensions["session_store"].create(
