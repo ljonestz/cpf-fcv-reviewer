@@ -114,3 +114,134 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_country_preflight_behavior_runs_real_app_handlers():
+    harness = textwrap.dedent(
+        """
+        const nodes = {};
+        function node() {
+          const element = {
+            hidden: false, disabled: false, value: "", files: [], children: [],
+            handlers: {}, className: "", parentNode: null,
+            addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); },
+            append(...values) {
+              for (const value of values) {
+                if (value && typeof value === "object") value.parentNode = this;
+                this.children.push(value);
+              }
+            },
+            replaceChildren(...values) { this.children = []; this.append(...values); },
+            reset() { this.files = []; this.value = ""; },
+            focus() {},
+            remove() {
+              if (!this.parentNode) return;
+              this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+              this.parentNode = null;
+            },
+            click() { return Promise.all((this.handlers.click || []).map((fn) => fn())); },
+            trigger(type) {
+              return Promise.all((this.handlers[type] || []).map((fn) => fn({preventDefault(){}})));
+            },
+          };
+          let text = "";
+          Object.defineProperty(element, "textContent", {
+            get() { return text; },
+            set(value) { text = String(value); this.children = []; },
+          });
+          return element;
+        }
+        for (const id of [
+          "#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress",
+          "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country",
+          "#country-detection", "#primary-upload", "#detail-level", "#submit-review", "#submit-correction",
+          "#correction-text", "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog",
+          "#close-process-dialog",
+        ]) nodes[id] = node();
+        nodes["#country"].value = "";
+        global.document = {
+          querySelector: (id) => nodes[id],
+          createElement: () => node(),
+          createTextNode: (value) => ({textContent: value}),
+        };
+        global.window = {__CPF_FCV_REVIEWER_TEST__: true, setTimeout: (fn) => fn(), location: {assign(){}}};
+        let stored = "";
+        global.sessionStorage = {getItem(){return stored}, setItem(k, v){stored = v}, removeItem(){stored = ""}};
+        global.FormData = class { append() {} };
+        const deferred = () => {
+          let resolve;
+          const promise = new Promise((done) => { resolve = done; });
+          return {promise, resolve};
+        };
+        const response = (country, requiresConfirmation = false) => ({
+          ok: true, status: 200,
+          json: async () => ({country, requires_confirmation: requiresConfirmation}),
+        });
+        let requests = [];
+        global.fetch = () => {
+          const request = deferred();
+          requests.push(request);
+          return request.promise;
+        };
+        const findInputs = (root) => [
+          ...(root.type === "text" ? [root] : []),
+          ...root.children.flatMap((child) => child && child.children ? findInputs(child) : []),
+        ];
+        (async () => {
+          require(process.argv[1]);
+          const cpf = nodes["#cpf"];
+          const submit = nodes["#submit-review"];
+          const detection = nodes["#country-detection"];
+
+          cpf.files = [{name: "first.docx"}];
+          const pending = cpf.trigger("change");
+          if (!submit.disabled) throw Error("submit was not disabled during detection");
+          requests.shift().resolve(response("Chad"));
+          await pending;
+          if (nodes["#country"].value !== "Chad" || submit.disabled) throw Error("high-confidence detection did not unlock submit");
+          if (findInputs(detection).length !== 0) throw Error("high-confidence detection created correction input");
+
+          cpf.files = [{name: "second.docx"}];
+          const needsConfirmation = cpf.trigger("change");
+          requests.shift().resolve(response("Sudan", true));
+          await needsConfirmation;
+          if (!submit.disabled || findInputs(detection).length !== 1) throw Error("confirmation detection was not gated");
+          const correction = findInputs(detection)[0];
+          correction.value = "South Sudan";
+          await correction.trigger("input");
+          if (nodes["#country"].value !== "South Sudan" || submit.disabled) throw Error("correction did not unlock submit");
+
+          cpf.files = [{name: "third.docx"}];
+          const failed = cpf.trigger("change");
+          requests.shift().resolve({ok: false, status: 400});
+          await failed;
+          if (!submit.disabled || findInputs(detection).length !== 1) throw Error("failed detection did not remain gated");
+
+          cpf.files = [{name: "fourth.docx"}];
+          const retried = cpf.trigger("change");
+          requests.shift().resolve(response("Kenya"));
+          await retried;
+          if (detection.className !== "country-detection") throw Error("successful retry kept the error class");
+
+          cpf.files = [{name: "stale-first.docx"}];
+          const first = cpf.trigger("change");
+          cpf.files = [{name: "fresh-second.docx"}];
+          const second = cpf.trigger("change");
+          const staleRequest = requests.shift();
+          const freshRequest = requests.shift();
+          freshRequest.resolve(response("Ghana"));
+          await second;
+          staleRequest.resolve(response("Nigeria"));
+          await first;
+          if (nodes["#country"].value !== "Ghana" || !detection.textContent.includes("Ghana")) throw Error("stale detection overwrote the latest country");
+        })().catch((error) => { console.error(error); process.exit(1); });
+        """
+    )
+    completed = subprocess.run(
+        ["node", "-e", harness, str(JS.resolve())],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr

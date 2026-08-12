@@ -125,6 +125,7 @@ async function detectCountry() {
   countryInput.value = "";
   countryRequiresConfirmation = false;
   countryDetection.textContent = "";
+  countryDetection.className = "country-detection";
   if (!file) {
     detectionPending = false;
     updateSubmitState();
