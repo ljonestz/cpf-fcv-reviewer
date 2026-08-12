@@ -1,50 +1,49 @@
 # CPF FCV Reviewer
 
-CPF FCV Reviewer is an advisory MVP for structured review of Country Partnership Framework (CPF) and Country Engagement Note (CEN) packages through an FCV lens. It supports expert judgment; it does not make policy, compliance, eligibility, endorsement, or clearance determinations.
+An advisory prototype for evidence-linked FCV review of CPF and CEN drafts. It supports expert judgment and practical options; it does not make institutional determinations.
 
-**Do not modify, integrate with, deploy through, or otherwise change the stable FCV Project Screener service.** This repository is separate from that service.
+**The stable FCV Project Screener is a separate product and must not be modified, integrated with, or deployed through this repository.**
 
-## Capability boundary
+## Current prototype
 
-| Capability | MVP implementation | Validation evidence | Production status |
-| --- | --- | --- | --- |
-| Review purpose | Evidence-linked, advisory FCV review with practical options | Synthetic English, French, and mixed-language fixtures | Not approved for operational use |
-| Document and state handling | Session-only, in-memory review state | Reset and expiry behaviour tested; browser reset smoke-tested | No durable storage, retention, audit, or identity controls |
-| Sources | Uploaded documents, approved-registry material, and public-web research interfaces | Synthetic adapters and fixtures only | No operational SharePoint access; no live source validation |
-| Institutional language | Registry-controlled exact language with validation | Owner-approved public guardrails and fail-closed tests | Public guardrails only; detailed OPCS policy belongs in a separate internal ITS track |
-| Export | Validated result can be downloaded as a DOCX review note | Structural export and browser-download checks | Not a production records or document-management workflow |
-| Deployment | Local MVP plus controlled public Render prototype | Automated, loader, and deployment smoke checks | No production-readiness claim |
+- Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
+- Current application version: `0.1.0`
+- Latest functional commit: `728eec6`
+- Deployment health response: `ok`; storage: `volatile`; the Render release label `4acca30` is stale and is not the Git commit or application version.
 
-## Data, source, and policy boundaries
+The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
-- Review state is volatile and held only for one running process. A restart, session expiry, or **Start a new review** reset destroys it. Do not treat the service as a record system.
-- When a current Research and Risk Assessment (RRA) is available, a direct SharePoint original takes precedence over a derived copy. An upload is the fallback when no unambiguous current original is available. Operational SharePoint and ITS access are outside this MVP.
-- The public prototype uses only product-owner-approved, non-confidential guardrails. Detailed OPCS-specific policy content is excluded and reserved for a separately governed internal ITS version. The application requires a versioned, unexpired registry bundle with an integrity check and fails closed when it is unavailable. It must not invent, paraphrase, or make unsupported policy claims.
-- Current-context research is public-web only. Licensed sources, including ACLED, are not a dependency and must not be used.
-- Output is English. French input has limited support and may be handled as source material; it does not change the output language.
-- Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
+## Safety boundary
 
-## Local operation
+- Review state is in-memory and temporary: restart, expiry, or **Start a new review** destroys it.
+- A direct current RRA original takes precedence over derived copies; upload is the fallback. Operational SharePoint and ITS access are out of scope.
+- Public current-context research is public-web only. Do not use licensed sources, including ACLED.
+- The public prototype uses approved non-confidential guardrails and fails closed when its required registry bundle is invalid or unavailable. Detailed internal policy content belongs on a separately governed internal track.
+- Output is English. French input support is limited.
 
-Use the project virtual environment from the repository root:
+If a policy-boundary, registry, non-sensitive-input, or unexpected-output concern arises, stop the local server. Do not retry, export, or share the review; record only a safe error category through the applicable internal process.
+
+## Run locally
+
+Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a virtual environment. Configure these environment variables without committing their values:
+
+- `ANTHROPIC_API_KEY` (required outside tests)
+- `ANTHROPIC_MODEL_ID` (optional model override)
+- `REGISTRY_BUNDLE_PATH` and `REGISTRY_BUNDLE_SHA256` (approved bundle and integrity check)
+- `APP_RELEASE` (deployment label)
+- `SESSION_TTL_SECONDS` (optional; defaults to one hour)
 
 ```powershell
-# Tests
 .\.venv\Scripts\python.exe -m pytest -q
-
-# Lint
 .\.venv\Scripts\python.exe -m ruff check .
-
-# Local MVP server
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-To export a completed review, use the interface's **Export Word note** action. The equivalent endpoint is `GET /api/reviews/<assessment_id>/export.docx`; it is available only while that volatile review session remains active.
+Use **Export Word note** only while the volatile review remains active.
 
-## Incident stop
+## Documentation
 
-If a non-sensitive-input, policy-boundary, registry, or unexpected-output concern arises, stop the local server immediately, do not retry the review with the same material, and do not export or share the result. Preserve no raw source content, model output, secrets, or user corrections in issue reports. Record only the safe error category and escalate through the applicable internal process.
-
-## Development
-
-Project-specific commands and the expanded safe-use boundary are documented in `CLAUDE.md`. The executed MVP validation record is in `docs/validation/2026-08-10-mvp-validation.md`.
+- [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
+- [Development instructions](CLAUDE.md): commands, repository map, safety constraints, and future-session checklist.
+- `docs/validation/`: dated validation evidence.
+- `docs/superpowers/`: historical designs and implementation plans.
