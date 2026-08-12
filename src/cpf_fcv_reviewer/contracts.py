@@ -34,6 +34,18 @@ class DiagnosticMode(StrEnum):
     LIMITED_FRAMING = "limited_framing"
 
 
+class DetailLevel(StrEnum):
+    BRIEF = "brief"
+    STANDARD = "standard"
+    IN_DEPTH = "in_depth"
+
+
+class DocumentRole(StrEnum):
+    PRIMARY = "primary"
+    PACKAGE = "package"
+    CONTEXT = "context"
+
+
 class SensitivityCategory(StrEnum):
     DIRECT = "direct"
     CAUTIOUS = "cautious"
@@ -84,6 +96,7 @@ class EvidenceItem(FrozenModel):
     locator: EvidenceLocator | None = None
     confidence: Literal["high", "medium", "low"]
     source_url: str | None = None
+    document_role: DocumentRole | None = None
 
     @model_validator(mode="after")
     def requires_evidence_source(self) -> EvidenceItem:
@@ -99,7 +112,7 @@ class EvidenceItem(FrozenModel):
 class UserCorrection(FrozenModel):
     correction_id: str
     created_at: datetime
-    affected_finding_id: str | None = None
+    affected_priority_area_id: str | None = None
     text: str
     rationale: str | None = None
     independently_supported: bool = False
@@ -119,31 +132,50 @@ class DiagnosticEntry(FrozenModel):
     grouping_rationale: str
 
 
-class Finding(FrozenModel):
-    finding_id: str
-    title: str
-    narrative: str
-    status: Literal[
-        "aligned",
-        "partially_aligned",
-        "not_reflected",
-        "strong_foundation",
-        "needs_strengthening",
-        "material_gap",
-    ]
+class RecommendationScale(StrEnum):
+    PREPARATION_PRIORITY = "preparation_priority"
+    SUBSTANTIVE_REVISION = "substantive_revision"
+    TARGETED_EDIT = "targeted_edit"
+    FINE_TUNING = "fine_tuning"
+    COMMENT_RESPONSE = "comment_response"
+
+
+class RevisionSummaryItem(FrozenModel):
+    priority_area_id: str
+    action: str
+
+
+class PriorityArea(FrozenModel):
+    priority_area_id: str
+    heading: str
+    assessment: str
+    why_it_matters: str
+    recommended_action: str
+    target_locator: EvidenceLocator
+    recommendation_scale: RecommendationScale
     evidence_ids: tuple[str, ...]
     sensitivity: SensitivityCategory
+    comment_reference: str | None = None
+
+    @field_validator(
+        "priority_area_id",
+        "heading",
+        "assessment",
+        "why_it_matters",
+        "recommended_action",
+    )
+    @classmethod
+    def requires_nonblank_narrative(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Narrative review fields cannot be blank.")
+        return value
 
 
-class Recommendation(FrozenModel):
-    recommendation_id: str
-    finding_id: str
-    priority_tier: Literal["core", "additional"]
-    action: str
-    why_it_matters: str
-    target_locator: EvidenceLocator
-    stage_behavior: str
-    sensitivity: SensitivityCategory
+class DocumentCoverage(FrozenModel):
+    primary_document: str
+    package_documents: tuple[str, ...] = ()
+    context_documents: tuple[str, ...] = ()
+    coverage_note: str
 
 
 class RunMetadata(FrozenModel):
@@ -159,6 +191,7 @@ class RunMetadata(FrozenModel):
     model_id: str
     source_scan_at: datetime | None = None
     output_language: Literal["en"] = "en"
+    detail_level: DetailLevel = DetailLevel.STANDARD
     document_fingerprints: dict[str, str] = Field(
         default_factory=lambda: ImmutableRegistryVersions({})
     )
@@ -189,33 +222,22 @@ class EvidencePack(FrozenModel):
     warnings: tuple[str, ...] = ()
 
 
-class PriorityQuestionResponse(FrozenModel):
-    question_id: str
-    question: str
-    direct_answer: str
-    evidence_ids: tuple[str, ...]
-    confidence: Literal["high", "medium", "low"]
-    limitation: str | None = None
-
-
 class ReviewResult(FrozenModel):
     metadata: RunMetadata
-    executive_judgment: str
-    diagnostic_title: str
-    findings: tuple[Finding, ...]
-    recommendations: tuple[Recommendation, ...]
+    overall_read: str
+    revision_summary: tuple[RevisionSummaryItem, ...]
+    priority_areas: tuple[PriorityArea, ...]
     institutional_referral_ids: tuple[str, ...] = ()
-    priority_question_responses: tuple[PriorityQuestionResponse, ...] = ()
     limitations: tuple[str, ...] = ()
+    document_coverage: DocumentCoverage
 
 
 class ReviewDraft(FrozenModel):
     """Model-authored review content; authoritative run metadata is attached locally."""
 
-    executive_judgment: str
-    diagnostic_title: str
-    findings: tuple[Finding, ...]
-    recommendations: tuple[Recommendation, ...]
+    overall_read: str
+    revision_summary: tuple[RevisionSummaryItem, ...]
+    priority_areas: tuple[PriorityArea, ...]
     institutional_referral_ids: tuple[str, ...]
-    priority_question_responses: tuple[PriorityQuestionResponse, ...]
     limitations: tuple[str, ...]
+    coverage_note: str

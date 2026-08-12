@@ -4,11 +4,13 @@ import pytest
 
 from cpf_fcv_reviewer.contracts import (
     DiagnosticMode,
+    DocumentCoverage,
     EvidenceItem,
     EvidenceLocator,
-    Finding,
-    Recommendation,
+    PriorityArea,
+    RecommendationScale,
     ReviewResult,
+    RevisionSummaryItem,
     RunMetadata,
     SensitivityCategory,
 )
@@ -46,32 +48,32 @@ def make_valid_result():
     )
     result = ReviewResult(
         metadata=metadata,
-        executive_judgment="The CPF has a useful foundation.",
-        diagnostic_title="Limited FCV diagnostic-framing assessment",
-        findings=(
-            Finding(
-                finding_id="f1",
-                title="Strengthen the causal link",
-                narrative="The link remains implicit.",
-                status="needs_strengthening",
-                evidence_ids=("ev-1",),
-                sensitivity=SensitivityCategory.CAUTIOUS,
+        overall_read="The CPF has a useful foundation but needs a clearer delivery narrative.",
+        revision_summary=(
+            RevisionSummaryItem(
+                priority_area_id="pa-1",
+                action="Clarify the causal link.",
             ),
         ),
-        recommendations=(
-            Recommendation(
-                recommendation_id="rec-1",
-                finding_id="f1",
-                priority_tier="core",
-                action="Clarify the causal link.",
+        priority_areas=(
+            PriorityArea(
+                priority_area_id="pa-1",
+                heading="Strengthen the causal link",
+                assessment="The link remains implicit.",
                 why_it_matters="The results chain is not explicit.",
+                recommended_action="Clarify the causal link.",
                 target_locator=locator,
-                stage_behavior="Targeted edit.",
+                recommendation_scale=RecommendationScale.FINE_TUNING,
+                evidence_ids=("ev-1",),
                 sensitivity=SensitivityCategory.CAUTIOUS,
             ),
         ),
         institutional_referral_ids=("SYN-REF-001",),
         limitations=("No RRA was available.",),
+        document_coverage=DocumentCoverage(
+            primary_document="CPF.docx",
+            coverage_note="The review covers the primary CPF draft.",
+        ),
     )
     evidence = {
         "ev-1": EvidenceItem(

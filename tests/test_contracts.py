@@ -4,12 +4,64 @@ import pytest
 from pydantic import ValidationError
 
 from cpf_fcv_reviewer.contracts import (
+    DetailLevel,
     DiagnosticMode,
     EvidenceItem,
     EvidenceLocator,
+    PriorityArea,
+    RecommendationScale,
+    ReviewResult,
     RunMetadata,
     SensitivityCategory,
 )
+
+
+def locator() -> EvidenceLocator:
+    return EvidenceLocator(
+        document_title="CPF.docx",
+        heading="Implementation arrangements",
+        element="paragraph 18",
+        excerpt="Delivery arrangements will adapt to local conditions.",
+    )
+
+
+def test_priority_area_keeps_assessment_action_target_and_evidence_together():
+    area = PriorityArea(
+        priority_area_id="pa-1",
+        heading="Make the delivery model explicit",
+        assessment="The CPF recognizes insecurity but leaves adaptation implicit.",
+        why_it_matters="Teams cannot see how delivery will change in insecure areas.",
+        recommended_action="Add two sentences defining differentiated delivery arrangements.",
+        target_locator=locator(),
+        recommendation_scale=RecommendationScale.TARGETED_EDIT,
+        evidence_ids=("ev-1",),
+        sensitivity=SensitivityCategory.CAUTIOUS,
+    )
+
+    assert area.target_locator.document_title == "CPF.docx"
+
+
+def test_priority_area_rejects_blank_action():
+    with pytest.raises(ValidationError):
+        PriorityArea(
+            priority_area_id="pa-1",
+            heading="Delivery",
+            assessment="The operating model is implicit.",
+            why_it_matters="Delivery choices remain unclear.",
+            recommended_action="   ",
+            target_locator=locator(),
+            recommendation_scale=RecommendationScale.TARGETED_EDIT,
+            evidence_ids=("ev-1",),
+            sensitivity=SensitivityCategory.CAUTIOUS,
+        )
+
+
+def test_review_result_contains_no_priority_question_response_collection(make_valid_result):
+    result, _ = make_valid_result
+
+    assert isinstance(result, ReviewResult)
+    assert "priority_question_responses" not in result.model_dump()
+    assert result.metadata.detail_level is DetailLevel.STANDARD
 
 
 def test_document_evidence_requires_a_real_locator():
