@@ -13,6 +13,7 @@ from cpf_fcv_reviewer.contracts import (
     RevisionSummaryItem,
     SensitivityCategory,
 )
+from cpf_fcv_reviewer.extraction import ExtractedDocument, ExtractedSegment
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.runtime import build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
@@ -393,6 +394,92 @@ def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch)
     }
     assert pack.metadata.detail_level.value == "in_depth"
     assert captured["payload"]["review_focus"] == "Focus on delivery arrangements."
+
+
+def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monkeypatch):
+    captured = {}
+
+    class FakeGateway:
+        def __init__(self, api_key, model_id):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
+            return output_type(
+                overall_read="The draft needs a clearer delivery approach.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                limitations=(),
+                coverage_note="The review covers the uploaded CPF and corroborating documents.",
+            )
+
+    def extracted(name, role, count):
+        return ExtractedDocument(
+            name=name,
+            segments=tuple(
+                ExtractedSegment(
+                    text=f"{role} segment {index}",
+                    page=None,
+                    heading=None,
+                    element=f"{role} {index}",
+                )
+                for index in range(count)
+            ),
+            warnings=(),
+        )
+
+    def fake_extract(data, name, *, max_pdf_pages=None):
+        if name == "benin-cpf.txt":
+            return extracted(name, "primary", 20)
+        if name.startswith("package-"):
+            return extracted(name, "package", 10)
+        return extracted(name, "context", 10)
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.extract_document", fake_extract)
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FakeGateway,
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+    )
+
+    services["review_orchestrator"].run(
+        {
+            "assessment_id": "run-with-saturated-role-budgets",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "concept_review",
+                "detail_level": "in_depth",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                "package_documents": [
+                    {"name": f"package-{index}.txt", "bytes": b"package"}
+                    for index in range(3)
+                ],
+                "context_documents": [
+                    {"name": f"context-{index}.txt", "bytes": b"context"}
+                    for index in range(2)
+                ],
+                "review_focus": "",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    by_role = {
+        role: [item for item in captured["pack"].evidence if item.document_role == role]
+        for role in DocumentRole
+    }
+    assert len(by_role[DocumentRole.PRIMARY]) == 12
+    assert len(by_role[DocumentRole.PACKAGE]) == 8
+    assert len(by_role[DocumentRole.CONTEXT]) == 4
+    assert len(captured["pack"].evidence) == 24
+    assert len({item.locator.document_title for item in by_role[DocumentRole.PACKAGE]}) == 3
+    assert len({item.locator.document_title for item in by_role[DocumentRole.CONTEXT]}) == 2
+    assert len(by_role[DocumentRole.PRIMARY]) > len(by_role[DocumentRole.PACKAGE])
 
 
 def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypatch):

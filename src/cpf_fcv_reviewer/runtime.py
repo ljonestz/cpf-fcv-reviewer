@@ -41,6 +41,33 @@ STEP_NAMES = (
 )
 
 
+def _select_role_segments(
+    document_role: DocumentRole,
+    documents: tuple,
+    budget: int,
+) -> list[tuple[object, object, DocumentRole]]:
+    """Select a bounded, deterministic, round-robin sample for one document role."""
+    if not documents or budget <= 0:
+        return []
+
+    selected: list[tuple[object, object, DocumentRole]] = []
+    offsets = [0] * len(documents)
+    while len(selected) < budget:
+        added_this_round = False
+        for index, document in enumerate(documents):
+            offset = offsets[index]
+            if offset >= len(document.segments):
+                continue
+            selected.append((document, document.segments[offset], document_role))
+            offsets[index] += 1
+            added_this_round = True
+            if len(selected) >= budget:
+                break
+        if not added_this_round:
+            break
+    return selected
+
+
 def build_runtime_services(config: dict) -> dict:
     path = Path(config.get("REGISTRY_BUNDLE_PATH", ""))
     expected_hash = str(config.get("REGISTRY_BUNDLE_SHA256", "")).strip().lower()
@@ -113,17 +140,14 @@ def build_runtime_services(config: dict) -> dict:
 
         document_groups = (
             (DocumentRole.PRIMARY, (primary_document,), 12),
-            (DocumentRole.PACKAGE, tuple(context.get("package_documents", ())), 4),
-            (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 2),
+            (DocumentRole.PACKAGE, tuple(context.get("package_documents", ())), 8),
+            (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 4),
         )
         selected_segments = []
         for document_role, documents, per_document_limit in document_groups:
-            for document in documents:
-                selected_segments.extend(
-                    (document, segment, document_role)
-                    for segment in document.segments[:per_document_limit]
-                )
-        selected_segments = selected_segments[:24]
+            selected_segments.extend(
+                _select_role_segments(document_role, documents, per_document_limit)
+            )
 
         role_counts = {role: 0 for role, _, _ in document_groups}
         evidence = []
