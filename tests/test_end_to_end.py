@@ -11,11 +11,13 @@ from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
     DiagnosticEntry,
     DiagnosticMode,
+    DocumentCoverage,
     EvidenceItem,
     EvidenceLocator,
-    Finding,
-    Recommendation,
+    PriorityArea,
+    RecommendationScale,
     ReviewResult,
+    RevisionSummaryItem,
     SensitivityCategory,
     UserCorrection,
 )
@@ -55,36 +57,50 @@ class FakePublicSearchAdapter:
 class FakeModelAdapter:
     def __init__(self) -> None:
         self.calls = 0
+        self.evidence_packs = []
+        self.review_focuses = []
 
-    def review(self, evidence_pack) -> ReviewResult:
+    def review(self, evidence_pack, *, review_focus="") -> ReviewResult:
         self.calls += 1
+        self.evidence_packs.append(evidence_pack)
+        self.review_focuses.append(review_focus)
         locator = evidence_pack.evidence[0].locator
         assert locator is not None
+        correction_text = (
+            evidence_pack.user_corrections[0].text
+            if evidence_pack.user_corrections
+            else None
+        )
+        assessment = "The synthetic strategy identifies delivery constraints."
+        recommended_action = "Clarify the delivery-risk response before finalization."
+        if correction_text:
+            assessment = f"The synthetic strategy incorporates this correction: {correction_text}"
+            recommended_action = "Retain the corrected delivery-risk description in the CPF."
         return ReviewResult(
             metadata=evidence_pack.metadata,
-            executive_judgment="The strategy has a usable FCV foundation that needs strengthening.",
-            diagnostic_title="Core Review 1",
-            findings=(
-                Finding(
-                    finding_id="finding-1",
-                    title="Delivery risk needs clearer treatment",
-                    narrative="The synthetic strategy identifies delivery constraints.",
-                    status="needs_strengthening",
-                    evidence_ids=("evidence-1",),
+            overall_read="The CPF has a credible foundation.",
+            revision_summary=(
+                RevisionSummaryItem(
+                    priority_area_id="pa-1",
+                    action="Clarify the delivery-risk response before finalization.",
+                ),
+            ),
+            priority_areas=(
+                PriorityArea(
+                    priority_area_id="pa-1",
+                    heading="Delivery risk needs clearer treatment",
+                    assessment=assessment,
+                    why_it_matters="This links the diagnostic to an implementable response.",
+                    recommended_action=recommended_action,
+                    target_locator=locator,
+                    recommendation_scale=RecommendationScale.TARGETED_EDIT,
+                    evidence_ids=("primary-001",),
                     sensitivity=SensitivityCategory.CAUTIOUS,
                 ),
             ),
-            recommendations=(
-                Recommendation(
-                    recommendation_id="recommendation-1",
-                    finding_id="finding-1",
-                    priority_tier="core",
-                    action="Clarify the delivery-risk response before finalization.",
-                    why_it_matters="This links the diagnostic to an implementable response.",
-                    target_locator=locator,
-                    stage_behavior="Revise the identified strategic-context passage.",
-                    sensitivity=SensitivityCategory.CAUTIOUS,
-                ),
+            document_coverage=DocumentCoverage(
+                primary_document=locator.document_title,
+                coverage_note="The review covers the uploaded CPF.",
             ),
             limitations=("No current RRA was available; limited framing was used.",),
         )
@@ -95,7 +111,7 @@ def correction_models(payload: dict) -> tuple[UserCorrection, ...]:
         UserCorrection(
             correction_id=item["correction_id"],
             created_at=item["created_at"],
-            affected_finding_id=item.get("affected_finding_id"),
+            affected_priority_area_id=item.get("affected_priority_area_id"),
             text=item["text"],
             rationale=item.get("rationale"),
             independently_supported=item["independently_supported"],
@@ -138,7 +154,7 @@ def synthetic_services():
             is_paraphrase=False,
         )
         evidence = EvidenceItem(
-            evidence_id="evidence-1",
+            evidence_id="primary-001",
             evidence_type="document_fact",
             text="The synthetic strategy describes FCV-related delivery constraints.",
             locator=locator,
@@ -160,7 +176,7 @@ def synthetic_services():
             diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
             documents={document.name: payload["cpf"]["bytes"]},
             registry_bundle=registry_bytes,
-            guidance=payload["guidance"],
+            guidance=payload["review_focus"],
             prompt_bytes={"review": Path("prompts/review.md").read_bytes()},
             model_id="synthetic-model-adapter",
             source_scan_at=datetime(2026, 8, 11, tzinfo=UTC),
@@ -176,7 +192,10 @@ def synthetic_services():
         return context
 
     def review(context):
-        context["result"] = model.review(context["evidence_pack"])
+        context["result"] = model.review(
+            context["evidence_pack"],
+            review_focus=context["payload"].get("review_focus", ""),
+        )
         return context
 
     def validate(context):
@@ -224,8 +243,7 @@ def test_complete_synthetic_local_workflow(fixture_name):
         data={
             "country": "Synthetic Republic",
             "review_stage": "decision_review",
-            "guidance": "What delivery risks need attention?",
-            "priority_questions": "What delivery risks need attention?",
+            "review_focus": "What delivery risks need attention?",
             "cpf": (BytesIO(content), fixture_name),
         },
         content_type="multipart/form-data",
@@ -240,10 +258,14 @@ def test_complete_synthetic_local_workflow(fixture_name):
     result_response = client.get(created["result_url"])
     assert result_response.status_code == 200
     result = result_response.get_json()
-    assert result["metadata"]["diagnostic_mode"] == "limited_framing"
+    assert result["overall_read"] == "The CPF has a credible foundation."
+    assert result["revision_summary"][0]["priority_area_id"] == "pa-1"
+    assert result["priority_areas"][0]["evidence_ids"] == ["primary-001"]
+    assert result["metadata"]["detail_level"] == "standard"
+    assert "priority_question_responses" not in result
     assert result["metadata"]["output_language"] == "en"
-    assert result["findings"][0]["evidence_ids"]
-    assert result["recommendations"][0]["target_locator"]["heading"]
+    parent_assessment = result["priority_areas"][0]["assessment"]
+    parent_recommended_action = result["priority_areas"][0]["recommended_action"]
 
     export = client.get(f"/api/reviews/{created['assessment_id']}/export.docx")
     assert export.status_code == 200
@@ -253,24 +275,46 @@ def test_complete_synthetic_local_workflow(fixture_name):
         for paragraph in document.paragraphs
         if paragraph.style.name.startswith(("Title", "Heading"))
     ]
-    browser_section_headings = [result["diagnostic_title"], result["findings"][0]["title"]]
+    browser_section_headings = [
+        "Overall read",
+        "What to revise",
+        "Priority areas for strengthening",
+        "Limitations and document coverage",
+    ]
     assert [heading for heading in docx_headings if heading in browser_section_headings] == (
         browser_section_headings
     )
 
     correction_response = client.post(
         f"/api/reviews/{created['assessment_id']}/corrections",
-        json={"text": "Use the corrected synthetic delivery-risk description."},
+        json={
+            "text": "Use the corrected synthetic delivery-risk description.",
+            "affected_priority_area_id": "pa-1",
+        },
     )
     assert correction_response.status_code == 201
     child = correction_response.get_json()
     child_state = app.extensions["session_store"].get(child["assessment_id"])
     child_run_labels = [item["label"] for item in child_state.payload["corrections"]]
     assert "User-provided correction" in child_run_labels
+    assert child_state.payload["corrections"][-1]["affected_priority_area_id"] == "pa-1"
     run_assessment(app, child["assessment_id"])
     child_result = client.get(child["result_url"]).get_json()
     assert child_result["metadata"]["parent_run_id"] == created["assessment_id"]
     assert child_result["metadata"]["correction_ids"]
+    assert model.review_focuses == [
+        "What delivery risks need attention?",
+        "What delivery risks need attention?",
+    ]
+    assert (
+        model.evidence_packs[1].user_corrections[0].affected_priority_area_id
+        == "pa-1"
+    )
+    assert child_result["priority_areas"][0]["assessment"] != parent_assessment
+    assert child_result["priority_areas"][0]["recommended_action"] != parent_recommended_action
+    assert "Use the corrected synthetic delivery-risk description." in child_result[
+        "priority_areas"
+    ][0]["assessment"]
 
     assert client.delete(f"/api/reviews/{child['assessment_id']}").status_code == 204
     assert client.get(child["result_url"]).status_code == 410

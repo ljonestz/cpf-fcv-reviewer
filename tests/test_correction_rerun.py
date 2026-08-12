@@ -17,7 +17,7 @@ def test_correction_creates_child_run_with_label_parent_and_no_stale_result():
         f"/api/reviews/{parent['assessment_id']}/corrections",
         json={
             "text": "The cited reform was adopted in July.",
-            "affected_finding_id": "f1",
+            "affected_priority_area_id": "pa-1",
             "rationale": "Country-team update",
         },
     )
@@ -34,6 +34,7 @@ def test_correction_creates_child_run_with_label_parent_and_no_stale_result():
     assert correction["label"] == "User-provided correction"
     assert correction["independently_supported"] is False
     assert correction["text"] == "The cited reform was adopted in July."
+    assert correction["affected_priority_area_id"] == "pa-1"
     assert correction["correction_id"]
     assert correction["created_at"].endswith("+00:00")
     assert state.payload["parent_assessment_id"] == parent["assessment_id"]

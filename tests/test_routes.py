@@ -280,7 +280,8 @@ def test_correction_is_labelled_and_persisted_in_child_state():
         f"/api/reviews/{created['assessment_id']}/corrections",
         json={
             "text": "  Correct the delivery-risk description.  ",
-            "affected_finding_id": "f-1",
+            "affected_priority_area_id": "  pa-1  ",
+            "rationale": "  Country-team update  ",
         },
     )
 
@@ -289,6 +290,8 @@ def test_correction_is_labelled_and_persisted_in_child_state():
     state = app.extensions["session_store"].get(child["assessment_id"])
     assert state.payload["corrections"][-1]["label"] == "User-provided correction"
     assert state.payload["corrections"][-1]["text"] == "Correct the delivery-risk description."
+    assert state.payload["corrections"][-1]["affected_priority_area_id"] == "pa-1"
+    assert state.payload["corrections"][-1]["rationale"] == "Country-team update"
     assert state.payload["parent_assessment_id"] == created["assessment_id"]
     assert state.payload["status"] == "created"
 
@@ -306,6 +309,44 @@ def test_blank_correction_is_rejected_without_mutating_state():
     assert response.status_code == 400
     state = app.extensions["session_store"].get(created["assessment_id"])
     assert state.payload["corrections"] == []
+
+
+@pytest.mark.parametrize(
+    ("payload", "error"),
+    [
+        ({"text": "valid", "affected_priority_area_id": 17}, "Correction details are invalid."),
+        ({"text": "valid", "rationale": ["not a string"]}, "Correction details are invalid."),
+        (
+            {"text": "valid", "affected_priority_area_id": "x" * 201},
+            "Correction details are invalid.",
+        ),
+        ({"text": "valid", "rationale": "x" * 1001}, "Correction details are invalid."),
+        ({"text": "x" * 2001}, "Correction text is too long."),
+        (
+            {"text": "valid", "affected_finding_id": "f-1"},
+            "Legacy correction fields are not supported.",
+        ),
+    ],
+)
+def test_invalid_correction_details_are_rejected_without_child_or_mutation(
+    payload, error
+):
+    app = make_app()
+    client = app.test_client()
+    created = create_review(client)
+    parent_state = app.extensions["session_store"].get(created["assessment_id"])
+    count_before = app.extensions["session_store"].count()
+
+    response = client.post(
+        f"/api/reviews/{created['assessment_id']}/corrections",
+        json=payload,
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": error}
+    assert "f-1" not in response.get_data(as_text=True)
+    assert app.extensions["session_store"].count() == count_before
+    assert parent_state.payload["corrections"] == []
 
 
 def test_event_stream_stops_after_terminal_event():

@@ -32,6 +32,10 @@ from .validators import validate_reproducibility_metadata
 
 bp = Blueprint("reviews", __name__)
 
+CORRECTION_TEXT_MAX_LENGTH = 2000
+CORRECTION_PRIORITY_AREA_MAX_LENGTH = 200
+CORRECTION_RATIONALE_MAX_LENGTH = 1000
+
 
 def store():
     return current_app.extensions["session_store"]
@@ -249,10 +253,38 @@ def add_correction(assessment_id):
     except SessionExpired:
         return jsonify(error="Assessment expired."), 410
 
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Correction request is invalid."), 400
+    if "affected_finding_id" in body:
+        return jsonify(error="Legacy correction fields are not supported."), 400
+
     text = body.get("text", "")
     if not isinstance(text, str) or not text.strip():
         return jsonify(error="Correction text is required."), 400
+    text = text.strip()
+    if len(text) > CORRECTION_TEXT_MAX_LENGTH:
+        return jsonify(error="Correction text is too long."), 400
+
+    affected_priority_area_id = body.get("affected_priority_area_id")
+    rationale = body.get("rationale")
+    if affected_priority_area_id is not None and not isinstance(
+        affected_priority_area_id, str
+    ):
+        return jsonify(error="Correction details are invalid."), 400
+    if rationale is not None and not isinstance(rationale, str):
+        return jsonify(error="Correction details are invalid."), 400
+    if (
+        isinstance(affected_priority_area_id, str)
+        and len(affected_priority_area_id.strip()) > CORRECTION_PRIORITY_AREA_MAX_LENGTH
+    ):
+        return jsonify(error="Correction details are invalid."), 400
+    if isinstance(rationale, str) and len(rationale.strip()) > CORRECTION_RATIONALE_MAX_LENGTH:
+        return jsonify(error="Correction details are invalid."), 400
+    if isinstance(affected_priority_area_id, str):
+        affected_priority_area_id = affected_priority_area_id.strip()
+    if isinstance(rationale, str):
+        rationale = rationale.strip()
 
     child_payload = dict(parent.payload)
     child_payload["corrections"] = list(parent.payload.get("corrections", ()))
@@ -261,9 +293,9 @@ def add_correction(assessment_id):
             "correction_id": uuid4().hex,
             "created_at": datetime.now(UTC).isoformat(),
             "label": "User-provided correction",
-            "text": text.strip(),
-            "affected_finding_id": body.get("affected_finding_id"),
-            "rationale": body.get("rationale"),
+            "text": text,
+            "affected_priority_area_id": affected_priority_area_id,
+            "rationale": rationale,
             "independently_supported": False,
         }
     )
