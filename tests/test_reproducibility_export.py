@@ -74,6 +74,28 @@ def test_docx_lists_reproducibility_hashes_labels_and_lineage(make_valid_result)
         assert expected in text
 
 
+def test_docx_keeps_referrals_in_a_restrained_technical_appendix(make_valid_result):
+    result, evidence = make_valid_result
+    data = build_docx(
+        result,
+        evidence=evidence,
+        hydrated_referrals=(
+            {
+                "entry_id": "SYN-REF-001",
+                "approved_text": "Consult the designated policy owner.",
+                "version": "1.0.0-test",
+            },
+        ),
+    )
+    document = Document(BytesIO(data))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+    assert "Technical appendix" in text
+    assert "Consult the designated policy owner." in text
+    assert "Matters for confirmation" not in text
+    assert "Registry: SYN-REF-001 | 1.0.0-test" in text
+
+
 def test_export_route_rejects_incomplete_reproducibility_metadata(make_valid_result):
     result, evidence = make_valid_result
     result = result.model_copy(update={"metadata": incomplete_metadata(result.metadata)})
