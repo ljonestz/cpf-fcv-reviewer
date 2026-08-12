@@ -5,6 +5,7 @@ import pytest
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
+    DocumentRole,
     EvidenceLocator,
     EvidencePack,
     PriorityArea,
@@ -244,6 +245,76 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
         context["evidence_pack"].evidence[0].evidence_id,
     )
     assert events[-1][0] == "run_complete"
+
+
+def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch):
+    captured = {}
+
+    class FakeGateway:
+        def __init__(self, api_key, model_id):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            pack = EvidencePack.model_validate(payload["evidence_pack"])
+            captured["pack"] = pack
+            return output_type(
+                overall_read="The draft identifies a material delivery constraint.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                limitations=(),
+                coverage_note="The review covers the uploaded CPF and package documents.",
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FakeGateway,
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+    )
+
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "run-with-supporting-document",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "cpf": {
+                    "name": "benin-cpf.txt",
+                    "bytes": b"Primary CPF delivery constraint. " * 20,
+                },
+                "supporting": [
+                    {
+                        "name": "benin-package.txt",
+                        "bytes": b"Supporting package context. " * 10,
+                    },
+                ],
+                "guidance": "",
+                "priority_questions": (),
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    pack = captured["pack"]
+    primary_evidence = [
+        item
+        for item in pack.evidence
+        if item.locator and item.locator.document_title == "benin-cpf.txt"
+    ]
+    package_evidence = [
+        item
+        for item in pack.evidence
+        if item.locator and item.locator.document_title == "benin-package.txt"
+    ]
+    assert primary_evidence
+    assert all(item.document_role == DocumentRole.PRIMARY for item in primary_evidence)
+    assert package_evidence
+    assert all(item.document_role == DocumentRole.PACKAGE for item in package_evidence)
+    assert context["result"].document_coverage.primary_document == "benin-cpf.txt"
 
 
 def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypatch):

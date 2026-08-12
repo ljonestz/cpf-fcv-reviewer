@@ -102,7 +102,13 @@ def build_runtime_services(config: dict) -> dict:
         for document_index, document in enumerate(documents):
             per_document_limit = 12 if document_index == 0 else 2
             selected_segments.extend(
-                (document, segment)
+                (
+                    document,
+                    segment,
+                    DocumentRole.PRIMARY
+                    if document_index == 0
+                    else DocumentRole.PACKAGE,
+                )
                 for segment in document.segments[:per_document_limit]
             )
         selected_segments = selected_segments[:24]
@@ -120,13 +126,12 @@ def build_runtime_services(config: dict) -> dict:
                     excerpt=segment.text[:600],
                 ),
                 confidence="high",
-                document_role=(
-                    DocumentRole.PRIMARY
-                    if document_index == 0
-                    else DocumentRole.PACKAGE
-                ),
+                document_role=document_role,
             )
-            for index, (document, segment) in enumerate(selected_segments, start=1)
+            for index, (document, segment, document_role) in enumerate(
+                selected_segments,
+                start=1,
+            )
         ]
 
         correction_payloads = tuple(payload.get("corrections", ()))
