@@ -414,8 +414,10 @@ def test_two_concurrent_sessions_remain_isolated():
 def test_raw_filename_correction_and_generated_narrative_are_not_written_to_application_logs(
     caplog,
     make_valid_result,
+    monkeypatch,
 ):
     app = create_app({"TESTING": True, "START_BACKGROUND_RUNS": False})
+    client = app.test_client()
     filename = "TOP-SECRET-FILENAME.txt"
     correction = "TOP-SECRET-CORRECTION"
     finding = "TOP-SECRET-NARRATIVE"
@@ -423,20 +425,47 @@ def test_raw_filename_correction_and_generated_narrative_are_not_written_to_appl
     secret_area = result.priority_areas[0].model_copy(update={"assessment": finding})
     result = result.model_copy(update={"priority_areas": (secret_area,)})
 
+    # This test stays focused on route-level redaction while the result endpoint
+    # still performs its legacy evidence traversal.
+    monkeypatch.setattr(
+        ReviewResult,
+        "findings",
+        property(lambda review_result: review_result.priority_areas),
+        raising=False,
+    )
+
     with caplog.at_level(logging.DEBUG):
-        app.extensions["session_store"].create(
-            {
-                "status": "complete",
-                "result": result.model_dump(mode="json"),
-                "evidence_by_id": {
-                    evidence_id: item.model_dump(mode="json")
-                    for evidence_id, item in evidence.items()
-                },
-                "filename": filename,
-                "correction": correction,
-            }
+        created = client.post(
+            "/api/reviews",
+            data={
+                "country": "Testland",
+                "review_stage": "concept_review",
+                "cpf": (BytesIO(b"Readable CPF text " * 20), filename),
+            },
+            content_type="multipart/form-data",
         )
-        app.logger.info("review completed")
+        assert created.status_code == 201
+        created_payload = created.get_json()
+
+        correction_response = client.post(
+            f"/api/reviews/{created_payload['assessment_id']}/corrections",
+            json={"text": correction},
+        )
+        assert correction_response.status_code == 201
+        child_payload = correction_response.get_json()
+        child_id = child_payload["assessment_id"]
+        app.extensions["session_store"].update(
+            child_id,
+            result=result.model_dump(mode="json"),
+            evidence_by_id={
+                evidence_id: item.model_dump(mode="json")
+                for evidence_id, item in evidence.items()
+            },
+            status="complete",
+        )
+        result_response = client.get(child_payload["result_url"])
+        assert result_response.status_code == 200
+        assert finding in result_response.get_data(as_text=True)
 
     logs = caplog.text
     assert filename not in logs

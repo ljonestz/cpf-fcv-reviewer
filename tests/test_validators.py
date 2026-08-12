@@ -194,6 +194,33 @@ def test_early_drafting_recommended_action_has_an_eighty_word_limit(word_count, 
     assert ("stage_length_overreach" in {issue.code for issue in issues}) is expected
 
 
+def test_early_drafting_accumulates_scale_and_length_violations():
+    action = " ".join(f"word-{index}" for index in range(81))
+
+    issues = validate_stage_behavior(
+        "early_drafting",
+        action,
+        RecommendationScale.SUBSTANTIVE_REVISION,
+    )
+
+    assert {issue.code for issue in issues} == {
+        "stage_overreach",
+        "stage_length_overreach",
+    }
+
+
+def test_later_stages_do_not_use_the_early_drafting_length_limit():
+    action = " ".join(f"word-{index}" for index in range(181))
+
+    issues = validate_stage_behavior(
+        "concept_review",
+        action,
+        RecommendationScale.SUBSTANTIVE_REVISION,
+    )
+
+    assert "stage_length_overreach" not in {issue.code for issue in issues}
+
+
 def test_response_to_comments_requires_comment_reference():
     reviewed = result(
         stage="response_to_comments",

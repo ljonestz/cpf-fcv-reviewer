@@ -234,28 +234,31 @@ def validate_stage_behavior(
     recommendation_scale: RecommendationScale | None = None,
 ) -> tuple[ValidationIssue, ...]:
     profile = STAGE_PROFILES.get(review_stage)
+    issues: list[ValidationIssue] = []
     if profile is not None and recommendation_scale not in (None, *profile.allowed_scales):
-        return (
+        issues.append(
             ValidationIssue(
                 "stage_overreach",
                 f"{recommendation_scale.value} is not allowed at {review_stage} stage.",
-            ),
+            )
         )
-    if profile is not None and len(action.split()) > profile.max_immediate_insertion_words:
-        return (
+    if review_stage == "early_drafting" and profile is not None and len(
+        action.split()
+    ) > profile.max_immediate_insertion_words:
+        issues.append(
             ValidationIssue(
                 "stage_length_overreach",
                 f"Recommended action exceeds the {profile.max_immediate_insertion_words}-word "
                 f"limit for {review_stage}.",
-            ),
+            )
         )
     if review_stage == "finalization" and any(
         term in action.casefold() for term in FINALIZATION_OVERREACH_TERMS
     ):
-        return (
+        issues.append(
             ValidationIssue(
                 "stage_overreach",
                 "Finalization permits targeted edits, not wholesale redesign.",
-            ),
+            )
         )
-    return ()
+    return tuple(issues)
