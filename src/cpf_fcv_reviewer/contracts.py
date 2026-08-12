@@ -11,6 +11,18 @@ class FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+def _requires_nonblank_text(value: str, field_name: str) -> str:
+    if not value.strip():
+        raise ValueError(f"{field_name} cannot be blank.")
+    return value
+
+
+def _requires_nonblank_items(values: tuple[str, ...], field_name: str) -> tuple[str, ...]:
+    if any(not value.strip() for value in values):
+        raise ValueError(f"{field_name} cannot contain blank entries.")
+    return values
+
+
 class ImmutableRegistryVersions(dict[str, str]):
     def __init__(self, values: dict[str, str]) -> None:
         dict.__init__(self, values)
@@ -144,6 +156,11 @@ class RevisionSummaryItem(FrozenModel):
     priority_area_id: str
     action: str
 
+    @field_validator("priority_area_id", "action")
+    @classmethod
+    def requires_nonblank_summary_text(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Revision summary fields")
+
 
 class PriorityArea(FrozenModel):
     priority_area_id: str
@@ -153,7 +170,7 @@ class PriorityArea(FrozenModel):
     recommended_action: str
     target_locator: EvidenceLocator
     recommendation_scale: RecommendationScale
-    evidence_ids: tuple[str, ...]
+    evidence_ids: tuple[str, ...] = Field(min_length=1)
     sensitivity: SensitivityCategory
     comment_reference: str | None = None
 
@@ -166,9 +183,19 @@ class PriorityArea(FrozenModel):
     )
     @classmethod
     def requires_nonblank_narrative(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Narrative review fields cannot be blank.")
-        return value
+        return _requires_nonblank_text(value, "Narrative review fields")
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def requires_nonblank_evidence_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _requires_nonblank_items(value, "Evidence identifiers")
+
+    @field_validator("comment_reference")
+    @classmethod
+    def rejects_blank_comment_reference(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _requires_nonblank_text(value, "Comment reference")
 
 
 class DocumentCoverage(FrozenModel):
@@ -176,6 +203,16 @@ class DocumentCoverage(FrozenModel):
     package_documents: tuple[str, ...] = ()
     context_documents: tuple[str, ...] = ()
     coverage_note: str
+
+    @field_validator("primary_document", "coverage_note")
+    @classmethod
+    def requires_nonblank_coverage_text(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Document coverage fields")
+
+    @field_validator("package_documents", "context_documents")
+    @classmethod
+    def rejects_blank_document_entries(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _requires_nonblank_items(value, "Document coverage entries")
 
 
 class RunMetadata(FrozenModel):
@@ -231,6 +268,11 @@ class ReviewResult(FrozenModel):
     limitations: tuple[str, ...] = ()
     document_coverage: DocumentCoverage
 
+    @field_validator("overall_read")
+    @classmethod
+    def requires_nonblank_overall_read(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Overall read")
+
 
 class ReviewDraft(FrozenModel):
     """Model-authored review content; authoritative run metadata is attached locally."""
@@ -241,3 +283,8 @@ class ReviewDraft(FrozenModel):
     institutional_referral_ids: tuple[str, ...]
     limitations: tuple[str, ...]
     coverage_note: str
+
+    @field_validator("overall_read")
+    @classmethod
+    def requires_nonblank_overall_read(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Overall read")
