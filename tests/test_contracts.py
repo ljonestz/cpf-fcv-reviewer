@@ -146,6 +146,21 @@ def test_review_draft_rejects_blank_overall_read(make_valid_result, value):
         )
 
 
+@pytest.mark.parametrize("value", ["", "   "])
+def test_review_draft_rejects_blank_coverage_note(make_valid_result, value):
+    result, _ = make_valid_result
+
+    with pytest.raises(ValidationError):
+        ReviewDraft(
+            overall_read=result.overall_read,
+            revision_summary=result.revision_summary,
+            priority_areas=result.priority_areas,
+            institutional_referral_ids=(),
+            limitations=(),
+            coverage_note=value,
+        )
+
+
 def test_new_contract_defaults_and_enum_fields_serialize_compactly():
     metadata = RunMetadata(
         run_id="run-1",

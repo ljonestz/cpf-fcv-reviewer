@@ -284,7 +284,7 @@ class ReviewDraft(FrozenModel):
     limitations: tuple[str, ...]
     coverage_note: str
 
-    @field_validator("overall_read")
+    @field_validator("overall_read", "coverage_note")
     @classmethod
-    def requires_nonblank_overall_read(cls, value: str) -> str:
-        return _requires_nonblank_text(value, "Overall read")
+    def requires_nonblank_draft_text(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Review draft text")
