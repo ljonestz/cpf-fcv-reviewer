@@ -4,7 +4,14 @@ from pathlib import Path
 import pytest
 
 from cpf_fcv_reviewer.app import create_app
-from cpf_fcv_reviewer.contracts import EvidencePack, Finding
+from cpf_fcv_reviewer.contracts import (
+    EvidenceLocator,
+    EvidencePack,
+    PriorityArea,
+    RecommendationScale,
+    RevisionSummaryItem,
+    SensitivityCategory,
+)
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.runtime import build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
@@ -140,7 +147,7 @@ def test_runtime_cannot_report_completion_without_a_review_result(monkeypatch):
     assert not any(kind == "run_complete" for kind, _ in events)
 
 
-def test_runtime_validation_requires_confirmed_priority_response(
+def test_runtime_validation_does_not_require_confirmed_priority_response(
     monkeypatch,
     make_valid_result,
 ):
@@ -161,7 +168,7 @@ def test_runtime_validation_requires_confirmed_priority_response(
 
     validated = validate(context)
 
-    assert "missing_priority_response" in {
+    assert "missing_priority_response" not in {
         issue["code"] for issue in validated["validation_issues"]
     }
 
@@ -175,22 +182,33 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
             pack = EvidencePack.model_validate(payload["evidence_pack"])
             evidence_id = pack.evidence[0].evidence_id
             return output_type(
-                executive_judgment="The draft identifies a material delivery constraint.",
-                diagnostic_title="Limited FCV diagnostic-framing assessment",
-                findings=(
-                    Finding(
-                        finding_id="finding-1",
-                        title="Delivery constraint",
-                        narrative="The constraint is described in the uploaded draft.",
-                        status="needs_strengthening",
-                        evidence_ids=(evidence_id,),
-                        sensitivity="cautious",
+                overall_read="The draft identifies a material delivery constraint.",
+                revision_summary=(
+                    RevisionSummaryItem(
+                        priority_area_id="area-1",
+                        action="Clarify the delivery constraint.",
                     ),
                 ),
-                recommendations=(),
+                priority_areas=(
+                    PriorityArea(
+                        priority_area_id="area-1",
+                        heading="Delivery constraint",
+                        assessment="The constraint is described in the uploaded draft.",
+                        why_it_matters="It may affect implementation.",
+                        recommended_action="Clarify the delivery constraint.",
+                        target_locator=EvidenceLocator(
+                            document_title="benin-cpf.txt",
+                            heading="Paragraph 1",
+                            excerpt="Material FCV delivery constraint.",
+                        ),
+                        recommendation_scale=RecommendationScale.FINE_TUNING,
+                        evidence_ids=(evidence_id,),
+                        sensitivity=SensitivityCategory.CAUTIOUS,
+                    ),
+                ),
                 institutional_referral_ids=(),
-                priority_question_responses=(),
                 limitations=("No current RRA was supplied.",),
+                coverage_note="The review covers the uploaded CPF.",
             )
 
     monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
@@ -222,7 +240,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
     )
 
     assert context["evidence_pack"].evidence
-    assert context["result"].findings[0].evidence_ids == (
+    assert context["result"].priority_areas[0].evidence_ids == (
         context["evidence_pack"].evidence[0].evidence_id,
     )
     assert events[-1][0] == "run_complete"
@@ -239,13 +257,12 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
             pack = EvidencePack.model_validate(payload["evidence_pack"])
             captured["pack"] = pack
             return output_type(
-                executive_judgment="The draft requires cautious review.",
-                diagnostic_title="Limited FCV diagnostic-framing assessment",
-                findings=(),
-                recommendations=(),
+                overall_read="The draft requires cautious review.",
+                revision_summary=(),
+                priority_areas=(),
                 institutional_referral_ids=(),
-                priority_question_responses=(),
                 limitations=(),
+                coverage_note="The review covers the uploaded CPF.",
             )
 
     monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
@@ -301,17 +318,16 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
         def generate(self, *, prompt_name, payload, output_type):
             if prompt_name == "repair":
                 repair_payloads.append(payload)
-                judgment = "The draft requires cautious review."
+                overall_read = "The draft requires cautious review."
             else:
-                judgment = "This package is eligible for special treatment."
+                overall_read = "This package is eligible for special treatment."
             return output_type(
-                executive_judgment=judgment,
-                diagnostic_title="Limited FCV diagnostic-framing assessment",
-                findings=(),
-                recommendations=(),
+                overall_read=overall_read,
+                revision_summary=(),
+                priority_areas=(),
                 institutional_referral_ids=(),
-                priority_question_responses=(),
                 limitations=(),
+                coverage_note="The review covers the uploaded CPF.",
             )
 
     monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)

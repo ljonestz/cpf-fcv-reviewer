@@ -5,26 +5,24 @@ import pytest
 from cpf_fcv_reviewer import validators
 from cpf_fcv_reviewer.contracts import (
     DiagnosticMode,
+    DocumentCoverage,
     EvidenceLocator,
-    Finding,
-    PriorityQuestionResponse,
-    Recommendation,
+    PriorityArea,
+    RecommendationScale,
     ReviewResult,
+    RevisionSummaryItem,
     RunMetadata,
     SensitivityCategory,
 )
-from cpf_fcv_reviewer.validators import (
-    validate_review,
-    validate_stage_behavior,
-)
+from cpf_fcv_reviewer.validators import result_text, validate_review, validate_stage_behavior
 
 
-def metadata():
+def metadata(*, stage: str = "finalization", mode: DiagnosticMode = DiagnosticMode.LIMITED_FRAMING):
     return RunMetadata(
         run_id="run-1",
         created_at=datetime.now(UTC),
-        review_stage="finalization",
-        diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+        review_stage=stage,
+        diagnostic_mode=mode,
         app_release="0.1.0",
         schema_version="1.0.0",
         rubric_version="1.0.0",
@@ -34,33 +32,194 @@ def metadata():
     )
 
 
-def locator():
+def locator(excerpt: str = "Outcome framework"):
     return EvidenceLocator(
         document_title="CPF",
         page=1,
-        excerpt="Outcome framework",
+        excerpt=excerpt,
     )
+
+
+def area(
+    *,
+    area_id: str = "pa-1",
+    scale: RecommendationScale = RecommendationScale.FINE_TUNING,
+    evidence_ids: tuple[str, ...] = ("ev-1",),
+    sensitivity: SensitivityCategory = SensitivityCategory.CAUTIOUS,
+    comment_reference: str | None = None,
+    recommended_action: str = "Clarify the causal link.",
+) -> PriorityArea:
+    return PriorityArea(
+        priority_area_id=area_id,
+        heading="Strengthen the causal link",
+        assessment="The link remains implicit.",
+        why_it_matters="The results chain is not explicit.",
+        recommended_action=recommended_action,
+        target_locator=locator("SECRET RAW EVIDENCE EXCERPT"),
+        recommendation_scale=scale,
+        evidence_ids=evidence_ids,
+        sensitivity=sensitivity,
+        comment_reference=comment_reference,
+    )
+
+
+def result(
+    *,
+    stage: str = "finalization",
+    mode: DiagnosticMode = DiagnosticMode.LIMITED_FRAMING,
+    summaries: tuple[RevisionSummaryItem, ...] = (
+        RevisionSummaryItem(priority_area_id="pa-1", action="Clarify the causal link."),
+    ),
+    areas: tuple[PriorityArea, ...] = (area(),),
+    limitations: tuple[str, ...] = ("No current RRA was available.",),
+    overall_read: str = "The CPF has a useful foundation but needs a clearer delivery narrative.",
+) -> ReviewResult:
+    return ReviewResult(
+        metadata=metadata(stage=stage, mode=mode),
+        overall_read=overall_read,
+        revision_summary=summaries,
+        priority_areas=areas,
+        limitations=limitations,
+        document_coverage=DocumentCoverage(
+            primary_document="CPF",
+            coverage_note="The review covers the primary CPF draft.",
+        ),
+    )
+
+
+def test_result_text_covers_model_authored_narrative_without_metadata_or_raw_evidence():
+    reviewed = result(
+        summaries=(RevisionSummaryItem(priority_area_id="pa-1", action="SUMMARY ACTION"),),
+        areas=(
+            area(
+                comment_reference="COMMENT REF",
+                recommended_action="RECOMMENDED ACTION",
+            ).model_copy(
+                update={
+                    "heading": "HEADING",
+                    "assessment": "ASSESSMENT",
+                    "why_it_matters": "WHY IT MATTERS",
+                }
+            ),
+        ),
+        limitations=("LIMITATION",),
+        overall_read="OVERALL READ",
+    )
+
+    text = result_text(reviewed)
+
+    for expected in (
+        "OVERALL READ",
+        "SUMMARY ACTION",
+        "HEADING",
+        "ASSESSMENT",
+        "WHY IT MATTERS",
+        "RECOMMENDED ACTION",
+        "COMMENT REF",
+        "LIMITATION",
+        "The review covers the primary CPF draft.",
+    ):
+        assert expected in text
+    assert "SECRET RAW EVIDENCE EXCERPT" not in text
+    assert "app_release" not in text
+    assert "registry_bundle_hash" not in text
+
+
+def test_summary_unknown_link_is_rejected():
+    reviewed = result(
+        summaries=(RevisionSummaryItem(priority_area_id="missing", action="Revise it."),)
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "unknown_priority_area" in {issue.code for issue in issues}
+
+
+def test_duplicate_priority_ids_and_summary_linkage_are_rejected_with_repairable_code():
+    reviewed = result(
+        summaries=(
+            RevisionSummaryItem(priority_area_id="pa-1", action="First action."),
+            RevisionSummaryItem(priority_area_id="pa-1", action="Second action."),
+        ),
+        areas=(area(), area()),
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    unknown_area_issues = [issue for issue in issues if issue.code == "unknown_priority_area"]
+    assert len(unknown_area_issues) >= 2
+    assert any("Duplicate priority area IDs" in issue.message for issue in unknown_area_issues)
+    assert any(
+        "Duplicate revision summary linkages" in issue.message
+        for issue in unknown_area_issues
+    )
+
+
+def test_priority_area_unknown_evidence_is_rejected():
+    reviewed = result(areas=(area(evidence_ids=("ev-2", "ev-1")),))
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert [issue.message for issue in issues if issue.code == "unknown_evidence"] == [
+        "pa-1 cites unknown evidence: ['ev-2']"
+    ]
+
+
+def test_finalization_requires_fine_tuning_scale():
+    reviewed = result(areas=(area(scale=RecommendationScale.TARGETED_EDIT),))
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "stage_overreach" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    ("word_count", "expected"),
+    [(80, False), (81, True)],
+)
+def test_early_drafting_recommended_action_has_an_eighty_word_limit(word_count, expected):
+    action = " ".join(f"word-{index}" for index in range(word_count))
+    reviewed = result(
+        stage="early_drafting",
+        areas=(
+            area(
+                scale=RecommendationScale.TARGETED_EDIT,
+                recommended_action=action,
+            ),
+        ),
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert ("stage_length_overreach" in {issue.code for issue in issues}) is expected
+
+
+def test_response_to_comments_requires_comment_reference():
+    reviewed = result(
+        stage="response_to_comments",
+        areas=(area(scale=RecommendationScale.COMMENT_RESPONSE),),
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "missing_comment_reference" in {issue.code for issue in issues}
+
+
+def test_withheld_narrative_is_not_ready_to_draft():
+    reviewed = result(areas=(area(sensitivity=SensitivityCategory.WITHHOLD),))
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "withheld_drafting" in {issue.code for issue in issues}
 
 
 def test_unknown_evidence_and_alignment_claim_fail():
-    result = ReviewResult(
-        metadata=metadata(),
-        executive_judgment="The CPF is aligned with the RRA.",
-        diagnostic_title="RRA-CPF alignment",
-        findings=(
-            Finding(
-                finding_id="f1",
-                title="Unsupported",
-                narrative="A named policy is triggered.",
-                status="material_gap",
-                evidence_ids=("missing",),
-                sensitivity=SensitivityCategory.DIRECT,
-            ),
-        ),
-        recommendations=(),
+    reviewed = result(
+        overall_read="The CPF review claims RRA alignment.",
+        areas=(area(evidence_ids=("missing",)),),
     )
 
-    issues = validate_review(result, evidence_ids=set(), prohibited_terms={"triggered"})
+    issues = validate_review(reviewed, evidence_ids=set(), prohibited_terms={"implicit"})
 
     assert {issue.code for issue in issues} == {
         "limited_mode_overclaim",
@@ -96,66 +255,5 @@ def test_registry_only_prohibited_phrase_is_rejected():
         )
 
 
-def test_recommendation_and_priority_question_are_traceable_and_validated():
-    result = ReviewResult(
-        metadata=metadata(),
-        executive_judgment="The evidence is limited.",
-        diagnostic_title="Limited FCV diagnostic-framing assessment",
-        findings=(),
-        recommendations=(
-            Recommendation(
-                recommendation_id="rec-1",
-                finding_id="missing-finding",
-                priority_tier="core",
-                action="Confirm eligibility for the PRA.",
-                why_it_matters="The rationale is unclear.",
-                target_locator=locator(),
-                stage_behavior="Targeted edit.",
-                sensitivity=SensitivityCategory.WITHHOLD,
-            ),
-        ),
-        priority_question_responses=(
-            PriorityQuestionResponse(
-                question_id="pq-1",
-                question="Has the delivery risk been confirmed?",
-                direct_answer="Not in the supplied package.",
-                evidence_ids=("ev-2", "ev-1", "ev-2"),
-                confidence="low",
-            ),
-        ),
-    )
-
-    issues = validate_review(result, evidence_ids={"ev-1"}, prohibited_terms=set())
-
-    assert {issue.code for issue in issues} == {
-        "unknown_finding",
-        "unknown_evidence",
-        "prohibited_policy_language",
-        "withheld_drafting",
-    }
-    assert [issue.message for issue in issues if issue.code == "unknown_evidence"] == [
-        "pq-1 cites unknown evidence: ['ev-2']"
-    ]
-
-
-def test_unknown_evidence_messages_are_sorted_and_deterministic():
-    result = ReviewResult(
-        metadata=metadata(),
-        executive_judgment="Evidence is limited.",
-        diagnostic_title="Limited FCV diagnostic-framing assessment",
-        findings=(
-            Finding(
-                finding_id="f1",
-                title="Finding",
-                narrative="Evidence requires confirmation.",
-                status="material_gap",
-                evidence_ids=("z-id", "a-id", "z-id"),
-                sensitivity=SensitivityCategory.CONFIRM,
-            ),
-        ),
-        recommendations=(),
-    )
-
-    issues = validate_review(result, evidence_ids=set(), prohibited_terms=set())
-
-    assert [issue.message for issue in issues] == ["f1 cites unknown evidence: ['a-id', 'z-id']"]
+def test_priority_question_validation_was_removed():
+    assert not hasattr(validators, "validate_priority_questions")

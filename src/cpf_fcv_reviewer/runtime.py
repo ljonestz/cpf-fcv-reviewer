@@ -5,7 +5,13 @@ from hashlib import sha256
 from pathlib import Path
 from secrets import compare_digest
 
-from .contracts import DiagnosticMode, EvidenceItem, EvidenceLocator, UserCorrection
+from .contracts import (
+    DiagnosticMode,
+    DocumentRole,
+    EvidenceItem,
+    EvidenceLocator,
+    UserCorrection,
+)
 from .evidence_builder import build_reproducible_evidence_pack
 from .extraction import extract_document, require_readable_primary
 from .model_gateway import AnthropicModelGateway
@@ -18,7 +24,6 @@ from .sources import choose_authoritative_source
 from .validators import (
     matched_prohibited_policy_phrases,
     result_text,
-    validate_priority_questions,
     validate_reproducibility_metadata,
     validate_review,
 )
@@ -115,6 +120,11 @@ def build_runtime_services(config: dict) -> dict:
                     excerpt=segment.text[:600],
                 ),
                 confidence="high",
+                document_role=(
+                    DocumentRole.PRIMARY
+                    if document_index == 0
+                    else DocumentRole.PACKAGE
+                ),
             )
             for index, (document, segment) in enumerate(selected_segments, start=1)
         ]
@@ -124,7 +134,7 @@ def build_runtime_services(config: dict) -> dict:
             UserCorrection(
                 correction_id=item["correction_id"],
                 created_at=datetime.fromisoformat(item["created_at"]),
-                affected_finding_id=item.get("affected_finding_id"),
+                affected_priority_area_id=item.get("affected_priority_area_id"),
                 text=item["text"][:2000],
                 rationale=(item.get("rationale") or "")[:1000] or None,
                 independently_supported=item.get("independently_supported", False),
@@ -183,8 +193,6 @@ def build_runtime_services(config: dict) -> dict:
                 prohibited_terms=prohibited_terms,
             )
         )
-        confirmed = tuple(context.get("payload", {}).get("priority_questions", ()))
-        issues.extend(validate_priority_questions(confirmed, context["result"]))
         issues.extend(validate_reproducibility_metadata(context["result"].metadata))
         return [{"code": issue.code, "message": issue.message} for issue in issues]
 
@@ -198,10 +206,12 @@ def build_runtime_services(config: dict) -> dict:
                     context["source_candidates"]
                 )
             if name == "review" and "evidence_pack" in context:
-                confirmed = tuple(context.get("payload", {}).get("priority_questions", ()))
+                review_focus = "\n".join(
+                    context.get("payload", {}).get("priority_questions", ())
+                )
                 context["result"] = review_engine.review(
                     context["evidence_pack"],
-                    priority_questions=confirmed,
+                    review_focus=review_focus,
                 )
             if name == "research":
                 context["public_research_gateway"] = research_gateway

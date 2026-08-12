@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 
-from .contracts import DiagnosticMode, ReviewResult, RunMetadata
+from .contracts import DiagnosticMode, RecommendationScale, ReviewResult, RunMetadata
+from .review_profiles import STAGE_PROFILES
 
 DETERMINATION_PATTERNS = (
     r"\beligible for\b",
@@ -70,21 +72,21 @@ def validate_reproducibility_metadata(
 
 def result_text(result: ReviewResult) -> str:
     """Return every user-facing review field that can carry a policy claim."""
-    parts = [result.executive_judgment, result.diagnostic_title]
-    for finding in result.findings:
-        parts.extend((finding.title, finding.narrative))
-    for recommendation in result.recommendations:
+    parts = [result.overall_read]
+    parts.extend(summary.action for summary in result.revision_summary)
+    for priority_area in result.priority_areas:
         parts.extend(
             (
-                recommendation.action,
-                recommendation.why_it_matters,
-                recommendation.stage_behavior,
+                priority_area.heading,
+                priority_area.assessment,
+                priority_area.why_it_matters,
+                priority_area.recommended_action,
             )
         )
-    for response in result.priority_question_responses:
-        parts.extend((response.question, response.direct_answer))
-        if response.limitation is not None:
-            parts.append(response.limitation)
+        if priority_area.comment_reference is not None:
+            parts.append(priority_area.comment_reference)
+    parts.extend(result.limitations)
+    parts.append(result.document_coverage.coverage_note)
     return "\n".join(parts)
 
 
@@ -133,69 +135,80 @@ def validate_review(
                 )
             )
 
-    finding_ids = {finding.finding_id for finding in result.findings}
-    for finding in result.findings:
-        _append_unknown_evidence_issue(
-            issues, finding.finding_id, finding.evidence_ids, evidence_ids
+    priority_area_counts = Counter(
+        priority_area.priority_area_id for priority_area in result.priority_areas
+    )
+    duplicate_priority_area_ids = sorted(
+        area_id for area_id, count in priority_area_counts.items() if count > 1
+    )
+    if duplicate_priority_area_ids:
+        issues.append(
+            ValidationIssue(
+                "unknown_priority_area",
+                f"Duplicate priority area IDs: {duplicate_priority_area_ids}",
+            )
         )
 
-    for recommendation in result.recommendations:
-        if recommendation.finding_id not in finding_ids:
+    summary_link_counts = Counter(
+        summary.priority_area_id for summary in result.revision_summary
+    )
+    duplicate_summary_links = sorted(
+        area_id for area_id, count in summary_link_counts.items() if count > 1
+    )
+    if duplicate_summary_links:
+        issues.append(
+            ValidationIssue(
+                "unknown_priority_area",
+                f"Duplicate revision summary linkages: {duplicate_summary_links}",
+            )
+        )
+
+    for summary in result.revision_summary:
+        if priority_area_counts.get(summary.priority_area_id, 0) != 1:
             issues.append(
                 ValidationIssue(
-                    "unknown_finding",
-                    f"{recommendation.recommendation_id} cites unknown finding: "
-                    f"{recommendation.finding_id}",
+                    "unknown_priority_area",
+                    f"Revision summary action cites priority area that does not resolve uniquely: "
+                    f"{summary.priority_area_id}",
                 )
             )
-        if recommendation.sensitivity.value == "withhold":
+
+    for priority_area in result.priority_areas:
+        _append_unknown_evidence_issue(
+            issues,
+            priority_area.priority_area_id,
+            priority_area.evidence_ids,
+            evidence_ids,
+        )
+        issues.extend(
+            validate_stage_behavior(
+                result.metadata.review_stage,
+                priority_area.recommended_action,
+                priority_area.recommendation_scale,
+            )
+        )
+        if priority_area.sensitivity.value == "withhold":
             issues.append(
                 ValidationIssue(
                     "withheld_drafting",
-                    f"{recommendation.recommendation_id} cannot be ready-to-paste.",
+                    f"{priority_area.priority_area_id} cannot be ready-to-paste.",
                 )
             )
-        issues.extend(validate_stage_behavior(result.metadata.review_stage, recommendation.action))
-
-    for response in result.priority_question_responses:
-        _append_unknown_evidence_issue(
-            issues, response.question_id, response.evidence_ids, evidence_ids
-        )
+        if result.metadata.review_stage == "response_to_comments" and not (
+            priority_area.comment_reference and priority_area.comment_reference.strip()
+        ):
+            issues.append(
+                ValidationIssue(
+                    "missing_comment_reference",
+                    f"{priority_area.priority_area_id} requires a comment reference.",
+                )
+            )
 
     try:
         assert_no_unsupported_policy_claims(text, prohibited_terms)
     except ValueError as exc:
         issues.append(ValidationIssue("prohibited_policy_language", str(exc)))
 
-    return tuple(issues)
-
-
-def validate_priority_questions(
-    confirmed: tuple[str, ...],
-    result: ReviewResult,
-) -> tuple[ValidationIssue, ...]:
-    response_counts: dict[str, int] = {}
-    for response in result.priority_question_responses:
-        response_counts[response.question] = response_counts.get(response.question, 0) + 1
-
-    issues: list[ValidationIssue] = []
-    missing = sorted(question for question in confirmed if response_counts.get(question, 0) == 0)
-    if missing:
-        issues.append(
-            ValidationIssue(
-                "missing_priority_response",
-                f"Missing priority responses: {missing}",
-            )
-        )
-
-    duplicates = sorted(question for question in confirmed if response_counts.get(question, 0) > 1)
-    if duplicates:
-        issues.append(
-            ValidationIssue(
-                "duplicate_priority_response",
-                f"Duplicate priority responses: {duplicates}",
-            )
-        )
     return tuple(issues)
 
 
@@ -218,7 +231,24 @@ def _append_unknown_evidence_issue(
 def validate_stage_behavior(
     review_stage: str,
     action: str,
+    recommendation_scale: RecommendationScale | None = None,
 ) -> tuple[ValidationIssue, ...]:
+    profile = STAGE_PROFILES.get(review_stage)
+    if profile is not None and recommendation_scale not in (None, *profile.allowed_scales):
+        return (
+            ValidationIssue(
+                "stage_overreach",
+                f"{recommendation_scale.value} is not allowed at {review_stage} stage.",
+            ),
+        )
+    if profile is not None and len(action.split()) > profile.max_immediate_insertion_words:
+        return (
+            ValidationIssue(
+                "stage_length_overreach",
+                f"Recommended action exceeds the {profile.max_immediate_insertion_words}-word "
+                f"limit for {review_stage}.",
+            ),
+        )
     if review_stage == "finalization" and any(
         term in action.casefold() for term in FINALIZATION_OVERREACH_TERMS
     ):
