@@ -1,34 +1,42 @@
 from __future__ import annotations
 
-from .contracts import EvidencePack, ReviewDraft, ReviewResult
+from .contracts import (
+    DocumentCoverage,
+    DocumentRole,
+    EvidencePack,
+    ReviewDraft,
+    ReviewResult,
+)
 from .model_gateway import ModelGateway
+from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 
-STAGE_RULES = {
-    "early_drafting": (
-        "May challenge strategic framing, selectivity, causal logic, "
-        "outcome structure, and theory of change."
-    ),
-    "concept_review": (
-        "Prioritize diagnostic alignment, strategic choices, outcome "
-        "architecture, One WBG roles, partnerships, and results logic."
-    ),
-    "decision_review": (
-        "Focus on specific revisions to objectives, results, risks, "
-        "implementation arrangements, calibration, and decisions."
-    ),
-    "roc_oc": (
-        "Focus on specific revisions to objectives, results, risks, "
-        "implementation arrangements, calibration, and decisions."
-    ),
-    "finalization": (
-        "Limit advice to targeted, high-value edits, factual corrections, "
-        "caveats, indicator refinements, and genuine confirmation needs."
-    ),
-    "response_to_comments": (
-        "Link each option to the prior comment and document location; use "
-        "accept, partially accept, explain, or verify options."
-    ),
-}
+
+def _serialize_stage_profile(profile) -> dict[str, object]:
+    return {
+        "instruction": profile.instruction,
+        "allowed_scales": [scale.value for scale in profile.allowed_scales],
+        "max_immediate_insertion_words": profile.max_immediate_insertion_words,
+    }
+
+
+def _serialize_detail_profile(profile) -> dict[str, object]:
+    return {
+        "target_pages": profile.target_pages,
+        "priority_area_range": list(profile.priority_area_range),
+    }
+
+
+def _document_names(evidence_pack: EvidencePack) -> dict[DocumentRole, tuple[str, ...]]:
+    return {
+        role: tuple(
+            dict.fromkeys(
+                item.locator.document_title
+                for item in evidence_pack.evidence
+                if item.document_role == role and item.locator is not None
+            )
+        )
+        for role in DocumentRole
+    }
 
 
 class ReviewEngine:
@@ -39,23 +47,38 @@ class ReviewEngine:
         self,
         evidence_pack: EvidencePack,
         *,
-        priority_questions: tuple[str, ...] = (),
+        review_focus: str = "",
     ) -> ReviewResult:
         stage = evidence_pack.metadata.review_stage
-        try:
-            stage_rule = STAGE_RULES[stage]
-        except KeyError as exc:
-            raise ValueError(f"Unsupported review stage: {stage}") from exc
+        if stage not in STAGE_PROFILES:
+            raise ValueError(f"Unsupported review stage: {stage}")
+        names = _document_names(evidence_pack)
+        if not names[DocumentRole.PRIMARY]:
+            raise ValueError("At least one located primary document evidence item is required.")
+        stage_profile = STAGE_PROFILES[stage]
+        detail_profile = DETAIL_PROFILES[evidence_pack.metadata.detail_level]
         draft = self.gateway.generate(
             prompt_name="review",
             payload={
                 "evidence_pack": evidence_pack.model_dump(mode="json"),
-                "stage_rule": stage_rule,
-                "priority_questions": priority_questions,
+                "stage_profile": _serialize_stage_profile(stage_profile),
+                "detail_profile": _serialize_detail_profile(detail_profile),
+                "review_focus": review_focus,
             },
             output_type=ReviewDraft,
         )
-        return ReviewResult(metadata=evidence_pack.metadata, **draft.model_dump())
+        coverage = DocumentCoverage(
+            primary_document=names[DocumentRole.PRIMARY][0],
+            package_documents=names[DocumentRole.PACKAGE],
+            context_documents=names[DocumentRole.CONTEXT],
+            coverage_note=draft.coverage_note,
+        )
+        content = draft.model_dump(exclude={"coverage_note"})
+        return ReviewResult(
+            metadata=evidence_pack.metadata,
+            document_coverage=coverage,
+            **content,
+        )
 
     def repair(
         self,
@@ -64,14 +87,27 @@ class ReviewEngine:
         *,
         forbidden_phrases: tuple[str, ...] = (),
     ) -> ReviewResult:
+        draft_payload = result.model_dump(
+            mode="json",
+            exclude={"metadata", "document_coverage"},
+        )
+        draft_payload["coverage_note"] = result.document_coverage.coverage_note
         draft = self.gateway.generate(
             prompt_name="repair",
             payload={
-                "draft": result.model_dump(mode="json", exclude={"metadata"}),
+                "draft": draft_payload,
                 "validation_issues": issues,
                 "forbidden_phrases": forbidden_phrases,
             },
             output_type=ReviewDraft,
         )
+        coverage = result.document_coverage.model_copy(
+            update={"coverage_note": draft.coverage_note}
+        )
+        content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})
-        return ReviewResult(metadata=metadata, **draft.model_dump())
+        return ReviewResult(
+            metadata=metadata,
+            document_coverage=coverage,
+            **content,
+        )

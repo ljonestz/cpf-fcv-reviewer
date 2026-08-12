@@ -1,4 +1,5 @@
 import json
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -6,15 +7,28 @@ import pytest
 
 from cpf_fcv_reviewer import model_gateway
 from cpf_fcv_reviewer.contracts import (
+    DetailLevel,
     DiagnosticMode,
+    DocumentRole,
+    EvidenceItem,
+    EvidenceLocator,
     EvidencePack,
-    PriorityQuestionResponse,
+    PriorityArea,
+    RecommendationScale,
     ReviewDraft,
     ReviewResult,
+    RevisionSummaryItem,
     RunMetadata,
+    SensitivityCategory,
 )
 from cpf_fcv_reviewer.model_gateway import AnthropicModelGateway
-from cpf_fcv_reviewer.review_engine import STAGE_RULES, ReviewEngine
+from cpf_fcv_reviewer.review_engine import ReviewEngine
+from cpf_fcv_reviewer.review_profiles import (
+    DETAIL_PROFILES,
+    STAGE_PROFILES,
+    DetailProfile,
+    StageProfile,
+)
 
 
 class FakeGateway:
@@ -28,12 +42,14 @@ class FakeGateway:
 
 
 def metadata(
+    *,
     mode: DiagnosticMode = DiagnosticMode.LIMITED_FRAMING,
     stage: str = "finalization",
+    detail: DetailLevel = DetailLevel.STANDARD,
 ) -> RunMetadata:
     return RunMetadata(
         run_id="run-1",
-        created_at=datetime.now(UTC),
+        created_at=datetime(2026, 8, 12, tzinfo=UTC),
         review_stage=stage,
         diagnostic_mode=mode,
         app_release="0.1.0",
@@ -42,139 +58,274 @@ def metadata(
         prompt_bundle_version="1.0.0",
         registry_versions={"fcv_strategy": "1.0.0"},
         model_id="fake",
+        detail_level=detail,
+    )
+
+
+def locator(title: str) -> EvidenceLocator:
+    return EvidenceLocator(
+        document_title=title,
+        heading="Results framework",
+        element="paragraph 12",
+        excerpt=f"Excerpt from {title}.",
+    )
+
+
+def evidence_item(
+    evidence_id: str,
+    title: str,
+    role: DocumentRole,
+) -> EvidenceItem:
+    return EvidenceItem(
+        evidence_id=evidence_id,
+        evidence_type="document_fact",
+        text=f"Evidence from {title}.",
+        confidence="high",
+        locator=locator(title),
+        document_role=role,
+    )
+
+
+def evidence_pack(meta: RunMetadata) -> EvidencePack:
+    return EvidencePack(
+        metadata=meta,
+        evidence=(
+            evidence_item("ev-primary-1", "Primary.docx", DocumentRole.PRIMARY),
+            evidence_item("ev-package-1", "Package.docx", DocumentRole.PACKAGE),
+            evidence_item("ev-package-2", "Package.docx", DocumentRole.PACKAGE),
+            evidence_item("ev-context-1", "Context.docx", DocumentRole.CONTEXT),
+        ),
+        diagnostic_entries=(),
+    )
+
+
+def draft_for(meta: RunMetadata, *, coverage_note: str = "Model coverage note.") -> ReviewDraft:
+    return ReviewDraft(
+        overall_read="The review has a credible foundation.",
+        revision_summary=(
+            RevisionSummaryItem(
+                priority_area_id="pa-1",
+                action="Clarify the delivery logic.",
+            ),
+        ),
+        priority_areas=(
+            PriorityArea(
+                priority_area_id="pa-1",
+                heading="Strengthen the delivery logic",
+                assessment="The delivery logic remains implicit.",
+                why_it_matters="A clearer chain will support implementation.",
+                recommended_action="Clarify the delivery logic.",
+                target_locator=locator("Primary.docx"),
+                recommendation_scale=(
+                    RecommendationScale.FINE_TUNING
+                    if meta.review_stage == "finalization"
+                    else RecommendationScale.TARGETED_EDIT
+                ),
+                evidence_ids=("ev-primary-1",),
+                sensitivity=SensitivityCategory.CAUTIOUS,
+            ),
+        ),
+        institutional_referral_ids=(),
+        limitations=(),
+        coverage_note=coverage_note,
     )
 
 
 def result_for(meta: RunMetadata) -> ReviewResult:
     return ReviewResult(
         metadata=meta,
-        executive_judgment="Evidence is limited.",
-        diagnostic_title="Limited FCV diagnostic-framing assessment",
-        findings=(),
-        recommendations=(),
-        limitations=("No RRA or accepted equivalent was available.",),
+        overall_read="The review has a credible foundation.",
+        revision_summary=(
+            RevisionSummaryItem(
+                priority_area_id="pa-1",
+                action="Clarify the delivery logic.",
+            ),
+        ),
+        priority_areas=(),
+        limitations=(),
+        document_coverage={
+            "primary_document": "Primary.docx",
+            "package_documents": ("Package.docx",),
+            "context_documents": ("Context.docx",),
+            "coverage_note": "Existing coverage note.",
+        },
     )
 
 
-def draft_for(meta: RunMetadata) -> ReviewDraft:
-    return ReviewDraft.model_validate(result_for(meta).model_dump(exclude={"metadata"}))
+def test_profiles_are_exact():
+    assert STAGE_PROFILES == {
+        "early_drafting": StageProfile(
+            "Challenge strategic framing where needed, but keep any immediate edit suitable "
+            "for a short concept document. Carry larger changes as preparation priorities.",
+            (RecommendationScale.PREPARATION_PRIORITY, RecommendationScale.TARGETED_EDIT),
+            80,
+        ),
+        "concept_review": StageProfile(
+            "Recommend material but bounded changes to strategic choices and architecture.",
+            (RecommendationScale.SUBSTANTIVE_REVISION, RecommendationScale.TARGETED_EDIT),
+            180,
+        ),
+        "decision_review": StageProfile(
+            "Recommend specific revisions to objectives, results, risks, and delivery choices.",
+            (RecommendationScale.SUBSTANTIVE_REVISION, RecommendationScale.TARGETED_EDIT),
+            140,
+        ),
+        "roc_oc": StageProfile(
+            "Focus on discrete management decisions and implementability refinements.",
+            (RecommendationScale.TARGETED_EDIT,),
+            100,
+        ),
+        "finalization": StageProfile(
+            "Limit advice to precise clarification, correction, consistency, and indicator edits.",
+            (RecommendationScale.FINE_TUNING,),
+            60,
+        ),
+        "response_to_comments": StageProfile(
+            "Link each action to the issue being resolved and propose concise response language.",
+            (RecommendationScale.COMMENT_RESPONSE,),
+            100,
+        ),
+    }
+    assert "short concept document" in STAGE_PROFILES["early_drafting"].instruction
+    assert STAGE_PROFILES["early_drafting"].allowed_scales == (
+        RecommendationScale.PREPARATION_PRIORITY,
+        RecommendationScale.TARGETED_EDIT,
+    )
+    assert STAGE_PROFILES["early_drafting"].max_immediate_insertion_words == 80
+    assert STAGE_PROFILES["concept_review"].allowed_scales == (
+        RecommendationScale.SUBSTANTIVE_REVISION,
+        RecommendationScale.TARGETED_EDIT,
+    )
+    assert STAGE_PROFILES["concept_review"].max_immediate_insertion_words == 180
+    assert STAGE_PROFILES["decision_review"].allowed_scales == (
+        RecommendationScale.SUBSTANTIVE_REVISION,
+        RecommendationScale.TARGETED_EDIT,
+    )
+    assert STAGE_PROFILES["decision_review"].max_immediate_insertion_words == 140
+    assert STAGE_PROFILES["roc_oc"].allowed_scales == (RecommendationScale.TARGETED_EDIT,)
+    assert STAGE_PROFILES["roc_oc"].max_immediate_insertion_words == 100
+    assert STAGE_PROFILES["finalization"].allowed_scales == (
+        RecommendationScale.FINE_TUNING,
+    )
+    assert STAGE_PROFILES["finalization"].max_immediate_insertion_words == 60
+    assert STAGE_PROFILES["response_to_comments"].allowed_scales == (
+        RecommendationScale.COMMENT_RESPONSE,
+    )
+    assert STAGE_PROFILES["response_to_comments"].max_immediate_insertion_words == 100
+    assert DETAIL_PROFILES == {
+        DetailLevel.BRIEF: DetailProfile(1, (2, 3)),
+        DetailLevel.STANDARD: DetailProfile(2, (3, 5)),
+        DetailLevel.IN_DEPTH: DetailProfile(3, (4, 7)),
+    }
+    assert DETAIL_PROFILES[DetailLevel.BRIEF].target_pages == 1
+    assert DETAIL_PROFILES[DetailLevel.BRIEF].priority_area_range == (2, 3)
+    assert DETAIL_PROFILES[DetailLevel.STANDARD].target_pages == 2
+    assert DETAIL_PROFILES[DetailLevel.STANDARD].priority_area_range == (3, 5)
+    assert DETAIL_PROFILES[DetailLevel.IN_DEPTH].target_pages == 3
+    assert DETAIL_PROFILES[DetailLevel.IN_DEPTH].priority_area_range == (4, 7)
+    with pytest.raises(FrozenInstanceError):
+        STAGE_PROFILES["finalization"].max_immediate_insertion_words = 1
+    with pytest.raises(FrozenInstanceError):
+        DETAIL_PROFILES[DetailLevel.BRIEF].target_pages = 9
 
 
-def test_limited_mode_has_non_alignment_title_and_uses_review_prompt():
-    meta = metadata()
+@pytest.mark.parametrize("stage", sorted(STAGE_PROFILES))
+@pytest.mark.parametrize("detail", tuple(DetailLevel))
+def test_every_stage_and_detail_injects_serialized_profiles(stage, detail):
+    meta = metadata(stage=stage, detail=detail)
     gateway = FakeGateway(draft_for(meta))
 
-    result = ReviewEngine(gateway).review(
-        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+    ReviewEngine(gateway).review(
+        evidence_pack(meta),
+        review_focus="Focus on delivery realism.",
     )
 
-    assert result.diagnostic_title == "Limited FCV diagnostic-framing assessment"
-    assert gateway.calls[0][0] == "review"
+    payload = gateway.calls[0][1]
+    assert set(payload) == {
+        "evidence_pack",
+        "stage_profile",
+        "detail_profile",
+        "review_focus",
+    }
+    assert payload["stage_profile"] == {
+        "instruction": STAGE_PROFILES[stage].instruction,
+        "allowed_scales": [
+            scale.value for scale in STAGE_PROFILES[stage].allowed_scales
+        ],
+        "max_immediate_insertion_words": STAGE_PROFILES[
+            stage
+        ].max_immediate_insertion_words,
+    }
+    assert payload["detail_profile"] == {
+        "target_pages": DETAIL_PROFILES[detail].target_pages,
+        "priority_area_range": list(DETAIL_PROFILES[detail].priority_area_range),
+    }
+    assert payload["review_focus"] == "Focus on delivery realism."
+    assert payload["evidence_pack"] == evidence_pack(meta).model_dump(mode="json")
+    json.dumps(payload)
+
+
+def test_review_derives_deduplicated_role_coverage_and_excludes_model_note():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta, coverage_note="Model-authored note."))
+
+    result = ReviewEngine(gateway).review(evidence_pack(meta))
+
+    assert result.document_coverage.primary_document == "Primary.docx"
+    assert result.document_coverage.package_documents == ("Package.docx",)
+    assert result.document_coverage.context_documents == ("Context.docx",)
+    assert result.document_coverage.coverage_note == "Model-authored note."
+    assert "coverage_note" not in result.model_dump(exclude={"document_coverage"})
     assert gateway.calls[0][2] is ReviewDraft
 
 
-def test_model_output_schema_excludes_authoritative_run_metadata():
+def test_missing_located_primary_role_is_rejected_before_gateway_call():
     meta = metadata()
-    gateway = FakeGateway(draft_for(meta))
-
-    ReviewEngine(gateway).review(
-        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
+    pack = EvidencePack(
+        metadata=meta,
+        evidence=(evidence_item("ev-package", "Package.docx", DocumentRole.PACKAGE),),
+        diagnostic_entries=(),
     )
-
-    assert gateway.calls[0][2].__name__ == "ReviewDraft"
-
-
-def test_finalization_stage_rule_and_serialized_evidence_pack_are_injected():
-    meta = metadata()
-    evidence_pack = EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
     gateway = FakeGateway(draft_for(meta))
 
-    ReviewEngine(gateway).review(evidence_pack)
-
-    payload = gateway.calls[0][1]
-    assert "targeted, high-value edits" in payload["stage_rule"]
-    assert payload["evidence_pack"] == evidence_pack.model_dump(mode="json")
-    assert payload["evidence_pack"]["metadata"]["diagnostic_mode"] == "limited_framing"
-
-
-@pytest.mark.parametrize("stage", sorted(STAGE_RULES))
-def test_every_supported_review_stage_injects_its_rule(stage):
-    meta = metadata(stage=stage)
-    gateway = FakeGateway(draft_for(meta))
-
-    ReviewEngine(gateway).review(
-        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
-    )
-
-    assert gateway.calls[0][1]["stage_rule"] == STAGE_RULES[stage]
-
-
-def test_unsupported_review_stage_is_rejected_before_gateway_call():
-    meta = metadata(stage="unsupported")
-    gateway = FakeGateway(result_for(meta))
-
-    with pytest.raises(ValueError, match="Unsupported review stage: unsupported"):
-        ReviewEngine(gateway).review(
-            EvidencePack(metadata=meta, evidence=(), diagnostic_entries=())
-        )
+    with pytest.raises(ValueError, match="located primary document evidence"):
+        ReviewEngine(gateway).review(pack)
 
     assert gateway.calls == []
 
 
-def test_each_confirmed_priority_question_has_one_direct_or_limited_response():
-    meta = metadata()
-    questions = (
-        "Is the implementation assumption confirmed?",
-        "Is the partnership logic credible?",
-    )
-    responses = (
-        PriorityQuestionResponse(
-            question_id="pq-1",
-            question=questions[0],
-            direct_answer="The supplied evidence confirms the stated assumption.",
-            evidence_ids=(),
-            confidence="medium",
-        ),
-        PriorityQuestionResponse(
-            question_id="pq-2",
-            question=questions[1],
-            direct_answer="The supplied evidence does not confirm it.",
-            evidence_ids=(),
-            confidence="low",
-            limitation="Confirmation is needed from the country team.",
-        ),
-    )
-    expected = draft_for(meta).model_copy(
-        update={"priority_question_responses": responses}
-    )
-    gateway = FakeGateway(expected)
-
-    actual = ReviewEngine(gateway).review(
-        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=()),
-        priority_questions=questions,
-    )
-
-    assert actual.priority_question_responses == responses
-    assert responses[1].limitation == "Confirmation is needed from the country team."
-
-
-def test_repair_keeps_authoritative_metadata_out_of_the_model_schema_and_payload():
-    meta = metadata()
+def test_unsupported_review_stage_is_rejected_before_gateway_call():
+    meta = metadata(stage="unsupported")
     gateway = FakeGateway(draft_for(meta))
 
+    with pytest.raises(ValueError, match="Unsupported review stage: unsupported"):
+        ReviewEngine(gateway).review(evidence_pack(meta))
+
+    assert gateway.calls == []
+
+
+def test_repair_preserves_application_coverage_and_updates_only_note():
+    meta = metadata()
+    initial = result_for(meta)
+    repaired_draft = draft_for(meta, coverage_note="Updated coverage note.")
+    gateway = FakeGateway(repaired_draft)
+
     repaired = ReviewEngine(gateway).repair(
-        result_for(meta),
-        [{"code": "example", "message": "Repair the draft."}],
-        forbidden_phrases=("complies with",),
+        initial,
+        [{"code": "example", "message": "Repair the narrative."}],
     )
 
-    prompt_name, payload, output_type = gateway.calls[0]
-    assert prompt_name == "repair"
-    assert output_type is ReviewDraft
+    payload = gateway.calls[0][1]
     assert "metadata" not in payload["draft"]
-    assert payload["forbidden_phrases"] == ("complies with",)
-    assert repaired.metadata.repair_count == 1
-    assert repaired.metadata.run_id == meta.run_id
+    assert "Primary.docx" not in json.dumps(payload["draft"])
+    assert "Package.docx" not in json.dumps(payload["draft"])
+    assert "Context.docx" not in json.dumps(payload["draft"])
+    assert payload["draft"]["coverage_note"] == "Existing coverage note."
+    assert repaired.document_coverage.primary_document == "Primary.docx"
+    assert repaired.document_coverage.package_documents == ("Package.docx",)
+    assert repaired.document_coverage.context_documents == ("Context.docx",)
+    assert repaired.document_coverage.coverage_note == "Updated coverage note."
+    assert repaired.metadata == meta.model_copy(update={"repair_count": 1})
 
 
 class FakeMessages:
@@ -194,7 +345,7 @@ class FakeAnthropicClient:
 
 def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     meta = metadata()
-    expected = result_for(meta)
+    expected = draft_for(meta)
     response = SimpleNamespace(parsed_output=expected)
     client = FakeAnthropicClient(response)
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
@@ -203,7 +354,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     actual = gateway.generate(
         prompt_name="review",
         payload={"accented": "Résilience"},
-        output_type=ReviewResult,
+        output_type=ReviewDraft,
     )
 
     assert actual == expected
@@ -211,7 +362,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
     assert call["system"].startswith("Version: 1.0.0")
-    assert call["output_format"] is ReviewResult
+    assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
 
@@ -224,21 +375,5 @@ def test_anthropic_gateway_rejects_missing_parsed_output(monkeypatch):
         gateway.generate(
             prompt_name="review",
             payload={"input": "bounded"},
-            output_type=ReviewResult,
+            output_type=ReviewDraft,
         )
-
-
-def test_confirmed_priority_questions_are_injected_into_review_payload():
-    meta = metadata()
-    gateway = FakeGateway(draft_for(meta))
-    questions = (
-        "Does the results framework track geographic distribution?",
-        "Is the partnership logic credible?",
-    )
-
-    ReviewEngine(gateway).review(
-        EvidencePack(metadata=meta, evidence=(), diagnostic_entries=()),
-        priority_questions=questions,
-    )
-
-    assert gateway.calls[0][1]["priority_questions"] == questions

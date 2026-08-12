@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from hashlib import sha256
 
-from .contracts import DiagnosticMode, RunMetadata
+from .contracts import DetailLevel, DiagnosticMode, RunMetadata
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -17,6 +17,7 @@ def build_run_metadata(
     run_id: str,
     created_at: datetime,
     review_stage: str,
+    detail_level: DetailLevel | str = DetailLevel.STANDARD,
     diagnostic_mode: DiagnosticMode | str,
     documents: Mapping[str, bytes],
     registry_bundle: bytes,
@@ -35,6 +36,7 @@ def build_run_metadata(
         run_id=run_id,
         created_at=created_at,
         review_stage=review_stage,
+        detail_level=detail_level,
         diagnostic_mode=diagnostic_mode,
         app_release="0.1.0",
         schema_version="1.0.0",

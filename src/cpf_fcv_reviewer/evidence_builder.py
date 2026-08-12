@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from .contracts import (
+    DetailLevel,
     DiagnosticEntry,
     DiagnosticMode,
     EvidenceItem,
@@ -86,6 +87,7 @@ def build_reproducible_evidence_pack(
     run_id: str,
     created_at: datetime,
     review_stage: str,
+    detail_level: DetailLevel | str = DetailLevel.STANDARD,
     diagnostic_mode: DiagnosticMode | str,
     documents: Mapping[str, bytes],
     registry_bundle: bytes,
@@ -109,6 +111,7 @@ def build_reproducible_evidence_pack(
         run_id=run_id,
         created_at=created_at,
         review_stage=review_stage,
+        detail_level=detail_level,
         diagnostic_mode=diagnostic_mode,
         documents=documents,
         registry_bundle=registry_bundle,

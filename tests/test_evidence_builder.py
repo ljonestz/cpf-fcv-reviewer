@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from cpf_fcv_reviewer.contracts import (
+    DetailLevel,
     DiagnosticEntry,
     DiagnosticMode,
     EvidenceItem,
@@ -20,6 +21,7 @@ def _metadata(mode: DiagnosticMode) -> RunMetadata:
         run_id="run-1",
         created_at=datetime.now(UTC),
         review_stage="concept",
+        detail_level=DetailLevel.STANDARD,
         diagnostic_mode=mode,
         app_release="test",
         schema_version="1",
@@ -183,3 +185,18 @@ def test_limited_mode_rejects_duplicate_diagnostic_entry_ids():
             ),
             material_diagnostic_ids=(),
         )
+
+
+def test_build_evidence_pack_preserves_detail_level_metadata():
+    metadata = _metadata(DiagnosticMode.LIMITED_FRAMING).model_copy(
+        update={"detail_level": DetailLevel.BRIEF}
+    )
+
+    pack = build_evidence_pack(
+        metadata=metadata,
+        evidence=(),
+        diagnostic_entries=(),
+        material_diagnostic_ids=(),
+    )
+
+    assert pack.metadata.detail_level is DetailLevel.BRIEF
