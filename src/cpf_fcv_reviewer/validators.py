@@ -242,9 +242,7 @@ def validate_stage_behavior(
                 f"{recommendation_scale.value} is not allowed at {review_stage} stage.",
             )
         )
-    if review_stage == "early_drafting" and profile is not None and len(
-        action.split()
-    ) > profile.max_immediate_insertion_words:
+    if profile is not None and len(action.split()) > profile.max_immediate_insertion_words:
         issues.append(
             ValidationIssue(
                 "stage_length_overreach",

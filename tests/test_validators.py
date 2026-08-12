@@ -14,6 +14,7 @@ from cpf_fcv_reviewer.contracts import (
     RunMetadata,
     SensitivityCategory,
 )
+from cpf_fcv_reviewer.review_profiles import STAGE_PROFILES
 from cpf_fcv_reviewer.validators import result_text, validate_review, validate_stage_behavior
 
 
@@ -174,24 +175,21 @@ def test_finalization_requires_fine_tuning_scale():
 
 
 @pytest.mark.parametrize(
-    ("word_count", "expected"),
-    [(80, False), (81, True)],
+    ("stage", "scale"),
+    [
+        ("early_drafting", RecommendationScale.TARGETED_EDIT),
+        ("decision_review", RecommendationScale.SUBSTANTIVE_REVISION),
+        ("finalization", RecommendationScale.FINE_TUNING),
+    ],
 )
-def test_early_drafting_recommended_action_has_an_eighty_word_limit(word_count, expected):
-    action = " ".join(f"word-{index}" for index in range(word_count))
-    reviewed = result(
-        stage="early_drafting",
-        areas=(
-            area(
-                scale=RecommendationScale.TARGETED_EDIT,
-                recommended_action=action,
-            ),
-        ),
-    )
+def test_known_stage_recommended_action_uses_profile_word_limit(stage, scale):
+    limit = STAGE_PROFILES[stage].max_immediate_insertion_words
 
-    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+    for word_count, expected in ((limit, False), (limit + 1, True)):
+        action = " ".join(f"word-{index}" for index in range(word_count))
+        issues = validate_stage_behavior(stage, action, scale)
 
-    assert ("stage_length_overreach" in {issue.code for issue in issues}) is expected
+        assert ("stage_length_overreach" in {issue.code for issue in issues}) is expected
 
 
 def test_early_drafting_accumulates_scale_and_length_violations():
@@ -209,16 +207,25 @@ def test_early_drafting_accumulates_scale_and_length_violations():
     }
 
 
-def test_later_stages_do_not_use_the_early_drafting_length_limit():
-    action = " ".join(f"word-{index}" for index in range(181))
-
+def test_finalization_preserves_wholesale_redesign_guard_with_valid_length():
     issues = validate_stage_behavior(
-        "concept_review",
+        "finalization",
+        "Replace all outcome areas.",
+        RecommendationScale.FINE_TUNING,
+    )
+
+    assert [issue.code for issue in issues] == ["stage_overreach"]
+
+
+def test_later_stages_use_their_own_profile_length_limits():
+    action = " ".join(f"word-{index}" for index in range(141))
+    issues = validate_stage_behavior(
+        "decision_review",
         action,
         RecommendationScale.SUBSTANTIVE_REVISION,
     )
 
-    assert "stage_length_overreach" not in {issue.code for issue in issues}
+    assert "stage_length_overreach" in {issue.code for issue in issues}
 
 
 def test_response_to_comments_requires_comment_reference():

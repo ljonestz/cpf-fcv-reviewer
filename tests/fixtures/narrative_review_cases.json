@@ -1,0 +1,41 @@
+[
+  {
+    "stage": "early_drafting",
+    "core_weakness": "The CPF does not yet make the pathway from the conflict-sensitive diagnosis to the proposed results explicit.",
+    "allowed_scales": ["preparation_priority", "targeted_edit"],
+    "max_action_words": 80,
+    "required_target_coordinates": {
+      "document_title": "Synthetic CPF draft.docx",
+      "heading": "Results framework",
+      "element": "paragraph 12"
+    },
+    "evidence_ids": ["ev-results-framework"],
+    "forbidden_headings": ["Pathway 1", "Mini assessment", "Questions for confirmation"]
+  },
+  {
+    "stage": "decision_review",
+    "core_weakness": "The CPF does not yet make the pathway from the conflict-sensitive diagnosis to the proposed results explicit.",
+    "allowed_scales": ["substantive_revision", "targeted_edit"],
+    "max_action_words": 140,
+    "required_target_coordinates": {
+      "document_title": "Synthetic CPF draft.docx",
+      "heading": "Results framework",
+      "element": "paragraph 12"
+    },
+    "evidence_ids": ["ev-results-framework"],
+    "forbidden_headings": ["Pathway 1", "Mini assessment", "Questions for confirmation"]
+  },
+  {
+    "stage": "finalization",
+    "core_weakness": "The CPF does not yet make the pathway from the conflict-sensitive diagnosis to the proposed results explicit.",
+    "allowed_scales": ["fine_tuning"],
+    "max_action_words": 60,
+    "required_target_coordinates": {
+      "document_title": "Synthetic CPF draft.docx",
+      "heading": "Results framework",
+      "element": "paragraph 12"
+    },
+    "evidence_ids": ["ev-results-framework"],
+    "forbidden_headings": ["Pathway 1", "Mini assessment", "Questions for confirmation"]
+  }
+]
