@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -91,9 +92,19 @@ def evidence_pack(meta: RunMetadata) -> EvidencePack:
         metadata=meta,
         evidence=(
             evidence_item("ev-primary-1", "Primary.docx", DocumentRole.PRIMARY),
-            evidence_item("ev-package-1", "Package.docx", DocumentRole.PACKAGE),
-            evidence_item("ev-package-2", "Package.docx", DocumentRole.PACKAGE),
-            evidence_item("ev-context-1", "Context.docx", DocumentRole.CONTEXT),
+            evidence_item("ev-package-a-1", "Package-A.docx", DocumentRole.PACKAGE),
+            evidence_item("ev-context-a-1", "Context-A.docx", DocumentRole.CONTEXT),
+            evidence_item("ev-package-b-1", "Package-B.docx", DocumentRole.PACKAGE),
+            evidence_item("ev-context-b-1", "Context-B.docx", DocumentRole.CONTEXT),
+            evidence_item("ev-package-a-2", "Package-A.docx", DocumentRole.PACKAGE),
+            evidence_item("ev-context-a-2", "Context-A.docx", DocumentRole.CONTEXT),
+            EvidenceItem(
+                evidence_id="ev-package-no-locator",
+                evidence_type="analytical_inference",
+                text="An inference without a document locator.",
+                confidence="medium",
+                document_role=DocumentRole.PACKAGE,
+            ),
         ),
         diagnostic_entries=(),
     )
@@ -229,6 +240,19 @@ def test_profiles_are_exact():
         DETAIL_PROFILES[DetailLevel.BRIEF].target_pages = 9
 
 
+def test_profile_registries_reject_assignment_and_deletion():
+    assert isinstance(STAGE_PROFILES, Mapping)
+    assert isinstance(DETAIL_PROFILES, Mapping)
+    with pytest.raises(TypeError):
+        STAGE_PROFILES["new_stage"] = STAGE_PROFILES["finalization"]
+    with pytest.raises(TypeError):
+        del STAGE_PROFILES["finalization"]
+    with pytest.raises(TypeError):
+        DETAIL_PROFILES[DetailLevel.BRIEF] = DETAIL_PROFILES[DetailLevel.STANDARD]
+    with pytest.raises(TypeError):
+        del DETAIL_PROFILES[DetailLevel.BRIEF]
+
+
 @pytest.mark.parametrize("stage", sorted(STAGE_PROFILES))
 @pytest.mark.parametrize("detail", tuple(DetailLevel))
 def test_every_stage_and_detail_injects_serialized_profiles(stage, detail):
@@ -272,8 +296,16 @@ def test_review_derives_deduplicated_role_coverage_and_excludes_model_note():
     result = ReviewEngine(gateway).review(evidence_pack(meta))
 
     assert result.document_coverage.primary_document == "Primary.docx"
-    assert result.document_coverage.package_documents == ("Package.docx",)
-    assert result.document_coverage.context_documents == ("Context.docx",)
+    assert result.document_coverage.package_documents == (
+        "Package-A.docx",
+        "Package-B.docx",
+    )
+    assert result.document_coverage.context_documents == (
+        "Context-A.docx",
+        "Context-B.docx",
+    )
+    assert "Primary.docx" not in result.document_coverage.package_documents
+    assert "Primary.docx" not in result.document_coverage.context_documents
     assert result.document_coverage.coverage_note == "Model-authored note."
     assert "coverage_note" not in result.model_dump(exclude={"document_coverage"})
     assert gateway.calls[0][2] is ReviewDraft

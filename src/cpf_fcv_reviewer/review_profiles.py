@@ -1,4 +1,6 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from .contracts import DetailLevel, RecommendationScale
 
@@ -16,7 +18,8 @@ class DetailProfile:
     priority_area_range: tuple[int, int]
 
 
-STAGE_PROFILES = {
+STAGE_PROFILES: Mapping[str, StageProfile] = MappingProxyType(
+    {
     "early_drafting": StageProfile(
         "Challenge strategic framing where needed, but keep any immediate edit suitable "
         "for a short concept document. Carry larger changes as preparation priorities.",
@@ -48,10 +51,13 @@ STAGE_PROFILES = {
         (RecommendationScale.COMMENT_RESPONSE,),
         100,
     ),
-}
+    }
+)
 
-DETAIL_PROFILES = {
-    DetailLevel.BRIEF: DetailProfile(1, (2, 3)),
-    DetailLevel.STANDARD: DetailProfile(2, (3, 5)),
-    DetailLevel.IN_DEPTH: DetailProfile(3, (4, 7)),
-}
+DETAIL_PROFILES: Mapping[DetailLevel, DetailProfile] = MappingProxyType(
+    {
+        DetailLevel.BRIEF: DetailProfile(1, (2, 3)),
+        DetailLevel.STANDARD: DetailProfile(2, (3, 5)),
+        DetailLevel.IN_DEPTH: DetailProfile(3, (4, 7)),
+    }
+)

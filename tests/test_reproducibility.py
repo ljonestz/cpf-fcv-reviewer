@@ -1,10 +1,29 @@
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 
 from cpf_fcv_reviewer.contracts import DetailLevel, DiagnosticMode
 from cpf_fcv_reviewer.evidence_builder import build_reproducible_evidence_pack
 from cpf_fcv_reviewer.reproducibility import build_run_metadata, sha256_bytes
+
+
+def test_metadata_rejects_unsupported_detail_level_at_pydantic_validation():
+    with pytest.raises(ValidationError, match="detail_level"):
+        build_run_metadata(
+            run_id="run-invalid-detail",
+            created_at=datetime(2026, 8, 10, tzinfo=UTC),
+            review_stage="early_drafting",
+            detail_level="unsupported",
+            diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+            documents={},
+            registry_bundle=b"registry",
+            guidance="guidance",
+            prompt_bytes={},
+            model_id="test-model",
+            source_scan_at=datetime(2026, 8, 10, tzinfo=UTC),
+            output_language="en",
+        )
 
 
 def test_metadata_records_every_reproducibility_input():
