@@ -203,12 +203,33 @@ function labelledParagraph(label, value, className) {
 }
 
 function locatorLabel(locator) {
+  if (!locator) return "";
   return [
     locator.document_title,
     locator.page ? `page ${locator.page}` : "",
     locator.heading || "",
     locator.element || "",
   ].filter(Boolean).join(" | ");
+}
+
+function evidenceTypeLabel(evidenceType) {
+  const labels = {
+    current_context: "Current context",
+    registry_language: "Registry language",
+    supporting_evidence: "Supporting evidence",
+  };
+  if (labels[evidenceType]) return labels[evidenceType];
+  if (!evidenceType) return "Supporting evidence";
+  return evidenceType
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function evidenceSourceLabel(item) {
+  const location = locatorLabel(item.locator);
+  if (location) return location;
+  if (item.source_url) return item.source_url;
+  return evidenceTypeLabel(item.evidence_type);
 }
 
 function renderEvidenceGroup(result, evidenceIds) {
@@ -220,7 +241,7 @@ function renderEvidenceGroup(result, evidenceIds) {
     if (!item) continue;
     const excerpt = item.locator && item.locator.excerpt || item.text;
     details.append(
-      text("p", locatorLabel(item.locator), "evidence-locator"),
+      text("p", evidenceSourceLabel(item), "evidence-locator"),
       text("p", excerpt, "evidence-excerpt"),
     );
   }

@@ -62,7 +62,7 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
     harness = textwrap.dedent(
         """
         const nodes = {};
-        function node() { return { hidden: false, disabled: false, value: "", children: [], handlers: {},
+        function node() { return { hidden: false, disabled: false, value: "", id: "", children: [], handlers: {},
           addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); }, append(...v) { this.children.push(...v); },
           replaceChildren(...v) { this.children = v; }, reset() {}, click() { return Promise.all((this.handlers.click || []).map(fn => fn())); },
           trigger(type) { return Promise.all((this.handlers[type] || []).map(fn => fn({preventDefault(){}}))); } }; }
@@ -83,14 +83,17 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
             why_it_matters: "Readers cannot follow implementation logic.",
             recommended_action: "Add a short explanation of the pathway.",
             target_locator: {document_title: "CPF.docx", page: 4, heading: "Results"},
-            evidence_ids: ["ev-1"], comment_reference: "QER comment 3"
+            evidence_ids: ["ev-1", "ev-context"], comment_reference: "QER comment 3"
           }],
           limitations: ["The RRA was not supplied."],
           document_coverage: {
-            primary_document: "CPF.docx", package_documents: [], context_documents: [],
+            primary_document: "CPF.docx", package_documents: ["CPF package annex.docx"], context_documents: [],
             coverage_note: "The review covers the supplied CPF."
           },
-          evidence_by_id: {"ev-1": {locator: {document_title: "CPF.docx", page: 4, heading: "Results", excerpt: "The programme will deliver results."}}}
+          evidence_by_id: {
+            "ev-1": {locator: {document_title: "CPF.docx", page: 4, heading: "Results", excerpt: "The programme will deliver results."}},
+            "ev-context": {evidence_type: "current_context", source_url: "https://example.test/context", text: "Context note explains the regional setting."}
+          }
         };
         let responses = [{status:202, ok:true}, {status:200, ok:true, json:async()=>complete}];
         let calls = 0; global.fetch = async () => { calls++; return responses.shift() || {status:200, ok:true, json:async()=>complete}; };
@@ -98,7 +101,8 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         require(process.argv[1]);
         const hooks = window.__cpfFcvReviewerTestHooks;
         hooks.watchEvents("one", "result"); const one = FakeSource.all[0]; one.error(); await one.emit("run_complete"); one.error();
-        if (calls !== 2 || nodes["#results"].hidden) throw Error("202 result did not retry to completion");
+        if (calls !== 2) throw Error("202 result did not retry to completion");
+        if (nodes["#results"].hidden) throw Error("result did not render after retry");
         const findByHref = (root, href) => {
           if (!root || typeof root !== "object") return null;
           if (root.href === href) return root;
@@ -108,21 +112,48 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
           }
           return null;
         };
+        const findById = (root, id) => {
+          if (!root || typeof root !== "object") return null;
+          if (root.id === id) return root;
+          for (const child of root.children || []) {
+            const match = findById(child, id);
+            if (match) return match;
+          }
+          return null;
+        };
         const summaryLink = findByHref(nodes["#results"], "#pa-1");
         if (!summaryLink) throw Error("revision summary did not link to its priority area");
+        if (!findById(nodes["#results"], "pa-1")) throw Error("revision summary target was not rendered");
         const collectText = (root) => [
           root && typeof root.textContent === "string" ? root.textContent : "",
           ...(root?.children || []).flatMap(collectText),
         ].join(" ");
         const renderedText = collectText(nodes["#results"]);
         for (const visibleText of [
+          "The draft has a sound foundation.",
+          "Clarify the delivery pathway.",
+          "Delivery pathway",
+          "The pathway is not yet explicit.",
+          "Readers cannot follow implementation logic.",
+          "Add a short explanation of the pathway.",
+          "CPF.docx | page 4 | Results",
+          "QER comment 3",
+          "The RRA was not supplied.",
+          "Primary document.",
+          "Package documents.",
+          "CPF package annex.docx",
+          "Context documents.",
+          "None supplied",
+          "The review covers the supplied CPF.",
           "Evidence and document locations",
           "CPF.docx | page 4 | Results",
           "The programme will deliver results.",
+          "https://example.test/context",
+          "Context note explains the regional setting.",
         ]) {
           if (!renderedText.includes(visibleText)) throw Error(`result omitted ${visibleText}`);
         }
-        if (renderedText.includes("ev-1")) throw Error("internal evidence ID was rendered");
+        if (renderedText.includes("ev-1") || renderedText.includes("ev-context")) throw Error("internal evidence ID was rendered");
         hooks.watchEvents("old", "old-result"); const old = FakeSource.all[1]; hooks.watchEvents("new", "new-result"); const newer = FakeSource.all[2]; await old.emit("run_failed", JSON.stringify({error:"review_failed"}));
         if (hooks.getActiveSource() !== newer) throw Error("stale stream mutated active stream");
         newer.error(); newer.error(); if (nodes["#return-to-intake"].hidden) throw Error("transport failure was not recoverable");
