@@ -79,6 +79,8 @@ def test_guided_landing_has_three_upload_zones_detail_control_and_process_dialog
     assert 'name="package_documents"' in html
     assert 'name="context_documents"' in html
     assert '<option value="standard" selected>Standard</option>' in html
+    dialog_start = html.split('<dialog id="process-dialog"', 1)[1].split(">", 1)[0]
+    assert " hidden" in dialog_start
     assert "How the Express review works" in html
     assert "Stage-sensitive synthesis" in html
     assert "grid-template-columns: repeat(3, 1fr)" in css

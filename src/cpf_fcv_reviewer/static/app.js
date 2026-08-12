@@ -98,15 +98,16 @@ function clearCountryCorrection() {
 }
 
 function showCountryCorrection(suggestedCountry) {
+  const normalizedSuggestion = suggestedCountry.trim();
   const wrapper = document.createElement("div");
   wrapper.className = "country-confirmation";
   const label = document.createElement("label");
-  label.textContent = suggestedCountry
-    ? `We detected ${suggestedCountry}. Confirm or correct the country.`
+  label.textContent = normalizedSuggestion
+    ? `We detected ${normalizedSuggestion}. Confirm or correct the country.`
     : "We could not identify the country. Enter it to continue.";
   countryCorrection = document.createElement("input");
   countryCorrection.type = "text";
-  countryCorrection.value = suggestedCountry || "";
+  countryCorrection.value = normalizedSuggestion;
   countryCorrection.autocomplete = "country-name";
   countryCorrection.addEventListener("input", () => {
     countryInput.value = countryCorrection.value.trim();
@@ -115,6 +116,20 @@ function showCountryCorrection(suggestedCountry) {
   });
   label.append(countryCorrection);
   wrapper.append(label);
+  if (normalizedSuggestion) {
+    const acceptSuggested = document.createElement("button");
+    acceptSuggested.type = "button";
+    acceptSuggested.textContent = "Use detected country";
+    acceptSuggested.addEventListener("click", () => {
+      countryInput.value = normalizedSuggestion;
+      countryRequiresConfirmation = false;
+      clearCountryCorrection();
+      countryDetection.textContent = `Country confirmed: ${countryInput.value}`;
+      updateSubmitState();
+      submitButton.focus();
+    });
+    wrapper.append(acceptSuggested);
+  }
   countryDetection.append(wrapper);
 }
 
@@ -166,6 +181,8 @@ async function detectCountry() {
 }
 
 primaryFileInput.addEventListener("change", detectCountry);
+
+if (typeof processDialog.showModal === "function") processDialog.hidden = false;
 
 openProcessDialog.addEventListener("click", () => {
   if (typeof processDialog.showModal === "function") processDialog.showModal();

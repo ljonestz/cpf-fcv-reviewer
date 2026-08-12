@@ -122,7 +122,7 @@ def test_country_preflight_behavior_runs_real_app_handlers():
         const nodes = {};
         function node() {
           const element = {
-            hidden: false, disabled: false, value: "", files: [], children: [],
+            hidden: false, disabled: false, value: "", files: [], children: [], focused: false,
             handlers: {}, className: "", parentNode: null,
             addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); },
             append(...values) {
@@ -133,7 +133,7 @@ def test_country_preflight_behavior_runs_real_app_handlers():
             },
             replaceChildren(...values) { this.children = []; this.append(...values); },
             reset() { this.files = []; this.value = ""; },
-            focus() {},
+            focus() { this.focused = true; },
             remove() {
               if (!this.parentNode) return;
               this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
@@ -164,6 +164,7 @@ def test_country_preflight_behavior_runs_real_app_handlers():
           createElement: () => node(),
           createTextNode: (value) => ({textContent: value}),
         };
+        nodes["#process-dialog"].hidden = true;
         global.window = {__CPF_FCV_REVIEWER_TEST__: true, setTimeout: (fn) => fn(), location: {assign(){}}};
         let stored = "";
         global.sessionStorage = {getItem(){return stored}, setItem(k, v){stored = v}, removeItem(){stored = ""}};
@@ -187,11 +188,22 @@ def test_country_preflight_behavior_runs_real_app_handlers():
           ...(root.type === "text" ? [root] : []),
           ...root.children.flatMap((child) => child && child.children ? findInputs(child) : []),
         ];
+        const findButtons = (root) => [
+          ...(root.type === "button" ? [root] : []),
+          ...root.children.flatMap((child) => child && child.children ? findButtons(child) : []),
+        ];
         (async () => {
           require(process.argv[1]);
           const cpf = nodes["#cpf"];
           const submit = nodes["#submit-review"];
           const detection = nodes["#country-detection"];
+          const processDialog = nodes["#process-dialog"];
+
+          if (!processDialog.hidden) throw Error("fallback dialog was not initially hidden");
+          await nodes["#open-process-dialog"].click();
+          if (processDialog.hidden) throw Error("fallback dialog did not open");
+          await nodes["#close-process-dialog"].click();
+          if (!processDialog.hidden) throw Error("fallback dialog did not close");
 
           cpf.files = [{name: "first.docx"}];
           const pending = cpf.trigger("change");
@@ -205,19 +217,29 @@ def test_country_preflight_behavior_runs_real_app_handlers():
           const needsConfirmation = cpf.trigger("change");
           requests.shift().resolve(response("Sudan", true));
           await needsConfirmation;
-          if (!submit.disabled || findInputs(detection).length !== 1) throw Error("confirmation detection was not gated");
-          const correction = findInputs(detection)[0];
-          correction.value = "South Sudan";
-          await correction.trigger("input");
-          if (nodes["#country"].value !== "South Sudan" || submit.disabled) throw Error("correction did not unlock submit");
+          if (!submit.disabled || findInputs(detection).length !== 1 || findButtons(detection).length !== 1) throw Error("confirmation detection was not gated");
+          const acceptSuggested = findButtons(detection)[0];
+          if (acceptSuggested.textContent !== "Use detected country") throw Error("suggested country acceptance control was missing");
+          await acceptSuggested.click();
+          if (nodes["#country"].value !== "Sudan" || submit.disabled || findInputs(detection).length !== 0 || !submit.focused) throw Error("unchanged suggested country was not accepted");
 
           cpf.files = [{name: "third.docx"}];
+          const editableConfirmation = cpf.trigger("change");
+          requests.shift().resolve(response("Sudan", true));
+          await editableConfirmation;
+          const editableCorrection = findInputs(detection)[0];
+          if (!editableCorrection) throw Error("editable confirmation input was missing");
+          editableCorrection.value = "South Sudan";
+          await editableCorrection.trigger("input");
+          if (nodes["#country"].value !== "South Sudan" || submit.disabled) throw Error("correction did not unlock submit");
+
+          cpf.files = [{name: "fourth.docx"}];
           const failed = cpf.trigger("change");
           requests.shift().resolve({ok: false, status: 400});
           await failed;
           if (!submit.disabled || findInputs(detection).length !== 1) throw Error("failed detection did not remain gated");
 
-          cpf.files = [{name: "fourth.docx"}];
+          cpf.files = [{name: "fifth.docx"}];
           const retried = cpf.trigger("change");
           requests.shift().resolve(response("Kenya"));
           await retried;
