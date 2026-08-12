@@ -360,6 +360,76 @@ def test_repair_preserves_application_coverage_and_updates_only_note():
     assert repaired.metadata == meta.model_copy(update={"repair_count": 1})
 
 
+def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
+    meta = metadata(
+        mode=DiagnosticMode.RRA_ALIGNMENT,
+        stage="concept_review",
+        detail=DetailLevel.IN_DEPTH,
+    )
+    initial = result_for(meta)
+    gateway = FakeGateway(draft_for(meta))
+    issues = [{"code": "priority_area_evidence_missing", "message": "Untrusted detail."}]
+
+    ReviewEngine(gateway).repair(
+        initial,
+        issues,
+        forbidden_phrases=("forbidden",),
+    )
+
+    payload = gateway.calls[0][1]
+    expected_draft = initial.model_dump(
+        mode="json",
+        exclude={"metadata", "document_coverage"},
+    )
+    expected_draft["coverage_note"] = initial.document_coverage.coverage_note
+    assert payload == {
+        "draft": expected_draft,
+        "validation_issues": issues,
+        "forbidden_phrases": ("forbidden",),
+        "diagnostic_mode": "rra_alignment",
+        "review_stage": "concept_review",
+        "stage_profile": {
+            "instruction": STAGE_PROFILES["concept_review"].instruction,
+            "allowed_scales": [
+                scale.value for scale in STAGE_PROFILES["concept_review"].allowed_scales
+            ],
+            "max_immediate_insertion_words": 180,
+        },
+        "detail_profile": {
+            "target_pages": 3,
+            "priority_area_range": [4, 7],
+        },
+    }
+    assert set(payload["draft"]) == {
+        "overall_read",
+        "revision_summary",
+        "priority_areas",
+        "institutional_referral_ids",
+        "limitations",
+        "coverage_note",
+    }
+    assert "document_coverage" not in payload["draft"]
+    assert "metadata" not in payload["draft"]
+    assert not any(
+        filename in json.dumps(payload["draft"])
+        for filename in ("Primary.docx", "Package.docx", "Context.docx")
+    )
+    json.dumps(payload)
+
+
+def test_repair_rejects_unsupported_metadata_stage_before_gateway_call():
+    meta = metadata(stage="unsupported")
+    gateway = FakeGateway(draft_for(meta))
+
+    with pytest.raises(ValueError, match="Unsupported review stage: unsupported"):
+        ReviewEngine(gateway).repair(
+            result_for(meta),
+            [{"code": "example", "message": "Untrusted detail."}],
+        )
+
+    assert gateway.calls == []
+
+
 class FakeMessages:
     def __init__(self, response):
         self.response = response
@@ -393,7 +463,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 1.0.0")
+    assert call["system"].startswith("Version: 2.0.0")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 

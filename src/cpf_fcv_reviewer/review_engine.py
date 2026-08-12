@@ -87,6 +87,11 @@ class ReviewEngine:
         *,
         forbidden_phrases: tuple[str, ...] = (),
     ) -> ReviewResult:
+        stage = result.metadata.review_stage
+        if stage not in STAGE_PROFILES:
+            raise ValueError(f"Unsupported review stage: {stage}")
+        stage_profile = STAGE_PROFILES[stage]
+        detail_profile = DETAIL_PROFILES[result.metadata.detail_level]
         draft_payload = result.model_dump(
             mode="json",
             exclude={"metadata", "document_coverage"},
@@ -98,6 +103,10 @@ class ReviewEngine:
                 "draft": draft_payload,
                 "validation_issues": issues,
                 "forbidden_phrases": forbidden_phrases,
+                "diagnostic_mode": result.metadata.diagnostic_mode.value,
+                "review_stage": stage,
+                "stage_profile": _serialize_stage_profile(stage_profile),
+                "detail_profile": _serialize_detail_profile(detail_profile),
             },
             output_type=ReviewDraft,
         )
