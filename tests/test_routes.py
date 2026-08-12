@@ -43,6 +43,73 @@ def test_primary_document_is_required():
     assert response.get_json()["error"] == "A primary CPF/CEN is required."
 
 
+def test_create_review_rejects_blank_country():
+    response = make_app().test_client().post(
+        "/api/reviews",
+        data={
+            "country": "   ",
+            "review_stage": "concept_review",
+            "cpf": (BytesIO(b"Readable CPF text " * 20), "cpf.txt"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Country is required."}
+
+
+def test_detect_country_uses_only_primary_upload_without_creating_state():
+    app = make_app()
+    client = app.test_client()
+    secret = "DO NOT RETURN THIS SUPPORTING CONTENT"
+
+    response = client.post(
+        "/api/detect-country",
+        data={
+            "cpf": (
+                BytesIO(
+                    b"Country Partnership Framework for the Republic of Chad for FY26-FY30\n"
+                    + b"Readable CPF content " * 20
+                ),
+                "chad-cpf.txt",
+            ),
+            "package_documents": [(BytesIO(secret.encode()), "secret.txt")],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "country": "Chad",
+        "requires_confirmation": False,
+    }
+    assert secret not in response.get_data(as_text=True)
+    assert app.extensions["session_store"].count() == 0
+
+
+def test_detect_country_rejects_missing_or_unreadable_primary():
+    app = make_app()
+    client = app.test_client()
+
+    for data in (
+        {},
+        {"cpf": (BytesIO(b"too short"), "cpf.txt")},
+        {"cpf": (BytesIO(b"not a valid PDF"), "cpf.pdf")},
+    ):
+        response = client.post(
+            "/api/detect-country",
+            data=data,
+            content_type="multipart/form-data",
+        )
+
+        assert response.status_code == 400
+        assert response.get_json() == {
+            "error": "A readable primary CPF/CEN is required."
+        }
+        assert "too short" not in response.get_data(as_text=True)
+        assert app.extensions["session_store"].count() == 0
+
+
 def test_create_review_preserves_upload_buckets_and_detail_level():
     app = make_app()
     response = app.test_client().post(

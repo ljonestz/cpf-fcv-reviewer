@@ -10,7 +10,9 @@ from uuid import uuid4
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
 from .contracts import DetailLevel, EvidenceItem, ReviewResult
+from .country_detection import detect_country
 from .export_docx import build_docx
+from .extraction import extract_document, require_readable_primary
 from .registry import hydrate_referrals
 from .session_store import SessionExpired
 from .validators import validate_reproducibility_metadata
@@ -22,11 +24,33 @@ def store():
     return current_app.extensions["session_store"]
 
 
+@bp.post("/api/detect-country")
+def detect_country_from_upload():
+    cpf = request.files.get("cpf")
+    if cpf is None or not cpf.filename:
+        return jsonify(error="A readable primary CPF/CEN is required."), 400
+
+    try:
+        document = extract_document(cpf.read(), cpf.filename)
+        require_readable_primary(document)
+    except Exception:
+        return jsonify(error="A readable primary CPF/CEN is required."), 400
+
+    detection = detect_country(document)
+    return jsonify(
+        country=detection.country,
+        requires_confirmation=detection.confidence != "high",
+    )
+
+
 @bp.post("/api/reviews")
 def create_review():
     cpf = request.files.get("cpf")
     if cpf is None:
         return jsonify(error="A primary CPF/CEN is required."), 400
+    country = request.form.get("country", "").strip()
+    if not country:
+        return jsonify(error="Country is required."), 400
 
     try:
         detail_level = DetailLevel(
@@ -43,7 +67,7 @@ def create_review():
         ]
 
     payload = {
-        "country": request.form.get("country", "").strip(),
+        "country": country,
         "review_stage": request.form.get("review_stage", "").strip(),
         "detail_level": detail_level.value,
         "cpf": {"name": cpf.filename, "bytes": cpf.read()},
