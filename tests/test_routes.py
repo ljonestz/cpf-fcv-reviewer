@@ -1,6 +1,21 @@
 from io import BytesIO
 
+import pytest
+
 from cpf_fcv_reviewer.app import create_app
+from cpf_fcv_reviewer.country_detection import (
+    COUNTRY_DETECTION_MAX_ARCHIVE_MEMBERS,
+    COUNTRY_DETECTION_MAX_CHARACTERS,
+    COUNTRY_DETECTION_MAX_PDF_PAGES,
+    COUNTRY_DETECTION_MAX_SEGMENTS,
+    COUNTRY_DETECTION_MAX_UNCOMPRESSED_BYTES,
+    COUNTRY_DETECTION_MAX_UPLOAD_BYTES,
+)
+from cpf_fcv_reviewer.extraction import (
+    ExtractedDocument,
+    ExtractedSegment,
+    ExtractionLimitExceeded,
+)
 
 
 def create_review(client):
@@ -58,6 +73,22 @@ def test_create_review_rejects_blank_country():
     assert response.get_json() == {"error": "Country is required."}
 
 
+@pytest.mark.parametrize("country", ["x" * 101, "Chad\x00"])
+def test_create_review_rejects_unsafe_confirmed_country(country):
+    response = make_app().test_client().post(
+        "/api/reviews",
+        data={
+            "country": country,
+            "review_stage": "concept_review",
+            "cpf": (BytesIO(b"Readable CPF text " * 20), "cpf.txt"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Country is invalid."}
+
+
 def test_detect_country_uses_only_primary_upload_without_creating_state():
     app = make_app()
     client = app.test_client()
@@ -108,6 +139,79 @@ def test_detect_country_rejects_missing_or_unreadable_primary():
         }
         assert "too short" not in response.get_data(as_text=True)
         assert app.extensions["session_store"].count() == 0
+
+
+def test_detect_country_rejects_detector_oversized_upload():
+    response = make_app().test_client().post(
+        "/api/detect-country",
+        data={
+            "cpf": (
+                BytesIO(b"x" * (COUNTRY_DETECTION_MAX_UPLOAD_BYTES + 1)),
+                "cpf.txt",
+            )
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "error": "A readable primary CPF/CEN is required."
+    }
+
+
+def test_detect_country_passes_detector_extraction_budgets(monkeypatch):
+    captured = {}
+
+    def fake_extract(data, name, **kwargs):
+        captured.update(kwargs)
+        return ExtractedDocument(
+            name,
+            (
+                ExtractedSegment(
+                    "Country Partnership Framework for Chad for FY26\n" + "x" * 120,
+                    None,
+                    None,
+                    "full text",
+                ),
+            ),
+            (),
+        )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.routes.extract_document", fake_extract)
+    response = make_app().test_client().post(
+        "/api/detect-country",
+        data={"cpf": (BytesIO(b"bounded input"), "cpf.txt")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"country": "Chad", "requires_confirmation": False}
+    assert captured == {
+        "max_pdf_pages": COUNTRY_DETECTION_MAX_PDF_PAGES,
+        "max_segments": COUNTRY_DETECTION_MAX_SEGMENTS,
+        "max_characters": COUNTRY_DETECTION_MAX_CHARACTERS,
+        "max_uncompressed_bytes": COUNTRY_DETECTION_MAX_UNCOMPRESSED_BYTES,
+        "max_archive_members": COUNTRY_DETECTION_MAX_ARCHIVE_MEMBERS,
+    }
+
+
+def test_detect_country_returns_generic_error_when_extraction_budget_is_exceeded(
+    monkeypatch,
+):
+    def limited_extract(*args, **kwargs):
+        raise ExtractionLimitExceeded("internal detail must not be exposed")
+
+    monkeypatch.setattr("cpf_fcv_reviewer.routes.extract_document", limited_extract)
+    response = make_app().test_client().post(
+        "/api/detect-country",
+        data={"cpf": (BytesIO(b"bounded input"), "cpf.docx")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "error": "A readable primary CPF/CEN is required."
+    }
 
 
 def test_create_review_preserves_upload_buckets_and_detail_level():

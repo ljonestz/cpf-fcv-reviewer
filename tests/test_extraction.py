@@ -6,6 +6,7 @@ from docx import Document
 
 from cpf_fcv_reviewer import extraction
 from cpf_fcv_reviewer.extraction import (
+    ExtractionLimitExceeded,
     extract_docx_bytes,
     extract_pdf_bytes,
     require_readable_primary,
@@ -37,6 +38,11 @@ def test_docx_segments_retain_heading_and_table_locator():
     assert paragraph.element == "paragraph 2"
     assert table.heading == "Strategic context"
     assert table.element == "table 1 row 2"
+
+
+def test_detector_docx_segment_budget_stops_element_expansion():
+    with pytest.raises(ExtractionLimitExceeded):
+        extract_docx_bytes(make_docx(), "CPF.docx", max_segments=2)
 
 
 def test_pdf_segments_use_real_page_numbers_only():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from datetime import UTC, datetime
 from io import BytesIO
 from threading import Thread
@@ -10,7 +11,15 @@ from uuid import uuid4
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
 from .contracts import DetailLevel, EvidenceItem, ReviewResult
-from .country_detection import detect_country
+from .country_detection import (
+    COUNTRY_DETECTION_MAX_ARCHIVE_MEMBERS,
+    COUNTRY_DETECTION_MAX_CHARACTERS,
+    COUNTRY_DETECTION_MAX_PDF_PAGES,
+    COUNTRY_DETECTION_MAX_SEGMENTS,
+    COUNTRY_DETECTION_MAX_UNCOMPRESSED_BYTES,
+    COUNTRY_DETECTION_MAX_UPLOAD_BYTES,
+    detect_country,
+)
 from .export_docx import build_docx
 from .extraction import extract_document, require_readable_primary
 from .registry import hydrate_referrals
@@ -31,7 +40,18 @@ def detect_country_from_upload():
         return jsonify(error="A readable primary CPF/CEN is required."), 400
 
     try:
-        document = extract_document(cpf.read(), cpf.filename)
+        data = cpf.read(COUNTRY_DETECTION_MAX_UPLOAD_BYTES + 1)
+        if len(data) > COUNTRY_DETECTION_MAX_UPLOAD_BYTES:
+            raise ValueError("Country detector upload budget exceeded.")
+        document = extract_document(
+            data,
+            cpf.filename,
+            max_pdf_pages=COUNTRY_DETECTION_MAX_PDF_PAGES,
+            max_segments=COUNTRY_DETECTION_MAX_SEGMENTS,
+            max_characters=COUNTRY_DETECTION_MAX_CHARACTERS,
+            max_uncompressed_bytes=COUNTRY_DETECTION_MAX_UNCOMPRESSED_BYTES,
+            max_archive_members=COUNTRY_DETECTION_MAX_ARCHIVE_MEMBERS,
+        )
         require_readable_primary(document)
     except Exception:
         return jsonify(error="A readable primary CPF/CEN is required."), 400
@@ -51,6 +71,10 @@ def create_review():
     country = request.form.get("country", "").strip()
     if not country:
         return jsonify(error="Country is required."), 400
+    if len(country) > 100 or any(
+        unicodedata.category(character).startswith("C") for character in country
+    ):
+        return jsonify(error="Country is invalid."), 400
 
     try:
         detail_level = DetailLevel(
