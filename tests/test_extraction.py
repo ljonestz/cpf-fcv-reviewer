@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 from docx import Document
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from cpf_fcv_reviewer import extraction
 from cpf_fcv_reviewer.extraction import (
@@ -28,6 +30,32 @@ def make_docx() -> bytes:
     return stream.getvalue()
 
 
+def make_pdf(texts: list[str]) -> bytes:
+    writer = PdfWriter()
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    for text in texts:
+        page = writer.add_blank_page(width=300, height=300)
+        stream = DecodedStreamObject()
+        stream.set_data(f"BT /F1 12 Tf 20 200 Td ({text}) Tj ET".encode())
+        page[NameObject("/Contents")] = writer._add_object(stream)
+        page[NameObject("/Resources")] = DictionaryObject(
+            {
+                NameObject("/Font"): DictionaryObject(
+                    {NameObject("/F1"): font}
+                )
+            }
+        )
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
 def test_docx_segments_retain_heading_and_table_locator():
     extracted = extract_docx_bytes(make_docx(), "CPF.docx")
 
@@ -43,6 +71,33 @@ def test_docx_segments_retain_heading_and_table_locator():
 def test_detector_docx_segment_budget_stops_element_expansion():
     with pytest.raises(ExtractionLimitExceeded):
         extract_docx_bytes(make_docx(), "CPF.docx", max_segments=2)
+
+
+def test_pdf_segment_budget_stops_page_expansion():
+    with pytest.raises(ExtractionLimitExceeded, match="segment"):
+        extract_pdf_bytes(
+            make_pdf(["First page text", "Second page text"]),
+            "CPF.pdf",
+            max_segments=1,
+        )
+
+
+def test_pdf_character_budget_stops_page_expansion():
+    with pytest.raises(ExtractionLimitExceeded, match="character"):
+        extract_pdf_bytes(
+            make_pdf(["A page with more extracted text than the budget"]),
+            "CPF.pdf",
+            max_characters=10,
+        )
+
+
+def test_pdf_uncompressed_stream_budget_is_effective():
+    with pytest.raises(ExtractionLimitExceeded, match="PDF stream"):
+        extract_pdf_bytes(
+            make_pdf(["A decoded page content stream"]),
+            "CPF.pdf",
+            max_uncompressed_bytes=1,
+        )
 
 
 def test_pdf_segments_use_real_page_numbers_only():

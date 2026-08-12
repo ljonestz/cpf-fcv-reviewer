@@ -51,10 +51,38 @@ def extract_pdf_bytes(
     name: str,
     *,
     max_pages: int | None = None,
+    max_segments: int | None = None,
+    max_characters: int | None = None,
+    max_uncompressed_bytes: int | None = None,
 ) -> ExtractedDocument:
     reader = PdfReader(BytesIO(data))
     pages = reader.pages if max_pages is None else reader.pages[:max_pages]
-    return segments_from_pdf_pages(name, [(page.extract_text() or "") for page in pages])
+    segments: list[ExtractedSegment] = []
+    warnings: list[str] = []
+    character_count = 0
+    uncompressed_bytes = 0
+
+    for index, page in enumerate(pages, start=1):
+        if max_uncompressed_bytes is not None:
+            contents = page.get_contents()
+            if contents is not None:
+                uncompressed_bytes += len(contents.get_data())
+                if uncompressed_bytes > max_uncompressed_bytes:
+                    raise ExtractionLimitExceeded("PDF stream budget exceeded.")
+
+        clean = (page.extract_text() or "").strip()
+        if not clean:
+            warnings.append(f"page {index} extracted no text")
+            continue
+        if max_segments is not None and len(segments) >= max_segments:
+            raise ExtractionLimitExceeded("PDF segment budget exceeded.")
+        next_character_count = character_count + len(clean)
+        if max_characters is not None and next_character_count > max_characters:
+            raise ExtractionLimitExceeded("PDF character budget exceeded.")
+        segments.append(ExtractedSegment(clean, index, None, f"page {index}"))
+        character_count = next_character_count
+
+    return ExtractedDocument(name, tuple(segments), tuple(warnings))
 
 
 def extract_docx_bytes(
@@ -173,7 +201,14 @@ def extract_document(
 ) -> ExtractedDocument:
     suffix = Path(name).suffix.lower()
     if suffix == ".pdf":
-        return extract_pdf_bytes(data, name, max_pages=max_pdf_pages)
+        return extract_pdf_bytes(
+            data,
+            name,
+            max_pages=max_pdf_pages,
+            max_segments=max_segments,
+            max_characters=max_characters,
+            max_uncompressed_bytes=max_uncompressed_bytes,
+        )
     if suffix == ".docx":
         return extract_docx_bytes(
             data,

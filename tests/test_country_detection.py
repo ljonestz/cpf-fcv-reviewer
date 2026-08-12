@@ -90,6 +90,23 @@ def test_detection_evidence_is_bounded_to_the_title():
             "Nigeria",
         ),
         ("Country Partnership Framework for Viet Nam for FY26", "Vietnam"),
+        (
+            "Country Partnership Framework for Democratic Republic of Congo for FY26",
+            "Democratic Republic of the Congo",
+        ),
+        (
+            "Country Partnership Framework for the Democratic Republic of the Congo for FY26",
+            "Democratic Republic of the Congo",
+        ),
+        (
+            "Country Partnership Framework for Republic of Congo for FY26",
+            "Congo",
+        ),
+        (
+            "Country Partnership Framework for Republic of the Congo for FY26",
+            "Congo",
+        ),
+        ("Country Partnership Framework for Republic of Korea for FY26", "South Korea"),
         ("Country Partnership Framework for the Republic of Türkiye for FY26", "Türkiye"),
     ],
 )

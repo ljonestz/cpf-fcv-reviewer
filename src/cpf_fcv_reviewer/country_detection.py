@@ -63,7 +63,7 @@ COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "China": (),
     "Colombia": (),
     "Comoros": (),
-    "Congo": ("Republic of the Congo",),
+    "Congo": ("Republic of Congo", "Republic of the Congo"),
     "Costa Rica": (),
     "Cote d'Ivoire": ("Côte d'Ivoire", "Ivory Coast"),
     "Croatia": (),
@@ -275,6 +275,11 @@ def _canonical_country(raw_candidate: str) -> str | None:
     candidate = unicodedata.normalize("NFKC", raw_candidate).strip(" .:-")
     if not candidate or any(unicodedata.category(char).startswith("C") for char in candidate):
         return None
+
+    exact_match = COUNTRY_BY_ALIAS.get(_registry_key(candidate))
+    if exact_match is not None:
+        return exact_match
+
     for prefix in PREFIXES:
         if candidate.casefold().startswith(prefix.casefold()):
             candidate = candidate[len(prefix) :].strip(" .:-")
