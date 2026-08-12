@@ -1,9 +1,11 @@
+from datetime import UTC
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
+import pytest
 from docx import Document
 
 from cpf_fcv_reviewer.app import create_app
@@ -69,8 +71,8 @@ def test_docx_uses_note_first_sections_and_omits_question_section(make_valid_res
 
 
 def test_withheld_content_is_not_rendered_as_draft_language(make_valid_result):
-    result, _ = make_valid_result
-    data = build_docx(result, evidence={}, hydrated_referrals=())
+    result, evidence = make_valid_result
+    data = build_docx(result, evidence=evidence, hydrated_referrals=())
     document = Document(BytesIO(data))
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
@@ -83,7 +85,7 @@ def test_docx_renders_context_evidence_with_human_source_label(make_valid_result
         update={
             "evidence_id": "ctx-1",
             "evidence_type": "current_context",
-            "locator": None,
+            "locator": evidence["ev-1"].locator,
             "source_url": "https://example.test/context",
             "text": "Context source excerpt.",
         }
@@ -94,9 +96,19 @@ def test_docx_renders_context_evidence_with_human_source_label(make_valid_result
     data = build_docx(result, evidence={"ctx-1": context_item}, hydrated_referrals=())
     text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
 
-    assert "Source: Current context | https://example.test/context" in text
+    assert (
+        "Source: Current context | CPF.docx | Results framework | paragraph 12 | "
+        "https://example.test/context"
+    ) in text
     assert "Excerpt: Context source excerpt." in text
     assert "ctx-1" not in text
+
+
+def test_docx_rejects_priority_area_with_missing_evidence(make_valid_result):
+    result, _ = make_valid_result
+
+    with pytest.raises(ValueError, match="Missing evidence for priority area"):
+        build_docx(result, evidence={}, hydrated_referrals=())
 
 
 def test_docx_preserves_coverage_buckets_and_optional_comment(make_valid_result):
@@ -184,6 +196,58 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
             )
     assert ("decimal", "720", "360") in custom_lists
     assert ("bullet", "720", "360") in custom_lists
+
+    list_num_ids = []
+    for paragraph in document_xml.findall(".//w:body/w:p", ns):
+        num_id = paragraph.find("w:pPr/w:numPr/w:numId", ns)
+        if num_id is not None:
+            list_num_ids.append(num_id.attrib[f"{{{w}}}val"])
+    custom_num_ids = {
+        num.attrib[f"{{{w}}}numId"]
+        for num in numbering_xml.findall("w:num", ns)
+        if num.find("w:abstractNumId", ns) is not None
+        and num.find("w:abstractNumId", ns).attrib[f"{{{w}}}val"]
+        in {
+            abstract.attrib[f"{{{w}}}abstractNumId"]
+            for abstract in numbering_xml.findall("w:abstractNum", ns)
+            if abstract.find("w:nsid", ns) is not None
+            and abstract.find("w:nsid", ns).attrib[f"{{{w}}}val"]
+            in {"C0F00001", "C0F00002"}
+        }
+    }
+    assert set(list_num_ids) == custom_num_ids
+    assert len(custom_num_ids) == 2
+
+
+def test_docx_core_properties_are_neutral_and_match_result_timestamp(make_valid_result):
+    result, evidence = make_valid_result
+    data = build_docx(result, evidence=evidence, hydrated_referrals=())
+    document = Document(BytesIO(data))
+    properties = document.core_properties
+
+    expected_timestamp = result.metadata.created_at.astimezone(UTC).replace(
+        microsecond=0
+    )
+    assert properties.author == "CPF FCV Reviewer"
+    assert properties.last_modified_by == "CPF FCV Reviewer"
+    assert properties.created == expected_timestamp
+    assert properties.modified == expected_timestamp
+
+
+def test_docx_footer_contains_muted_page_field(make_valid_result):
+    result, evidence = make_valid_result
+    data = build_docx(result, evidence=evidence, hydrated_referrals=())
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+
+    with ZipFile(BytesIO(data)) as archive:
+        footer_xml = ET.fromstring(archive.read("word/footer1.xml"))
+
+    assert "Volatile-session export" in "".join(footer_xml.itertext())
+    assert footer_xml.find(".//w:fldChar[@w:fldCharType='begin']", ns) is not None
+    instruction = footer_xml.find(".//w:instrText", ns)
+    assert instruction is not None
+    assert instruction.text == " PAGE "
+    assert footer_xml.find(".//w:fldChar[@w:fldCharType='end']", ns) is not None
 
 
 def test_docx_empty_narrative_collections_have_explicit_empty_states(make_valid_result):

@@ -20,7 +20,11 @@ from .country_detection import (
     COUNTRY_DETECTION_MAX_UPLOAD_BYTES,
     detect_country,
 )
-from .export_docx import build_docx
+from .export_docx import (
+    EvidenceCompletenessError,
+    build_docx,
+    validate_evidence_completeness,
+)
 from .extraction import extract_document, require_readable_primary
 from .registry import hydrate_referrals
 from .session_store import SessionExpired
@@ -208,10 +212,14 @@ def export_review(assessment_id):
         return jsonify(error="Review result is invalid."), 409
     if validate_reproducibility_metadata(result.metadata):
         return jsonify(error="Reproducibility metadata is incomplete."), 409
-    evidence = {
-        evidence_id: EvidenceItem.model_validate(item)
-        for evidence_id, item in evidence_payload.items()
-    }
+    try:
+        evidence = {
+            evidence_id: EvidenceItem.model_validate(item)
+            for evidence_id, item in evidence_payload.items()
+        }
+        validate_evidence_completeness(result, evidence)
+    except ValueError:
+        return jsonify(error="Traceable evidence is invalid."), 409
     bundle = current_app.extensions["registry_bundle"]
     try:
         data = build_docx(
@@ -222,6 +230,8 @@ def export_review(assessment_id):
                 bundle,
             ),
         )
+    except EvidenceCompletenessError:
+        return jsonify(error="Traceable evidence is invalid."), 409
     except Exception:
         return jsonify(error="DOCX export failed."), 500
     return send_file(

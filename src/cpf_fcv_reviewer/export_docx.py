@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from io import BytesIO
 
 from docx import Document
@@ -20,6 +21,11 @@ BLACK = RGBColor(0, 0, 0)
 PAGE_WIDTH_DXA = 9360
 LIST_TEXT_INDENT_DXA = 720
 LIST_HANGING_DXA = 360
+APPLICATION_AUTHOR = "CPF FCV Reviewer"
+
+
+class EvidenceCompletenessError(ValueError):
+    """Raised when a narrative priority area cites unavailable evidence."""
 
 
 def _set_style_font(style, *, name: str, size: float, color: RGBColor) -> None:
@@ -46,13 +52,26 @@ def _next_numbering_id(numbering, tag: str, attribute: str) -> int:
 
 def _add_numbering_definition(document: Document, *, fmt: str, level_text: str) -> int:
     numbering = document.part.numbering_part.element
+    if fmt == "bullet":
+        level_text = "•"
+    marker = {"decimal": "C0F00001", "bullet": "C0F00002"}[fmt]
+    for abstract in numbering.findall(qn("w:abstractNum")):
+        nsid = abstract.find(qn("w:nsid"))
+        if nsid is None or nsid.get(qn("w:val")) != marker:
+            continue
+        abstract_id = abstract.get(qn("w:abstractNumId"))
+        for number in numbering.findall(qn("w:num")):
+            reference = number.find(qn("w:abstractNumId"))
+            if reference is not None and reference.get(qn("w:val")) == abstract_id:
+                return int(number.get(qn("w:numId")))
+
     abstract_id = _next_numbering_id(numbering, "w:abstractNum", "w:abstractNumId")
     num_id = _next_numbering_id(numbering, "w:num", "w:numId")
 
     abstract = OxmlElement("w:abstractNum")
     abstract.set(qn("w:abstractNumId"), str(abstract_id))
     nsid = OxmlElement("w:nsid")
-    nsid.set(qn("w:val"), f"{abstract_id:08X}")
+    nsid.set(qn("w:val"), marker)
     abstract.append(nsid)
     multi_level = OxmlElement("w:multiLevelType")
     multi_level.set(qn("w:val"), "singleLevel")
@@ -115,7 +134,32 @@ def _add_list_paragraph(document: Document, text: str, *, style_name: str, num_i
     return paragraph
 
 
-def _configure_document(document: Document) -> None:
+def _add_page_field(paragraph) -> None:
+    for field_type in ("begin", "separate", "end"):
+        run = paragraph.add_run()
+        run.font.name = "Calibri"
+        run.font.size = Pt(8.5)
+        run.font.color.rgb = MUTED
+        field = OxmlElement("w:fldChar")
+        field.set(qn("w:fldCharType"), field_type)
+        run._r.append(field)
+        if field_type == "begin":
+            instruction_run = paragraph.add_run()
+            instruction_run.font.name = "Calibri"
+            instruction_run.font.size = Pt(8.5)
+            instruction_run.font.color.rgb = MUTED
+            instruction = OxmlElement("w:instrText")
+            instruction.set(qn("xml:space"), "preserve")
+            instruction.text = " PAGE "
+            instruction_run._r.append(instruction)
+        elif field_type == "separate":
+            result_run = paragraph.add_run("1")
+            result_run.font.name = "Calibri"
+            result_run.font.size = Pt(8.5)
+            result_run.font.color.rgb = MUTED
+
+
+def _configure_document(document: Document, *, created_at: datetime) -> tuple[int, int]:
     section = document.sections[0]
     section.orientation = WD_ORIENT.PORTRAIT
     section.page_width = Inches(8.5)
@@ -132,6 +176,15 @@ def _configure_document(document: Document) -> None:
     normal.paragraph_format.space_before = Pt(0)
     normal.paragraph_format.space_after = Pt(6)
     normal.paragraph_format.line_spacing = 1.1
+
+    timestamp = created_at
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(UTC).replace(tzinfo=None)
+    properties = document.core_properties
+    properties.author = APPLICATION_AUTHOR
+    properties.last_modified_by = APPLICATION_AUTHOR
+    properties.created = timestamp
+    properties.modified = timestamp
 
     title = document.styles["Title"]
     _set_style_font(title, name="Calibri", size=23, color=BLACK)
@@ -157,8 +210,12 @@ def _configure_document(document: Document) -> None:
             style = document.styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
         _set_list_style(style)
 
-    _add_numbering_definition(document, fmt="decimal", level_text="%1.")
-    _add_numbering_definition(document, fmt="bullet", level_text="•")
+    revision_num_id = _add_numbering_definition(document, fmt="decimal", level_text="%1.")
+    limitation_num_id = _add_numbering_definition(
+        document,
+        fmt="bullet",
+        level_text="•",
+    )
 
     header = section.header.paragraphs[0]
     header.text = "CPF FCV REVIEW | ADVISORY FIRST PASS"
@@ -170,13 +227,15 @@ def _configure_document(document: Document) -> None:
         run.font.color.rgb = MUTED
 
     footer = section.footer.paragraphs[0]
-    footer.text = "Volatile-session export"
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     footer.paragraph_format.space_before = Pt(0)
-    for run in footer.runs:
-        run.font.name = "Calibri"
-        run.font.size = Pt(8.5)
-        run.font.color.rgb = MUTED
+    label = footer.add_run("Volatile-session export | Page ")
+    label.font.name = "Calibri"
+    label.font.size = Pt(8.5)
+    label.font.color.rgb = MUTED
+    _add_page_field(footer)
+
+    return revision_num_id, limitation_num_id
 
 
 def target_text(locator: EvidenceLocator) -> str:
@@ -201,15 +260,42 @@ def _evidence_type_label(item: EvidenceItem) -> str:
 
 
 def locator_text(item: EvidenceItem) -> str:
+    parts = []
+    if item.evidence_type == "current_context":
+        parts.append(_evidence_type_label(item))
     if item.locator is not None:
-        return target_text(item.locator)
+        parts.append(target_text(item.locator))
     if item.source_url:
-        return f"{_evidence_type_label(item)} | {item.source_url}"
-    return _evidence_type_label(item)
+        parts.append(item.source_url)
+    if not parts:
+        parts.append(_evidence_type_label(item))
+    return " | ".join(parts)
 
 
 def evidence_excerpt(item: EvidenceItem) -> str:
+    if item.evidence_type == "current_context":
+        return item.text
     return item.locator.excerpt if item.locator is not None else item.text
+
+
+def validate_evidence_completeness(
+    result: ReviewResult,
+    evidence: dict[str, EvidenceItem],
+) -> None:
+    missing = [
+        (area.priority_area_id, evidence_id)
+        for area in result.priority_areas
+        for evidence_id in area.evidence_ids
+        if evidence_id not in evidence
+    ]
+    if missing:
+        details = ", ".join(
+            f"{priority_area_id}: {evidence_id}"
+            for priority_area_id, evidence_id in missing
+        )
+        raise EvidenceCompletenessError(
+            f"Missing evidence for priority area citations: {details}."
+        )
 
 
 def _add_coverage(document: Document, result: ReviewResult) -> None:
@@ -270,8 +356,12 @@ def build_docx(
     evidence: dict[str, EvidenceItem],
     hydrated_referrals: tuple[dict, ...],
 ) -> bytes:
+    validate_evidence_completeness(result, evidence)
     document = Document()
-    _configure_document(document)
+    revision_num_id, limitation_num_id = _configure_document(
+        document,
+        created_at=result.metadata.created_at,
+    )
 
     document.add_heading("CPF FCV Review", level=0)
     advisory = document.add_paragraph()
@@ -289,7 +379,6 @@ def build_docx(
 
     document.add_heading("What to revise", level=1)
     if result.revision_summary:
-        revision_num_id = _add_numbering_definition(document, fmt="decimal", level_text="%1.")
         for item in result.revision_summary:
             _add_list_paragraph(
                 document,
@@ -323,7 +412,6 @@ def build_docx(
 
     document.add_heading("Limitations and document coverage", level=1)
     if result.limitations:
-        limitation_num_id = _add_numbering_definition(document, fmt="bullet", level_text="•")
         for limitation in result.limitations:
             _add_list_paragraph(
                 document,

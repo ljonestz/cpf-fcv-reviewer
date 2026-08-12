@@ -121,6 +121,36 @@ def test_export_route_rejects_incomplete_reproducibility_metadata(make_valid_res
     assert response.get_json() == {"error": "Reproducibility metadata is incomplete."}
 
 
+def test_export_route_rejects_missing_citation_without_leaking_details(make_valid_result):
+    result, evidence = make_valid_result
+    registry = load_registry_bundle(
+        Path("tests/fixtures/registry_bundle.synthetic.json"),
+        allow_synthetic=True,
+    )
+    app = create_app(
+        {"TESTING": True, "START_BACKGROUND_RUNS": False},
+        services={"registry_bundle": registry},
+    )
+    assessment_id = app.extensions["session_store"].create(
+        {
+            "status": "complete",
+            "result": result.model_dump(mode="json"),
+            "evidence_by_id": {
+                "unrelated": evidence["ev-1"].model_copy(
+                    update={"evidence_id": "unrelated"}
+                ).model_dump(mode="json")
+            },
+        }
+    )
+
+    response = app.test_client().get(f"/api/reviews/{assessment_id}/export.docx")
+
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "Traceable evidence is invalid."}
+    assert "ev-1" not in response.get_data(as_text=True)
+    assert "implicit" not in response.get_data(as_text=True)
+
+
 def test_result_route_rejects_incomplete_reproducibility_metadata(make_valid_result):
     result, _ = make_valid_result
     result = result.model_copy(update={"metadata": incomplete_metadata(result.metadata)})
