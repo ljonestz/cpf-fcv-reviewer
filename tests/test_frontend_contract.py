@@ -148,6 +148,13 @@ def test_browser_evidence_is_expandable_and_uses_validated_locator_content():
     assert "innerHTML" not in javascript
 
 
+def test_long_evidence_source_labels_wrap_safely():
+    css = Path("src/cpf_fcv_reviewer/static/styles.css").read_text(encoding="utf-8")
+
+    assert ".evidence-locator" in css
+    assert "overflow-wrap: anywhere" in css
+
+
 def test_browser_omits_legacy_result_collections_and_question_section():
     javascript = JS.read_text(encoding="utf-8")
 

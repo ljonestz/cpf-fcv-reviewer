@@ -62,13 +62,22 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
     harness = textwrap.dedent(
         """
         const nodes = {};
-        function node() { return { hidden: false, disabled: false, value: "", id: "", children: [], handlers: {},
+        function node() { return { hidden: false, disabled: false, value: "", id: "", tagName: "", tabIndex: 0, focused: false, children: [], handlers: {},
           addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); }, append(...v) { this.children.push(...v); },
-          replaceChildren(...v) { this.children = v; }, reset() {}, click() { return Promise.all((this.handlers.click || []).map(fn => fn())); },
+          replaceChildren(...v) { this.children = v; }, reset() {}, focus() { this.focused = true; }, click() { return Promise.all((this.handlers.click || []).map(fn => fn())); },
           trigger(type) { return Promise.all((this.handlers[type] || []).map(fn => fn({preventDefault(){}}))); } }; }
         for (const id of ["#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress", "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country", "#country-detection", "#primary-upload", "#detail-level", "#submit-review", "#submit-correction", "#correction-text", "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog", "#close-process-dialog"]) nodes[id] = node();
         nodes["#cpf"].files = [{}]; nodes["#country"].value = "Chad";
-        global.document = { querySelector: id => nodes[id], createElement: () => node(), createTextNode: value => ({textContent:value}) };
+        const findElementById = (root, id) => {
+          if (!root || typeof root !== "object") return null;
+          if (root.id === id) return root;
+          for (const child of root.children || []) {
+            const match = findElementById(child, id);
+            if (match) return match;
+          }
+          return null;
+        };
+        global.document = { querySelector: id => nodes[id], getElementById: id => findElementById(nodes["#results"], id), createElement: tag => Object.assign(node(), {tagName: tag}), createTextNode: value => ({textContent:value}) };
         global.window = { __CPF_FCV_REVIEWER_TEST__: true, setTimeout: fn => fn(), location: {assign(){}} };
         let stored = ""; global.sessionStorage = { getItem(){return stored}, setItem(k,v){stored=v}, removeItem(){stored=""} };
         global.FormData = class {};
@@ -76,9 +85,9 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         FakeSource.all = []; global.EventSource = FakeSource;
         const complete = {
           overall_read: "The draft has a sound foundation.",
-          revision_summary: [{priority_area_id: "pa-1", action: "Clarify the delivery pathway."}],
+          revision_summary: [{priority_area_id: "results / delivery#1", action: "Clarify the delivery pathway."}],
           priority_areas: [{
-            priority_area_id: "pa-1", heading: "Delivery pathway",
+            priority_area_id: "results / delivery#1", heading: "Delivery pathway",
             assessment: "The pathway is not yet explicit.",
             why_it_matters: "Readers cannot follow implementation logic.",
             recommended_action: "Add a short explanation of the pathway.",
@@ -121,9 +130,14 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
           }
           return null;
         };
-        const summaryLink = findByHref(nodes["#results"], "#pa-1");
+        const summaryLink = findByHref(nodes["#results"], "#cpf-priority-area-1");
         if (!summaryLink) throw Error("revision summary did not link to its priority area");
-        if (!findById(nodes["#results"], "pa-1")) throw Error("revision summary target was not rendered");
+        if (findByHref(nodes["#results"], "#results / delivery#1")) throw Error("raw model ID was used as a fragment");
+        const prioritySection = findById(nodes["#results"], "cpf-priority-area-1");
+        if (!prioritySection) throw Error("revision summary target was not rendered");
+        if (prioritySection.tabIndex !== -1) throw Error("priority area was not keyboard-focusable");
+        await summaryLink.click();
+        if (!prioritySection.focused) throw Error("summary link did not focus its priority area");
         const collectText = (root) => [
           root && typeof root.textContent === "string" ? root.textContent : "",
           ...(root?.children || []).flatMap(collectText),
@@ -148,13 +162,34 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
           "Evidence and document locations",
           "CPF.docx | page 4 | Results",
           "The programme will deliver results.",
+          "Current context",
           "https://example.test/context",
           "Context note explains the regional setting.",
         ]) {
           if (!renderedText.includes(visibleText)) throw Error(`result omitted ${visibleText}`);
         }
         if (renderedText.includes("ev-1") || renderedText.includes("ev-context")) throw Error("internal evidence ID was rendered");
-        hooks.watchEvents("old", "old-result"); const old = FakeSource.all[1]; hooks.watchEvents("new", "new-result"); const newer = FakeSource.all[2]; await old.emit("run_failed", JSON.stringify({error:"review_failed"}));
+        const empty = {...complete, overall_read: "The empty review returned a controlled response.", revision_summary: [], priority_areas: []};
+        global.fetch = async () => ({status:200, ok:true, json:async()=>empty});
+        hooks.watchEvents("empty", "empty-result"); const emptySource = FakeSource.all[1]; await emptySource.emit("run_complete");
+        const emptyText = collectText(nodes["#results"]);
+        for (const emptyState of [
+          "No revision summary was returned for this review.",
+          "No priority areas were returned for this review.",
+        ]) {
+          if (!emptyText.includes(emptyState)) throw Error(`empty result omitted ${emptyState}`);
+        }
+        const findByTag = (root, tagName) => {
+          if (!root || typeof root !== "object") return null;
+          if (root.tagName === tagName) return root;
+          for (const child of root.children || []) {
+            const match = findByTag(child, tagName);
+            if (match) return match;
+          }
+          return null;
+        };
+        if (findByTag(nodes["#results"], "ol")) throw Error("empty revision summary rendered a blank list");
+        hooks.watchEvents("old", "old-result"); const old = FakeSource.all[2]; hooks.watchEvents("new", "new-result"); const newer = FakeSource.all[3]; await old.emit("run_failed", JSON.stringify({error:"review_failed"}));
         if (hooks.getActiveSource() !== newer) throw Error("stale stream mutated active stream");
         newer.error(); newer.error(); if (nodes["#return-to-intake"].hidden) throw Error("transport failure was not recoverable");
         hooks.setAssessmentId("parent"); nodes["#correction-text"].value = "context"; let resolvePost; calls = 0;
@@ -163,13 +198,13 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         if (calls !== 1 || !nodes["#submit-correction"].disabled) throw Error("correction was not locked");
         const reset = nodes["#reset-review"].click(); resolvePost({ok:true, json:async()=>({assessment_id:"late", event_url:"late", result_url:"late"})});
         await Promise.all([first, second, reset]);
-        if (stored || FakeSource.all.length !== 3) throw Error("late correction resurrected review state");
+        if (stored || FakeSource.all.length !== 4) throw Error("late correction resurrected review state");
         hooks.setAssessmentId("old"); nodes["#correction-text"].value = "blocked"; let resolveDelete; calls = 0;
         global.fetch = () => { calls++; if (calls === 1) return new Promise(resolve => { resolveDelete = resolve; }); return Promise.resolve({ok:true, json:async()=>({assessment_id:"new", event_url:"new", result_url:"new-result"})}); };
         const pendingReset = nodes["#reset-review"].click(); await nodes["#submit-correction"].click();
-        if (calls !== 1 || FakeSource.all.length !== 3 || stored) throw Error("correction ran during pending reset");
+        if (calls !== 1 || FakeSource.all.length !== 4 || stored) throw Error("correction ran during pending reset");
         nodes["#country"].value = "Chad"; nodes["#cpf"].files = [{}]; nodes["#submit-review"].disabled = false;
-        await nodes["#review-form"].trigger("submit"); const current = FakeSource.all[3];
+        await nodes["#review-form"].trigger("submit"); const current = FakeSource.all[4];
         if (stored !== "new" || hooks.getActiveSource() !== current) throw Error("new run did not start during pending purge");
         resolveDelete({ok:true}); await pendingReset;
         if (stored !== "new" || hooks.getActiveSource() !== current || !nodes["#landing-view"].hidden) throw Error("stale purge overwrote new run");

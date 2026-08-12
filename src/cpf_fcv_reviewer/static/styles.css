@@ -70,6 +70,7 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .evidence-group summary { padding: 14px 0; }
 .sensitivity, .evidence { color: var(--muted); font-size: .92rem; }
 .evidence-locator, .evidence-excerpt { color: var(--muted); }
+.evidence-locator { overflow-wrap: anywhere; }
 .evidence-excerpt { max-width: 78ch; }
 .coverage-primary, .coverage-package, .coverage-context, .coverage-note { max-width: 78ch; }
 @media (max-width: 760px) {

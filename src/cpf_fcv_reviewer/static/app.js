@@ -228,8 +228,9 @@ function evidenceTypeLabel(evidenceType) {
 function evidenceSourceLabel(item) {
   const location = locatorLabel(item.locator);
   if (location) return location;
-  if (item.source_url) return item.source_url;
-  return evidenceTypeLabel(item.evidence_type);
+  const type = evidenceTypeLabel(item.evidence_type);
+  if (item.source_url) return `${type} | ${item.source_url}`;
+  return type;
 }
 
 function renderEvidenceGroup(result, evidenceIds) {
@@ -252,21 +253,39 @@ function renderResult(result) {
   results.replaceChildren();
   results.append(text("h2", "Overall read"), text("p", result.overall_read, "overall-read"));
 
+  const priorityAreaAnchorIds = new Map(
+    result.priority_areas.map((_, index) => [`${index}`, `cpf-priority-area-${index + 1}`]),
+  );
   const summary = document.createElement("ol");
   for (const item of result.revision_summary) {
     const link = document.createElement("a");
-    link.href = `#${item.priority_area_id}`;
+    const priorityAreaIndex = result.priority_areas.findIndex(
+      (area) => area.priority_area_id === item.priority_area_id,
+    );
+    const anchorId = priorityAreaAnchorIds.get(`${priorityAreaIndex}`);
+    link.href = anchorId ? `#${anchorId}` : "#";
     link.textContent = item.action;
+    if (anchorId) {
+      link.addEventListener("click", () => {
+        document.getElementById(anchorId)?.focus({preventScroll: true});
+      });
+    }
     const row = document.createElement("li");
     row.append(link);
     summary.append(row);
   }
-  results.append(text("h2", "What to revise"), summary);
+  results.append(text("h2", "What to revise"));
+  results.append(
+    result.revision_summary.length
+      ? summary
+      : text("p", "No revision summary was returned for this review.", "empty-state"),
+  );
 
   results.append(text("h2", "Priority areas for strengthening"));
-  for (const area of result.priority_areas) {
+  for (const [index, area] of result.priority_areas.entries()) {
     const section = document.createElement("section");
-    section.id = area.priority_area_id;
+    section.id = priorityAreaAnchorIds.get(`${index}`);
+    section.tabIndex = -1;
     section.className = "priority-area";
     section.append(
       text("h3", area.heading),
@@ -282,6 +301,9 @@ function renderResult(result) {
     }
     section.append(renderEvidenceGroup(result, area.evidence_ids));
     results.append(section);
+  }
+  if (!result.priority_areas.length) {
+    results.append(text("p", "No priority areas were returned for this review.", "empty-state"));
   }
 
   results.append(text("h2", "Limitations and document coverage"));
