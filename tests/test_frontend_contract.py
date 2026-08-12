@@ -10,9 +10,15 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
     html = HTML.read_text(encoding="utf-8")
     for element_id in (
         'id="cpf"',
-        'id="supporting"',
+        'id="primary-upload"',
+        'id="package-documents"',
+        'id="context-documents"',
         'id="review-stage"',
-        'id="guidance"',
+        'id="detail-level"',
+        'id="additional-guidance"',
+        'id="review-focus"',
+        'id="country-detection"',
+        'id="process-dialog"',
         'id="progress"',
         'id="results"',
         'id="correction-text"',
@@ -30,6 +36,11 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
     assert '<label for="correction-text">' in html
     assert "public version" in html.lower()
     assert "internal ITS version" in html
+    assert '<label for="country">' not in html
+    assert '<input id="country" name="country" type="hidden">' in html
+    assert "Express review" in html
+    assert "Early drafting / PCN" in html
+    assert "Questions requiring a dedicated response" not in html
 
 
 def test_index_route_serves_the_interface():
@@ -52,15 +63,38 @@ def test_guided_landing_separates_essential_and_optional_inputs():
     assert "1. Add the draft" not in html
     assert "2. Add context" not in html
     assert "3. Review options" not in html
-    assert '<label for="country">Country <span aria-hidden="true">*</span></label>' in html
-    assert (
-        '<label for="review-stage">Review stage '
-        '<span aria-hidden="true">*</span></label>' in html
-    )
-    assert '<label for="cpf">CPF or CEN <span aria-hidden="true">*</span></label>' in html
-    assert '<details id="optional-inputs">' in html
-    assert "Supporting documents and specific questions (optional)" in html
+    assert '<label for="review-stage">Review stage' in html
+    assert 'id="primary-upload"' in html
+    assert '<details id="additional-guidance">' in html
+    assert "What should the review pay particular attention to?" in html
     assert "held only for this session" in html
+
+
+def test_guided_landing_has_three_upload_zones_detail_control_and_process_dialog():
+    html = HTML.read_text(encoding="utf-8")
+    css = Path("src/cpf_fcv_reviewer/static/styles.css").read_text(encoding="utf-8")
+
+    assert '<section class="hero"' in html
+    assert '<div class="upload-zones">' in html
+    assert 'name="package_documents"' in html
+    assert 'name="context_documents"' in html
+    assert '<option value="standard" selected>Standard</option>' in html
+    assert "How the Express review works" in html
+    assert "Stage-sensitive synthesis" in html
+    assert "grid-template-columns: repeat(3, 1fr)" in css
+    assert "@media (max-width: 760px)" in css
+    assert "grid-template-columns: 1fr" in css
+
+
+def test_country_detection_preflight_and_submit_gating_are_wired():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'fetch("/api/detect-country"' in javascript
+    assert 'document.querySelector("#country")' in javascript
+    assert "requires_confirmation" in javascript
+    assert "countryCorrection" in javascript
+    assert "detectionPending" in javascript
+    assert "submitButton.disabled" in javascript
 
 
 def test_browser_state_is_session_only_and_reset_clears_assessment_id():

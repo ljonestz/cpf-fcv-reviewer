@@ -7,55 +7,81 @@
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-  <header>
-    <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
-    <h1>Strengthen the FCV framing of a CPF or CEN</h1>
-    <p class="purpose">Get an evidence-linked advisory review and practical options to strengthen the draft.</p>
-    <p class="advisory"><strong>Public version.</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
-  </header>
-  <main>
-    <section id="landing-view" aria-labelledby="landing-title">
-      <h2 id="landing-title">Start an FCV review</h2>
-      <p id="landing-notice" role="status" aria-live="polite" hidden></p>
+  <header class="site-header">
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
+      <h1 id="hero-title">Strengthen the FCV framing of a CPF or CEN</h1>
+      <p class="purpose">Get a concise, evidence-linked note with practical options to strengthen the draft.</p>
+      <p class="advisory"><strong>Public version.</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. Use public or non-sensitive material only. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
       <ol class="steps" aria-label="How the review works">
         <li>Add the draft</li>
         <li>Add context</li>
         <li>Review options</li>
       </ol>
+    </section>
+  </header>
+  <main>
+    <section id="landing-view" aria-labelledby="express-review-heading">
+      <p id="landing-notice" role="status" aria-live="polite" hidden></p>
       <form id="review-form" class="form-card">
-        <p class="helper"><span aria-hidden="true">*</span> Required. Your files and review are held only for this session.</p>
-        <div class="field-grid">
+        <div class="form-heading">
           <div>
-            <label for="country">Country <span aria-hidden="true">*</span></label>
-            <input id="country" name="country" required>
+            <p class="eyebrow">GUIDED INTAKE</p>
+            <h2 id="express-review-heading">Express review</h2>
+            <p class="helper">Upload the main draft and any useful context. The review will infer the country from the primary file and tailor its advice to the selected stage.</p>
           </div>
-          <div>
-            <label for="review-stage">Review stage <span aria-hidden="true">*</span></label>
+          <button id="open-process-dialog" class="button-secondary" type="button">How it works</button>
+        </div>
+        <p class="helper"><span aria-hidden="true">*</span> Required. Your files and review are held only for this session.</p>
+
+        <div class="upload-zones">
+          <label class="upload-zone upload-zone-primary" id="primary-upload" for="cpf">
+            <span class="upload-zone-title">Primary document <span aria-hidden="true">*</span></span>
+            <span class="upload-zone-description">The CPF or CEN being reviewed.</span>
+            <input id="cpf" name="cpf" type="file" accept=".pdf,.docx,.txt,.md" required>
+          </label>
+          <label class="upload-zone" for="package-documents">
+            <span class="upload-zone-title">CPF package documents</span>
+            <span class="upload-zone-description">Supporting documents submitted with the package.</span>
+            <input id="package-documents" name="package_documents" type="file" accept=".pdf,.docx,.txt,.md" multiple>
+          </label>
+          <label class="upload-zone" for="context-documents">
+            <span class="upload-zone-title">Wider contextual documents</span>
+            <span class="upload-zone-description">RRA, PLR, diagnostics, or other useful context.</span>
+            <input id="context-documents" name="context_documents" type="file" accept=".pdf,.docx,.txt,.md" multiple>
+          </label>
+        </div>
+
+        <div id="country-detection" class="country-detection" aria-live="polite"></div>
+        <input id="country" name="country" type="hidden">
+
+        <div class="field-grid">
+          <label for="review-stage">Review stage <span aria-hidden="true">*</span>
             <select id="review-stage" name="review_stage" required>
-              <option value="early_drafting">Early drafting</option>
+              <option value="early_drafting">Early drafting / PCN</option>
               <option value="concept_review">Concept review</option>
               <option value="decision_review">Decision review</option>
               <option value="roc_oc">ROC / OC</option>
               <option value="finalization">Finalization</option>
               <option value="response_to_comments">Response to comments</option>
             </select>
-          </div>
+          </label>
+          <label for="detail-level">Level of detail
+            <select id="detail-level" name="detail_level">
+              <option value="brief">Brief</option>
+              <option value="standard" selected>Standard</option>
+              <option value="in_depth">In-depth</option>
+            </select>
+          </label>
         </div>
-        <label for="cpf">CPF or CEN <span aria-hidden="true">*</span></label>
-        <input id="cpf" name="cpf" type="file" accept=".pdf,.docx,.txt,.md" required>
 
-        <details id="optional-inputs">
-          <summary>Supporting documents and specific questions (optional)</summary>
-          <label for="supporting">Supporting package</label>
-          <input id="supporting" name="supporting" type="file" accept=".pdf,.docx,.txt,.md" multiple>
-          <label for="guidance">Analysis guidance</label>
-          <textarea id="guidance" name="guidance"></textarea>
-          <fieldset id="priority-questions" hidden>
-            <legend>Questions requiring a dedicated response</legend>
-            <div id="priority-question-list"></div>
-          </fieldset>
+        <details id="additional-guidance">
+          <summary>Additional guidance</summary>
+          <label for="review-focus">What should the review pay particular attention to?</label>
+          <textarea id="review-focus" name="review_focus" maxlength="4000" placeholder="Optional: identify a theme, section, or concern for the reviewer."></textarea>
         </details>
-        <button type="submit">Run FCV review</button>
+
+        <button id="submit-review" type="submit" disabled>Run Express review</button>
       </form>
     </section>
 
@@ -78,6 +104,22 @@
       </nav>
     </section>
   </main>
+
+  <dialog id="process-dialog" aria-labelledby="process-dialog-title">
+    <div class="dialog-heading">
+      <h2 id="process-dialog-title">How the Express review works</h2>
+      <button id="close-process-dialog" class="dialog-close" type="button" aria-label="Close">×</button>
+    </div>
+    <p>The reviewer reads the primary document, selects traceable evidence, checks the supporting and contextual material, and produces a connected note in prose.</p>
+    <ol>
+      <li><strong>Extraction:</strong> reads the uploaded documents and identifies usable text.</li>
+      <li><strong>Evidence selection:</strong> gives the primary CPF the greatest analytical weight while retaining bounded corroboration from the other zones.</li>
+      <li><strong>Contextual checking:</strong> uses the package and wider context to make the feedback specific.</li>
+      <li><strong>Stage-sensitive synthesis:</strong> adjusts the scale of advice, from strategic options at Early drafting / PCN to fine-tuning at Finalization.</li>
+      <li><strong>Validation and rendering:</strong> checks evidence links and produces a Word-ready note.</li>
+    </ol>
+    <p class="advisory"><strong>Use public or non-sensitive material only.</strong> This tool provides advisory feedback and does not replace formal review or clearance processes.</p>
+  </dialog>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -9,20 +9,30 @@ JS = Path("src/cpf_fcv_reviewer/static/app.js")
 CSS = Path("src/cpf_fcv_reviewer/static/styles.css")
 
 
-def test_priority_question_confirmation_controls_are_wired():
+def test_express_intake_removes_priority_question_confirmation_controls():
     html = HTML.read_text(encoding="utf-8")
     javascript = JS.read_text(encoding="utf-8")
     css = CSS.read_text(encoding="utf-8")
 
-    assert 'id="priority-questions"' in html
-    assert 'id="priority-question-list"' in html
-    assert "Questions requiring a dedicated response" in html
-    assert "function detectedQuestions" in javascript
-    assert 'checkbox.name = "priority_questions"' in javascript
-    assert 'guidance.addEventListener("input", renderPriorityQuestions)' in javascript
-    assert "toLocaleLowerCase()" in javascript
-    assert "#priority-question-list label" in css
-    assert "#priority-question-list input" in css
+    assert 'id="priority-questions"' not in html
+    assert 'id="priority-question-list"' not in html
+    assert "Questions requiring a dedicated response" not in html
+    assert "function detectedQuestions" not in javascript
+    assert 'checkbox.name = "priority_questions"' not in javascript
+    assert "renderPriorityQuestions" not in javascript
+    assert "#priority-question-list label" not in css
+    assert "#priority-question-list input" not in css
+
+
+def test_process_dialog_has_native_open_and_close_controls():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'id="process-dialog"' in html
+    assert 'id="open-process-dialog"' in html
+    assert 'id="close-process-dialog"' in html
+    assert "showModal()" in javascript
+    assert ".close()" in javascript
 
 
 def test_correction_handler_switches_to_child_run_and_watches_it():
@@ -56,7 +66,8 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
           addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); }, append(...v) { this.children.push(...v); },
           replaceChildren(...v) { this.children = v; }, reset() {}, click() { return Promise.all((this.handlers.click || []).map(fn => fn())); },
           trigger(type) { return Promise.all((this.handlers[type] || []).map(fn => fn({preventDefault(){}}))); } }; }
-        for (const id of ["#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress", "#results", "#corrections", "#actions", "#return-to-intake", "#guidance", "#priority-questions", "#priority-question-list", "#submit-correction", "#correction-text", "#export-docx", "#reset-review"]) nodes[id] = node();
+        for (const id of ["#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress", "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country", "#country-detection", "#primary-upload", "#detail-level", "#submit-review", "#submit-correction", "#correction-text", "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog", "#close-process-dialog"]) nodes[id] = node();
+        nodes["#cpf"].files = [{}]; nodes["#country"].value = "Chad";
         global.document = { querySelector: id => nodes[id], createElement: () => node(), createTextNode: value => ({textContent:value}) };
         global.window = { __CPF_FCV_REVIEWER_TEST__: true, setTimeout: fn => fn(), location: {assign(){}} };
         let stored = ""; global.sessionStorage = { getItem(){return stored}, setItem(k,v){stored=v}, removeItem(){stored=""} };
@@ -85,6 +96,7 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         global.fetch = () => { calls++; if (calls === 1) return new Promise(resolve => { resolveDelete = resolve; }); return Promise.resolve({ok:true, json:async()=>({assessment_id:"new", event_url:"new", result_url:"new-result"})}); };
         const pendingReset = nodes["#reset-review"].click(); await nodes["#submit-correction"].click();
         if (calls !== 1 || FakeSource.all.length !== 3 || stored) throw Error("correction ran during pending reset");
+        nodes["#country"].value = "Chad"; nodes["#cpf"].files = [{}]; nodes["#submit-review"].disabled = false;
         await nodes["#review-form"].trigger("submit"); const current = FakeSource.all[3];
         if (stored !== "new" || hooks.getActiveSource() !== current) throw Error("new run did not start during pending purge");
         resolveDelete({ok:true}); await pendingReset;

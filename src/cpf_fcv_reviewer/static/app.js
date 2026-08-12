@@ -7,14 +7,22 @@ const results = document.querySelector("#results");
 const corrections = document.querySelector("#corrections");
 const actions = document.querySelector("#actions");
 const returnToIntake = document.querySelector("#return-to-intake");
-const guidance = document.querySelector("#guidance");
-const questionPanel = document.querySelector("#priority-questions");
-const questionList = document.querySelector("#priority-question-list");
+const primaryFileInput = document.querySelector("#cpf");
+const countryInput = document.querySelector("#country");
+const countryDetection = document.querySelector("#country-detection");
+const submitButton = document.querySelector("#submit-review");
+const processDialog = document.querySelector("#process-dialog");
+const openProcessDialog = document.querySelector("#open-process-dialog");
+const closeProcessDialog = document.querySelector("#close-process-dialog");
 const submitCorrection = document.querySelector("#submit-correction");
 let assessmentId = sessionStorage.getItem("cpf_fcv_assessment_id") || "";
 let activeEventSource;
 let operationEpoch = 0;
 let resetPending = false;
+let detectionPending = false;
+let countryRequiresConfirmation = false;
+let countryCorrection;
+let detectionEpoch = 0;
 const RESULT_RETRY_LIMIT = 3;
 const RESULT_RETRY_DELAY_MS = 250;
 const SOURCE_ERROR_LIMIT = 2;
@@ -76,33 +84,103 @@ function text(tag, value, className = "") {
   return node;
 }
 
-function detectedQuestions(value) {
-  const questions = new Map();
-  for (const line of value.split(/\r?\n/)) {
-    const clean = line.trim().replace(/^[-*]\s*/, "").trim();
-    if (!clean.endsWith("?")) continue;
-    const key = clean.toLocaleLowerCase();
-    if (!questions.has(key)) questions.set(key, clean);
-  }
-  return [...questions.values()];
+function updateSubmitState() {
+  const hasPrimaryFile = Boolean(primaryFileInput?.files?.length);
+  submitButton.disabled = detectionPending
+    || countryRequiresConfirmation
+    || !countryInput.value.trim()
+    || !hasPrimaryFile;
 }
 
-function renderPriorityQuestions() {
-  questionList.replaceChildren();
-  for (const question of detectedQuestions(guidance.value)) {
-    const label = document.createElement("label");
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.name = "priority_questions";
-    checkbox.value = question;
-    checkbox.checked = true;
-    label.append(checkbox, document.createTextNode(question));
-    questionList.append(label);
-  }
-  questionPanel.hidden = questionList.children.length === 0;
+function clearCountryCorrection() {
+  countryCorrection?.remove();
+  countryCorrection = undefined;
 }
 
-guidance.addEventListener("input", renderPriorityQuestions);
+function showCountryCorrection(suggestedCountry) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "country-confirmation";
+  const label = document.createElement("label");
+  label.textContent = suggestedCountry
+    ? `We detected ${suggestedCountry}. Confirm or correct the country.`
+    : "We could not identify the country. Enter it to continue.";
+  countryCorrection = document.createElement("input");
+  countryCorrection.type = "text";
+  countryCorrection.value = suggestedCountry || "";
+  countryCorrection.autocomplete = "country-name";
+  countryCorrection.addEventListener("input", () => {
+    countryInput.value = countryCorrection.value.trim();
+    countryRequiresConfirmation = !countryInput.value;
+    updateSubmitState();
+  });
+  label.append(countryCorrection);
+  wrapper.append(label);
+  countryDetection.append(wrapper);
+}
+
+async function detectCountry() {
+  const file = primaryFileInput.files?.[0];
+  const requestEpoch = ++detectionEpoch;
+  clearCountryCorrection();
+  countryInput.value = "";
+  countryRequiresConfirmation = false;
+  countryDetection.textContent = "";
+  if (!file) {
+    detectionPending = false;
+    updateSubmitState();
+    return;
+  }
+
+  detectionPending = true;
+  countryDetection.textContent = "Identifying the country from the primary document…";
+  updateSubmitState();
+  try {
+    const body = new FormData();
+    body.append("cpf", file);
+    const response = await fetch("/api/detect-country", {method: "POST", body});
+    if (requestEpoch !== detectionEpoch) return;
+    if (!response.ok) throw new Error("Country detection failed.");
+    const detection = await response.json();
+    if (requestEpoch !== detectionEpoch) return;
+    countryInput.value = detection.country || "";
+    if (detection.requires_confirmation) {
+      countryRequiresConfirmation = true;
+      showCountryCorrection(detection.country || "");
+      countryDetection.firstChild?.remove();
+    } else {
+      countryDetection.textContent = `Country detected: ${countryInput.value}`;
+    }
+  } catch (_error) {
+    if (requestEpoch !== detectionEpoch) return;
+    countryDetection.textContent = "Country detection was unavailable. Enter the country to continue.";
+    countryDetection.className = "country-detection is-error";
+    countryRequiresConfirmation = true;
+    showCountryCorrection("");
+  } finally {
+    if (requestEpoch === detectionEpoch) {
+      detectionPending = false;
+      updateSubmitState();
+    }
+  }
+}
+
+primaryFileInput.addEventListener("change", detectCountry);
+
+openProcessDialog.addEventListener("click", () => {
+  if (typeof processDialog.showModal === "function") processDialog.showModal();
+  else processDialog.hidden = false;
+});
+
+closeProcessDialog.addEventListener("click", () => {
+  if (typeof processDialog.close === "function") processDialog.close();
+  else processDialog.hidden = true;
+});
+
+processDialog.addEventListener("click", (event) => {
+  if (event.target === processDialog && typeof processDialog.close === "function") {
+    processDialog.close();
+  }
+});
 
 function renderEvidence(result, evidenceId) {
   const details = document.createElement("details");
@@ -266,6 +344,10 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (submitButton.disabled || detectionPending || countryRequiresConfirmation) {
+    countryCorrection?.focus();
+    return;
+  }
   resetPending = false;
   const operation = ++operationEpoch;
   showProgress();
@@ -337,6 +419,13 @@ document.querySelector("#reset-review").addEventListener("click", async () => {
   results.replaceChildren();
   progress.replaceChildren();
   form.reset();
+  clearCountryCorrection();
+  countryInput.value = "";
+  countryDetection.textContent = "";
+  countryDetection.className = "country-detection";
+  detectionPending = false;
+  countryRequiresConfirmation = false;
+  updateSubmitState();
   document.querySelector("#correction-text").value = "";
   corrections.hidden = true;
   actions.hidden = true;
