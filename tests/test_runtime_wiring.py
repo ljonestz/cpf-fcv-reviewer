@@ -163,7 +163,7 @@ def test_runtime_validation_does_not_require_confirmed_priority_response(
             diagnostic_entries=(),
         ),
         "payload": {
-            "priority_questions": ("Is the partnership logic credible?",),
+            "review_focus": "Is the partnership logic credible?",
         },
     }
 
@@ -231,9 +231,10 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                     "name": "benin-cpf.txt",
                     "bytes": b"Material FCV delivery constraint. " * 20,
                 },
-                "supporting": [],
-                "guidance": "",
-                "priority_questions": (),
+                "package_documents": [],
+                "context_documents": [],
+                "review_focus": "",
+                "detail_level": "standard",
                 "corrections": [],
             },
         },
@@ -285,14 +286,15 @@ def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch
                     "name": "benin-cpf.txt",
                     "bytes": b"Primary CPF delivery constraint. " * 20,
                 },
-                "supporting": [
+                "package_documents": [
                     {
                         "name": "benin-package.txt",
                         "bytes": b"Supporting package context. " * 10,
                     },
                 ],
-                "guidance": "",
-                "priority_questions": (),
+                "context_documents": [],
+                "review_focus": "",
+                "detail_level": "standard",
                 "corrections": [],
             },
         },
@@ -315,6 +317,82 @@ def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch
     assert package_evidence
     assert all(item.document_role == DocumentRole.PACKAGE for item in package_evidence)
     assert context["result"].document_coverage.primary_document == "benin-cpf.txt"
+
+
+def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch):
+    captured = {}
+
+    class FakeGateway:
+        def __init__(self, api_key, model_id):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            captured["payload"] = payload
+            captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
+            return output_type(
+                overall_read="The draft needs a clearer delivery approach.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                limitations=(),
+                coverage_note="The review covers the CPF, package, and context documents.",
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FakeGateway,
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+    )
+
+    services["review_orchestrator"].run(
+        {
+            "assessment_id": "run-with-three-upload-roles",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "concept_review",
+                "detail_level": "in_depth",
+                "cpf": {
+                    "name": "benin-cpf.txt",
+                    "bytes": b"Primary CPF delivery constraint. " * 20,
+                },
+                "package_documents": [
+                    {
+                        "name": "benin-results.txt",
+                        "bytes": b"Package results framework. " * 10,
+                    },
+                ],
+                "context_documents": [
+                    {
+                        "name": "benin-rra.txt",
+                        "bytes": b"Context risk analysis. " * 10,
+                    },
+                ],
+                "review_focus": "Focus on delivery arrangements.",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    pack = captured["pack"]
+    by_role = {
+        role: [item for item in pack.evidence if item.document_role == role]
+        for role in DocumentRole
+    }
+    assert all(by_role.values())
+    assert all(item.evidence_id.startswith("primary-") for item in by_role[DocumentRole.PRIMARY])
+    assert all(item.evidence_id.startswith("package-") for item in by_role[DocumentRole.PACKAGE])
+    assert all(item.evidence_id.startswith("context-") for item in by_role[DocumentRole.CONTEXT])
+    assert set(pack.metadata.document_fingerprints) == {
+        "primary:benin-cpf.txt",
+        "package:1:benin-results.txt",
+        "context:1:benin-rra.txt",
+    }
+    assert pack.metadata.detail_level.value == "in_depth"
+    assert captured["payload"]["review_focus"] == "Focus on delivery arrangements."
 
 
 def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypatch):
@@ -364,9 +442,10 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
                     "name": "benin-cpf.txt",
                     "bytes": b"Material FCV delivery constraint. " * 20,
                 },
-                "supporting": [],
-                "guidance": "",
-                "priority_questions": (),
+                "package_documents": [],
+                "context_documents": [],
+                "review_focus": "",
+                "detail_level": "standard",
                 "corrections": corrections,
             },
         },
@@ -420,9 +499,10 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
                     "name": "benin-cpf.txt",
                     "bytes": b"SOURCE_SENTINEL material delivery constraint. " * 10,
                 },
-                "supporting": [],
-                "guidance": "",
-                "priority_questions": (),
+                "package_documents": [],
+                "context_documents": [],
+                "review_focus": "",
+                "detail_level": "standard",
                 "corrections": [],
             },
         },

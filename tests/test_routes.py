@@ -43,6 +43,55 @@ def test_primary_document_is_required():
     assert response.get_json()["error"] == "A primary CPF/CEN is required."
 
 
+def test_create_review_preserves_upload_buckets_and_detail_level():
+    app = make_app()
+    response = app.test_client().post(
+        "/api/reviews",
+        data={
+            "country": "Testland",
+            "review_stage": "concept_review",
+            "detail_level": "in_depth",
+            "cpf": (BytesIO(b"CPF text " * 30), "cpf.txt"),
+            "package_documents": [
+                (BytesIO(b"Results matrix"), "results.txt"),
+                (BytesIO(b"Learning review"), "learning.txt"),
+            ],
+            "context_documents": [(BytesIO(b"RRA context"), "rra.txt")],
+            "review_focus": "Pay particular attention to delivery arrangements.",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 201
+    state = app.extensions["session_store"].get(
+        response.get_json()["assessment_id"]
+    )
+    assert state.payload["detail_level"] == "in_depth"
+    assert [item["name"] for item in state.payload["package_documents"]] == [
+        "results.txt",
+        "learning.txt",
+    ]
+    assert state.payload["context_documents"][0]["name"] == "rra.txt"
+    assert "delivery arrangements" in state.payload["review_focus"]
+    assert "priority_questions" not in state.payload
+
+
+def test_create_review_rejects_unsupported_detail_level():
+    response = make_app().test_client().post(
+        "/api/reviews",
+        data={
+            "country": "Testland",
+            "review_stage": "concept_review",
+            "detail_level": "verbose",
+            "cpf": (BytesIO(b"Readable CPF text " * 20), "cpf.txt"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Unsupported detail level."}
+
+
 def test_reset_removes_active_review():
     client = make_app().test_client()
     created = create_review(client)

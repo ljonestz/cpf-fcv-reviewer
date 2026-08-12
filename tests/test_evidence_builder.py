@@ -14,6 +14,7 @@ from cpf_fcv_reviewer.evidence_builder import (
     build_evidence_pack,
     select_diagnostic_mode,
 )
+from cpf_fcv_reviewer.reproducibility import sha256_bytes
 
 
 def _metadata(mode: DiagnosticMode) -> RunMetadata:
@@ -200,3 +201,35 @@ def test_build_evidence_pack_preserves_detail_level_metadata():
     )
 
     assert pack.metadata.detail_level is DetailLevel.BRIEF
+
+
+def test_reproducibility_fingerprints_preserve_upload_role_prefixes():
+    from cpf_fcv_reviewer.evidence_builder import build_reproducible_evidence_pack
+
+    pack = build_reproducible_evidence_pack(
+        run_id="run-role-fingerprints",
+        created_at=datetime(2026, 8, 12, tzinfo=UTC),
+        review_stage="concept_review",
+        detail_level=DetailLevel.STANDARD,
+        diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+        documents={
+            "primary:cpf.txt": b"primary",
+            "package:1:results.txt": b"package",
+            "context:1:rra.txt": b"context",
+        },
+        registry_bundle=b"registry",
+        guidance="",
+        prompt_bytes={},
+        model_id="test-model",
+        source_scan_at=datetime(2026, 8, 12, tzinfo=UTC),
+        output_language="en",
+        evidence=(),
+        diagnostic_entries=(),
+        material_diagnostic_ids=(),
+    )
+
+    assert pack.metadata.document_fingerprints == {
+        "context:1:rra.txt": sha256_bytes(b"context"),
+        "package:1:results.txt": sha256_bytes(b"package"),
+        "primary:cpf.txt": sha256_bytes(b"primary"),
+    }

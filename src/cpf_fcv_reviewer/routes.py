@@ -9,9 +9,8 @@ from uuid import uuid4
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
-from .contracts import EvidenceItem, ReviewResult
+from .contracts import DetailLevel, EvidenceItem, ReviewResult
 from .export_docx import build_docx
-from .priority_questions import detect_priority_questions
 from .registry import hydrate_referrals
 from .session_store import SessionExpired
 from .validators import validate_reproducibility_metadata
@@ -28,18 +27,29 @@ def create_review():
     cpf = request.files.get("cpf")
     if cpf is None:
         return jsonify(error="A primary CPF/CEN is required."), 400
+
+    try:
+        detail_level = DetailLevel(
+            request.form.get("detail_level", DetailLevel.STANDARD)
+        )
+    except ValueError:
+        return jsonify(error="Unsupported detail level."), 400
+
+    def uploaded_files(field_name: str) -> list[dict[str, object]]:
+        return [
+            {"name": item.filename, "bytes": item.read()}
+            for item in request.files.getlist(field_name)
+            if item.filename
+        ]
+
     payload = {
         "country": request.form.get("country", "").strip(),
         "review_stage": request.form.get("review_stage", "").strip(),
+        "detail_level": detail_level.value,
         "cpf": {"name": cpf.filename, "bytes": cpf.read()},
-        "supporting": [
-            {"name": item.filename, "bytes": item.read()}
-            for item in request.files.getlist("supporting")
-        ],
-        "guidance": request.form.get("guidance", "").strip(),
-        "priority_questions": detect_priority_questions(
-            "\n".join(request.form.getlist("priority_questions"))
-        ),
+        "package_documents": uploaded_files("package_documents"),
+        "context_documents": uploaded_files("context_documents"),
+        "review_focus": request.form.get("review_focus", "").strip()[:4000],
         "corrections": [],
         "status": "created",
     }

@@ -6,6 +6,7 @@ from pathlib import Path
 from secrets import compare_digest
 
 from .contracts import (
+    DetailLevel,
     DiagnosticMode,
     DocumentRole,
     EvidenceItem,
@@ -78,15 +79,24 @@ def build_runtime_services(config: dict) -> dict:
         primary = payload["cpf"]
         primary_document = extract_document(primary["bytes"], primary["name"])
         require_readable_primary(primary_document)
-        supporting_documents = tuple(
+        package_documents = tuple(
             extract_document(item["bytes"], item["name"], max_pdf_pages=2)
-            for item in payload.get("supporting", ())
+            for item in payload.get("package_documents", ())
+        )
+        context_documents = tuple(
+            extract_document(item["bytes"], item["name"], max_pdf_pages=2)
+            for item in payload.get("context_documents", ())
         )
         context["primary_document"] = primary_document
-        context["supporting_documents"] = supporting_documents
+        context["package_documents"] = package_documents
+        context["context_documents"] = context_documents
         context["extraction_warnings"] = tuple(
             warning
-            for document in (primary_document, *supporting_documents)
+            for document in (
+                primary_document,
+                *package_documents,
+                *context_documents,
+            )
             for warning in document.warnings
         )
         return context
@@ -96,43 +106,48 @@ def build_runtime_services(config: dict) -> dict:
         primary_document = context.get("primary_document")
         if not payload or primary_document is None:
             return context
+        review_focus = payload.get("review_focus", "")
+        if not isinstance(review_focus, str):
+            review_focus = ""
+        review_focus = review_focus.strip()[:4000]
 
-        documents = (primary_document, *context.get("supporting_documents", ()))
+        document_groups = (
+            (DocumentRole.PRIMARY, (primary_document,), 12),
+            (DocumentRole.PACKAGE, tuple(context.get("package_documents", ())), 4),
+            (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 2),
+        )
         selected_segments = []
-        for document_index, document in enumerate(documents):
-            per_document_limit = 12 if document_index == 0 else 2
-            selected_segments.extend(
-                (
-                    document,
-                    segment,
-                    DocumentRole.PRIMARY
-                    if document_index == 0
-                    else DocumentRole.PACKAGE,
+        for document_role, documents, per_document_limit in document_groups:
+            for document in documents:
+                selected_segments.extend(
+                    (document, segment, document_role)
+                    for segment in document.segments[:per_document_limit]
                 )
-                for segment in document.segments[:per_document_limit]
-            )
         selected_segments = selected_segments[:24]
 
-        evidence = [
-            EvidenceItem(
-                evidence_id=f"document-{index:03d}",
-                evidence_type="document_fact",
-                text=segment.text[:1600],
-                locator=EvidenceLocator(
-                    document_title=document.name,
-                    page=segment.page,
-                    heading=segment.heading,
-                    element=segment.element,
-                    excerpt=segment.text[:600],
-                ),
-                confidence="high",
-                document_role=document_role,
+        role_counts = {role: 0 for role, _, _ in document_groups}
+        evidence = []
+        for document, segment, document_role in selected_segments:
+            role_counts[document_role] += 1
+            evidence.append(
+                EvidenceItem(
+                    evidence_id=(
+                        f"{document_role.value}-"
+                        f"{role_counts[document_role]:03d}"
+                    ),
+                    evidence_type="document_fact",
+                    text=segment.text[:1600],
+                    locator=EvidenceLocator(
+                        document_title=document.name,
+                        page=segment.page,
+                        heading=segment.heading,
+                        element=segment.element,
+                        excerpt=segment.text[:600],
+                    ),
+                    confidence="high",
+                    document_role=document_role,
+                )
             )
-            for index, (document, segment, document_role) in enumerate(
-                selected_segments,
-                start=1,
-            )
-        ]
 
         correction_payloads = tuple(payload.get("corrections", ()))
         corrections = tuple(
@@ -156,11 +171,25 @@ def build_runtime_services(config: dict) -> dict:
             for item in corrections
         )
 
-        document_bytes = {f"cpf:{payload['cpf']['name']}": payload["cpf"]["bytes"]}
+        document_bytes = {
+            f"primary:{payload['cpf']['name']}": payload["cpf"]["bytes"]
+        }
         document_bytes.update(
             {
-                f"supporting:{index}:{item['name']}": item["bytes"]
-                for index, item in enumerate(payload.get("supporting", ()), start=1)
+                f"package:{index}:{item['name']}": item["bytes"]
+                for index, item in enumerate(
+                    payload.get("package_documents", ()),
+                    start=1,
+                )
+            }
+        )
+        document_bytes.update(
+            {
+                f"context:{index}:{item['name']}": item["bytes"]
+                for index, item in enumerate(
+                    payload.get("context_documents", ()),
+                    start=1,
+                )
             }
         )
         prompt_bytes = {
@@ -174,7 +203,8 @@ def build_runtime_services(config: dict) -> dict:
             diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
             documents=document_bytes,
             registry_bundle=path.read_bytes(),
-            guidance=payload.get("guidance", ""),
+            detail_level=payload.get("detail_level", DetailLevel.STANDARD),
+            guidance=review_focus,
             prompt_bytes=prompt_bytes,
             model_id=config["ANTHROPIC_MODEL_ID"],
             source_scan_at=datetime.now(UTC),
@@ -211,9 +241,10 @@ def build_runtime_services(config: dict) -> dict:
                     context["source_candidates"]
                 )
             if name == "review" and "evidence_pack" in context:
-                review_focus = "\n".join(
-                    context.get("payload", {}).get("priority_questions", ())
-                )
+                review_focus = context.get("payload", {}).get("review_focus", "")
+                if not isinstance(review_focus, str):
+                    review_focus = ""
+                review_focus = review_focus.strip()[:4000]
                 context["result"] = review_engine.review(
                     context["evidence_pack"],
                     review_focus=review_focus,
