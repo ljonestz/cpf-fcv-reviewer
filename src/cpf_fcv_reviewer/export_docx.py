@@ -276,6 +276,7 @@ def build_docx(
     document.add_heading("CPF FCV Review", level=0)
     advisory = document.add_paragraph()
     advisory_run = advisory.add_run(
+        "Public version. Use public or non-sensitive material only. "
         "AI-assisted advisory first pass. This is not clearance, policy advice, "
         "a compliance finding, an eligibility determination, or an official "
         "classification."

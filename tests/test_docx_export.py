@@ -1,8 +1,8 @@
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
-from zipfile import ZipFile
 from xml.etree import ElementTree as ET
+from zipfile import ZipFile
 
 from docx import Document
 
@@ -41,6 +41,8 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert "Target: CPF.docx | Results framework | paragraph 12" in text
     assert "The review covers the primary CPF draft." in text
     assert "Consult the designated policy owner." in text
+    assert "Public version." in text
+    assert "public or non-sensitive material" in text
     assert "fake-model" in text
     assert "No RRA was available." in text
     assert "ev-1" not in text
@@ -135,6 +137,9 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
     assert page_size.attrib[f"{{{w}}}w"] == "12240"
     assert page_size.attrib[f"{{{w}}}h"] == "15840"
     assert page_margins.attrib[f"{{{w}}}top"] == "1440"
+    assert page_margins.attrib[f"{{{w}}}right"] == "1440"
+    assert page_margins.attrib[f"{{{w}}}bottom"] == "1440"
+    assert page_margins.attrib[f"{{{w}}}left"] == "1440"
     assert page_margins.attrib[f"{{{w}}}header"] == "708"
     assert page_margins.attrib[f"{{{w}}}footer"] == "708"
 
@@ -144,6 +149,11 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
     normal_spacing = style("Normal").find("w:pPr/w:spacing", ns)
     assert normal_spacing.attrib[f"{{{w}}}after"] == "120"
     assert normal_spacing.attrib[f"{{{w}}}line"] == "264"
+    normal_run_properties = style("Normal").find("w:rPr", ns)
+    normal_fonts = normal_run_properties.find("w:rFonts", ns)
+    assert normal_fonts.attrib[f"{{{w}}}ascii"] == "Calibri"
+    assert normal_fonts.attrib[f"{{{w}}}hAnsi"] == "Calibri"
+    assert normal_run_properties.find("w:sz", ns).attrib[f"{{{w}}}val"] == "22"
     expected_headings = {
         "Heading1": ("320", "160", "2E74B5", "32"),
         "Heading2": ("240", "120", "2E74B5", "26"),
