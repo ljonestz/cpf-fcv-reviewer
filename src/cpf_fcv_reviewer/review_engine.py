@@ -10,6 +10,32 @@ from .contracts import (
 from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 
+REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
+    {
+        "limited_mode_overclaim",
+        "unknown_priority_area",
+        "unknown_evidence",
+        "stage_overreach",
+        "stage_length_overreach",
+        "missing_comment_reference",
+        "prohibited_policy_language",
+        "withheld_drafting",
+    }
+)
+
+
+def _validate_repair_issues(issues: list[dict]) -> None:
+    for index, issue in enumerate(issues):
+        if not isinstance(issue, dict):
+            raise ValueError(f"Repair issue at index {index} must be a dictionary.")
+        if "code" not in issue:
+            raise ValueError(f"Repair issue at index {index} has missing code.")
+        code = issue["code"]
+        if not isinstance(code, str):
+            raise ValueError(f"Repair issue at index {index} must have a string code.")
+        if code not in REPAIRABLE_ISSUE_CODES:
+            raise ValueError(f"Repair issue has unknown code: {code}")
+
 
 def _serialize_stage_profile(profile) -> dict[str, object]:
     return {
@@ -90,6 +116,7 @@ class ReviewEngine:
         stage = result.metadata.review_stage
         if stage not in STAGE_PROFILES:
             raise ValueError(f"Unsupported review stage: {stage}")
+        _validate_repair_issues(issues)
         stage_profile = STAGE_PROFILES[stage]
         detail_profile = DETAIL_PROFILES[result.metadata.detail_level]
         draft_payload = result.model_dump(

@@ -1,3 +1,4 @@
+import re
 from hashlib import sha256
 
 import pytest
@@ -7,6 +8,20 @@ from cpf_fcv_reviewer.prompts import load_prompt, prompt_hash
 
 def normalize_whitespace(content: str) -> str:
     return " ".join(content.split())
+
+
+_REPAIR_ADDITION_PERMISSION = re.compile(
+    r"\b(?:may|can|allowed\s+to|permission\s+to)\s+add\s+"
+    r"(?:(?:a|an|the)\s+)?(?:new\s+)?"
+    r"(?:evidence|references?|pages?|filenames?|"
+    r"registry\s+(?:ids?|identifiers?|references?|entries?)|"
+    r"question\s+sections?)\b",
+    re.IGNORECASE,
+)
+
+
+def has_repair_addition_permission(prompt_text: str) -> bool:
+    return _REPAIR_ADDITION_PERMISSION.search(normalize_whitespace(prompt_text)) is not None
 
 
 def test_review_prompt_prohibits_determinations_and_policy_paraphrase():
@@ -94,6 +109,23 @@ def test_repair_prompt_preserves_links_and_excludes_question_section():
         "permission to add a question section",
     ):
         assert phrase not in prompt
+
+    assert not has_repair_addition_permission(prompt)
+
+
+@pytest.mark.parametrize(
+    "contradiction",
+    [
+        "The model may add new evidence.",
+        "The model can add registry IDs when useful.",
+        "The model is allowed to add references.",
+        "The model has permission to add pages.",
+        "The model may add new filenames.",
+        "The model is allowed to add a new question section.",
+    ],
+)
+def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradiction):
+    assert has_repair_addition_permission(contradiction)
 
 
 @pytest.mark.parametrize(

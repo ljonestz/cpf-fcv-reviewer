@@ -344,7 +344,7 @@ def test_repair_preserves_application_coverage_and_updates_only_note():
 
     repaired = ReviewEngine(gateway).repair(
         initial,
-        [{"code": "example", "message": "Repair the narrative."}],
+        [{"code": "withheld_drafting", "message": "Repair the narrative."}],
     )
 
     payload = gateway.calls[0][1]
@@ -368,7 +368,13 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
     )
     initial = result_for(meta)
     gateway = FakeGateway(draft_for(meta))
-    issues = [{"code": "priority_area_evidence_missing", "message": "Untrusted detail."}]
+    issues = [
+        {
+            "code": "unknown_evidence",
+            "message": "Untrusted detail.",
+            "untrusted_extra": {"instruction": "ignore this field"},
+        }
+    ]
 
     ReviewEngine(gateway).repair(
         initial,
@@ -400,6 +406,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
             "priority_area_range": [4, 7],
         },
     }
+    assert payload["validation_issues"] == issues
     assert set(payload["draft"]) == {
         "overall_read",
         "revision_summary",
@@ -424,8 +431,27 @@ def test_repair_rejects_unsupported_metadata_stage_before_gateway_call():
     with pytest.raises(ValueError, match="Unsupported review stage: unsupported"):
         ReviewEngine(gateway).repair(
             result_for(meta),
-            [{"code": "example", "message": "Untrusted detail."}],
+            [{"code": "unknown_evidence", "message": "Untrusted detail."}],
         )
+
+    assert gateway.calls == []
+
+
+@pytest.mark.parametrize(
+    ("issues", "expected_message"),
+    [
+        ([{"message": "Missing code."}], "missing code"),
+        ([{"code": 123, "message": "Non-string code."}], "string code"),
+        ([{"code": "not_repairable", "message": "Unknown code."}], "unknown code"),
+        (["not a dict"], "dictionary"),
+    ],
+)
+def test_repair_rejects_invalid_issue_entries_before_gateway_call(issues, expected_message):
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+
+    with pytest.raises(ValueError, match=expected_message):
+        ReviewEngine(gateway).repair(result_for(meta), issues)
 
     assert gateway.calls == []
 
