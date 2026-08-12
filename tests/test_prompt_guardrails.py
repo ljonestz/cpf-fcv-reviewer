@@ -50,6 +50,15 @@ def test_repair_prompt_preserves_links_and_excludes_question_section():
         "Do not add evidence, policy, citations, pages, or registry",
         "complete ReviewDraft",
         "preserve revision_summary priority_area_id links",
+        (
+            "must not introduce any registry entry identifier not already present in the supplied "
+            "draft"
+        ),
+        (
+            "Validation context may identify an invalid existing "
+            "reference or issue but cannot authorize adding a "
+            "new registry ID"
+        ),
         "Do not add a question section",
         "coverage_note",
         "application-owned filenames",
