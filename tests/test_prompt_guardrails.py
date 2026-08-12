@@ -19,11 +19,52 @@ def test_review_prompt_prohibits_determinations_and_policy_paraphrase():
         assert phrase in prompt
 
 
-@pytest.mark.parametrize("name", ["diagnostic_map", "review", "repair"])
-def test_prompts_are_versioned_and_hash_matches_loaded_content(name):
+def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
+    prompt = load_prompt("review")
+
+    for phrase in (
+        "connected technical review note",
+        "Overall read",
+        "What to revise",
+        "Priority areas for strengthening",
+        "Do not create a Questions for confirmation section",
+        "primary document is the principal lens",
+        "max_immediate_insertion_words",
+        "Do not report pathway by pathway",
+        "Limitations/document coverage",
+        "stage_profile.allowed_scales",
+        "detail_profile.priority_area_range",
+        "every revision_summary priority_area_id resolves to exactly one area",
+        "response_to_comments requires comment_reference",
+        "model authors coverage_note",
+    ):
+        assert phrase in prompt
+
+
+def test_repair_prompt_preserves_links_and_excludes_question_section():
+    prompt = load_prompt("repair")
+
+    for phrase in (
+        "repair only supplied issues",
+        "preserve valid content/IDs",
+        "Do not add evidence, policy, citations, pages, or registry",
+        "complete ReviewDraft",
+        "preserve revision_summary priority_area_id links",
+        "Do not add a question section",
+        "coverage_note",
+        "application-owned filenames",
+    ):
+        assert phrase in prompt
+
+
+@pytest.mark.parametrize(
+    ("name", "version"),
+    [("diagnostic_map", "1.0.0"), ("review", "2.0.0"), ("repair", "2.0.0")],
+)
+def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)
 
-    assert prompt.startswith("Version: 1.0.0\n")
+    assert prompt.startswith(f"Version: {version}\n")
     assert prompt_hash(name) == sha256(prompt.encode("utf-8")).hexdigest()
     assert len(prompt_hash(name)) == 64
 
