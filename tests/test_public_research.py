@@ -12,11 +12,14 @@ def test_retains_qualifying_public_claim_without_licensed_data():
     claim = CurrentContextClaim(
         claim_id="c1",
         text="The operating context may have changed since the CPF was drafted.",
+        publisher="World Bank",
+        source_title="Country context update",
         source_url="https://example.org/context-update",
         source_date=date(2026, 8, 1),
         source_type="public analysis",
         relevance="Tests whether the contextual assumption remains plausible.",
-        relationship="qualifies",
+        relationship="establishes",
+        context_kind="current_development",
         licensed_data_required=False,
     )
 
@@ -30,11 +33,14 @@ def test_rejects_claims_requiring_licensed_data():
     claim = CurrentContextClaim(
         claim_id="c2",
         text="A licensed event-level dataset would be required to substantiate this claim.",
+        publisher="Public analytics provider",
+        source_title="Conflict events",
         source_url="https://example.org/context-update",
         source_date=date(2026, 8, 1),
         source_type="public analysis",
         relevance="Would otherwise inform the current context.",
         relationship="corroborates",
+        context_kind="current_development",
         licensed_data_required=True,
     )
 
@@ -48,11 +54,14 @@ def test_rejects_claim_without_a_public_source_url():
     claim = CurrentContextClaim(
         claim_id="c3",
         text="The source reference was omitted.",
+        publisher="World Bank",
+        source_title="Unlinked source",
         source_url=None,
         source_date=date(2026, 8, 1),
         source_type="public analysis",
         relevance="Would otherwise inform the current context.",
         relationship="unresolved",
+        context_kind="structural_dynamic",
         licensed_data_required=False,
     )
 
@@ -67,10 +76,13 @@ def test_current_context_claim_requires_a_source_url_field_even_when_null():
         CurrentContextClaim(
             claim_id="c4",
             text="The source URL field must be included.",
+            publisher="World Bank",
+            source_title="Public source",
             source_date=date(2026, 8, 1),
             source_type="public analysis",
             relevance="Tests the public-source contract.",
             relationship="unresolved",
+            context_kind="structural_dynamic",
             licensed_data_required=False,
         )
 
@@ -79,11 +91,14 @@ def test_rejects_claim_without_material_relevance():
     claim = CurrentContextClaim(
         claim_id="c5",
         text="The source is not materially tied to the review question.",
+        publisher="World Bank",
+        source_title="Public source",
         source_url="https://example.org/context-update",
         source_date=date(2026, 8, 1),
         source_type="public analysis",
         relevance="   ",
         relationship="unresolved",
+        context_kind="implementation_condition",
         licensed_data_required=False,
     )
 
@@ -93,7 +108,7 @@ def test_rejects_claim_without_material_relevance():
     assert rejected == {"c5": "material relevance is required"}
 
 
-def test_anthropic_gateway_passes_prompt_through_and_strips_text(monkeypatch):
+def test_anthropic_gateway_parses_concatenated_json_claim_text(monkeypatch):
     calls: list[dict[str, object]] = []
 
     class FakeMessages:
@@ -101,37 +116,92 @@ def test_anthropic_gateway_passes_prompt_through_and_strips_text(monkeypatch):
             calls.append(kwargs)
             return SimpleNamespace(
                 content=(
-                    SimpleNamespace(type="text", text="  public result  "),
+                    SimpleNamespace(
+                        type="text",
+                        text='[{"claim_id":"c1","text":"A current development.",',
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text=(
+                            '"publisher":"World Bank","source_title":"Update",'
+                            '"source_url":"https://example.org/update",'
+                            '"source_date":"2026-08-01","source_type":"public report",'
+                            '"relevance":"Tests recency.","relationship":"establishes",'
+                            '"context_kind":"current_development",'
+                            '"licensed_data_required":false}]'
+                        ),
+                    ),
                     SimpleNamespace(type="web_search_result", text="ignored"),
                 )
             )
 
     fake_client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
-    monkeypatch.setattr(public_research, "Anthropic", lambda api_key: fake_client)
-    gateway = public_research.AnthropicPublicResearchGateway("test-key", "test-model")
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway(
+        "test-key", "test-model", timeout_seconds=12.5
+    )
 
     response = gateway.search("Use this prompt exactly.")
 
     assert calls[0]["messages"] == [
         {"role": "user", "content": "Use this prompt exactly."}
     ]
-    assert response == "public result"
+    assert isinstance(response, tuple)
+    assert response[0].publisher == "World Bank"
+    assert response[0].context_kind == "current_development"
+    assert response[0].relationship == "establishes"
+    assert calls[0]["tools"][0]["name"] == "web_search"
+
+
+def test_anthropic_gateway_configures_timeout_and_disables_retries(monkeypatch):
+    captured = {}
+
+    def fake_anthropic(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(public_research, "Anthropic", fake_anthropic)
+
+    public_research.AnthropicPublicResearchGateway(
+        "test-key", "test-model", timeout_seconds=7.25
+    )
+
+    assert captured == {"api_key": "test-key", "timeout": 7.25, "max_retries": 0}
+
+
+@pytest.mark.parametrize("response_text", ["{\"claim_id\": \"c1\"}", "not json"])
+def test_anthropic_gateway_rejects_non_array_or_malformed_json(monkeypatch, response_text):
+    class FakeMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(content=(SimpleNamespace(type="text", text=response_text),))
+
+    fake_client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway(
+        "test-key", "test-model", timeout_seconds=10
+    )
+
+    with pytest.raises(ValueError, match="could not be parsed"):
+        gateway.search("Use this prompt exactly.")
 
 
 def test_load_research_prompt_remains_available_separately():
     prompt = public_research.load_research_prompt()
-    assert "bounded public-source recency and plausibility check" in prompt
+    assert "bounded, source-linked current-country evidence check" in prompt
 
 
 def _claim(claim_id: str = "claim-1", **overrides: object) -> CurrentContextClaim:
     fields: dict[str, object] = {
         "claim_id": claim_id,
         "text": "The contextual assumption needs a bounded public-source check.",
+        "publisher": "World Bank",
+        "source_title": "Context update",
         "source_url": "https://example.org/context-update",
         "source_date": date(2026, 8, 1),
         "source_type": "public analysis",
         "relevance": "Tests whether the claim remains plausible.",
         "relationship": "qualifies",
+        "context_kind": "structural_dynamic",
         "licensed_data_required": False,
     }
     fields.update(overrides)
@@ -146,7 +216,9 @@ def test_current_context_claim_requires_a_strict_boolean_license_flag(
         _claim(licensed_data_required=licensed_data_required)
 
 
-@pytest.mark.parametrize("field", ["claim_id", "text", "source_type"])
+@pytest.mark.parametrize(
+    "field", ["claim_id", "text", "publisher", "source_title", "source_type"]
+)
 def test_current_context_claim_rejects_blank_required_text(field: str):
     with pytest.raises(ValidationError):
         _claim(**{field: "   "})
@@ -204,15 +276,18 @@ def test_public_research_prompt_enumerates_the_json_contract():
     prompt = public_research.load_research_prompt()
 
     expected_terms = (
-        "claim_id:",
-        "text:",
-        "source_url:",
-        "source_date:",
-        "source_type:",
-        "relevance:",
-        "relationship: corroborates | qualifies | contradicts | unresolved",
-        "licensed_data_required: boolean",
-        "JSON array only",
+        "`claim_id`",
+        "`text`",
+        "`publisher`",
+        "`source_title`",
+        "`source_url`",
+        "`source_date`",
+        "`source_type`",
+        "`relevance`",
+        "`context_kind`",
+        "`relationship`",
+        "`licensed_data_required`",
+        "strict JSON array only",
     )
 
     for term in expected_terms:
@@ -285,17 +360,54 @@ def test_public_research_prompt_specifies_authority_field_constraints():
     prompt = public_research.load_research_prompt()
 
     expected_terms = (
-        "claim_id: unique nonblank string",
-        "text: nonblank string",
-        "source_url: public HTTP(S) URL or null",
-        "source_date: ISO YYYY-MM-DD date",
-        "source_type: nonblank string",
-        "relevance: nonblank string",
-        "licensed_data_required: boolean",
+        "`claim_id`: unique nonblank string",
+        "`text`: nonblank source-grounded claim",
+        "`publisher`: nonblank publisher or institution name",
+        "`source_title`: nonblank title of the cited source",
+        "`source_url`: public HTTP(S) URL or null",
+        "`source_date`: ISO YYYY-MM-DD publication date",
+        "`source_type`: nonblank source type",
+        "`relevance`: nonblank explanation",
+        "`context_kind`: exactly",
+        "`structural_dynamic`",
+        "`current_development`",
+        "`resilience_factor`",
+        "`implementation_condition`",
+        "`relationship`: exactly",
+        "`corroborates`",
+        "`qualifies`",
+        "`contradicts`",
+        "`unresolved`",
+        "`establishes`",
+        "`licensed_data_required`: boolean",
     )
 
     for term in expected_terms:
         assert term in prompt
+
+
+def test_public_research_prompt_requires_exact_modes_and_source_hierarchy():
+    prompt = public_research.load_research_prompt()
+
+    for term in (
+        "`rra_update`",
+        "`holistic`",
+        "focus on developments after its",
+        "publication date",
+        "Never call the output an RRA",
+        "World Bank and other MDB sources",
+        "UN reporting",
+        "ICG or a comparable specialist source",
+        "established public analytics",
+        "trusted media only for genuinely recent developments",
+        "Do not use licensed event-level data",
+    ):
+        assert term in prompt
+
+
+def test_current_context_claim_rejects_unknown_context_kind():
+    with pytest.raises(ValidationError):
+        _claim(context_kind="unclassified")
 
 
 @pytest.mark.parametrize(

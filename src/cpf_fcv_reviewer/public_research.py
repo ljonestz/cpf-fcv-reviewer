@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from datetime import date
 from ipaddress import ip_address
@@ -16,14 +17,28 @@ class CurrentContextClaim(BaseModel):
 
     claim_id: str
     text: str
+    publisher: str
+    source_title: str
     source_url: str | None
     source_date: date
     source_type: str
     relevance: str
-    relationship: Literal["corroborates", "qualifies", "contradicts", "unresolved"]
+    context_kind: Literal[
+        "structural_dynamic",
+        "current_development",
+        "resilience_factor",
+        "implementation_condition",
+    ]
+    relationship: Literal[
+        "corroborates",
+        "qualifies",
+        "contradicts",
+        "unresolved",
+        "establishes",
+    ]
     licensed_data_required: StrictBool
 
-    @field_validator("claim_id", "text", "source_type")
+    @field_validator("claim_id", "text", "publisher", "source_title", "source_type")
     @classmethod
     def requires_nonblank_text(cls, value: str) -> str:
         if not value.strip():
@@ -146,18 +161,29 @@ def _is_valid_public_hostname(hostname: str) -> bool:
 
 
 class PublicResearchGateway(Protocol):
-    def search(self, prompt: str) -> str: ...
+    def search(self, prompt: str) -> tuple[CurrentContextClaim, ...]: ...
 
 
 class AnthropicPublicResearchGateway:
-    def __init__(self, api_key: str, model_id: str) -> None:
-        self._client = Anthropic(api_key=api_key)
+    def __init__(
+        self,
+        api_key: str,
+        model_id: str,
+        *,
+        timeout_seconds: float = 60.0,
+    ) -> None:
+        self._client = Anthropic(
+            api_key=api_key,
+            timeout=timeout_seconds,
+            max_retries=0,
+        )
         self._model_id = model_id
 
-    def search(self, prompt: str) -> str:
+    def search(self, prompt: str) -> tuple[CurrentContextClaim, ...]:
         response = self._client.beta.messages.create(
             model=self._model_id,
             max_tokens=5000,
+            system="Return a strict JSON array only.",
             tools=[
                 {
                     "type": "web_search_20250305",
@@ -173,9 +199,16 @@ class AnthropicPublicResearchGateway:
             ],
             betas=["web-search-2025-03-05"],
         )
-        return "\n".join(
+        text = "".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"
         ).strip()
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            raise ValueError("Public research response could not be parsed.") from None
+        if not isinstance(payload, list):
+            raise ValueError("Public research response could not be parsed.")
+        return tuple(CurrentContextClaim.model_validate(item) for item in payload)
 
 
 def load_research_prompt() -> str:
