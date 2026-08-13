@@ -30,8 +30,11 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
     assert result.overall_read in text
-    assert "Overall read" in text
-    assert "What to revise" in text
+    assert "Overall assessment" in text
+    assert result.overall_read in text
+    assert "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy" in text
+    assert result.alignment_readout in text
+    assert "Priority measures to strengthen the CPF/CEN" in text
     assert "Priority areas for strengthening" in text
     assert "Limitations and document coverage" in text
     assert result.revision_summary[0].action in text
@@ -60,8 +63,13 @@ def test_docx_uses_note_first_sections_and_omits_question_section(make_valid_res
     data = build_docx(result, evidence=evidence, hydrated_referrals=())
     text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
 
-    assert text.index("Overall read") < text.index("What to revise")
-    assert text.index("What to revise") < text.index("Priority areas for strengthening")
+    assert text.index("Overall assessment") < text.index("How the draft responds")
+    assert text.index("How the draft responds") < text.index(
+        "Priority measures to strengthen the CPF/CEN"
+    )
+    assert text.index("Priority measures to strengthen the CPF/CEN") < text.index(
+        "Priority areas for strengthening"
+    )
     assert text.index("Priority areas for strengthening") < text.index(
         "Limitations and document coverage"
     )

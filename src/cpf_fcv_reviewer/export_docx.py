@@ -374,10 +374,16 @@ def build_docx(
     advisory_run.bold = True
     advisory_run.font.color.rgb = DARK_BLUE
 
-    document.add_heading("Overall read", level=1)
+    document.add_heading("Overall assessment", level=1)
     document.add_paragraph(result.overall_read)
 
-    document.add_heading("What to revise", level=1)
+    document.add_heading(
+        "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy",
+        level=1,
+    )
+    document.add_paragraph(result.alignment_readout)
+
+    document.add_heading("Priority measures to strengthen the CPF/CEN", level=1)
     if result.revision_summary:
         for item in result.revision_summary:
             _add_list_paragraph(
