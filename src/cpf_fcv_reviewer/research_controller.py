@@ -1,0 +1,325 @@
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import date, timedelta
+from enum import StrEnum
+from time import monotonic as default_monotonic
+from time import sleep as default_sleep
+from typing import Protocol
+
+from .public_research import (
+    CurrentContextClaim,
+    load_research_prompt,
+    retain_public_claims,
+)
+
+
+class ResearchMode(StrEnum):
+    RRA_UPDATE = "rra_update"
+    HOLISTIC = "holistic"
+
+
+@dataclass(frozen=True)
+class ResearchRequest:
+    country: str
+    review_date: date
+    mode: ResearchMode
+    diagnostic_title: str | None = None
+    diagnostic_date: date | None = None
+    diagnostic_summary: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.country, str) or not self.country.strip():
+            raise ValueError("Research country must be nonblank.")
+        if not isinstance(self.review_date, date):
+            raise ValueError("Research review date must be a date.")
+        if not isinstance(self.mode, ResearchMode):
+            raise ValueError("Research mode is invalid.")
+        if self.diagnostic_title is not None and not self.diagnostic_title.strip():
+            raise ValueError("Diagnostic title must be nonblank when provided.")
+        if self.mode is ResearchMode.RRA_UPDATE and (
+            self.diagnostic_title is None or self.diagnostic_date is None
+        ):
+            raise ValueError("RRA update mode requires a diagnostic title and date.")
+        if self.mode is ResearchMode.HOLISTIC and (
+            self.diagnostic_title is not None or self.diagnostic_date is not None
+        ):
+            raise ValueError("Holistic mode cannot include RRA metadata.")
+        if self.diagnostic_date is not None and self.diagnostic_date > self.review_date:
+            raise ValueError("Diagnostic date cannot be after the review date.")
+
+
+@dataclass(frozen=True)
+class ResearchResult:
+    claims: tuple[CurrentContextClaim, ...]
+    rejected: dict[str, str]
+    attempts: int
+    sufficient: bool
+
+
+class ResearchFailure(RuntimeError):
+    failure_code = "research_failed"
+
+
+class ResearchProviderFailure(ResearchFailure):
+    failure_code = "research_provider_failed"
+
+
+class ResearchTimeout(ResearchFailure):
+    failure_code = "research_timeout"
+
+
+class MalformedResearch(ResearchFailure):
+    failure_code = "research_malformed"
+
+
+class ResearchConfigurationError(ResearchFailure):
+    failure_code = "research_configuration"
+
+
+class ResearchSourceRejected(ResearchFailure):
+    failure_code = "research_source_rejected"
+
+
+class InsufficientResearch(ResearchFailure):
+    failure_code = "research_insufficient"
+
+
+class ResearchGateway(Protocol):
+    def search(self, prompt: str) -> tuple[CurrentContextClaim, ...]: ...
+
+
+Emitter = Callable[[str, dict[str, object]], None]
+
+
+class ResearchController:
+    def __init__(
+        self,
+        gateway: ResearchGateway,
+        *,
+        max_attempts: int = 3,
+        minimum_claims: int = 4,
+        minimum_publishers: int = 2,
+        total_budget_seconds: float = 300.0,
+        retry_backoff_seconds: float | Sequence[float] = 1.0,
+        monotonic: Callable[[], float] = default_monotonic,
+        sleep: Callable[[float], None] = default_sleep,
+    ) -> None:
+        if max_attempts <= 0 or minimum_claims <= 0 or minimum_publishers <= 0:
+            raise ValueError("Research attempt and sufficiency settings must be positive.")
+        if total_budget_seconds <= 0:
+            raise ValueError("Research total budget must be positive.")
+        if isinstance(retry_backoff_seconds, Sequence) and not isinstance(
+            retry_backoff_seconds, (str, bytes)
+        ):
+            backoff = tuple(float(value) for value in retry_backoff_seconds)
+            if any(value < 0 for value in backoff):
+                raise ValueError("Research retry backoff cannot be negative.")
+            self._backoff = backoff or (0.0,)
+        else:
+            if float(retry_backoff_seconds) < 0:
+                raise ValueError("Research retry backoff cannot be negative.")
+            self._backoff = (float(retry_backoff_seconds),)
+        self.gateway = gateway
+        self.max_attempts = max_attempts
+        self.minimum_claims = minimum_claims
+        self.minimum_publishers = minimum_publishers
+        self.total_budget_seconds = total_budget_seconds
+        self.monotonic = monotonic
+        self.sleep = sleep
+
+    def run(self, request: ResearchRequest, emit: Emitter) -> ResearchResult:
+        started = self.monotonic()
+        accepted: dict[str, CurrentContextClaim] = {}
+        accepted_urls: set[str] = set()
+        rejected: dict[str, str] = {}
+        last_missing: tuple[str, ...] = ()
+        last_failure: ResearchFailure | None = None
+
+        for attempt in range(1, self.max_attempts + 1):
+            elapsed = self.monotonic() - started
+            if attempt > 1 and elapsed >= self.total_budget_seconds:
+                raise ResearchTimeout("Research total budget was exhausted.")
+            prompt = self._prompt(request, attempt, last_missing)
+            emit(
+                "research_attempt",
+                self._event_data(attempt, accepted, rejected, request, elapsed),
+            )
+            try:
+                claims = self.gateway.search(prompt)
+            except Exception as exc:
+                failure = self._classify_exception(exc)
+                if isinstance(failure, ResearchConfigurationError):
+                    raise failure from None
+                last_failure = failure
+                if attempt >= self.max_attempts:
+                    raise failure from None
+                last_missing = ("provider response",)
+                if not self._prepare_retry(attempt, started, last_missing, emit):
+                    raise ResearchTimeout("Research total budget was exhausted.") from None
+                continue
+
+            retained, source_rejections = retain_public_claims(tuple(claims))
+            for key, reason in source_rejections.items():
+                rejected[key] = reason
+            for item in retained:
+                claim_key = item.claim_id.casefold()
+                url_key = (item.source_url or "").strip().casefold()
+                if claim_key in accepted:
+                    rejected[f"duplicate_id:{item.claim_id}"] = "duplicate claim ID"
+                elif url_key in accepted_urls:
+                    rejected["duplicate_url"] = "duplicate source URL"
+                else:
+                    accepted[claim_key] = item
+                    accepted_urls.add(url_key)
+
+            last_missing = self._missing_coverage(tuple(accepted.values()), request)
+            elapsed = self.monotonic() - started
+            if not last_missing:
+                result = ResearchResult(tuple(accepted.values()), rejected, attempt, True)
+                emit(
+                    "research_sufficient",
+                    self._event_data(attempt, accepted, rejected, request, elapsed),
+                )
+                return result
+            if attempt < self.max_attempts:
+                if not self._prepare_retry(attempt, started, last_missing, emit):
+                    raise ResearchTimeout("Research total budget was exhausted.")
+
+        if not accepted and rejected:
+            raise ResearchSourceRejected("All public research claims were rejected.")
+        if last_failure is not None:
+            raise last_failure
+        raise InsufficientResearch("Public research did not meet the sufficiency threshold.")
+
+    def _prepare_retry(
+        self,
+        attempt: int,
+        started: float,
+        missing: tuple[str, ...],
+        emit: Emitter,
+    ) -> bool:
+        delay = self._backoff[min(attempt - 1, len(self._backoff) - 1)]
+        elapsed = self.monotonic() - started
+        if elapsed + delay >= self.total_budget_seconds:
+            return False
+        emit(
+            "research_retry",
+            {"attempt": attempt, "next_attempt": attempt + 1, "missing_coverage": missing},
+        )
+        self.sleep(delay)
+        return True
+
+    def _prompt(
+        self,
+        request: ResearchRequest,
+        attempt: int,
+        missing: tuple[str, ...],
+    ) -> str:
+        lines = [
+            load_research_prompt().strip(),
+            f"research_mode: {request.mode.value}",
+            f"country: {request.country.strip()}",
+            f"review_date: {request.review_date.isoformat()}",
+        ]
+        if request.mode is ResearchMode.RRA_UPDATE:
+            lines.extend(
+                (
+                    f"diagnostic_title: {request.diagnostic_title}",
+                    f"diagnostic_date: {request.diagnostic_date.isoformat()}",
+                    (
+                        "Focus on the diagnostic date-to-review date gap and re-test "
+                        "material structural findings."
+                    ),
+                    f"diagnostic_summary: {request.diagnostic_summary.strip()}",
+                )
+            )
+        else:
+            lines.append("Cover structural dynamics and current developments separately.")
+            lines.append("Use a bounded recent window of 24 months through the review date.")
+        if attempt > 1:
+            labels = ", ".join(missing)
+            lines.append(f"Retry attempt {attempt}: missing coverage: {labels}.")
+            lines.append("Shift source emphasis toward authoritative sources not yet represented.")
+        return "\n".join(lines)
+
+    def _missing_coverage(
+        self,
+        claims: tuple[CurrentContextClaim, ...],
+        request: ResearchRequest,
+    ) -> tuple[str, ...]:
+        missing: list[str] = []
+        if len(claims) < self.minimum_claims:
+            missing.append("claims")
+        publishers = {
+            claim.publisher.strip().casefold()
+            for claim in claims
+            if claim.publisher.strip()
+        }
+        if len(publishers) < self.minimum_publishers:
+            missing.append("publishers")
+        kinds = {claim.context_kind for claim in claims}
+        if "structural_dynamic" not in kinds:
+            missing.append("structural_dynamic")
+        if "current_development" not in kinds:
+            missing.append("current_development")
+        if not any(self._is_recent(claim, request) for claim in claims):
+            missing.append("recent")
+        return tuple(missing)
+
+    @staticmethod
+    def _is_recent(claim: CurrentContextClaim, request: ResearchRequest) -> bool:
+        if request.mode is ResearchMode.RRA_UPDATE:
+            return request.diagnostic_date < claim.source_date <= request.review_date
+        window_start = request.review_date - timedelta(days=365 * 2)
+        return window_start <= claim.source_date <= request.review_date
+
+    @staticmethod
+    def _event_data(
+        attempt: int,
+        accepted: dict[str, CurrentContextClaim],
+        rejected: dict[str, str],
+        request: ResearchRequest,
+        elapsed: float,
+    ) -> dict[str, object]:
+        kinds = {claim.context_kind for claim in accepted.values()}
+        publishers = {
+            claim.publisher.strip().casefold()
+            for claim in accepted.values()
+            if claim.publisher.strip()
+        }
+        return {
+            "attempt": attempt,
+            "accepted_count": len(accepted),
+            "rejected_count": len(rejected),
+            "publisher_count": len(publishers),
+            "missing_coverage": tuple(
+                label
+                for label, present in (
+                    ("structural_dynamic", "structural_dynamic" in kinds),
+                    ("current_development", "current_development" in kinds),
+                )
+                if not present
+            ),
+            "elapsed_seconds": round(elapsed, 3),
+        }
+
+    @staticmethod
+    def _classify_exception(exc: Exception) -> ResearchFailure:
+        name = type(exc).__name__.casefold()
+        message = str(exc).casefold()
+        if (
+            "auth" in name
+            or "config" in name
+            or "authentication" in message
+            or "api key" in message
+            or "credential" in message
+            or getattr(exc, "status_code", None) in {401, 403}
+        ):
+            return ResearchConfigurationError("Public research configuration failed.")
+        if isinstance(exc, TimeoutError):
+            return ResearchTimeout("Public research timed out.")
+        if isinstance(exc, ValueError):
+            return MalformedResearch("Public research response was malformed.")
+        return ResearchProviderFailure("Public research provider failed.")
