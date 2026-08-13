@@ -1,4 +1,5 @@
 from datetime import date
+from math import inf, nan
 
 import pytest
 
@@ -132,12 +133,35 @@ def test_transient_provider_error_retries_then_succeeds():
 
 
 def test_configuration_error_stops_immediately():
-    gateway = ScriptedGateway((RuntimeError("authentication failed"), sufficient_claims()))
+    class UnauthorizedError(RuntimeError):
+        status_code = 401
+
+    gateway = ScriptedGateway((UnauthorizedError("unrelated"), sufficient_claims()))
 
     with pytest.raises(ResearchConfigurationError):
         controller(gateway).run(holistic_request(), lambda *_: None)
 
     assert gateway.calls == 1
+
+
+def test_auth_like_message_without_status_retries_as_provider_failure():
+    gateway = ScriptedGateway((RuntimeError("authentication failed"),) * 3)
+
+    with pytest.raises(ResearchProviderFailure):
+        controller(gateway).run(holistic_request(), lambda *_: None)
+
+    assert gateway.calls == 3
+
+
+def test_research_request_rejects_non_date_diagnostic_date():
+    with pytest.raises(ValueError, match="diagnostic date"):
+        ResearchRequest(
+            "Benin",
+            date(2026, 8, 1),
+            ResearchMode.RRA_UPDATE,
+            diagnostic_title="Benin RRA",
+            diagnostic_date="2022-03-01",
+        )
 
 
 def test_timeout_retries_then_raises_terminal_timeout():
@@ -282,3 +306,45 @@ def test_total_budget_stops_before_next_attempt():
         ).run(holistic_request(), lambda *_: None)
 
     assert gateway.calls == 1
+
+
+@pytest.mark.parametrize(
+    "response, expected",
+    [
+        (ValueError("malformed"), MalformedResearch),
+        (ConnectionError("provider"), ResearchProviderFailure),
+    ],
+)
+def test_retryable_failure_precedes_source_rejection_on_exhaustion(response, expected):
+    rejected = claim("licensed").model_copy(update={"licensed_data_required": True})
+    gateway = ScriptedGateway((response, (rejected,)))
+
+    with pytest.raises(expected):
+        controller(gateway, max_attempts=2).run(holistic_request(), lambda *_: None)
+
+
+def test_source_rejection_precedes_insufficient_only_without_prior_failure():
+    rejected = claim("licensed").model_copy(update={"licensed_data_required": True})
+
+    with pytest.raises(ResearchSourceRejected):
+        controller(ScriptedGateway(((rejected,),)), max_attempts=1).run(
+            holistic_request(), lambda *_: None
+        )
+
+
+@pytest.mark.parametrize("value", [True, False, 1.0, "3", 0, -1])
+def test_controller_rejects_invalid_integer_settings(value):
+    with pytest.raises(ValueError):
+        controller(ScriptedGateway(()), max_attempts=value)
+
+
+@pytest.mark.parametrize("value", [True, nan, inf, -inf, 0, -1, "3"])
+def test_controller_rejects_invalid_budget_settings(value):
+    with pytest.raises(ValueError):
+        controller(ScriptedGateway(()), total_budget_seconds=value)
+
+
+@pytest.mark.parametrize("value", [True, nan, inf, -inf, -1, "1"])
+def test_controller_rejects_invalid_backoff_settings(value):
+    with pytest.raises(ValueError):
+        controller(ScriptedGateway(()), retry_backoff_seconds=value)

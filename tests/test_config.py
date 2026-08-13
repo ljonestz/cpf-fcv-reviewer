@@ -1,3 +1,5 @@
+from math import inf, nan
+
 import pytest
 
 from cpf_fcv_reviewer.config import build_config
@@ -41,3 +43,19 @@ def test_research_settings_accept_overrides(monkeypatch):
 def test_research_settings_reject_nonpositive_or_inconsistent_values(overrides):
     with pytest.raises(ValueError):
         build_config({"TESTING": True, **overrides})
+
+
+@pytest.mark.parametrize(
+    "name, value",
+    [
+        ("RESEARCH_MAX_ATTEMPTS", True),
+        ("RESEARCH_MINIMUM_CLAIMS", 1.0),
+        ("RESEARCH_MINIMUM_PUBLISHERS", "2"),
+        ("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", nan),
+        ("RESEARCH_TOTAL_BUDGET_SECONDS", inf),
+        ("RESEARCH_RETRY_BACKOFF_SECONDS", True),
+    ],
+)
+def test_research_settings_reject_wrong_types_or_nonfinite_values(name, value):
+    with pytest.raises(ValueError):
+        build_config({"TESTING": True, name: value})

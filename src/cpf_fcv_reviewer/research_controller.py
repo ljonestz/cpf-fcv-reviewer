@@ -4,6 +4,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
+from math import isfinite
+from numbers import Real
 from time import monotonic as default_monotonic
 from time import sleep as default_sleep
 from typing import Protocol
@@ -49,6 +51,8 @@ class ResearchRequest:
             self.diagnostic_title is not None or self.diagnostic_date is not None
         ):
             raise ValueError("Holistic mode cannot include RRA metadata.")
+        if self.diagnostic_date is not None and not isinstance(self.diagnostic_date, date):
+            raise ValueError("diagnostic date must be a date.")
         if self.diagnostic_date is not None and self.diagnostic_date > self.review_date:
             raise ValueError("Diagnostic date cannot be after the review date.")
 
@@ -109,20 +113,19 @@ class ResearchController:
         monotonic: Callable[[], float] = default_monotonic,
         sleep: Callable[[float], None] = default_sleep,
     ) -> None:
-        if max_attempts <= 0 or minimum_claims <= 0 or minimum_publishers <= 0:
-            raise ValueError("Research attempt and sufficiency settings must be positive.")
-        if total_budget_seconds <= 0:
-            raise ValueError("Research total budget must be positive.")
+        _require_positive_int(max_attempts, "max_attempts")
+        _require_positive_int(minimum_claims, "minimum_claims")
+        _require_positive_int(minimum_publishers, "minimum_publishers")
+        _require_finite_number(total_budget_seconds, "total_budget_seconds", positive=True)
         if isinstance(retry_backoff_seconds, Sequence) and not isinstance(
             retry_backoff_seconds, (str, bytes)
         ):
             backoff = tuple(float(value) for value in retry_backoff_seconds)
-            if any(value < 0 for value in backoff):
-                raise ValueError("Research retry backoff cannot be negative.")
+            for value in backoff:
+                _require_finite_number(value, "retry_backoff_seconds", positive=False)
             self._backoff = backoff or (0.0,)
         else:
-            if float(retry_backoff_seconds) < 0:
-                raise ValueError("Research retry backoff cannot be negative.")
+            _require_finite_number(retry_backoff_seconds, "retry_backoff_seconds", positive=False)
             self._backoff = (float(retry_backoff_seconds),)
         self.gateway = gateway
         self.max_attempts = max_attempts
@@ -190,10 +193,10 @@ class ResearchController:
                 if not self._prepare_retry(attempt, started, last_missing, emit):
                     raise ResearchTimeout("Research total budget was exhausted.")
 
-        if not accepted and rejected:
-            raise ResearchSourceRejected("All public research claims were rejected.")
         if last_failure is not None:
             raise last_failure
+        if not accepted and rejected:
+            raise ResearchSourceRejected("All public research claims were rejected.")
         raise InsufficientResearch("Public research did not meet the sufficiency threshold.")
 
     def _prepare_retry(
@@ -309,22 +312,28 @@ class ResearchController:
 
     @staticmethod
     def _classify_exception(exc: Exception) -> ResearchFailure:
-        name = type(exc).__name__.casefold()
-        message = str(exc).casefold()
-        if (
-            "auth" in name
-            or "config" in name
-            or "authentication" in message
-            or "api key" in message
-            or "credential" in message
-            or getattr(exc, "status_code", None) in {401, 403}
-        ):
+        if isinstance(exc, ResearchConfigurationError):
+            return exc
+        if getattr(exc, "status_code", None) in {401, 403}:
             return ResearchConfigurationError("Public research configuration failed.")
         if isinstance(exc, TimeoutError):
             return ResearchTimeout("Public research timed out.")
         if isinstance(exc, ValueError):
             return MalformedResearch("Public research response was malformed.")
         return ResearchProviderFailure("Public research provider failed.")
+
+
+def _require_positive_int(value: object, name: str) -> None:
+    if type(value) is not int or value <= 0:
+        raise ValueError(f"{name} must be a positive integer.")
+
+
+def _require_finite_number(value: object, name: str, *, positive: bool) -> None:
+    if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):
+        raise ValueError(f"{name} must be a finite number.")
+    if value < 0 or (positive and value <= 0):
+        requirement = "positive" if positive else "nonnegative"
+        raise ValueError(f"{name} must be {requirement}.")
 
 
 def _normalize_source_url(url: str) -> str:

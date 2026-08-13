@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from math import isfinite
+from numbers import Real
 
 
 def build_config(overrides: dict | None = None) -> dict:
@@ -36,17 +38,23 @@ def build_config(overrides: dict | None = None) -> dict:
         "TESTING": False,
     }
     config.update(overrides or {})
-    positive_research_settings = (
+    for name in (
         "RESEARCH_MAX_ATTEMPTS",
-        "RESEARCH_ATTEMPT_TIMEOUT_SECONDS",
-        "RESEARCH_TOTAL_BUDGET_SECONDS",
         "RESEARCH_MINIMUM_CLAIMS",
         "RESEARCH_MINIMUM_PUBLISHERS",
-    )
-    if any(config[name] <= 0 for name in positive_research_settings):
-        raise ValueError("Research settings must be positive.")
-    if config["RESEARCH_RETRY_BACKOFF_SECONDS"] < 0:
-        raise ValueError("Research retry backoff cannot be negative.")
+    ):
+        if type(config[name]) is not int or config[name] <= 0:
+            raise ValueError(f"{name} must be a positive integer.")
+    for name, positive in (
+        ("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", True),
+        ("RESEARCH_TOTAL_BUDGET_SECONDS", True),
+        ("RESEARCH_RETRY_BACKOFF_SECONDS", False),
+    ):
+        value = config[name]
+        if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):
+            raise ValueError(f"{name} must be a finite number.")
+        if value < 0 or (positive and value <= 0):
+            raise ValueError(f"{name} has an invalid bound.")
     if config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"] > config["RESEARCH_TOTAL_BUDGET_SECONDS"]:
         raise ValueError("Research attempt timeout cannot exceed total budget.")
     config["ANTHROPIC_API_KEY"] = config["ANTHROPIC_API_KEY"].strip()
