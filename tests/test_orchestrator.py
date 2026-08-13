@@ -83,3 +83,38 @@ def test_failed_repair_emits_terminal_failure_without_completion():
 
     assert events[-1][0] == "run_failed"
     assert not any(kind == "run_complete" for kind, _ in events)
+
+
+def test_orchestrator_injects_private_emitter_and_removes_it_after_success():
+    seen = {}
+
+    def step(context):
+        seen["emit"] = context["_emit"]
+        context["_emit"]("sub_event", {"ok": True})
+        return context
+
+    events = []
+    result = ReviewOrchestrator(
+        steps=(("research", step),),
+        repair=lambda context, issues: context,
+    ).run({}, lambda kind, data: events.append((kind, data)))
+
+    assert callable(seen["emit"])
+    assert ("sub_event", {"ok": True}) in events
+    assert "_emit" not in result
+
+
+def test_orchestrator_removes_private_emitter_after_failure():
+    context = {}
+
+    def step(current_context):
+        assert callable(current_context["_emit"])
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        ReviewOrchestrator(
+            steps=(("research", step),),
+            repair=lambda current_context, issues: current_context,
+        ).run(context, lambda *_: None)
+
+    assert "_emit" not in context

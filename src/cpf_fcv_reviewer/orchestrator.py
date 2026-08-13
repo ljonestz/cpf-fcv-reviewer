@@ -35,6 +35,8 @@ class ReviewOrchestrator:
 
     def run(self, context: dict, emit: Emitter) -> dict:
         repaired = False
+        original_context = context
+        context["_emit"] = emit
         try:
             for name, step in self.steps:
                 emit("step_start", {"step": name})
@@ -56,3 +58,6 @@ class ReviewOrchestrator:
             context["status"] = "failed"
             emit("run_failed", {"error": safe_failure_code(exc)})
             raise
+        finally:
+            original_context.pop("_emit", None)
+            context.pop("_emit", None)

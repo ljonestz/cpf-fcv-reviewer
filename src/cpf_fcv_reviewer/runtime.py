@@ -20,6 +20,7 @@ from .orchestrator import ReviewOrchestrator
 from .prompts import load_prompt
 from .public_research import AnthropicPublicResearchGateway
 from .registry import RegistryUnavailable, load_registry_bundle
+from .research_controller import ResearchController
 from .review_engine import ReviewEngine
 from .sources import choose_authoritative_source
 from .validators import (
@@ -68,7 +69,12 @@ def _select_role_segments(
     return selected
 
 
-def build_runtime_services(config: dict) -> dict:
+def build_runtime_services(
+    config: dict,
+    *,
+    model_gateway=None,
+    research_gateway=None,
+) -> dict:
     path = Path(config.get("REGISTRY_BUNDLE_PATH", ""))
     expected_hash = str(config.get("REGISTRY_BUNDLE_SHA256", "")).strip().lower()
     if not expected_hash:
@@ -87,13 +93,24 @@ def build_runtime_services(config: dict) -> dict:
     except RegistryUnavailable as exc:
         raise RuntimeError(str(exc)) from exc
 
-    model_gateway = AnthropicModelGateway(
-        config["ANTHROPIC_API_KEY"],
-        config["ANTHROPIC_MODEL_ID"],
-    )
-    research_gateway = AnthropicPublicResearchGateway(
-        config["ANTHROPIC_API_KEY"],
-        config["ANTHROPIC_MODEL_ID"],
+    if model_gateway is None:
+        model_gateway = AnthropicModelGateway(
+            config["ANTHROPIC_API_KEY"],
+            config["ANTHROPIC_MODEL_ID"],
+        )
+    if research_gateway is None:
+        research_gateway = AnthropicPublicResearchGateway(
+            config["ANTHROPIC_API_KEY"],
+            config["ANTHROPIC_MODEL_ID"],
+            timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
+        )
+    research_controller = ResearchController(
+        research_gateway,
+        max_attempts=config["RESEARCH_MAX_ATTEMPTS"],
+        minimum_claims=config["RESEARCH_MINIMUM_CLAIMS"],
+        minimum_publishers=config["RESEARCH_MINIMUM_PUBLISHERS"],
+        total_budget_seconds=config["RESEARCH_TOTAL_BUDGET_SECONDS"],
+        retry_backoff_seconds=config["RESEARCH_RETRY_BACKOFF_SECONDS"],
     )
     review_engine = ReviewEngine(model_gateway)
 
@@ -306,4 +323,8 @@ def build_runtime_services(config: dict) -> dict:
         steps=tuple((name, mark_step(name)) for name in STEP_NAMES),
         repair=repair,
     )
-    return {"review_orchestrator": orchestrator, "registry_bundle": bundle}
+    return {
+        "review_orchestrator": orchestrator,
+        "registry_bundle": bundle,
+        "research_controller": research_controller,
+    }

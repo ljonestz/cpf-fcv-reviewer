@@ -43,6 +43,12 @@ def production_config(**overrides):
         "REGISTRY_BUNDLE_PATH": str(FIXTURE),
         "REGISTRY_BUNDLE_SHA256": sha256(FIXTURE.read_bytes()).hexdigest(),
         "ALLOW_SYNTHETIC_REGISTRY": False,
+        "RESEARCH_MAX_ATTEMPTS": 3,
+        "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": 90.0,
+        "RESEARCH_TOTAL_BUDGET_SECONDS": 300.0,
+        "RESEARCH_MINIMUM_CLAIMS": 4,
+        "RESEARCH_MINIMUM_PUBLISHERS": 2,
+        "RESEARCH_RETRY_BACKOFF_SECONDS": 1.0,
     }
     config.update(overrides)
     return config
@@ -70,7 +76,7 @@ def test_production_rejects_synthetic_registry_even_with_valid_hash():
 
 def test_runtime_builds_exact_named_step_sequence(monkeypatch):
     class FakeModelGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             self.api_key = api_key
             self.model_id = model_id
 
@@ -88,7 +94,11 @@ def test_runtime_builds_exact_named_step_sequence(monkeypatch):
 
     services = build_runtime_services(production_config(ALLOW_SYNTHETIC_REGISTRY=True))
 
-    assert set(services) == {"review_orchestrator", "registry_bundle"}
+    assert set(services) == {
+        "review_orchestrator",
+        "registry_bundle",
+        "research_controller",
+    }
     assert [name for name, _ in services["review_orchestrator"].steps] == [
         "extract",
         "resolve_sources",
@@ -177,7 +187,7 @@ def test_runtime_validation_does_not_require_confirmed_priority_response(
 
 def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
     class FakeGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             self.model_id = model_id
 
         def generate(self, *, prompt_name, payload, output_type):
@@ -253,7 +263,7 @@ def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch
     captured = {}
 
     class FakeGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             pass
 
         def generate(self, *, prompt_name, payload, output_type):
@@ -320,11 +330,64 @@ def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch
     assert context["result"].document_coverage.primary_document == "benin-cpf.txt"
 
 
+def test_runtime_accepts_injected_gateways_and_constructs_configured_research_controller():
+    model_gateway = object()
+    research_gateway = object()
+
+    services = build_runtime_services(
+        production_config(
+            ALLOW_SYNTHETIC_REGISTRY=True,
+            RESEARCH_MAX_ATTEMPTS=5,
+            RESEARCH_TOTAL_BUDGET_SECONDS=42.0,
+            RESEARCH_MINIMUM_CLAIMS=6,
+            RESEARCH_MINIMUM_PUBLISHERS=3,
+            RESEARCH_RETRY_BACKOFF_SECONDS=0.25,
+        ),
+        model_gateway=model_gateway,
+        research_gateway=research_gateway,
+    )
+
+    controller = services["research_controller"]
+    assert controller.gateway is research_gateway
+    assert controller.max_attempts == 5
+    assert controller.total_budget_seconds == 42.0
+    assert controller.minimum_claims == 6
+    assert controller.minimum_publishers == 3
+    assert controller._backoff == (0.25,)
+
+
+def test_default_research_gateway_receives_attempt_timeout(monkeypatch):
+    captured = {}
+
+    class FakeModelGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
+            pass
+
+    class FakeResearchGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds):
+            captured["timeout_seconds"] = timeout_seconds
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeModelGateway)
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FakeResearchGateway,
+    )
+
+    build_runtime_services(
+        production_config(
+            ALLOW_SYNTHETIC_REGISTRY=True,
+            RESEARCH_ATTEMPT_TIMEOUT_SECONDS=12.5,
+        )
+    )
+
+    assert captured["timeout_seconds"] == 12.5
+
+
 def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch):
     captured = {}
 
     class FakeGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             pass
 
         def generate(self, *, prompt_name, payload, output_type):
@@ -400,7 +463,7 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
     captured = {}
 
     class FakeGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             pass
 
         def generate(self, *, prompt_name, payload, output_type):
@@ -486,7 +549,7 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
     captured = {}
 
     class FakeGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             self.model_id = model_id
 
         def generate(self, *, prompt_name, payload, output_type):
@@ -549,7 +612,7 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
     repair_payloads = []
 
     class FakeGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             self.model_id = model_id
 
         def generate(self, *, prompt_name, payload, output_type):
