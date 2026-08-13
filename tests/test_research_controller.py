@@ -13,6 +13,8 @@ from cpf_fcv_reviewer.research_controller import (
     ResearchRequest,
     ResearchSourceRejected,
     ResearchTimeout,
+    _normalize_source_url,
+    _subtract_calendar_years,
 )
 
 
@@ -191,6 +193,39 @@ def test_holistic_recent_window_is_bounded_to_24_months():
         controller(gateway, max_attempts=1).run(holistic_request(), lambda *_: None)
 
     assert "24 months" in gateway.prompts[0]
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "HTTPS://EXAMPLE.ORG:443/source#section",
+        "https://example.org/source/",
+    ],
+)
+def test_equivalent_source_url_variants_normalize_identically(source_url):
+    assert _normalize_source_url(source_url) == "https://example.org/source"
+
+
+def test_distinct_source_path_and_query_do_not_normalize_identically():
+    assert _normalize_source_url("https://example.org/source?a=1") != _normalize_source_url(
+        "https://example.org/source?a=2"
+    )
+    assert _normalize_source_url("https://example.org/source/a") != _normalize_source_url(
+        "https://example.org/source/b"
+    )
+
+
+def test_holistic_recency_uses_calendar_years_with_leap_day_fallback():
+    review_date = date(2024, 2, 29)
+    request = ResearchRequest("Benin", review_date, ResearchMode.HOLISTIC)
+
+    assert _subtract_calendar_years(review_date, 2) == date(2022, 2, 28)
+    assert ResearchController._is_recent(
+        claim("boundary", source_date=date(2022, 2, 28)), request
+    )
+    assert not ResearchController._is_recent(
+        claim("before", source_date=date(2022, 2, 27)), request
+    )
 
 
 def test_duplicate_url_and_claim_id_are_not_accumulated():

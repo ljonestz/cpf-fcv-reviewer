@@ -2,17 +2,20 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from enum import StrEnum
 from time import monotonic as default_monotonic
 from time import sleep as default_sleep
 from typing import Protocol
+from urllib.parse import urlsplit, urlunsplit
 
 from .public_research import (
     CurrentContextClaim,
     load_research_prompt,
     retain_public_claims,
 )
+
+# The gateway owns per-attempt network timeouts; this controller only bounds work between calls.
 
 
 class ResearchMode(StrEnum):
@@ -144,7 +147,7 @@ class ResearchController:
             prompt = self._prompt(request, attempt, last_missing)
             emit(
                 "research_attempt",
-                self._event_data(attempt, accepted, rejected, request, elapsed),
+                self._event_data(attempt, accepted, rejected, elapsed),
             )
             try:
                 claims = self.gateway.search(prompt)
@@ -165,7 +168,7 @@ class ResearchController:
                 rejected[key] = reason
             for item in retained:
                 claim_key = item.claim_id.casefold()
-                url_key = (item.source_url or "").strip().casefold()
+                url_key = _normalize_source_url(item.source_url or "")
                 if claim_key in accepted:
                     rejected[f"duplicate_id:{item.claim_id}"] = "duplicate claim ID"
                 elif url_key in accepted_urls:
@@ -180,7 +183,7 @@ class ResearchController:
                 result = ResearchResult(tuple(accepted.values()), rejected, attempt, True)
                 emit(
                     "research_sufficient",
-                    self._event_data(attempt, accepted, rejected, request, elapsed),
+                    self._event_data(attempt, accepted, rejected, elapsed),
                 )
                 return result
             if attempt < self.max_attempts:
@@ -272,7 +275,7 @@ class ResearchController:
     def _is_recent(claim: CurrentContextClaim, request: ResearchRequest) -> bool:
         if request.mode is ResearchMode.RRA_UPDATE:
             return request.diagnostic_date < claim.source_date <= request.review_date
-        window_start = request.review_date - timedelta(days=365 * 2)
+        window_start = _subtract_calendar_years(request.review_date, 2)
         return window_start <= claim.source_date <= request.review_date
 
     @staticmethod
@@ -280,7 +283,6 @@ class ResearchController:
         attempt: int,
         accepted: dict[str, CurrentContextClaim],
         rejected: dict[str, str],
-        request: ResearchRequest,
         elapsed: float,
     ) -> dict[str, object]:
         kinds = {claim.context_kind for claim in accepted.values()}
@@ -323,3 +325,26 @@ class ResearchController:
         if isinstance(exc, ValueError):
             return MalformedResearch("Public research response was malformed.")
         return ResearchProviderFailure("Public research provider failed.")
+
+
+def _normalize_source_url(url: str) -> str:
+    parsed = urlsplit(url.strip())
+    scheme = parsed.scheme.casefold()
+    hostname = (parsed.hostname or "").casefold()
+    try:
+        port = parsed.port
+    except ValueError:
+        return url.strip().casefold()
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
+    default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+    netloc = hostname if not port or default_port else f"{hostname}:{port}"
+    path = parsed.path.rstrip("/")
+    return urlunsplit((scheme, netloc, path, parsed.query, ""))
+
+
+def _subtract_calendar_years(value: date, years: int) -> date:
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        return value.replace(year=value.year - years, day=28)
