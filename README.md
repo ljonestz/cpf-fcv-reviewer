@@ -8,23 +8,25 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest functional commit: `b749948`
+- Latest local functional commit: `a13c947`
 - Deployment health response: `ok`; storage: `volatile`; the Render release label `4acca30` is stale and is not the Git commit or application version.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
-The review starts with three document buckets: primary CPF/CEN documents, package documents, and contextual documents. Country inference uses the recognized title when available and requires manual country confirmation when it is not. Review stage and detail are selected explicitly: Early drafting / PCN, Concept review, Decision review, ROC / OC, Finalization, or Response to comments, with Brief, Standard, or In-depth detail.
+The review starts with three document buckets: the draft CPF/CEN, accompanying package documents, and an optional public RRA or supporting analytics. Country inference uses the recognized title when available and requires manual country confirmation when it is not. Review stage is selected explicitly: Early drafting / PCN, Concept review, Decision review, ROC / OC, Finalization, or Response to comments.
 
-Results are organized as connected note sections: Overall read; What to revise; Priority areas for strengthening; and Limitations and document coverage. Evidence details are collapsed by default, and the exported DOCX follows the same note structure. Correction reruns refer to the review itself, not to individual findings. There is no questions-for-confirmation section.
+Every review performs bounded current-country public-web research. An uploaded public RRA changes the research window but never suppresses that current research. Retryable research failures can be retried in the browser using the retained volatile uploads; retry never exposes partial output.
+
+Completed results open in a separate experience with a default **Five-minute readout** and an authoritative **Detailed analysis** view. Both derive from the same canonical result, and the full detailed note can be downloaded as DOCX. Evidence details are collapsed by default. Correction reruns refer to the review itself, not to individual findings. There is no questions-for-confirmation section.
 
 ## Safety boundary
 
 - Review state is in-memory and temporary: restart, expiry, or **Start a new review** destroys it.
-- A direct current RRA original takes precedence over derived copies; upload is the fallback. Operational SharePoint and ITS access are out of scope.
+- A direct current RRA original takes precedence over derived copies; upload is the public-prototype fallback. Operational SharePoint and ITS access are out of scope. A future internal ITS implementation would use the existing source-adapter boundary with separately governed, permission-aware SharePoint access.
 - Public current-context research is public-web only. Do not use licensed sources, including ACLED.
 - The public prototype uses approved non-confidential guardrails and fails closed when its required registry bundle is invalid or unavailable. Detailed internal policy content belongs on a separately governed internal track.
 - Output is English. French input support is limited.
-- The public prototype is non-production, uses volatile state and public-web-only current context, and has no production-use approval. Deployment state is unchanged; the Render `APP_RELEASE` label remains stale.
+- The public prototype is non-production, uses volatile state and public-web-only current context, and has no production-use approval. The local redesign has not been deployed; the Render `APP_RELEASE` label remains stale.
 
 If a policy-boundary, registry, non-sensitive-input, or unexpected-output concern arises, stop the local server. Do not retry, export, or share the review; record only a safe error category through the applicable internal process.
 
@@ -44,7 +46,7 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Export Word note** only while the volatile review remains active.
+Use **Download full detailed note** only while the volatile review remains active.
 
 ## Documentation
 
