@@ -214,6 +214,7 @@ def test_review_draft_rejects_blank_coverage_note(make_valid_result, value):
     with pytest.raises(ValidationError):
         ReviewDraft(
             overall_read=result.overall_read,
+            alignment_readout="The draft is partly aligned with the diagnostic.",
             revision_summary=result.revision_summary,
             priority_areas=result.priority_areas,
             institutional_referral_ids=(),
