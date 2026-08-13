@@ -85,6 +85,17 @@ def _is_explicit_authoritative_claim(claim) -> bool:
     )
 
 
+def _truncate_at_word_boundary(text: str, maximum: int) -> str:
+    """Keep bounded evidence readable by not cutting the final word."""
+    if len(text) <= maximum:
+        return text
+    truncated = text[:maximum]
+    if truncated[-1].isspace():
+        return truncated.rstrip()
+    parts = truncated.rsplit(maxsplit=1)
+    return parts[0].rstrip() if len(parts) == 2 else truncated
+
+
 def build_runtime_services(
     config: dict,
     *,
@@ -196,13 +207,13 @@ def build_runtime_services(
                         f"{role_counts[document_role]:03d}"
                     ),
                     evidence_type="document_fact",
-                    text=segment.text[:1600],
+                    text=_truncate_at_word_boundary(segment.text, 1600),
                     locator=EvidenceLocator(
                         document_title=document.name,
                         page=segment.page,
                         heading=segment.heading,
                         element=segment.element,
-                        excerpt=segment.text[:600],
+                        excerpt=_truncate_at_word_boundary(segment.text, 600),
                     ),
                     confidence="high",
                     document_role=document_role,

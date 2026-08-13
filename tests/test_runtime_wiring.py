@@ -18,7 +18,7 @@ from cpf_fcv_reviewer.extraction import ExtractedDocument, ExtractedSegment
 from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchResult
-from cpf_fcv_reviewer.runtime import build_runtime_services
+from cpf_fcv_reviewer.runtime import _truncate_at_word_boundary, build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
 
 FIXTURE = Path("tests/fixtures/registry_bundle.synthetic.json")
@@ -611,6 +611,64 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
     assert len({item.locator.document_title for item in by_role[DocumentRole.PACKAGE]}) == 3
     assert len({item.locator.document_title for item in by_role[DocumentRole.CONTEXT]}) == 2
     assert len(by_role[DocumentRole.PRIMARY]) > len(by_role[DocumentRole.PACKAGE])
+
+
+def test_runtime_evidence_truncation_keeps_complete_words(monkeypatch):
+    services = _runtime_services(monkeypatch)
+    build_evidence = dict(services["review_orchestrator"].steps)["build_evidence"]
+    segment_text = (
+        ("x " * 299)
+        + "obscure "
+        + ("y " * 496)
+        + "magnified "
+        + ("z " * 10)
+    )
+    context = build_evidence(
+        {
+            "assessment_id": "word-boundary-evidence",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "detail_level": "standard",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                "package_documents": [],
+                "context_documents": [],
+                "review_focus": "",
+                "corrections": [],
+            },
+            "primary_document": ExtractedDocument(
+                name="benin-cpf.txt",
+                segments=(
+                    ExtractedSegment(
+                        text=segment_text,
+                        page=None,
+                        heading=None,
+                        element="Paragraph 1",
+                    ),
+                ),
+                warnings=(),
+            ),
+            "research_result": ResearchResult((), {}, 0, True),
+        }
+    )
+    evidence = next(
+        item
+        for item in context["evidence_pack"].evidence
+        if item.evidence_type == "document_fact"
+    )
+
+    assert len(evidence.text) <= 1600
+    assert len(evidence.locator.excerpt) <= 600
+    assert evidence.text.endswith("y")
+    assert evidence.locator.excerpt.endswith("x")
+    assert segment_text[len(evidence.text)].isspace()
+    assert segment_text[len(evidence.locator.excerpt)].isspace()
+
+
+def test_runtime_evidence_truncation_keeps_single_long_token_nonempty():
+    truncated = _truncate_at_word_boundary("x" * 1601, 1600)
+
+    assert truncated == "x" * 1600
 
 
 def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypatch):
