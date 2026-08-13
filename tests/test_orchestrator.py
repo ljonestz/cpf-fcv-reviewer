@@ -66,6 +66,39 @@ def test_repair_runs_at_most_once():
     assert attempts == [("bad",)]
 
 
+def test_repair_start_exposes_only_safe_validation_metadata():
+    events = []
+    captured = {}
+    sensitive_message = "Sensitive evidence excerpt: operation quartz-739."
+    sensitive_id = "assessment-secret-123"
+
+    def validate(context):
+        context["validation_issues"] = [
+            {
+                "code": "stage_overreach",
+                "message": sensitive_message,
+                "assessment_id": sensitive_id,
+            }
+        ]
+        return context
+
+    def repair(context, issues):
+        captured["issues"] = issues
+        context["validation_issues"] = []
+        return context
+
+    ReviewOrchestrator(
+        steps=(("validate", validate),),
+        repair=repair,
+    ).run({}, lambda kind, data: events.append((kind, data)))
+
+    repair_event = next(data for kind, data in events if kind == "repair_start")
+    assert captured["issues"][0]["message"] == sensitive_message
+    assert repair_event == {"issue_count": 1, "codes": ["stage_overreach"]}
+    assert sensitive_message not in str(repair_event)
+    assert sensitive_id not in str(repair_event)
+
+
 def test_failed_repair_emits_terminal_failure_without_completion():
     events = []
 

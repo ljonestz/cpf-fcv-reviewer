@@ -136,6 +136,20 @@ def test_result_text_covers_model_authored_narrative_without_metadata_or_raw_evi
     assert "registry_bundle_hash" not in text
 
 
+def test_alignment_readout_prohibited_policy_language_is_rejected():
+    reviewed = result().model_copy(
+        update={"alignment_readout": "The CPF is eligible for expedited support."}
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        prohibited_terms={"expedited support"},
+    )
+
+    assert [issue.code for issue in issues] == ["prohibited_policy_language"]
+
+
 def test_summary_unknown_link_is_rejected():
     reviewed = result(
         summaries=(RevisionSummaryItem(priority_area_id="missing", action="Revise it."),)

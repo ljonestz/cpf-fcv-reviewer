@@ -468,6 +468,30 @@ def test_reset_removes_active_review():
     assert client.get(created["result_url"]).status_code == 410
 
 
+def test_reset_after_correction_purges_the_entire_assessment_lineage():
+    app = make_app()
+    client = app.test_client()
+    parent = create_review(client)
+    child = client.post(
+        f"/api/reviews/{parent['assessment_id']}/corrections",
+        json={"text": "Correct the delivery-risk description."},
+    ).get_json()
+    grandchild = client.post(
+        f"/api/reviews/{child['assessment_id']}/corrections",
+        json={"text": "Correct the implementation-risk description."},
+    ).get_json()
+    unrelated = create_review(client)
+
+    response = client.delete(f"/api/reviews/{grandchild['assessment_id']}")
+
+    assert response.status_code == 204
+    assert app.extensions["session_store"].count() == 1
+    assert client.get(parent["result_url"]).status_code == 410
+    assert client.get(child["result_url"]).status_code == 410
+    assert client.get(grandchild["result_url"]).status_code == 410
+    assert client.get(unrelated["result_url"]).status_code == 202
+
+
 def test_correction_is_labelled_and_persisted_in_child_state():
     app = make_app()
     client = app.test_client()

@@ -48,7 +48,20 @@ class ReviewOrchestrator:
                     if repaired:
                         raise ValueError("Validation failed after the only repair.")
                     issues = list(context["validation_issues"])
-                    emit("repair_start", {"issues": issues})
+                    emit(
+                        "repair_start",
+                        {
+                            "issue_count": len(issues),
+                            "codes": list(
+                                dict.fromkeys(
+                                    issue["code"]
+                                    for issue in issues
+                                    if isinstance(issue, dict)
+                                    and isinstance(issue.get("code"), str)
+                                )
+                            ),
+                        },
+                    )
                     context = self.repair(context, issues)
                     repaired = True
                     if context.get("validation_issues"):

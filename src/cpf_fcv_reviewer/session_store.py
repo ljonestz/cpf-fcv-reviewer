@@ -127,7 +127,24 @@ class VolatileSessionStore:
         with self._lock:
             now = self._clock()
             self._purge_expired(now)
-            self._items.pop(session_id, None)
+            lineage_ids = {session_id}
+            while True:
+                related_ids = {
+                    candidate_id
+                    for candidate_id, state in self._items.items()
+                    if state.payload.get("parent_assessment_id") in lineage_ids
+                }
+                for candidate_id in lineage_ids:
+                    state = self._items.get(candidate_id)
+                    if state is not None:
+                        parent_id = state.payload.get("parent_assessment_id")
+                        if parent_id in self._items:
+                            related_ids.add(parent_id)
+                if related_ids <= lineage_ids:
+                    break
+                lineage_ids.update(related_ids)
+            for candidate_id in lineage_ids:
+                self._items.pop(candidate_id, None)
 
     def count(self) -> int:
         with self._lock:
