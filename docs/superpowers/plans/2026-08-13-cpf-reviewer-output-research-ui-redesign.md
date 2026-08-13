@@ -54,7 +54,7 @@
 - Modify: `src/cpf_fcv_reviewer/contracts.py:262-289`
 - Modify: `tests/conftest.py:40-82`
 - Modify: `tests/test_contracts.py`
-- Modify: `tests/test_model_gateway.py`
+- Modify: `tests/test_review_engine.py`
 
 - [ ] **Step 1: Write failing contract tests**
 
@@ -91,7 +91,7 @@ def test_review_draft_requires_alignment_readout(make_valid_result):
 Run:
 
 ```powershell
-\.venv\Scripts\python.exe -m pytest tests/test_contracts.py tests/test_model_gateway.py -q
+\.venv\Scripts\python.exe -m pytest tests/test_contracts.py tests/test_review_engine.py -q
 ```
 
 Expected: FAIL because `alignment_readout` is not defined.
@@ -143,7 +143,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add -- src/cpf_fcv_reviewer/contracts.py tests/conftest.py tests/test_contracts.py tests/test_model_gateway.py
+git add -- src/cpf_fcv_reviewer/contracts.py tests/conftest.py tests/test_contracts.py tests/test_review_engine.py
 git commit -m "feat: add canonical CPF alignment readout"
 ```
 
@@ -267,12 +267,12 @@ Implement `_extract_month_year()` with explicit English month names and four-dig
 
 - [ ] **Step 4: Strengthen source precedence tests**
 
-Add a test to `tests/test_sources.py` proving one current SharePoint original wins over an upload, while multiple current authoritative candidates return `None` for confirmation. Keep this as an interface contract only; do not add SharePoint access.
+Add a test to `tests/test_source_precedence.py` proving one current SharePoint original wins over an upload, while multiple current authoritative candidates return `None` for confirmation. Keep this as an interface contract only; do not add SharePoint access.
 
 - [ ] **Step 5: Run focused tests**
 
 ```powershell
-\.venv\Scripts\python.exe -m pytest tests/test_diagnostic_sources.py tests/test_sources.py -q
+\.venv\Scripts\python.exe -m pytest tests/test_diagnostic_sources.py tests/test_source_precedence.py -q
 ```
 
 Expected: PASS.
@@ -280,7 +280,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add -- src/cpf_fcv_reviewer/diagnostic_sources.py src/cpf_fcv_reviewer/sources.py tests/test_diagnostic_sources.py tests/test_sources.py
+git add -- src/cpf_fcv_reviewer/diagnostic_sources.py src/cpf_fcv_reviewer/sources.py tests/test_diagnostic_sources.py tests/test_source_precedence.py
 git commit -m "feat: identify uploaded RRA baselines"
 ```
 
@@ -400,7 +400,7 @@ git commit -m "feat: structure current-country research claims"
 - Create: `src/cpf_fcv_reviewer/research_controller.py`
 - Create: `tests/test_research_controller.py`
 - Modify: `src/cpf_fcv_reviewer/config.py`
-- Modify: `tests/test_config.py`
+- Create: `tests/test_config.py`
 
 - [ ] **Step 1: Write failing controller tests**
 
@@ -1067,7 +1067,7 @@ git commit -m "feat: redesign the CPF review intake and progress flow"
 - Modify: `src/cpf_fcv_reviewer/static/app.js`
 - Modify: `src/cpf_fcv_reviewer/static/styles.css`
 - Modify: `tests/test_frontend_contract.py`
-- Modify: `tests/test_frontend_accessibility.py`
+- Create: `tests/test_frontend_accessibility.py`
 - Modify: `tests/test_output_parity.py`
 
 - [ ] **Step 1: Write failing results-view tests**
