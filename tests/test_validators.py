@@ -78,6 +78,7 @@ def result(
     return ReviewResult(
         metadata=metadata(stage=stage, mode=mode),
         overall_read=overall_read,
+        alignment_readout="The CPF shows partial alignment with relevant FCV priorities.",
         revision_summary=summaries,
         priority_areas=areas,
         limitations=limitations,

@@ -107,6 +107,7 @@ def build_result(case: dict) -> ReviewResult:
             "The draft has a credible foundation, but the conflict-sensitive diagnosis is not yet "
             "translated into an explicit results pathway."
         ),
+        alignment_readout="The draft shows partial alignment with the FCV framing.",
         revision_summary=(RevisionSummaryItem(priority_area_id=area_id, action=action),),
         priority_areas=(
             PriorityArea(

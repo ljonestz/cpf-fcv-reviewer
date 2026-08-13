@@ -76,6 +76,7 @@ def _result(
     return ReviewResult(
         metadata=_metadata(),
         overall_read="The supplied evidence supports a bounded advisory review.",
+        alignment_readout="The supplied evidence supports a cautious FCV alignment readout.",
         revision_summary=revision_summary,
         priority_areas=priority_areas,
         limitations=limitations,

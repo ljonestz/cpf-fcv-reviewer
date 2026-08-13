@@ -79,6 +79,7 @@ class FakeModelAdapter:
         return ReviewResult(
             metadata=evidence_pack.metadata,
             overall_read="The CPF has a credible foundation.",
+            alignment_readout="The CPF addresses some FCV concerns but needs clearer alignment.",
             revision_summary=(
                 RevisionSummaryItem(
                     priority_area_id="pa-1",
