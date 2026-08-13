@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from .extraction import ExtractedDocument
+
 DiagnosticKind = Literal["rra", "accepted_equivalent"]
 
 RRA_MARKERS = ("risk and resilience assessment", "risk & resilience assessment")
@@ -37,11 +39,9 @@ class UploadedDiagnostic:
     publication_date: date | None
 
 
-def _candidate_text(document: object) -> str:
-    name = str(getattr(document, "name", ""))
-    segments = getattr(document, "segments", ())
-    segment_text = " ".join(str(getattr(segment, "text", "")) for segment in segments[:3])
-    return f"{name} {segment_text}"[:6000]
+def _candidate_text(document: ExtractedDocument) -> str:
+    segment_text = " ".join(segment.text for segment in document.segments[:3])
+    return f"{document.name} {segment_text}"[:6000]
 
 
 def _publication_date(text: str) -> date | None:
@@ -56,7 +56,7 @@ def _publication_date(text: str) -> date | None:
 
 
 def identify_uploaded_diagnostic(
-    documents: tuple,
+    documents: tuple[ExtractedDocument, ...],
     *,
     country: str,
 ) -> UploadedDiagnostic | None:
@@ -68,7 +68,8 @@ def identify_uploaded_diagnostic(
     for document in documents:
         text = _candidate_text(document)
         lowered = text.casefold()
-        if normalized_country not in lowered:
+        country_pattern = rf"(?<!\w){re.escape(normalized_country)}(?!\w)"
+        if re.search(country_pattern, lowered) is None:
             continue
         has_rra_marker = any(marker in lowered for marker in RRA_MARKERS)
         has_accepted_marker = ACCEPTED_EQUIVALENT_MARKER in lowered
@@ -78,7 +79,7 @@ def identify_uploaded_diagnostic(
         kind: DiagnosticKind = "rra" if has_rra_marker else "accepted_equivalent"
         matches.append(
             UploadedDiagnostic(
-                name=str(getattr(document, "name", "")),
+                name=document.name,
                 kind=kind,
                 publication_date=_publication_date(text),
             )

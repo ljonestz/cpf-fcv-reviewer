@@ -89,6 +89,18 @@ def test_rejects_diagnostic_when_country_does_not_match():
     ) is None
 
 
+def test_country_token_does_not_match_a_longer_country_name():
+    assert identify_uploaded_diagnostic(
+        (
+            document(
+                "Somaliland Risk and Resilience Assessment.pdf",
+                "Somaliland country context",
+            ),
+        ),
+        country="Mali",
+    ) is None
+
+
 def test_retains_diagnostic_but_omits_ambiguous_publication_date():
     result = identify_uploaded_diagnostic(
         (document("Benin Risk and Resilience Assessment.pdf", "March 2022; revised July 2023"),),
