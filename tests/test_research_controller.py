@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from math import inf, nan
 
 import pytest
@@ -161,6 +161,26 @@ def test_research_request_rejects_non_date_diagnostic_date():
             ResearchMode.RRA_UPDATE,
             diagnostic_title="Benin RRA",
             diagnostic_date="2022-03-01",
+        )
+
+
+def test_research_request_rejects_datetime_review_date():
+    with pytest.raises(ValueError, match="review date"):
+        ResearchRequest(
+            "Benin",
+            datetime(2026, 8, 1),
+            ResearchMode.HOLISTIC,
+        )
+
+
+def test_research_request_rejects_datetime_diagnostic_date():
+    with pytest.raises(ValueError, match="diagnostic date"):
+        ResearchRequest(
+            "Benin",
+            date(2026, 8, 1),
+            ResearchMode.RRA_UPDATE,
+            diagnostic_title="Benin RRA",
+            diagnostic_date=datetime(2022, 3, 1),
         )
 
 

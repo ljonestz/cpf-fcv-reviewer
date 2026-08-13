@@ -37,7 +37,7 @@ class ResearchRequest:
     def __post_init__(self) -> None:
         if not isinstance(self.country, str) or not self.country.strip():
             raise ValueError("Research country must be nonblank.")
-        if not isinstance(self.review_date, date):
+        if type(self.review_date) is not date:
             raise ValueError("Research review date must be a date.")
         if not isinstance(self.mode, ResearchMode):
             raise ValueError("Research mode is invalid.")
@@ -51,7 +51,7 @@ class ResearchRequest:
             self.diagnostic_title is not None or self.diagnostic_date is not None
         ):
             raise ValueError("Holistic mode cannot include RRA metadata.")
-        if self.diagnostic_date is not None and not isinstance(self.diagnostic_date, date):
+        if self.diagnostic_date is not None and type(self.diagnostic_date) is not date:
             raise ValueError("diagnostic date must be a date.")
         if self.diagnostic_date is not None and self.diagnostic_date > self.review_date:
             raise ValueError("Diagnostic date cannot be after the review date.")
