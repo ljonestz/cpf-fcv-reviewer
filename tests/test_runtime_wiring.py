@@ -57,6 +57,36 @@ def production_config(**overrides):
     return config
 
 
+def _current_claims():
+    return (
+        CurrentContextClaim(
+            claim_id="claim-1", text="Exact current finding.", publisher="World Bank",
+            source_title="Finding", source_url="https://www.worldbank.org/finding",
+            source_date=date(2026, 7, 1), source_type="report", relevance="Relevant.",
+            context_kind="structural_dynamic", relationship="establishes",
+            licensed_data_required=False,
+        ),
+        CurrentContextClaim(
+            claim_id="claim-2", text="Exact other finding.", publisher="Other source",
+            source_title="Other finding", source_url="https://other.example.org/finding",
+            source_date=date(2026, 7, 2), source_type="briefing", relevance="Relevant.",
+            context_kind="current_development", relationship="corroborates",
+            licensed_data_required=False,
+        ),
+    )
+
+
+class _InjectedResearchController:
+    def __init__(self):
+        self.requests = []
+        self.emits = []
+
+    def run(self, request, emit):
+        self.requests.append(request)
+        self.emits.append(emit)
+        return ResearchResult(_current_claims(), {}, 1, True)
+
+
 def test_production_startup_fails_closed_for_missing_registry(tmp_path):
     with pytest.raises(RuntimeError, match="registry bundle"):
         create_app(production_config(REGISTRY_BUNDLE_PATH=str(tmp_path / "missing.json")))
@@ -198,6 +228,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
             evidence_id = pack.evidence[0].evidence_id
             return output_type(
                 overall_read="The draft identifies a material delivery constraint.",
+                alignment_readout="The draft partly reflects current context.",
                 revision_summary=(
                     RevisionSummaryItem(
                         priority_area_id="area-1",
@@ -232,7 +263,8 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
         FakeGateway,
     )
     services = build_runtime_services(
-        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=_InjectedResearchController(),
     )
     events = []
     context = services["review_orchestrator"].run(
@@ -274,6 +306,7 @@ def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch
             captured["pack"] = pack
             return output_type(
                 overall_read="The draft identifies a material delivery constraint.",
+                alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
                 priority_areas=(),
                 institutional_referral_ids=(),
@@ -287,7 +320,8 @@ def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch
         FakeGateway,
     )
     services = build_runtime_services(
-        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=_InjectedResearchController(),
     )
 
     context = services["review_orchestrator"].run(
@@ -398,6 +432,7 @@ def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch)
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
             return output_type(
                 overall_read="The draft needs a clearer delivery approach.",
+                alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
                 priority_areas=(),
                 institutional_referral_ids=(),
@@ -411,7 +446,8 @@ def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch)
         FakeGateway,
     )
     services = build_runtime_services(
-        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=_InjectedResearchController(),
     )
 
     services["review_orchestrator"].run(
@@ -473,6 +509,7 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
             return output_type(
                 overall_read="The draft needs a clearer delivery approach.",
+                alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
                 priority_areas=(),
                 institutional_referral_ids=(),
@@ -509,7 +546,8 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
         FakeGateway,
     )
     services = build_runtime_services(
-        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=_InjectedResearchController(),
     )
 
     services["review_orchestrator"].run(
@@ -542,7 +580,10 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
     assert len(by_role[DocumentRole.PRIMARY]) == 12
     assert len(by_role[DocumentRole.PACKAGE]) == 8
     assert len(by_role[DocumentRole.CONTEXT]) == 4
-    assert len(captured["pack"].evidence) == 24
+    assert sum(len(items) for items in by_role.values()) == 24
+    assert len(
+        [item for item in captured["pack"].evidence if item.evidence_type == "current_context"]
+    ) == 2
     assert len({item.locator.document_title for item in by_role[DocumentRole.PACKAGE]}) == 3
     assert len({item.locator.document_title for item in by_role[DocumentRole.CONTEXT]}) == 2
     assert len(by_role[DocumentRole.PRIMARY]) > len(by_role[DocumentRole.PACKAGE])
@@ -560,6 +601,7 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
             captured["pack"] = pack
             return output_type(
                 overall_read="The draft requires cautious review.",
+                alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
                 priority_areas=(),
                 institutional_referral_ids=(),
@@ -573,7 +615,8 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
         FakeGateway,
     )
     services = build_runtime_services(
-        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=_InjectedResearchController(),
     )
     corrections = [
         {
@@ -626,6 +669,7 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
                 overall_read = "This package is eligible for special treatment."
             return output_type(
                 overall_read=overall_read,
+                alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
                 priority_areas=(),
                 institutional_referral_ids=(),
@@ -639,7 +683,8 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
         FakeGateway,
     )
     services = build_runtime_services(
-        production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=_InjectedResearchController(),
     )
 
     context = services["review_orchestrator"].run(
@@ -666,36 +711,6 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
     assert "metadata" not in repair_payloads[0]["draft"]
     assert "SOURCE_SENTINEL" not in str(repair_payloads[0])
     assert context["result"].metadata.repair_count == 1
-
-
-def _current_claims():
-    return (
-        CurrentContextClaim(
-            claim_id="claim-1", text="Exact current finding.", publisher="World Bank",
-            source_title="Finding", source_url="https://www.worldbank.org/finding",
-            source_date=date(2026, 7, 1), source_type="report", relevance="Relevant.",
-            context_kind="structural_dynamic", relationship="establishes",
-            licensed_data_required=False,
-        ),
-        CurrentContextClaim(
-            claim_id="claim-2", text="Exact other finding.", publisher="Other source",
-            source_title="Other finding", source_url="https://other.example.org/finding",
-            source_date=date(2026, 7, 2), source_type="briefing", relevance="Relevant.",
-            context_kind="current_development", relationship="corroborates",
-            licensed_data_required=False,
-        ),
-    )
-
-
-class _InjectedResearchController:
-    def __init__(self):
-        self.requests = []
-        self.emits = []
-
-    def run(self, request, emit):
-        self.requests.append(request)
-        self.emits.append(emit)
-        return ResearchResult(_current_claims(), {}, 1, True)
 
 
 def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
