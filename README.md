@@ -8,7 +8,7 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest local functional commit: `a13c947`
+- Latest local functional commit: `0e596a9`
 - Deployment health response: `ok`; storage: `volatile`; the Render release label `4acca30` is stale and is not the Git commit or application version.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
