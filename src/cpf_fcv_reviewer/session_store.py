@@ -76,6 +76,14 @@ class VolatileSessionStore:
             state.payload.update(deepcopy(values))
             state.expires_at = now + self._ttl
 
+    def remove_keys(self, assessment_id: str, *keys) -> None:
+        with self._lock:
+            now = self._clock()
+            state = self._get_state(assessment_id, now)
+            for key in keys:
+                state.payload.pop(key, None)
+            state.expires_at = now + self._ttl
+
     def emit(self, session_id: str, event_type: str, data: dict) -> None:
         with self._lock:
             state = self._get_state(session_id, self._clock())

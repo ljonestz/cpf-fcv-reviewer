@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from .extraction import DocumentUnreadable
 from .registry import RegistryUnavailable
+from .research_controller import ResearchFailure
 
 Emitter = Callable[[str, dict], None]
 Step = Callable[[dict], dict]
@@ -17,6 +18,8 @@ SAFE_FAILURES = {
 
 
 def safe_failure_code(error: Exception) -> str:
+    if isinstance(error, ResearchFailure):
+        return error.failure_code
     for error_type, code in SAFE_FAILURES.items():
         if isinstance(error, error_type):
             return code

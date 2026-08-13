@@ -8,6 +8,14 @@ from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.extraction import DocumentUnreadable, require_readable_primary
 from cpf_fcv_reviewer.orchestrator import ReviewOrchestrator, safe_failure_code
 from cpf_fcv_reviewer.registry import RegistryUnavailable
+from cpf_fcv_reviewer.research_controller import (
+    InsufficientResearch,
+    MalformedResearch,
+    ResearchConfigurationError,
+    ResearchProviderFailure,
+    ResearchSourceRejected,
+    ResearchTimeout,
+)
 from cpf_fcv_reviewer.routes import run_assessment
 
 
@@ -17,6 +25,12 @@ from cpf_fcv_reviewer.routes import run_assessment
         (TimeoutError(), "model_timeout"),
         (RegistryUnavailable(), "registry_unavailable"),
         (DocumentUnreadable(), "document_unreadable"),
+        (ResearchTimeout(), "research_timeout"),
+        (ResearchProviderFailure(), "research_provider_failed"),
+        (MalformedResearch(), "research_malformed"),
+        (ResearchConfigurationError(), "research_configuration"),
+        (ResearchSourceRejected(), "research_source_rejected"),
+        (InsufficientResearch(), "research_insufficient"),
         (RuntimeError(), "review_failed"),
     ],
 )
@@ -37,6 +51,12 @@ def test_unreadable_primary_uses_dedicated_exception():
             RegistryUnavailable("registry path C:/secret unavailable"),
             "registry_unavailable",
         ),
+        (ResearchTimeout("provider detail"), "research_timeout"),
+        (ResearchProviderFailure("provider detail"), "research_provider_failed"),
+        (MalformedResearch("provider detail"), "research_malformed"),
+        (ResearchConfigurationError("provider detail"), "research_configuration"),
+        (ResearchSourceRejected("provider detail"), "research_source_rejected"),
+        (InsufficientResearch("provider detail"), "research_insufficient"),
     ],
 )
 def test_failure_event_exposes_only_a_stable_error_code(error, expected_code):

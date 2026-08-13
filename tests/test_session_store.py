@@ -172,10 +172,48 @@ def test_update_refreshes_expiry_but_event_operations_do_not():
     now = now + timedelta(seconds=1)
     store.emit(session_id, "step_start", {"step": "extract"})
     assert store.get(session_id).expires_at == refreshed_expiry
-
     now = now + timedelta(seconds=1)
     assert store.next_event(session_id) == {
         "type": "step_start",
         "data": {"step": "extract"},
     }
     assert store.get(session_id).expires_at == refreshed_expiry
+
+
+def test_remove_keys_clears_stale_payload_and_refreshes_expiry():
+    now = datetime.now(UTC)
+    store = VolatileSessionStore(ttl_seconds=10, clock=lambda: now)
+    session_id = store.create(
+        {
+            "country": "A",
+            "result": {"stale": True},
+            "evidence": ["stale evidence"],
+            "failure": "stale failure",
+            "status": "running",
+        }
+    )
+    original_expiry = store.get(session_id).expires_at
+
+    now = now + timedelta(seconds=2)
+    store.remove_keys(session_id, "result", "evidence", "failure")
+
+    state = store.get(session_id)
+    assert state.payload == {"country": "A", "status": "running"}
+    assert state.expires_at == now + timedelta(seconds=10)
+    assert state.expires_at > original_expiry
+
+
+def test_remove_keys_ignores_missing_keys_and_preserves_session():
+    store = VolatileSessionStore(ttl_seconds=60)
+    session_id = store.create({"country": "A", "status": "running"})
+
+    store.remove_keys(session_id, "result", "failure", "missing")
+
+    assert store.get(session_id).payload == {"country": "A", "status": "running"}
+
+
+def test_remove_keys_raises_for_nonexistent_session():
+    store = VolatileSessionStore(ttl_seconds=60)
+
+    with pytest.raises(SessionExpired):
+        store.remove_keys("missing", "result")
