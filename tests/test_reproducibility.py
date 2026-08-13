@@ -129,3 +129,27 @@ def test_evidence_pack_builder_constructs_metadata_before_model_use():
     assert pack.metadata.registry_bundle_hash == sha256_bytes(b"synthetic registry")
     assert pack.metadata.prompt_hashes == {"review": sha256_bytes(b"review prompt")}
     assert pack.metadata.detail_level is DetailLevel.IN_DEPTH
+
+
+def test_public_research_prompt_bytes_affect_prompt_hashes():
+    common = dict(
+        run_id="run-prompt-research",
+        created_at=datetime(2026, 8, 10, tzinfo=UTC),
+        review_stage="concept_review",
+        detail_level=DetailLevel.BRIEF,
+        diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+        documents={},
+        registry_bundle=b"registry",
+        guidance="guidance",
+        model_id="test-model",
+        source_scan_at=datetime(2026, 8, 10, tzinfo=UTC),
+        output_language="en",
+    )
+    first = build_run_metadata(
+        **common, prompt_bytes={"public_research": b"research-v1"}
+    )
+    second = build_run_metadata(
+        **common, prompt_bytes={"public_research": b"research-v2"}
+    )
+
+    assert first.prompt_hashes["public_research"] != second.prompt_hashes["public_research"]

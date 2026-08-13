@@ -818,3 +818,19 @@ def test_runtime_appends_current_research_exactly_before_review(monkeypatch):
         ("current-001", "Exact current finding.", "https://www.worldbank.org/finding", "high"),
         ("current-002", "Exact other finding.", "https://other.example.org/finding", "medium"),
     ]
+
+
+def test_runtime_appends_registry_evidence_to_model_pack(monkeypatch):
+    _, pack = _run_narrow_runtime(
+        monkeypatch,
+        b"No diagnostic supplied.",
+        controller=_InjectedResearchController(),
+    )
+    bundle = load_registry_bundle(FIXTURE, allow_synthetic=True)
+
+    registry = [item for item in pack.evidence if item.evidence_type == "registry_language"]
+    assert [(item.evidence_id, item.text) for item in registry] == [
+        (f"registry-{entry.entry_id}", entry.approved_text)
+        for entry in bundle.entries
+    ]
+    assert all(item.confidence == "high" for item in registry)

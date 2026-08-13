@@ -19,7 +19,7 @@ from .extraction import extract_document, require_readable_primary
 from .model_gateway import AnthropicModelGateway
 from .orchestrator import ReviewOrchestrator
 from .prompts import load_prompt
-from .public_research import AnthropicPublicResearchGateway
+from .public_research import AnthropicPublicResearchGateway, load_research_prompt
 from .registry import RegistryUnavailable, load_registry_bundle
 from .research_controller import ResearchController, ResearchMode, ResearchRequest
 from .review_engine import ReviewEngine
@@ -254,6 +254,21 @@ def build_runtime_services(
             used_evidence_ids.add(evidence_id)
             current_index += 1
 
+        registry_evidence = tuple(
+            EvidenceItem(
+                evidence_id=f"registry-{entry.entry_id}",
+                evidence_type="registry_language",
+                text=entry.approved_text,
+                confidence="high",
+            )
+            for entry in bundle.entries
+        )
+        if used_evidence_ids.intersection(
+            item.evidence_id for item in registry_evidence
+        ):
+            raise RuntimeError("Evidence ID collision.")
+        evidence.extend(registry_evidence)
+
         document_bytes = {
             f"primary:{payload['cpf']['name']}": payload["cpf"]["bytes"]
         }
@@ -276,8 +291,10 @@ def build_runtime_services(
             }
         )
         prompt_bytes = {
-            name: load_prompt(name).encode("utf-8")
-            for name in ("diagnostic_map", "review", "repair")
+            "diagnostic_map": load_prompt("diagnostic_map").encode("utf-8"),
+            "public_research": load_research_prompt().encode("utf-8"),
+            "review": load_prompt("review").encode("utf-8"),
+            "repair": load_prompt("repair").encode("utf-8"),
         }
         context["evidence_pack"] = build_reproducible_evidence_pack(
             run_id=context["assessment_id"],
