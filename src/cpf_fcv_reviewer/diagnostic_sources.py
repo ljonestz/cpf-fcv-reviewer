@@ -72,9 +72,7 @@ def identify_uploaded_diagnostic(
             continue
         has_rra_marker = any(marker in lowered for marker in RRA_MARKERS)
         has_accepted_marker = ACCEPTED_EQUIVALENT_MARKER in lowered
-        has_fcv_risk_marker = FCV_RISK_ASSESSMENT_MARKER in str(
-            getattr(document, "name", "")
-        ).casefold()
+        has_fcv_risk_marker = FCV_RISK_ASSESSMENT_MARKER in lowered
         if not (has_rra_marker or has_accepted_marker or has_fcv_risk_marker):
             continue
         kind: DiagnosticKind = "rra" if has_rra_marker else "accepted_equivalent"

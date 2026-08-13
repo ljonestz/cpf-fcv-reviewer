@@ -45,7 +45,7 @@ def test_identifies_explicit_accepted_equivalent():
     result = identify_uploaded_diagnostic(
         (
             document(
-                "Benin FCV Risk Assessment.pdf",
+                "Benin contextual diagnostic.pdf",
                 "Accepted equivalent diagnostic, January 2023",
             ),
         ),
@@ -55,6 +55,21 @@ def test_identifies_explicit_accepted_equivalent():
     assert result is not None
     assert result.kind == "accepted_equivalent"
     assert result.publication_date == date(2023, 1, 1)
+
+
+def test_identifies_fcv_risk_assessment_cover_title_as_accepted_equivalent():
+    result = identify_uploaded_diagnostic(
+        (
+            document(
+                "Benin contextual diagnostic.pdf",
+                "Benin FCV Risk Assessment",
+            ),
+        ),
+        country="Benin",
+    )
+
+    assert result is not None
+    assert result.kind == "accepted_equivalent"
 
 
 def test_retains_undated_rra_with_no_publication_date():
