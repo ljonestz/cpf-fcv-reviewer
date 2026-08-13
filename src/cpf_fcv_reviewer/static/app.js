@@ -14,6 +14,10 @@ const resultTabs = Array.from(document.querySelectorAll?.('[role="tab"][data-res
 const corrections = document.querySelector("#corrections");
 const actions = document.querySelector("#actions");
 const returnToIntake = document.querySelector("#return-to-intake");
+const researchRecovery = document.querySelector("#research-recovery") || document.createElement("section");
+const researchRecoveryHeading = document.querySelector("#research-recovery-heading") || document.createElement("h2");
+const researchRecoveryMessage = document.querySelector("#research-recovery-message") || document.createElement("p");
+const retryResearchButton = document.querySelector("#retry-research") || document.createElement("button");
 const primaryFileInput = document.querySelector("#cpf");
 const countryInput = document.querySelector("#country");
 const countryDetection = document.querySelector("#country-detection");
@@ -22,6 +26,7 @@ const processDialog = document.querySelector("#process-dialog");
 const openProcessDialog = document.querySelector("#open-process-dialog");
 const closeProcessDialog = document.querySelector("#close-process-dialog");
 const submitCorrection = document.querySelector("#submit-correction");
+const resetReviewButton = document.querySelector("#reset-review");
 let assessmentId = sessionStorage.getItem("cpf_fcv_assessment_id") || "";
 let activeEventSource;
 let operationEpoch = 0;
@@ -33,6 +38,12 @@ let detectionEpoch = 0;
 const RESULT_RETRY_LIMIT = 3;
 const RESULT_RETRY_DELAY_MS = 250;
 const SOURCE_ERROR_LIMIT = 2;
+const retryableResearchCodes = new Set([
+  "research_provider_failed",
+  "research_timeout",
+  "research_malformed",
+  "research_insufficient",
+]);
 
 const progressLabels = {
   extract: "Reading the CPF package",
@@ -86,6 +97,8 @@ function showLanding(notice = "") {
   landingView.hidden = false;
   reviewWorkspace.hidden = true;
   returnToIntake.hidden = true;
+  researchRecovery.hidden = true;
+  retryResearchButton.hidden = true;
   landingNotice.textContent = notice;
   landingNotice.hidden = !notice;
 }
@@ -99,6 +112,8 @@ function showProgress() {
   corrections.hidden = true;
   actions.hidden = true;
   returnToIntake.hidden = true;
+  researchRecovery.hidden = true;
+  retryResearchButton.hidden = true;
   updateProgress("extract");
 }
 
@@ -110,13 +125,30 @@ function showResults() {
   corrections.hidden = false;
   actions.hidden = false;
   returnToIntake.hidden = true;
+  researchRecovery.hidden = true;
+  retryResearchButton.hidden = true;
   submitCorrection.disabled = false;
 }
 
 function showRecoverableFailure(message) {
   showProgress();
+  resetProgress();
   progressMessage.textContent = message;
+  retryResearchButton.hidden = true;
+  researchRecovery.hidden = true;
   returnToIntake.hidden = false;
+}
+
+function showResearchFailure(message) {
+  showProgress();
+  resetProgress();
+  progress.hidden = true;
+  researchRecoveryMessage.textContent = message;
+  researchRecovery.hidden = false;
+  retryResearchButton.hidden = false;
+  retryResearchButton.disabled = false;
+  returnToIntake.hidden = false;
+  researchRecoveryHeading.focus({preventScroll: true});
 }
 
 function text(tag, value, className = "") {
@@ -539,7 +571,13 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
     if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
     const data = JSON.parse(event.data);
     const label = failureLabels[data.error] || failureLabels.review_failed;
-    showRecoverableFailure(`Review stopped: ${label}`);
+    if (retryableResearchCodes.has(data.error)) {
+      showResearchFailure(
+        "The available research routes could not establish a sufficient current-country evidence baseline. Retry research using the uploaded package still held in this temporary session.",
+      );
+    } else {
+      showRecoverableFailure(`Review stopped: ${label}`);
+    }
   });
   source.addEventListener("expired", () => {
     if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
@@ -585,6 +623,37 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+async function retryResearch() {
+  if (!assessmentId || resetPending || retryResearchButton.disabled) return;
+  const operation = ++operationEpoch;
+  retryResearchButton.disabled = true;
+  researchRecoveryMessage.textContent = "Restarting current-country research using the uploaded package held in this temporary session.";
+  try {
+    const response = await fetch(`/api/reviews/${assessmentId}/retry-research`, {
+      method: "POST",
+    });
+    if (!isCurrentOperation(operation)) return;
+    if (!response.ok) {
+      if (response.status === 410) {
+        showRecoverableFailure("This volatile review session expired. Upload again.");
+      } else {
+        showResearchFailure("Research could not restart. Retry research, or start a new review.");
+      }
+      return;
+    }
+    const retry = await response.json();
+    if (!isCurrentOperation(operation)) return;
+    showProgress();
+    progressMessage.textContent = "Restarting the review with current-country research";
+    watchEvents(retry.event_url, retry.result_url, operation);
+  } catch (_error) {
+    if (!isCurrentOperation(operation)) return;
+    showResearchFailure("Research could not restart. Retry research, or start a new review.");
+  }
+}
+
+retryResearchButton.addEventListener("click", retryResearch);
+
 submitCorrection.addEventListener("click", async () => {
   const correction = document.querySelector("#correction-text").value.trim();
   if (!correction || !assessmentId || resetPending || submitCorrection.disabled) return;
@@ -620,7 +689,8 @@ document.querySelector("#export-docx").addEventListener("click", () => {
   if (assessmentId) window.location.assign(`/api/reviews/${assessmentId}/export.docx`);
 });
 
-document.querySelector("#reset-review").addEventListener("click", async () => {
+async function resetReview() {
+  if (resetPending) return;
   const resetEpoch = ++operationEpoch;
   const assessmentToPurge = assessmentId;
   resetPending = true;
@@ -664,14 +734,13 @@ document.querySelector("#reset-review").addEventListener("click", async () => {
         ? ""
         : "The review was cleared from this browser, but server purge was not confirmed. Any remaining volatile state will expire.";
       showLanding(notice);
-      resetPending = false;
     }
+    resetPending = false;
   }
-});
+}
 
-returnToIntake.addEventListener("click", () => {
-  showLanding();
-});
+resetReviewButton.addEventListener("click", resetReview);
+returnToIntake.addEventListener("click", resetReview);
 
 if (window.__CPF_FCV_REVIEWER_TEST__) {
   window.__cpfFcvReviewerTestHooks = {

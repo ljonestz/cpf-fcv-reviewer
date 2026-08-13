@@ -115,6 +115,28 @@ def test_browser_state_is_session_only_and_reset_clears_assessment_id():
     assert 'sessionStorage.removeItem("cpf_fcv_assessment_id")' in javascript
 
 
+def test_start_new_review_and_result_reset_share_guarded_purge_behavior():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert "async function resetReview()" in javascript
+    reset_handler = javascript.split("async function resetReview()", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    for fragment in (
+        "if (resetPending) return",
+        "const resetEpoch = ++operationEpoch",
+        "activeEventSource?.close()",
+        'sessionStorage.removeItem("cpf_fcv_assessment_id")',
+        "form.reset()",
+        'method: "DELETE"',
+        "The review was cleared from this browser",
+    ):
+        assert fragment in reset_handler
+    assert 'resetReviewButton.addEventListener("click", resetReview)' in javascript
+    assert 'returnToIntake.addEventListener("click", resetReview)' in javascript
+    assert javascript.count('sessionStorage.removeItem("cpf_fcv_assessment_id")') == 1
+
+
 def test_result_rendering_uses_connected_note_sections_and_safe_text_content():
     javascript = JS.read_text(encoding="utf-8")
 
@@ -187,6 +209,38 @@ def test_interface_transitions_between_landing_progress_and_results():
     assert "showResults();" in javascript
     assert "showLanding();" in javascript
     assert "Start a new review" in html
+
+
+def test_research_failure_offers_retry_without_reupload():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'id="research-recovery"' in html
+    assert 'id="retry-research"' in html
+    assert "research_provider_failed" in javascript
+    assert "research_timeout" in javascript
+    assert "research_malformed" in javascript
+    assert "research_insufficient" in javascript
+    assert "function retryResearch()" in javascript
+    retry_handler = javascript.split("function retryResearch()", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    assert 'fetch(`/api/reviews/${assessmentId}/retry-research`' in retry_handler
+    assert 'method: "POST"' in retry_handler
+    assert "watchEvents(retry.event_url, retry.result_url, operation)" in retry_handler
+    assert retry_handler.index("showProgress();") > retry_handler.index(
+        "await response.json()"
+    )
+    assert (
+        'progressMessage.textContent = "Restarting the review with '
+        'current-country research"' in retry_handler
+    )
+    assert (
+        'progressMessage.textContent = "Restarting current-country research"'
+        not in retry_handler
+    )
+    assert "new FormData(form)" not in retry_handler
+    assert "formData" not in retry_handler.lower()
 
 
 def test_return_to_intake_respects_the_hidden_attribute_and_landing_has_notice():

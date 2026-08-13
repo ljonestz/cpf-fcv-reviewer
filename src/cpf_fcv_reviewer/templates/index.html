@@ -92,7 +92,13 @@
         </ol>
         <p id="progress-message" role="status" aria-live="polite"></p>
       </section>
-      <button id="return-to-intake" type="button" hidden>Return to intake</button>
+      <section id="research-recovery" hidden aria-labelledby="research-recovery-heading">
+        <p class="eyebrow">RESEARCH UNAVAILABLE</p>
+        <h2 id="research-recovery-heading" tabindex="-1">Current-country research could not be established</h2>
+        <p id="research-recovery-message" role="status" aria-live="polite">A sufficient current-country evidence baseline is required before the review note can be completed. Retry research using the uploaded package still held in this temporary session.</p>
+        <button id="retry-research" type="button" hidden>Retry research</button>
+      </section>
+      <button id="return-to-intake" class="button-secondary" type="button" hidden>Start a new review</button>
       <section id="results" hidden aria-labelledby="result-title">
         <header class="result-header">
           <div>

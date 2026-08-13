@@ -80,6 +80,26 @@ def test_completed_result_heading_is_focusable_and_receives_focus():
     assert render_result.index("showResults();") < render_result.index("resultTitle.focus")
 
 
+def test_research_recovery_is_focusable_and_retry_is_failure_specific():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'id="research-recovery-heading" tabindex="-1"' in html
+    assert 'id="research-recovery" hidden aria-labelledby="research-recovery-heading"' in html
+    assert 'id="research-recovery-message" role="status" aria-live="polite"' in html
+    assert 'id="retry-research" type="button"' in html
+    research_failure = javascript.split("function showResearchFailure", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    generic_failure = javascript.split("function showRecoverableFailure", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    assert "researchRecoveryHeading.focus({preventScroll: true})" in research_failure
+    assert "retryResearchButton.hidden = false" in research_failure
+    assert "retryResearchButton.hidden = true" in generic_failure
+    assert "returnToIntake.hidden = false" in research_failure
+
+
 def test_mobile_result_tabs_stay_horizontal_for_left_right_navigation():
     css = CSS.read_text(encoding="utf-8")
     mobile = css.split("@media (max-width: 760px)", 1)[1]

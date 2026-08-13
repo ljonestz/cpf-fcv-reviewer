@@ -127,6 +127,24 @@ def test_retry_research_resets_failed_state_without_reupload():
     assert app.extensions["session_store"].next_event(assessment_id) is None
 
 
+def test_failed_and_retried_research_never_exposes_partial_result():
+    app = make_app()
+    assessment_id = failed_assessment(app)
+    client = app.test_client()
+
+    failed_result = client.get(f"/api/reviews/{assessment_id}/result")
+    retry = client.post(f"/api/reviews/{assessment_id}/retry-research")
+    retried_result = client.get(f"/api/reviews/{assessment_id}/result")
+
+    assert failed_result.status_code == 202
+    assert failed_result.get_json() == {"status": "failed"}
+    assert retry.status_code == 202
+    assert retried_result.status_code == 202
+    assert retried_result.get_json() == {"status": "created"}
+    assert "result" not in failed_result.get_data(as_text=True)
+    assert "result" not in retried_result.get_data(as_text=True)
+
+
 @pytest.mark.parametrize(
     "status,failure_code",
     [
