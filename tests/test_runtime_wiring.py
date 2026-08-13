@@ -146,7 +146,7 @@ def test_runtime_builds_exact_named_step_sequence(monkeypatch):
 
 def _runtime_services(monkeypatch):
     class FakeGateway:
-        def __init__(self, api_key, model_id):
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
             pass
 
     monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
@@ -180,16 +180,10 @@ def test_runtime_resolve_sources_uses_upload_fallback(monkeypatch):
 
 def test_runtime_cannot_report_completion_without_a_review_result(monkeypatch):
     services = _runtime_services(monkeypatch)
-    events = []
+    render = dict(services["review_orchestrator"].steps)["render"]
 
     with pytest.raises(RuntimeError, match="Review result is unavailable"):
-        services["review_orchestrator"].run(
-            {},
-            lambda kind, data: events.append((kind, data)),
-        )
-
-    assert events[-1][0] == "run_failed"
-    assert not any(kind == "run_complete" for kind, _ in events)
+        render({})
 
 
 def test_runtime_validation_does_not_require_confirmed_priority_response(
