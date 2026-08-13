@@ -1,6 +1,6 @@
 # CPF FCV Reviewer
 
-An advisory prototype for evidence-linked FCV review of CPF and CEN drafts. It supports expert judgment and practical options; it does not make institutional determinations.
+An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN drafts. It supports expert judgment and practical options; it does not make policy, compliance, eligibility, endorsement, or clearance determinations.
 
 **The stable FCV Project Screener is a separate product and must not be modified, integrated with, or deployed through this repository.**
 
@@ -8,10 +8,14 @@ An advisory prototype for evidence-linked FCV review of CPF and CEN drafts. It s
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest functional commit: `728eec6`
+- Latest functional commit: `b749948`
 - Deployment health response: `ok`; storage: `volatile`; the Render release label `4acca30` is stale and is not the Git commit or application version.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
+
+The review starts with three document buckets: primary CPF/CEN documents, package documents, and contextual documents. Country inference uses the recognized title when available and requires manual country confirmation when it is not. Review stage and detail are selected explicitly: Early drafting / PCN, Concept review, Decision review, ROC / OC, Finalization, or Response to comments, with Brief, Standard, or In-depth detail.
+
+Results are organized as connected note sections: Overall read; What to revise; Priority areas for strengthening; and Limitations and document coverage. Evidence details are collapsed by default, and the exported DOCX follows the same note structure. Correction reruns refer to the review itself, not to individual findings. There is no questions-for-confirmation section.
 
 ## Safety boundary
 
@@ -20,6 +24,7 @@ The public service is an MVP, not approved for operational use. Use only approve
 - Public current-context research is public-web only. Do not use licensed sources, including ACLED.
 - The public prototype uses approved non-confidential guardrails and fails closed when its required registry bundle is invalid or unavailable. Detailed internal policy content belongs on a separately governed internal track.
 - Output is English. French input support is limited.
+- The public prototype is non-production, uses volatile state and public-web-only current context, and has no production-use approval. Deployment state is unchanged; the Render `APP_RELEASE` label remains stale.
 
 If a policy-boundary, registry, non-sensitive-input, or unexpected-output concern arises, stop the local server. Do not retry, export, or share the review; record only a safe error category through the applicable internal process.
 
