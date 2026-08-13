@@ -58,6 +58,6 @@ DETAIL_PROFILES: Mapping[DetailLevel, DetailProfile] = MappingProxyType(
     {
         DetailLevel.BRIEF: DetailProfile(1, (2, 3)),
         DetailLevel.STANDARD: DetailProfile(2, (3, 5)),
-        DetailLevel.IN_DEPTH: DetailProfile(3, (4, 7)),
+        DetailLevel.IN_DEPTH: DetailProfile(3, (3, 5)),
     }
 )

@@ -1,8 +1,11 @@
 Version: 2.0.0
 
 The model must repair only supplied issues in the provided ReviewDraft and
-validation context. It must preserve valid content/IDs, structure, evidence
-links, and wording that do not need repair. This is the only repair attempt.
+validation context. It only fixes supplied issues and preserves valid
+content/IDs, structure, evidence links, priority order, alignment_readout, and
+wording that do not need repair. This is the only repair attempt.
+The repair must preserve valid content/IDs and preserve alignment_readout unless
+a supplied issue specifically requires repairing them.
 Return one complete ReviewDraft.
 
 Application-defined validation issue codes and bounded remediation categories
@@ -29,9 +32,28 @@ assessment" and do not claim or rate RRA alignment. Preserve real evidence
 locators only. English is the default output; preserve original French excerpts
 and mark analytical translation or paraphrase.
 
-Repair the note as a connected technical review note, not a dashboard,
-checklist, or pathway report. Preserve the note-first order: Overall read; What
-to revise; Priority areas for strengthening; Limitations/document coverage.
+Repair the note as a connected integrated priority-led technical review note,
+not a dashboard, checklist, or pathway report. Preserve the note-first order:
+Overall read; Alignment readout; What to revise; Priority areas for
+strengthening; Limitations/document coverage. The repair must preserve valid
+priority order and preserve valid evidence. Organize the note around the
+question: How the draft responds to the RRA, current FCV dynamics, and the FCV
+Strategy. preserve valid priority order and preserve valid evidence and target
+locators. Do not add a question section, including a Questions for confirmation
+section. Do not pad the note or introduce generic issues.
+
+Preserve the distinction between source-supported fact, analytical
+interpretation, and uncertainty. Where supplied evidence describes a
+relationship, retain whether it corroborates, qualifies, contradicts,
+supersedes, or establishes a point in the draft. Treat a supplied RRA or
+equivalent as a dated RRA historical baseline and preserve comparison with the
+present gap. If no RRA or equivalent is supplied, do not claim RRA alignment.
+In all cases, never call web synthesis an RRA. Preserve current_context support on actionable
+priorities when it is supplied. Name an FCV Strategy pillar only when its
+material relevance and registry_language support are already present. Use exact
+evidence IDs only: use only supplied evidence IDs, supplied registry IDs, and
+real supplied locators;
+never invent source IDs, Strategy IDs, or locators.
 Do not report pathway by pathway. Do not add a question section, including a
 Questions for confirmation section. Do not pad the note or introduce generic
 issues.
@@ -66,5 +88,8 @@ forbidden phrase in the output. Do not use the repair request as permission to
 add content outside the supplied issues.
 
 Return only content-only JSON matching the complete ReviewDraft schema. The
-repair must omit metadata. Include all required fields: overall_read, revision_summary,
-priority_areas, institutional_referral_ids, limitations, and coverage_note.
+repair must omit metadata. Include all required fields: overall_read,
+alignment_readout, revision_summary, priority_areas,
+institutional_referral_ids, limitations, and coverage_note. Preserve the valid
+alignment_readout and valid priority order unless a supplied issue specifically
+requires repairing them.

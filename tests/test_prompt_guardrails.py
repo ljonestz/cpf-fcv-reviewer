@@ -3,7 +3,9 @@ from hashlib import sha256
 
 import pytest
 
+from cpf_fcv_reviewer.contracts import DetailLevel
 from cpf_fcv_reviewer.prompts import load_prompt, prompt_hash
+from cpf_fcv_reviewer.review_profiles import DETAIL_PROFILES
 
 
 def normalize_whitespace(content: str) -> str:
@@ -65,6 +67,62 @@ def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
 
     assert "Every material finding and recommendation must cite evidence identifiers" not in prompt
     assert "every-material-finding-and-recommendation" not in prompt
+
+
+def test_review_prompt_requires_integrated_priority_led_contract():
+    prompt = normalize_whitespace(load_prompt("review"))
+
+    for phrase in (
+        "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy",
+        "substantive detailed opening",
+        "balanced five-minute synthesis",
+        "3–5 ordered linked measures",
+        "full integrated note",
+        "corroborates, qualifies, contradicts, supersedes, or establishes",
+        "source-supported fact",
+        "interpretation",
+        "uncertainty",
+        "dated RRA historical baseline",
+        "present gap",
+        "never call web synthesis an RRA",
+        "do not claim RRA alignment",
+        "current_context",
+        "registry_language",
+        "plain language",
+        "exact evidence IDs only",
+        "never invent source IDs, Strategy IDs, or locators",
+    ):
+        assert phrase in prompt
+
+
+def test_repair_prompt_preserves_integrated_note_and_only_repairs_supplied_issues():
+    prompt = normalize_whitespace(load_prompt("repair"))
+
+    for phrase in (
+        "only fixes supplied issues",
+        "preserve valid priority order",
+        "preserve alignment_readout",
+        "preserve valid evidence",
+        "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy",
+        "corroborates, qualifies, contradicts, supersedes, or establishes",
+        "dated RRA historical baseline",
+        "present gap",
+        "never call web synthesis an RRA",
+        "do not claim RRA alignment",
+        "current_context",
+        "registry_language",
+        "exact evidence IDs only",
+        "never invent source IDs, Strategy IDs, or locators",
+        "alignment_readout",
+    ):
+        assert phrase in prompt
+
+
+def test_in_depth_profile_uses_canonical_integrated_note_range():
+    profile = DETAIL_PROFILES[DetailLevel.IN_DEPTH]
+
+    assert profile.target_pages == 3
+    assert profile.priority_area_range == (3, 5)
 
 
 def test_repair_prompt_preserves_links_and_excludes_question_section():

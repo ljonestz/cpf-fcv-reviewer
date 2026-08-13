@@ -31,25 +31,53 @@ English is the default output. Preserve original French excerpts and mark any
 analytical translation or paraphrase as such. Do not silently treat a French
 translation as source text.
 
-## Note-first synthesis
+## Integrated priority-led note
 
-The primary document is the principal lens: assess its strategy,
-implementation, risks, results, and material FCV-sensitive choices. The package
-corroborates or qualifies what the primary document says. Contextual evidence
-tests the framing and assumptions; it does not automatically become a finding
-or programming requirement. Connect the evidence into a short, decision-useful
-narrative and calibrate uncertainty.
+Organize the note around the question: How the draft responds to the RRA, current
+FCV dynamics, and the FCV Strategy. The primary document is the principal lens:
+assess its strategy, implementation, risks, results, and material
+FCV-sensitive choices. State whether supplied evidence corroborates, qualifies,
+contradicts, supersedes, or establishes a point in the draft. Connect the
+evidence into a decision-useful narrative and calibrate uncertainty.
+
+Separate source-supported fact from analytical interpretation and uncertainty.
+Treat the RRA or equivalent as a dated RRA historical baseline when one is
+supplied, compare that baseline with present conditions, and identify the
+present gap rather than assuming the old baseline remains current. If no RRA or
+equivalent is supplied, do not claim RRA alignment: use current structural and
+current-context evidence where available and state the limitation. In all cases,
+never call web synthesis an RRA.
+
+current_context evidence is required for actionable priorities when current
+context evidence is available in the pack. Use exact evidence IDs only: use only
+supplied evidence IDs and real supplied locators; never invent source IDs,
+Strategy IDs, or locators.
+Name an FCV Strategy pillar only when it is materially relevant to the priority
+and supported by a supplied registry_language evidence item. Explain the pillar
+in plain language, without paraphrasing policy or guidance, and do not infer
+Strategy alignment without that registry support.
 
 The content order is:
 
-1. Overall read: synthesize the evidenced priority areas into the central
-   judgement, stated with appropriate uncertainty.
-2. What to revise: the revision_summary, with one concise action for each
-   selected material issue and a link to its one priority area.
-3. Priority areas for strengthening: substantive priority areas, each tied to a
-   primary-document target, a feasible target-specific action, an allowed
-   recommendation scale, and direct evidence IDs.
-4. Limitations/document coverage: limitations and the model-authored
+1. Overall read: write a substantive detailed opening and central assessment,
+   synthesizing the integrated priority areas with appropriate uncertainty. The
+   overall_read synthesizes the evidenced priority areas.
+2. Alignment readout: write a balanced five-minute synthesis of how the
+   existing draft responds to the supplied RRA or equivalent, current FCV
+   dynamics, and materially relevant approved FCV Strategy language. Ground
+   this synthesis through the linked priority areas; do not invent evidence IDs
+   in this field.
+3. What to revise: write a concise revision_summary of 3–5 ordered linked
+   measures (3-5 ordered linked measures),
+   exactly order-matched to priority_areas, with one priority_area_id link for
+   each measure.
+4. Priority areas for strengthening: write the full integrated note for each
+   selected priority, combining the draft treatment, the dated RRA/equivalent
+   baseline and present gap where supplied, current-context evidence, any
+   materially relevant registry-supported FCV Strategy pillar in plain English,
+   why it matters, a feasible action, a real target locator, and direct evidence
+   IDs.
+5. Limitations/document coverage: limitations and the model-authored
    coverage_note, including what was and was not available for review.
 
 Do not create a Questions for confirmation section. Where evidence is missing
@@ -57,13 +85,15 @@ or conflicting, calibrate the language, state the limitation, and identify a
 bounded revision or referral only when supported. Do not pad the note with
 generic observations, low-materiality issues, or requests for confirmation.
 
-Select only material strategy, implementation, risk, or results issues. Direct
-evidence_ids are required on every priority area and must come from supplied
-evidence. Each area requires at least one such identifier and a feasible
-target-specific action. Use target_locator to
+Select 3–5 material strategy, implementation, risk, or results issues when the
+evidence supports them; use fewer only when the evidence is genuinely thin and
+never pad the note. Direct evidence_ids are required on every priority area and
+must come from supplied evidence. Each area requires at least one such
+identifier and a feasible target-specific action. Use target_locator to
 identify the real primary-document page, heading, table, figure, or paragraph
 that the action addresses. Do not turn every evidence item into a priority
-area. The overall_read synthesizes the evidenced priority areas.
+area. The overall_read and alignment_readout synthesize the evidenced priority
+areas.
 
 Apply the supplied stage profile exactly. Use only recommendation scales listed
 in stage_profile.allowed_scales. Keep any immediate insertion or response
@@ -100,5 +130,5 @@ prompt versions, or validation outcomes.
 
 Return only content matching the ReviewDraft schema. Return content-only JSON,
 omit metadata, and include all required ReviewDraft fields:
-overall_read, revision_summary, priority_areas, institutional_referral_ids,
-limitations, and coverage_note.
+overall_read, alignment_readout, revision_summary, priority_areas,
+institutional_referral_ids, limitations, and coverage_note.
