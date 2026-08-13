@@ -4,7 +4,7 @@ import json
 import unicodedata
 from datetime import UTC, datetime
 from io import BytesIO
-from threading import Thread
+from threading import RLock, Thread
 from time import sleep
 from uuid import uuid4
 
@@ -26,6 +26,7 @@ from .export_docx import (
     validate_evidence_completeness,
 )
 from .extraction import extract_document, require_readable_primary
+from .orchestrator import safe_failure_code
 from .registry import hydrate_referrals
 from .session_store import SessionExpired
 from .validators import validate_reproducibility_metadata
@@ -35,10 +36,67 @@ bp = Blueprint("reviews", __name__)
 CORRECTION_TEXT_MAX_LENGTH = 2000
 CORRECTION_PRIORITY_AREA_MAX_LENGTH = 200
 CORRECTION_RATIONALE_MAX_LENGTH = 1000
+RETRYABLE_RESEARCH_CODES = {
+    "research_provider_failed",
+    "research_timeout",
+    "research_malformed",
+    "research_insufficient",
+}
+_RETRY_STATE_LOCK = RLock()
 
 
 def store():
     return current_app.extensions["session_store"]
+
+
+def _partial_research_keys(payload: dict) -> tuple[str, ...]:
+    return tuple(
+        key
+        for key in payload
+        if key.startswith("research_") or key.endswith("_research")
+    )
+
+
+@bp.post("/api/reviews/<assessment_id>/retry-research")
+def retry_research(assessment_id):
+    with _RETRY_STATE_LOCK:
+        try:
+            state = store().get(assessment_id)
+        except SessionExpired:
+            return jsonify(error="Assessment expired."), 410
+
+        failure_code = state.payload.get("failure_code")
+        if (
+            state.payload.get("status") != "failed"
+            or failure_code not in RETRYABLE_RESEARCH_CODES
+        ):
+            return jsonify(error="Research retry is unavailable."), 409
+
+        stale_keys = {
+            "failure_code",
+            "result",
+            "evidence_by_id",
+            "validation_issues",
+            *_partial_research_keys(state.payload),
+        }
+        store().remove_keys(assessment_id, *stale_keys)
+        store().clear_events(assessment_id)
+        store().update(assessment_id, status="created")
+        store().emit(assessment_id, "run_started", {})
+
+    if current_app.config["START_BACKGROUND_RUNS"]:
+        app = current_app._get_current_object()
+        Thread(target=run_assessment, args=(app, assessment_id), daemon=True).start()
+
+    base = f"/api/reviews/{assessment_id}"
+    return (
+        jsonify(
+            assessment_id=assessment_id,
+            event_url=f"{base}/events",
+            result_url=f"{base}/result",
+        ),
+        202,
+    )
 
 
 @bp.post("/api/detect-country")
@@ -354,6 +412,7 @@ def run_assessment(app, assessment_id):
         except SessionExpired:
             return
         except Exception as exc:
+            failure_code = safe_failure_code(exc)
             status_code = getattr(exc, "status_code", None)
             cause_types = []
             cause = exc.__cause__
@@ -361,12 +420,25 @@ def run_assessment(app, assessment_id):
                 cause_types.append(type(cause).__name__)
                 cause = cause.__cause__
             current_app.logger.error(
-                "review_run_failed error_type=%s status_code=%s cause_chain=%s",
+                "review_run_failed error_type=%s status_code=%s cause_chain=%s failure_code=%s",
                 type(exc).__name__,
                 status_code if isinstance(status_code, int) else "none",
                 ">".join(cause_types) or "none",
+                failure_code,
             )
             try:
-                store().update(assessment_id, status="failed")
+                state = store().get(assessment_id)
+                stale_keys = {
+                    "result",
+                    "evidence_by_id",
+                    "validation_issues",
+                    *_partial_research_keys(state.payload),
+                }
+                store().remove_keys(assessment_id, *stale_keys)
+                store().update(
+                    assessment_id,
+                    status="failed",
+                    failure_code=failure_code,
+                )
             except SessionExpired:
                 return

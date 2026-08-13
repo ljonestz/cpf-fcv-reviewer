@@ -16,6 +16,15 @@ from cpf_fcv_reviewer.extraction import (
     ExtractedSegment,
     ExtractionLimitExceeded,
 )
+from cpf_fcv_reviewer.research_controller import (
+    InsufficientResearch,
+    MalformedResearch,
+    ResearchConfigurationError,
+    ResearchProviderFailure,
+    ResearchSourceRejected,
+    ResearchTimeout,
+)
+from cpf_fcv_reviewer.routes import run_assessment
 
 
 def create_review(client):
@@ -34,6 +43,176 @@ def create_review(client):
 
 def make_app():
     return create_app({"TESTING": True, "START_BACKGROUND_RUNS": False})
+
+
+class FailingOrchestrator:
+    def __init__(self, error):
+        self.error = error
+
+    def run(self, context, emit):
+        context["result"] = {"sensitive": "partial result"}
+        context["evidence_by_id"] = {"secret": "partial evidence"}
+        context["validation_issues"] = ["secret validation detail"]
+        emit("run_failed", {"error": "research_provider_failed"})
+        raise self.error
+
+
+def failed_assessment(app, error=None):
+    if error is None:
+        error = ResearchProviderFailure("provider secret")
+    assessment_id = app.extensions["session_store"].create(
+        {
+            "status": "created",
+            "country": "Testland",
+            "cpf": {"name": "cpf.txt", "bytes": b"original upload"},
+            "corrections": [{"correction_id": "correction-1"}],
+        }
+    )
+    app.extensions["review_orchestrator"] = FailingOrchestrator(error)
+    run_assessment(app, assessment_id)
+    return assessment_id
+
+
+def test_failed_research_stores_only_safe_code_and_preserves_uploads():
+    app = make_app()
+    assessment_id = failed_assessment(app)
+
+    payload = app.extensions["session_store"].get(assessment_id).payload
+    assert payload["status"] == "failed"
+    assert payload["failure_code"] == "research_provider_failed"
+    assert payload["cpf"]["bytes"] == b"original upload"
+    assert "result" not in payload
+    assert "evidence_by_id" not in payload
+    assert "validation_issues" not in payload
+    assert "provider secret" not in repr(payload)
+
+
+def test_retry_research_resets_failed_state_without_reupload():
+    app = make_app()
+    assessment_id = failed_assessment(app)
+    app.extensions["session_store"].update(
+        assessment_id,
+        result={"stale": True},
+        evidence_by_id={"stale": True},
+        validation_issues=["stale"],
+        partial_research={"stale": True},
+    )
+
+    response = app.test_client().post(
+        f"/api/reviews/{assessment_id}/retry-research"
+    )
+
+    assert response.status_code == 202
+    assert response.get_json() == {
+        "assessment_id": assessment_id,
+        "event_url": f"/api/reviews/{assessment_id}/events",
+        "result_url": f"/api/reviews/{assessment_id}/result",
+    }
+    payload = app.extensions["session_store"].get(assessment_id).payload
+    assert payload["status"] == "created"
+    assert payload["cpf"]["bytes"] == b"original upload"
+    assert payload["corrections"] == [{"correction_id": "correction-1"}]
+    for key in (
+        "failure_code",
+        "result",
+        "evidence_by_id",
+        "validation_issues",
+        "partial_research",
+    ):
+        assert key not in payload
+    assert app.extensions["session_store"].next_event(assessment_id) == {
+        "type": "run_started",
+        "data": {},
+    }
+    assert app.extensions["session_store"].next_event(assessment_id) is None
+
+
+@pytest.mark.parametrize(
+    "status,failure_code",
+    [
+        ("complete", "research_timeout"),
+        ("created", "research_timeout"),
+        ("running", "research_timeout"),
+        ("failed", "review_failed"),
+        ("failed", ResearchConfigurationError.failure_code),
+        ("failed", ResearchSourceRejected.failure_code),
+    ],
+)
+def test_retry_research_rejects_unavailable_states(status, failure_code):
+    app = make_app()
+    assessment_id = app.extensions["session_store"].create(
+        {"status": status, "failure_code": failure_code}
+    )
+
+    response = app.test_client().post(
+        f"/api/reviews/{assessment_id}/retry-research"
+    )
+
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "Research retry is unavailable."}
+
+
+def test_retry_research_missing_assessment_uses_expired_response():
+    response = make_app().test_client().post(
+        "/api/reviews/missing/retry-research"
+    )
+
+    assert response.status_code == 410
+    assert response.get_json() == {"error": "Assessment expired."}
+
+
+def test_retry_research_duplicate_request_is_rejected():
+    app = make_app()
+    assessment_id = failed_assessment(app)
+    client = app.test_client()
+
+    assert client.post(f"/api/reviews/{assessment_id}/retry-research").status_code == 202
+    response = client.post(f"/api/reviews/{assessment_id}/retry-research")
+
+    assert response.status_code == 409
+    assert response.get_json() == {"error": "Research retry is unavailable."}
+
+
+def test_retry_research_starts_daemon_with_same_assessment_when_enabled(monkeypatch):
+    app = create_app({"TESTING": True, "START_BACKGROUND_RUNS": True})
+    assessment_id = failed_assessment(app)
+    started = []
+
+    class RecordingThread:
+        def __init__(self, *, target, args, daemon):
+            started.append((target, args, daemon))
+
+        def start(self):
+            started.append("started")
+
+    monkeypatch.setattr("cpf_fcv_reviewer.routes.Thread", RecordingThread)
+
+    response = app.test_client().post(
+        f"/api/reviews/{assessment_id}/retry-research"
+    )
+
+    assert response.status_code == 202
+    assert started[0][0] is run_assessment
+    assert started[0][1] == (app, assessment_id)
+    assert started[0][2] is True
+    assert started[1] == "started"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        InsufficientResearch("secret"),
+        MalformedResearch("secret"),
+        ResearchTimeout("secret"),
+    ],
+)
+def test_retryable_research_failures_are_recorded_without_exception_text(error):
+    app = make_app()
+    assessment_id = failed_assessment(app, error)
+    payload = app.extensions["session_store"].get(assessment_id).payload
+
+    assert payload["failure_code"].startswith("research_")
+    assert "secret" not in repr(payload)
 
 
 def test_create_review_returns_assessment_and_event_urls():

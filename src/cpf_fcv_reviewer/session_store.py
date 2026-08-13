@@ -94,6 +94,11 @@ class VolatileSessionStore:
             state = self._get_state(session_id, self._clock())
             return deepcopy(state.events.popleft()) if state.events else None
 
+    def clear_events(self, session_id: str) -> None:
+        with self._lock:
+            state = self._get_state(session_id, self._clock())
+            state.events.clear()
+
     def delete(self, session_id: str) -> None:
         with self._lock:
             now = self._clock()

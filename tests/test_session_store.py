@@ -45,6 +45,27 @@ def test_each_session_has_an_independent_event_queue():
     assert store.next_event(second) is None
 
 
+def test_clear_events_discards_terminal_events_without_refreshing_expiry():
+    now = datetime.now(UTC)
+    store = VolatileSessionStore(ttl_seconds=10, clock=lambda: now)
+    session_id = store.create({"country": "A"})
+    store.emit(session_id, "run_failed", {"error": "research_timeout"})
+    original_expiry = store.get(session_id).expires_at
+
+    now = now + timedelta(seconds=2)
+    store.clear_events(session_id)
+
+    assert store.next_event(session_id) is None
+    assert store.get(session_id).expires_at == original_expiry
+
+
+def test_clear_events_raises_for_expired_or_missing_session():
+    store = VolatileSessionStore(ttl_seconds=60)
+
+    with pytest.raises(SessionExpired):
+        store.clear_events("missing")
+
+
 def test_update_applies_keyword_values_and_extends_expiry():
     now = datetime.now(UTC)
     store = VolatileSessionStore(ttl_seconds=60, clock=lambda: now)
