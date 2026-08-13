@@ -88,6 +88,13 @@ def test_guided_landing_has_three_upload_zones_detail_control_and_process_dialog
     assert "grid-template-columns: 1fr" in css
 
 
+def test_correction_prompt_uses_note_first_review_language():
+    html = HTML.read_text(encoding="utf-8")
+
+    assert "Add context or correct the review" in html
+    assert "Add context or correct a finding" not in html
+
+
 def test_country_detection_preflight_and_submit_gating_are_wired():
     javascript = JS.read_text(encoding="utf-8")
 
