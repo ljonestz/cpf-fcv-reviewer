@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass
+from typing import Literal
 
 from .contracts import DiagnosticMode, RecommendationScale, ReviewResult, RunMetadata
 from .review_profiles import STAGE_PROFILES
@@ -30,8 +31,23 @@ FINALIZATION_OVERREACH_TERMS = (
 
 @dataclass(frozen=True)
 class ValidationIssue:
-    code: str
+    code: ValidationIssueCode
     message: str
+
+
+ValidationIssueCode = Literal[
+    "incomplete_reproducibility_metadata",
+    "limited_mode_overclaim",
+    "unknown_priority_area",
+    "unknown_evidence",
+    "stage_overreach",
+    "stage_length_overreach",
+    "withheld_drafting",
+    "missing_comment_reference",
+    "missing_current_context_support",
+    "missing_registry_support",
+    "prohibited_policy_language",
+]
 
 
 def validate_reproducibility_metadata(
@@ -180,6 +196,19 @@ def validate_review(
             priority_area.evidence_ids,
             evidence_ids,
         )
+        if priority_area.sensitivity.value != "withhold":
+            _append_missing_current_context_issue(
+                issues,
+                priority_area.priority_area_id,
+                priority_area.evidence_ids,
+                evidence_ids,
+            )
+        _append_missing_registry_issue(
+            issues,
+            priority_area.priority_area_id,
+            priority_area,
+            evidence_ids,
+        )
         issues.extend(
             validate_stage_behavior(
                 result.metadata.review_stage,
@@ -260,3 +289,50 @@ def validate_stage_behavior(
             )
         )
     return tuple(issues)
+
+
+def _append_missing_current_context_issue(
+    issues: list[ValidationIssue],
+    item_id: str,
+    cited_ids: tuple[str, ...],
+    evidence_ids: set[str],
+) -> None:
+    available_current_ids = {
+        evidence_id for evidence_id in evidence_ids if evidence_id.startswith("current-")
+    }
+    if available_current_ids and available_current_ids.isdisjoint(cited_ids):
+        issues.append(
+            ValidationIssue(
+                "missing_current_context_support",
+                f"{item_id} requires current-context evidence support.",
+            )
+        )
+
+
+def _append_missing_registry_issue(
+    issues: list[ValidationIssue],
+    item_id: str,
+    priority_area,
+    evidence_ids: set[str],
+) -> None:
+    authored_text = " ".join(
+        (
+            priority_area.heading,
+            priority_area.assessment,
+            priority_area.why_it_matters,
+            priority_area.recommended_action,
+        )
+    ).casefold()
+    if not ("fcv strategy" in authored_text or "strategy pillar" in authored_text):
+        return
+    available_registry_ids = {
+        evidence_id for evidence_id in evidence_ids if evidence_id.startswith("registry-")
+    }
+    if available_registry_ids.isdisjoint(priority_area.evidence_ids):
+        issues.append(
+            ValidationIssue(
+                "missing_registry_support",
+                f"{item_id} makes an FCV Strategy or Strategy pillar claim without "
+                "registry-language evidence.",
+            )
+        )

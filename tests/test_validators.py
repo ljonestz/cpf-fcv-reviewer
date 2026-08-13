@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import get_args
 
 import pytest
 
@@ -15,7 +16,12 @@ from cpf_fcv_reviewer.contracts import (
     SensitivityCategory,
 )
 from cpf_fcv_reviewer.review_profiles import STAGE_PROFILES
-from cpf_fcv_reviewer.validators import result_text, validate_review, validate_stage_behavior
+from cpf_fcv_reviewer.validators import (
+    ValidationIssueCode,
+    result_text,
+    validate_review,
+    validate_stage_behavior,
+)
 
 
 def metadata(*, stage: str = "finalization", mode: DiagnosticMode = DiagnosticMode.LIMITED_FRAMING):
@@ -49,12 +55,15 @@ def area(
     sensitivity: SensitivityCategory = SensitivityCategory.CAUTIOUS,
     comment_reference: str | None = None,
     recommended_action: str = "Clarify the causal link.",
+    heading: str = "Strengthen the causal link",
+    assessment: str = "The link remains implicit.",
+    why_it_matters: str = "The results chain is not explicit.",
 ) -> PriorityArea:
     return PriorityArea(
         priority_area_id=area_id,
-        heading="Strengthen the causal link",
-        assessment="The link remains implicit.",
-        why_it_matters="The results chain is not explicit.",
+        heading=heading,
+        assessment=assessment,
+        why_it_matters=why_it_matters,
         recommended_action=recommended_action,
         target_locator=locator("SECRET RAW EVIDENCE EXCERPT"),
         recommendation_scale=scale,
@@ -165,6 +174,118 @@ def test_priority_area_unknown_evidence_is_rejected():
     assert [issue.message for issue in issues if issue.code == "unknown_evidence"] == [
         "pa-1 cites unknown evidence: ['ev-2']"
     ]
+
+
+def test_actionable_priority_requires_current_context_when_available():
+    reviewed = result(areas=(area(),))
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        prohibited_terms=set(),
+    )
+
+    assert [
+        issue.message
+        for issue in issues
+        if issue.code == "missing_current_context_support"
+    ] == [
+        "pa-1 requires current-context evidence support."
+    ]
+
+
+def test_current_context_citation_satisfies_actionable_priority_support():
+    reviewed = result(areas=(area(evidence_ids=("ev-1", "current-1")),))
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" not in {issue.code for issue in issues}
+
+
+def test_withheld_priority_is_exempt_from_current_context_support():
+    reviewed = result(
+        areas=(area(sensitivity=SensitivityCategory.WITHHOLD),),
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" not in {issue.code for issue in issues}
+
+
+def test_no_current_context_available_does_not_require_current_support():
+    reviewed = result(areas=(area(),))
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "missing_current_context_support" not in {issue.code for issue in issues}
+
+
+def test_explicit_fc_strategy_claim_requires_registry_evidence():
+    reviewed = result(
+        areas=(
+            area(
+                heading="FCV Strategy pillar for delivery",
+                evidence_ids=("ev-1",),
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "registry-1"},
+        prohibited_terms=set(),
+    )
+
+    assert [issue.message for issue in issues if issue.code == "missing_registry_support"] == [
+        "pa-1 makes an FCV Strategy or Strategy pillar claim without registry-language evidence."
+    ]
+
+
+def test_registry_evidence_satisfies_explicit_fc_strategy_claim():
+    reviewed = result(
+        areas=(
+            area(
+                assessment="The FCV Strategy is reflected in the delivery approach.",
+                evidence_ids=("ev-1", "registry-1"),
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "registry-1"},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_registry_support" not in {issue.code for issue in issues}
+
+
+def test_generic_strategy_language_does_not_require_registry_evidence():
+    reviewed = result(
+        areas=(area(heading="Strengthen the strategy"),),
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "registry-1"},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_registry_support" not in {issue.code for issue in issues}
+
+
+def test_integrated_support_issue_codes_are_declared_in_validation_code_type():
+    declared_codes = set(get_args(ValidationIssueCode))
+
+    assert {"missing_current_context_support", "missing_registry_support"} <= declared_codes
 
 
 def test_finalization_requires_fine_tuning_scale():
