@@ -12,6 +12,7 @@ def test_browser_fields_are_present_in_docx(make_valid_result):
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
     assert result.overall_read in text
+    assert result.alignment_readout in text
     for item in result.revision_summary:
         assert item.action in text
         assert item.priority_area_id not in text

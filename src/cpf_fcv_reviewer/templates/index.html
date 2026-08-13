@@ -93,7 +93,25 @@
         <p id="progress-message" role="status" aria-live="polite"></p>
       </section>
       <button id="return-to-intake" type="button" hidden>Return to intake</button>
-      <section id="results" hidden aria-live="polite"></section>
+      <section id="results" hidden aria-labelledby="result-title">
+        <header class="result-header">
+          <div>
+            <p class="eyebrow">REVIEW COMPLETE</p>
+            <h2 id="result-title" tabindex="-1">CPF / CEN FCV review</h2>
+            <p id="result-context" class="result-context"></p>
+          </div>
+          <nav id="actions" hidden aria-label="Review actions">
+            <button id="export-docx" type="button">Download full detailed note</button>
+            <button id="reset-review" class="button-secondary" type="button">Start a new review</button>
+          </nav>
+        </header>
+        <div class="result-tabs" role="tablist" aria-label="Review result views">
+          <button id="result-tab-summary" role="tab" aria-selected="true" aria-controls="summary-panel" tabindex="0" data-result-view="summary" type="button">Five-minute readout</button>
+          <button id="result-tab-detailed" role="tab" aria-selected="false" aria-controls="detailed-panel" tabindex="-1" data-result-view="detailed" type="button">Detailed analysis</button>
+        </div>
+        <section id="summary-panel" role="tabpanel" aria-labelledby="result-tab-summary" tabindex="0"></section>
+        <section id="detailed-panel" role="tabpanel" aria-labelledby="result-tab-detailed" tabindex="0" hidden></section>
+      </section>
 
       <section id="corrections" hidden>
         <h2>Add context or correct the review</h2>
@@ -103,10 +121,6 @@
         <button id="submit-correction" type="button">Add correction and rerun</button>
       </section>
 
-      <nav id="actions" hidden aria-label="Review actions">
-        <button id="export-docx" type="button">Export Word note</button>
-        <button id="reset-review" type="button">Start a new review</button>
-      </nav>
     </section>
   </main>
 

@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 from cpf_fcv_reviewer.app import create_app
@@ -118,8 +119,8 @@ def test_result_rendering_uses_connected_note_sections_and_safe_text_content():
     javascript = JS.read_text(encoding="utf-8")
 
     for fragment in (
-        'text("h2", "Overall read")',
-        'text("h2", "What to revise")',
+        'text("h2", "Overall assessment")',
+        'text("h2", "Priority measures to strengthen the CPF / CEN")',
         'text("h2", "Priority areas for strengthening")',
         'text("h2", "Limitations and document coverage")',
         "result.revision_summary",
@@ -279,3 +280,98 @@ def test_task9_css_uses_repository_owned_screener_aligned_visual_language():
     assert ".upload-badge" in css
     assert ".progress-steps" in css
     assert "@media (max-width: 760px)" in css
+
+
+def test_results_have_accessible_summary_and_detailed_tabs():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'role="tablist"' in html
+    assert "Five-minute readout" in html
+    assert "Detailed analysis" in html
+    assert "aria-selected" in javascript
+    assert "ArrowLeft" in javascript
+    assert "ArrowRight" in javascript
+    assert 'case "Home"' in javascript
+    assert 'case "End"' in javascript
+
+
+def test_summary_uses_only_canonical_result_fields():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert "result.overall_read" in javascript
+    assert "result.alignment_readout" in javascript
+    assert "result.revision_summary" in javascript
+    assert "fetchSummary" not in javascript
+
+
+def test_detailed_analysis_renders_all_priority_prose_evidence_and_coverage():
+    javascript = JS.read_text(encoding="utf-8")
+
+    for fragment in (
+        "function renderDetailedAnalysis(result)",
+        "result.priority_areas",
+        "area.heading",
+        "area.assessment",
+        "area.why_it_matters",
+        "area.recommended_action",
+        "area.target_locator",
+        "area.comment_reference",
+        "area.evidence_ids",
+        "result.evidence_by_id",
+        "result.limitations",
+        "result.document_coverage",
+    ):
+        assert fragment in javascript
+    assert "innerHTML" not in javascript
+
+
+def test_export_always_uses_the_full_note_endpoint():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert "`/api/reviews/${assessmentId}/export.docx`" in javascript
+    assert "summary/export" not in javascript
+
+
+def test_result_header_uses_confirmed_country_type_and_coverage_context():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'document.querySelector("#result-title")' in javascript
+    assert "countryInput.value.trim()" in javascript
+    assert "inferDocumentType(result.document_coverage.primary_document)" in javascript
+    assert "resultTitle.textContent" in javascript
+    assert "resultContext.textContent" in javascript
+    assert "result.document_coverage.primary_document" in javascript
+    assert "result.metadata?.review_stage" in javascript
+
+
+def test_document_type_inference_is_conservative():
+    javascript = JS.read_text(encoding="utf-8")
+    start = javascript.index("function inferDocumentType(primaryDocumentName)")
+    end = javascript.index("\n}\n", start) + 3
+    function_source = javascript[start:end]
+    script = f"""
+{function_source}
+const cases = [
+  ["Benin CEN draft.docx", "CEN"],
+  ["benin-cen_v2.pdf", "CEN"],
+  ["Chad CPF draft.docx", "CPF"],
+  ["chad_cpf-v3.pdf", "CPF"],
+  ["Chad CPF CEN draft.docx", "CPF / CEN"],
+  ["Country partnership draft.docx", "CPF / CEN"],
+  ["vacancy agenda.pdf", "CPF / CEN"],
+];
+for (const [name, expected] of cases) {{
+  const actual = inferDocumentType(name);
+  if (actual !== expected) throw new Error(`${{name}}: ${{actual}} !== ${{expected}}`);
+}}
+"""
+
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr

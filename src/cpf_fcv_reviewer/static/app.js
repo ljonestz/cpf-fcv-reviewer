@@ -6,6 +6,11 @@ const progress = document.querySelector("#progress");
 const progressMessage = document.querySelector("#progress-message") || progress;
 const progressSteps = Array.from(document.querySelectorAll?.("[data-progress-step]") || []);
 const results = document.querySelector("#results");
+const resultTitle = document.querySelector("#result-title") || document.createElement("h2");
+const resultContext = document.querySelector("#result-context") || document.createElement("p");
+const summaryPanel = document.querySelector("#summary-panel") || results;
+const detailedPanel = document.querySelector("#detailed-panel") || results;
+const resultTabs = Array.from(document.querySelectorAll?.('[role="tab"][data-result-view]') || []);
 const corrections = document.querySelector("#corrections");
 const actions = document.querySelector("#actions");
 const returnToIntake = document.querySelector("#return-to-intake");
@@ -293,42 +298,45 @@ function renderEvidenceGroup(result, evidenceIds) {
   return details;
 }
 
-function renderResult(result) {
-  results.replaceChildren();
-  results.append(text("h2", "Overall read"), text("p", result.overall_read, "overall-read"));
-
-  const priorityAreaAnchorIds = new Map(
+function priorityAreaAnchorIds(result) {
+  return new Map(
     result.priority_areas.map((_, index) => [`${index}`, `cpf-priority-area-${index + 1}`]),
   );
+}
+
+function renderRevisionSummary(result, anchorIds) {
+  if (!result.revision_summary.length) {
+    return text("p", "No revision summary was returned for this review.", "empty-state");
+  }
   const summary = document.createElement("ol");
   for (const item of result.revision_summary) {
     const link = document.createElement("a");
     const priorityAreaIndex = result.priority_areas.findIndex(
       (area) => area.priority_area_id === item.priority_area_id,
     );
-    const anchorId = priorityAreaAnchorIds.get(`${priorityAreaIndex}`);
+    const anchorId = anchorIds.get(`${priorityAreaIndex}`);
     link.href = anchorId ? `#${anchorId}` : "#";
     link.textContent = item.action;
     if (anchorId) {
-      link.addEventListener("click", () => {
-        document.getElementById(anchorId)?.focus({preventScroll: true});
+      link.addEventListener("click", (event) => {
+        event?.preventDefault();
+        setResultView("detailed");
+        document.getElementById(anchorId)?.focus();
       });
     }
     const row = document.createElement("li");
     row.append(link);
     summary.append(row);
   }
-  results.append(text("h2", "What to revise"));
-  results.append(
-    result.revision_summary.length
-      ? summary
-      : text("p", "No revision summary was returned for this review.", "empty-state"),
-  );
+  return summary;
+}
 
-  results.append(text("h2", "Priority areas for strengthening"));
+function renderPriorityAreas(result, anchorIds) {
+  const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  fragment.append(text("h2", "Priority areas for strengthening"));
   for (const [index, area] of result.priority_areas.entries()) {
     const section = document.createElement("section");
-    section.id = priorityAreaAnchorIds.get(`${index}`);
+    section.id = anchorIds.get(`${index}`);
     section.tabIndex = -1;
     section.className = "priority-area";
     section.append(
@@ -344,30 +352,125 @@ function renderResult(result) {
       );
     }
     section.append(renderEvidenceGroup(result, area.evidence_ids));
-    results.append(section);
+    fragment.append(section);
   }
   if (!result.priority_areas.length) {
-    results.append(text("p", "No priority areas were returned for this review.", "empty-state"));
+    fragment.append(text("p", "No priority areas were returned for this review.", "empty-state"));
   }
+  return fragment;
+}
 
-  results.append(text("h2", "Limitations and document coverage"));
+function renderCoverage(result) {
+  const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  fragment.append(text("h2", "Limitations and document coverage"));
   if (result.limitations.length) {
     const list = document.createElement("ul");
-    for (const limitation of result.limitations) {
-      list.append(text("li", limitation));
-    }
-    results.append(list);
+    for (const limitation of result.limitations) list.append(text("li", limitation));
+    fragment.append(list);
   }
   const coverage = result.document_coverage;
   if (coverage) {
-    results.append(
+    fragment.append(
       labelledParagraph("Primary document", coverage.primary_document, "coverage-primary"),
       labelledParagraph("Package documents", coverage.package_documents.join(", ") || "None supplied", "coverage-package"),
       labelledParagraph("Context documents", coverage.context_documents.join(", ") || "None supplied", "coverage-context"),
       labelledParagraph("Coverage note", coverage.coverage_note, "coverage-note"),
     );
   }
+  return fragment;
+}
+
+function renderFiveMinuteReadout(result) {
+  const anchorIds = priorityAreaAnchorIds(result);
+  const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  fragment.append(
+    text("p", "Five-minute readout", "read-time"),
+    text("h2", "Overall assessment"),
+    text("p", result.overall_read, "overall-read"),
+    text("h2", "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy"),
+    text("p", result.alignment_readout, "alignment-readout"),
+    text("h2", "Priority measures to strengthen the CPF / CEN"),
+    renderRevisionSummary(result, anchorIds),
+  );
+  return fragment;
+}
+
+function renderDetailedAnalysis(result) {
+  const anchorIds = priorityAreaAnchorIds(result);
+  const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  fragment.append(text("h2", "Overall assessment"));
+  fragment.append(text("p", result.overall_read, "overall-read"));
+  fragment.append(renderPriorityAreas(result, anchorIds));
+  fragment.append(renderCoverage(result));
+  return fragment;
+}
+
+function inferDocumentType(primaryDocumentName) {
+  const name = primaryDocumentName || "";
+  const hasCen = /(^|[^a-z0-9])cen([^a-z0-9]|$)/i.test(name);
+  const hasCpf = /(^|[^a-z0-9])cpf([^a-z0-9]|$)/i.test(name);
+  if (hasCen !== hasCpf) return hasCen ? "CEN" : "CPF";
+  return "CPF / CEN";
+}
+
+function setResultView(view) {
+  const panels = {summary: summaryPanel, detailed: detailedPanel};
+  for (const tab of resultTabs) {
+    const isSelected = tab.dataset.resultView === view;
+    const panel = panels[tab.dataset.resultView];
+    tab.setAttribute("aria-selected", String(isSelected));
+    tab.tabIndex = isSelected ? 0 : -1;
+    tab.classList.toggle("is-active", isSelected);
+    panel.hidden = !isSelected;
+  }
+}
+
+function handleResultTabKeydown(event) {
+  const currentIndex = resultTabs.indexOf(event.currentTarget);
+  let nextIndex;
+  switch (event.key) {
+    case "ArrowLeft":
+      nextIndex = (currentIndex - 1 + resultTabs.length) % resultTabs.length;
+      break;
+    case "ArrowRight":
+      nextIndex = (currentIndex + 1) % resultTabs.length;
+      break;
+    case "Home":
+      nextIndex = 0;
+      break;
+    case "End":
+      nextIndex = resultTabs.length - 1;
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  const nextTab = resultTabs[nextIndex];
+  setResultView(nextTab.dataset.resultView);
+  nextTab.focus();
+}
+
+for (const tab of resultTabs) {
+  tab.addEventListener("click", () => setResultView(tab.dataset.resultView));
+  tab.addEventListener("keydown", handleResultTabKeydown);
+}
+
+function renderResult(result) {
+  if (summaryPanel === detailedPanel) {
+    results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysis(result));
+  } else {
+    summaryPanel.replaceChildren(renderFiveMinuteReadout(result));
+    detailedPanel.replaceChildren(renderDetailedAnalysis(result));
+  }
+  const country = countryInput.value.trim();
+  const documentType = inferDocumentType(result.document_coverage.primary_document);
+  const reviewStage = result.metadata?.review_stage;
+  const stage = reviewStage ? ` · ${reviewStage.replaceAll("_", " ")}` : "";
+  resultTitle.textContent = `${country} ${documentType} FCV review`;
+  resultContext.textContent = `${result.document_coverage.primary_document}${stage}`;
+  setResultView("summary");
   showResults();
+  resultTitle.focus({preventScroll: true});
 }
 
 function isActiveSource(source) {
@@ -525,7 +628,14 @@ document.querySelector("#reset-review").addEventListener("click", async () => {
   activeEventSource = undefined;
   sessionStorage.removeItem("cpf_fcv_assessment_id");
   assessmentId = "";
-  results.replaceChildren();
+  if (summaryPanel === detailedPanel) {
+    results.replaceChildren();
+  } else {
+    summaryPanel.replaceChildren();
+    detailedPanel.replaceChildren();
+  }
+  resultContext.textContent = "";
+  resultTitle.textContent = "CPF / CEN FCV review";
   resetProgress();
   form.reset();
   clearCountryCorrection();

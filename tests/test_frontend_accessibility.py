@@ -1,0 +1,88 @@
+from pathlib import Path
+
+HTML = Path("src/cpf_fcv_reviewer/templates/index.html")
+JS = Path("src/cpf_fcv_reviewer/static/app.js")
+CSS = Path("src/cpf_fcv_reviewer/static/styles.css")
+
+
+def test_summary_tab_and_panel_are_selected_first():
+    html = HTML.read_text(encoding="utf-8")
+
+    assert (
+        'id="result-tab-summary" role="tab" aria-selected="true" '
+        'aria-controls="summary-panel" tabindex="0"' in html
+    )
+    assert (
+        'id="result-tab-detailed" role="tab" aria-selected="false" '
+        'aria-controls="detailed-panel" tabindex="-1"' in html
+    )
+    assert 'id="summary-panel" role="tabpanel"' in html
+    detailed_panel = html.split('id="detailed-panel"', 1)[1].split(">", 1)[0]
+    assert 'role="tabpanel"' in detailed_panel
+    assert " hidden" in detailed_panel
+
+
+def test_result_tabs_have_roving_keyboard_state_and_linked_panels():
+    javascript = JS.read_text(encoding="utf-8")
+
+    for fragment in (
+        "function setResultView(view)",
+        'tab.setAttribute("aria-selected", String(isSelected))',
+        "tab.tabIndex = isSelected ? 0 : -1",
+        "panel.hidden = !isSelected",
+        'case "ArrowLeft"',
+        'case "ArrowRight"',
+        'case "Home"',
+        'case "End"',
+    ):
+        assert fragment in javascript
+
+
+def test_changing_result_tabs_is_client_side_only():
+    javascript = JS.read_text(encoding="utf-8")
+    assert "function setResultView(view)" in javascript
+    assert "function handleResultTabKeydown(event)" in javascript
+    tab_state = javascript.split("function setResultView(view)", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    keyboard_handler = javascript.split(
+        "function handleResultTabKeydown(event)", 1
+    )[1].split("\n}\n", 1)[0]
+
+    assert "fetch(" not in tab_state
+    assert "fetch(" not in keyboard_handler
+    assert "EventSource" not in tab_state
+    assert "EventSource" not in keyboard_handler
+
+
+def test_corrections_remain_outside_both_tabpanels():
+    html = HTML.read_text(encoding="utf-8")
+    assert 'id="summary-panel"' in html
+    assert 'id="detailed-panel"' in html
+    summary_end = html.index("</section>", html.index('id="summary-panel"'))
+    detailed_end = html.index("</section>", html.index('id="detailed-panel"'))
+    corrections = html.index('id="corrections"')
+
+    assert corrections > summary_end
+    assert corrections > detailed_end
+
+
+def test_completed_result_heading_is_focusable_and_receives_focus():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'id="result-title" tabindex="-1"' in html
+    render_result = javascript.split("function renderResult(result)", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+    assert "showResults();" in render_result
+    assert "resultTitle.focus({preventScroll: true});" in render_result
+    assert render_result.index("showResults();") < render_result.index("resultTitle.focus")
+
+
+def test_mobile_result_tabs_stay_horizontal_for_left_right_navigation():
+    css = CSS.read_text(encoding="utf-8")
+    mobile = css.split("@media (max-width: 760px)", 1)[1]
+
+    assert "#actions, .result-tabs" not in mobile
+    assert ".result-tabs { flex-wrap: wrap; }" in mobile
