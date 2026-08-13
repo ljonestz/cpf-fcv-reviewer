@@ -243,14 +243,14 @@ def test_profiles_are_exact():
     assert DETAIL_PROFILES == {
         DetailLevel.BRIEF: DetailProfile(1, (2, 3)),
         DetailLevel.STANDARD: DetailProfile(2, (3, 5)),
-        DetailLevel.IN_DEPTH: DetailProfile(3, (4, 7)),
+        DetailLevel.IN_DEPTH: DetailProfile(3, (3, 5)),
     }
     assert DETAIL_PROFILES[DetailLevel.BRIEF].target_pages == 1
     assert DETAIL_PROFILES[DetailLevel.BRIEF].priority_area_range == (2, 3)
     assert DETAIL_PROFILES[DetailLevel.STANDARD].target_pages == 2
     assert DETAIL_PROFILES[DetailLevel.STANDARD].priority_area_range == (3, 5)
     assert DETAIL_PROFILES[DetailLevel.IN_DEPTH].target_pages == 3
-    assert DETAIL_PROFILES[DetailLevel.IN_DEPTH].priority_area_range == (4, 7)
+    assert DETAIL_PROFILES[DetailLevel.IN_DEPTH].priority_area_range == (3, 5)
     with pytest.raises(FrozenInstanceError):
         STAGE_PROFILES["finalization"].max_immediate_insertion_words = 1
     with pytest.raises(FrozenInstanceError):
@@ -452,7 +452,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         },
         "detail_profile": {
             "target_pages": 3,
-            "priority_area_range": [4, 7],
+            "priority_area_range": [3, 5],
         },
     }
     assert payload["validation_issues"] == issues
