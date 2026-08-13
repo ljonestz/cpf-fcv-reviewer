@@ -262,6 +262,7 @@ class EvidencePack(FrozenModel):
 class ReviewResult(FrozenModel):
     metadata: RunMetadata
     overall_read: str
+    alignment_readout: str
     revision_summary: tuple[RevisionSummaryItem, ...]
     priority_areas: tuple[PriorityArea, ...]
     institutional_referral_ids: tuple[str, ...] = ()
@@ -273,11 +274,17 @@ class ReviewResult(FrozenModel):
     def requires_nonblank_overall_read(cls, value: str) -> str:
         return _requires_nonblank_text(value, "Overall read")
 
+    @field_validator("alignment_readout")
+    @classmethod
+    def requires_nonblank_alignment_readout(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Alignment readout")
+
 
 class ReviewDraft(FrozenModel):
     """Model-authored review content; authoritative run metadata is attached locally."""
 
     overall_read: str
+    alignment_readout: str
     revision_summary: tuple[RevisionSummaryItem, ...]
     priority_areas: tuple[PriorityArea, ...]
     institutional_referral_ids: tuple[str, ...]
@@ -288,3 +295,8 @@ class ReviewDraft(FrozenModel):
     @classmethod
     def requires_nonblank_draft_text(cls, value: str) -> str:
         return _requires_nonblank_text(value, "Review draft text")
+
+    @field_validator("alignment_readout")
+    @classmethod
+    def requires_nonblank_alignment_readout(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Alignment readout")

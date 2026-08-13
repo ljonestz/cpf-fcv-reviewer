@@ -110,9 +110,18 @@ def evidence_pack(meta: RunMetadata) -> EvidencePack:
     )
 
 
-def draft_for(meta: RunMetadata, *, coverage_note: str = "Model coverage note.") -> ReviewDraft:
+def draft_for(
+    meta: RunMetadata,
+    *,
+    coverage_note: str = "Model coverage note.",
+    alignment_readout: str = (
+        "The draft partly reflects the diagnostic and current context, but the strategic "
+        "response remains incomplete."
+    ),
+) -> ReviewDraft:
     return ReviewDraft(
         overall_read="The review has a credible foundation.",
+        alignment_readout=alignment_readout,
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",
@@ -142,10 +151,18 @@ def draft_for(meta: RunMetadata, *, coverage_note: str = "Model coverage note.")
     )
 
 
-def result_for(meta: RunMetadata) -> ReviewResult:
+def result_for(
+    meta: RunMetadata,
+    *,
+    alignment_readout: str = (
+        "The draft partly reflects the diagnostic and current context, but the strategic "
+        "response remains incomplete."
+    ),
+) -> ReviewResult:
     return ReviewResult(
         metadata=meta,
         overall_read="The review has a credible foundation.",
+        alignment_readout=alignment_readout,
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",
@@ -311,6 +328,19 @@ def test_review_derives_deduplicated_role_coverage_and_excludes_model_note():
     assert gateway.calls[0][2] is ReviewDraft
 
 
+def test_review_carries_model_authored_alignment_readout_into_result():
+    meta = metadata()
+    alignment_readout = (
+        "The draft partly reflects the diagnostic and current context, but the strategic "
+        "response remains incomplete."
+    )
+    gateway = FakeGateway(draft_for(meta, alignment_readout=alignment_readout))
+
+    result = ReviewEngine(gateway).review(evidence_pack(meta))
+
+    assert result.alignment_readout == alignment_readout
+
+
 def test_missing_located_primary_role_is_rejected_before_gateway_call():
     meta = metadata()
     pack = EvidencePack(
@@ -358,6 +388,25 @@ def test_repair_preserves_application_coverage_and_updates_only_note():
     assert repaired.document_coverage.context_documents == ("Context.docx",)
     assert repaired.document_coverage.coverage_note == "Updated coverage note."
     assert repaired.metadata == meta.model_copy(update={"repair_count": 1})
+
+
+def test_repair_preserves_and_replaces_alignment_readout():
+    meta = metadata()
+    initial_alignment = "The initial alignment readout is incomplete."
+    repaired_alignment = (
+        "The revised alignment readout links the draft to Benin's diagnostic and current "
+        "context."
+    )
+    initial = result_for(meta, alignment_readout=initial_alignment)
+    gateway = FakeGateway(draft_for(meta, alignment_readout=repaired_alignment))
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [{"code": "withheld_drafting", "message": "Repair the narrative."}],
+    )
+
+    assert gateway.calls[0][1]["draft"]["alignment_readout"] == initial_alignment
+    assert repaired.alignment_readout == repaired_alignment
 
 
 def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
@@ -409,6 +458,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
     assert payload["validation_issues"] == issues
     assert set(payload["draft"]) == {
         "overall_read",
+        "alignment_readout",
         "revision_summary",
         "priority_areas",
         "institutional_referral_ids",

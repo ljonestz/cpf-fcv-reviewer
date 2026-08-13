@@ -49,6 +49,10 @@ def make_valid_result():
     result = ReviewResult(
         metadata=metadata,
         overall_read="The CPF has a useful foundation but needs a clearer delivery narrative.",
+        alignment_readout=(
+            "The draft partly reflects the diagnostic and current context, but the strategic "
+            "response remains incomplete."
+        ),
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",
