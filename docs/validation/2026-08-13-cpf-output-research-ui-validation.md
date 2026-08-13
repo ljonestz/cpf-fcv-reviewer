@@ -5,7 +5,7 @@ Validation date: 2026-08-13; branch: `feat/mvp-review-run`
 ## Automated verification
 
 - Focused integration group: 300 passed in 4.40 seconds.
-- Full suite after the final evidence-boundary fix: 619 passed in 16.30 seconds.
+- Final full suite after the evidence-boundary and privacy fixes: 622 passed in 10.70 seconds.
 - Ruff: all checks passed.
 - JavaScript syntax: `node --check src/cpf_fcv_reviewer/static/app.js` passed.
 - `git diff --check`: passed; Git reported line-ending warnings only.
