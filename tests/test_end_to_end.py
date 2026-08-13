@@ -276,14 +276,15 @@ def test_complete_synthetic_local_workflow(fixture_name):
         for paragraph in document.paragraphs
         if paragraph.style.name.startswith(("Title", "Heading"))
     ]
-    browser_section_headings = [
-        "Overall read",
-        "What to revise",
+    authoritative_docx_headings = [
+        "Overall assessment",
+        "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy",
+        "Priority measures to strengthen the CPF/CEN",
         "Priority areas for strengthening",
         "Limitations and document coverage",
     ]
-    assert [heading for heading in docx_headings if heading in browser_section_headings] == (
-        browser_section_headings
+    assert [heading for heading in docx_headings if heading in authoritative_docx_headings] == (
+        authoritative_docx_headings
     )
 
     correction_response = client.post(

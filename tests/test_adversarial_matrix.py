@@ -328,10 +328,13 @@ def test_public_contradiction_is_retained_with_its_qualifying_relationship():
     claim = CurrentContextClaim(
         claim_id="contradiction",
         text="A public update contradicts an earlier contextual assumption.",
+        publisher="Synthetic public source",
+        source_title="Synthetic context update",
         source_url="https://example.org/update",
         source_date=date(2026, 8, 10),
         source_type="public analysis",
         relevance="Qualifies the supplied CPF context.",
+        context_kind="current_development",
         relationship="contradicts",
         licensed_data_required=False,
     )

@@ -474,6 +474,25 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
     json.dumps(payload)
 
 
+def test_repair_accepts_evidence_support_issues_and_passes_them_to_gateway():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+    issues = [
+        {
+            "code": "missing_current_context_support",
+            "message": "Current-context evidence is not linked.",
+        },
+        {
+            "code": "missing_registry_support",
+            "message": "Registry evidence is not linked.",
+        },
+    ]
+
+    ReviewEngine(gateway).repair(result_for(meta), issues)
+
+    assert gateway.calls[0][1]["validation_issues"] == issues
+
+
 def test_repair_rejects_unsupported_metadata_stage_before_gateway_call():
     meta = metadata(stage="unsupported")
     gateway = FakeGateway(draft_for(meta))

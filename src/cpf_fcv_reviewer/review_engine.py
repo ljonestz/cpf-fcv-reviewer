@@ -13,8 +13,10 @@ from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
     {
         "limited_mode_overclaim",
+        "missing_current_context_support",
         "unknown_priority_area",
         "unknown_evidence",
+        "missing_registry_support",
         "stage_overreach",
         "stage_length_overreach",
         "missing_comment_reference",

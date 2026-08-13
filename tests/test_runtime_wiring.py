@@ -213,13 +213,41 @@ def test_runtime_validation_does_not_require_confirmed_priority_response(
 
 
 def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
+    gateway_calls = []
+    current_context_evidence_id = None
+
     class FakeGateway:
         def __init__(self, api_key, model_id, *, timeout_seconds=None):
             self.model_id = model_id
 
         def generate(self, *, prompt_name, payload, output_type):
+            nonlocal current_context_evidence_id
+            gateway_calls.append(prompt_name)
+            if prompt_name == "repair":
+                assert {issue["code"] for issue in payload["validation_issues"]} == {
+                    "missing_current_context_support"
+                }
+                repaired_draft = dict(payload["draft"])
+                repaired_priority = dict(repaired_draft["priority_areas"][0])
+                repaired_priority["evidence_ids"] = (
+                    *repaired_priority["evidence_ids"],
+                    current_context_evidence_id,
+                )
+                repaired_draft["priority_areas"] = (repaired_priority,)
+                return output_type.model_validate(repaired_draft)
+
+            assert prompt_name == "review"
             pack = EvidencePack.model_validate(payload["evidence_pack"])
-            evidence_id = pack.evidence[0].evidence_id
+            evidence_id = next(
+                item.evidence_id
+                for item in pack.evidence
+                if item.evidence_type == "document_fact"
+            )
+            current_context_evidence_id = next(
+                item.evidence_id
+                for item in pack.evidence
+                if item.evidence_type == "current_context"
+            )
             return output_type(
                 overall_read="The draft identifies a material delivery constraint.",
                 alignment_readout="The draft partly reflects current context.",
@@ -284,7 +312,9 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
     assert context["evidence_pack"].evidence
     assert context["result"].priority_areas[0].evidence_ids == (
         context["evidence_pack"].evidence[0].evidence_id,
+        current_context_evidence_id,
     )
+    assert gateway_calls == ["review", "repair"]
     assert events[-1][0] == "run_complete"
 
 
