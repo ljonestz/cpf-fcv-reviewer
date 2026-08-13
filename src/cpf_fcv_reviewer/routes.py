@@ -4,7 +4,7 @@ import json
 import unicodedata
 from datetime import UTC, datetime
 from io import BytesIO
-from threading import RLock, Thread
+from threading import Thread
 from time import sleep
 from uuid import uuid4
 
@@ -42,7 +42,6 @@ RETRYABLE_RESEARCH_CODES = {
     "research_malformed",
     "research_insufficient",
 }
-_RETRY_STATE_LOCK = RLock()
 
 
 def store():
@@ -59,30 +58,15 @@ def _partial_research_keys(payload: dict) -> tuple[str, ...]:
 
 @bp.post("/api/reviews/<assessment_id>/retry-research")
 def retry_research(assessment_id):
-    with _RETRY_STATE_LOCK:
-        try:
-            state = store().get(assessment_id)
-        except SessionExpired:
-            return jsonify(error="Assessment expired."), 410
-
-        failure_code = state.payload.get("failure_code")
-        if (
-            state.payload.get("status") != "failed"
-            or failure_code not in RETRYABLE_RESEARCH_CODES
-        ):
-            return jsonify(error="Research retry is unavailable."), 409
-
-        stale_keys = {
-            "failure_code",
-            "result",
-            "evidence_by_id",
-            "validation_issues",
-            *_partial_research_keys(state.payload),
-        }
-        store().remove_keys(assessment_id, *stale_keys)
-        store().clear_events(assessment_id)
-        store().update(assessment_id, status="created")
-        store().emit(assessment_id, "run_started", {})
+    try:
+        reset = store().reset_failed_research(
+            assessment_id,
+            RETRYABLE_RESEARCH_CODES,
+        )
+    except SessionExpired:
+        return jsonify(error="Assessment expired."), 410
+    if not reset:
+        return jsonify(error="Research retry is unavailable."), 409
 
     if current_app.config["START_BACKGROUND_RUNS"]:
         app = current_app._get_current_object()

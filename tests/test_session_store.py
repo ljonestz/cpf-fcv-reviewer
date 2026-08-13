@@ -45,25 +45,70 @@ def test_each_session_has_an_independent_event_queue():
     assert store.next_event(second) is None
 
 
-def test_clear_events_discards_terminal_events_without_refreshing_expiry():
+def test_reset_failed_research_atomically_resets_payload_events_and_expiry():
     now = datetime.now(UTC)
     store = VolatileSessionStore(ttl_seconds=10, clock=lambda: now)
-    session_id = store.create({"country": "A"})
+    session_id = store.create(
+        {
+            "status": "failed",
+            "failure_code": "research_timeout",
+            "result": {"stale": True},
+            "evidence_by_id": {"stale": True},
+            "validation_issues": ["stale"],
+            "partial_research": {"stale": True},
+            "research_context": {"stale": True},
+            "country": "A",
+        }
+    )
     store.emit(session_id, "run_failed", {"error": "research_timeout"})
     original_expiry = store.get(session_id).expires_at
 
     now = now + timedelta(seconds=2)
-    store.clear_events(session_id)
+    assert store.reset_failed_research(
+        session_id,
+        {
+            "research_provider_failed",
+            "research_timeout",
+            "research_malformed",
+            "research_insufficient",
+        },
+    ) is True
 
+    state = store.get(session_id)
+    assert state.payload == {"status": "created", "country": "A"}
+    assert state.expires_at == now + timedelta(seconds=10)
+    assert state.expires_at > original_expiry
+    assert store.next_event(session_id) == {"type": "run_started", "data": {}}
     assert store.next_event(session_id) is None
-    assert store.get(session_id).expires_at == original_expiry
 
 
-def test_clear_events_raises_for_expired_or_missing_session():
+def test_reset_failed_research_false_leaves_state_and_events_unchanged():
     store = VolatileSessionStore(ttl_seconds=60)
+    session_id = store.create(
+        {"status": "failed", "failure_code": "research_configuration", "result": {"x": 1}}
+    )
+    store.emit(session_id, "run_failed", {"error": "research_configuration"})
+    before = store.get(session_id)
+
+    assert store.reset_failed_research(session_id, {"research_timeout"}) is False
+
+    after = store.get(session_id)
+    assert after.payload == before.payload
+    assert after.expires_at == before.expires_at
+    assert store.next_event(session_id) == {
+        "type": "run_failed",
+        "data": {"error": "research_configuration"},
+    }
+
+
+def test_reset_failed_research_raises_for_expired_session():
+    now = datetime.now(UTC)
+    store = VolatileSessionStore(ttl_seconds=1, clock=lambda: now)
+    session_id = store.create({"status": "failed", "failure_code": "research_timeout"})
+    now = now + timedelta(seconds=2)
 
     with pytest.raises(SessionExpired):
-        store.clear_events("missing")
+        store.reset_failed_research(session_id, {"research_timeout"})
 
 
 def test_update_applies_keyword_values_and_extends_expiry():

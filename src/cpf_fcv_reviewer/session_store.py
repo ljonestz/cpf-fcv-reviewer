@@ -94,10 +94,34 @@ class VolatileSessionStore:
             state = self._get_state(session_id, self._clock())
             return deepcopy(state.events.popleft()) if state.events else None
 
-    def clear_events(self, session_id: str) -> None:
+    def reset_failed_research(self, session_id: str, retryable_codes: set[str]) -> bool:
         with self._lock:
-            state = self._get_state(session_id, self._clock())
+            now = self._clock()
+            state = self._get_state(session_id, now)
+            if (
+                state.payload.get("status") != "failed"
+                or state.payload.get("failure_code") not in retryable_codes
+            ):
+                return False
+
+            stale_keys = {
+                "failure_code",
+                "result",
+                "evidence_by_id",
+                "validation_issues",
+                *(
+                    key
+                    for key in state.payload
+                    if key.startswith("research_") or key.endswith("_research")
+                ),
+            }
+            for key in stale_keys:
+                state.payload.pop(key, None)
+            state.payload["status"] = "created"
             state.events.clear()
+            state.events.append(deepcopy({"type": "run_started", "data": {}}))
+            state.expires_at = now + self._ttl
+            return True
 
     def delete(self, session_id: str) -> None:
         with self._lock:
