@@ -1,3 +1,4 @@
+from datetime import date
 from hashlib import sha256
 from pathlib import Path
 
@@ -14,7 +15,9 @@ from cpf_fcv_reviewer.contracts import (
     SensitivityCategory,
 )
 from cpf_fcv_reviewer.extraction import ExtractedDocument, ExtractedSegment
+from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.registry import load_registry_bundle
+from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchResult
 from cpf_fcv_reviewer.runtime import build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
 
@@ -663,3 +666,140 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
     assert "metadata" not in repair_payloads[0]["draft"]
     assert "SOURCE_SENTINEL" not in str(repair_payloads[0])
     assert context["result"].metadata.repair_count == 1
+
+
+def _current_claims():
+    return (
+        CurrentContextClaim(
+            claim_id="claim-1", text="Exact current finding.", publisher="World Bank",
+            source_title="Finding", source_url="https://www.worldbank.org/finding",
+            source_date=date(2026, 7, 1), source_type="report", relevance="Relevant.",
+            context_kind="structural_dynamic", relationship="establishes",
+            licensed_data_required=False,
+        ),
+        CurrentContextClaim(
+            claim_id="claim-2", text="Exact other finding.", publisher="Other source",
+            source_title="Other finding", source_url="https://other.example.org/finding",
+            source_date=date(2026, 7, 2), source_type="briefing", relevance="Relevant.",
+            context_kind="current_development", relationship="corroborates",
+            licensed_data_required=False,
+        ),
+    )
+
+
+class _InjectedResearchController:
+    def __init__(self):
+        self.requests = []
+        self.emits = []
+
+    def run(self, request, emit):
+        self.requests.append(request)
+        self.emits.append(emit)
+        return ResearchResult(_current_claims(), {}, 1, True)
+
+
+def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
+    captured = {}
+
+    class ModelGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
+            return output_type(
+                overall_read="The review identifies a delivery constraint.",
+                alignment_readout="The draft partly reflects current context.",
+                revision_summary=(), priority_areas=(), institutional_referral_ids=(),
+                limitations=(), coverage_note="The review covers the uploaded CPF.",
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", ModelGateway)
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=controller,
+        review_date_provider=lambda: date(2026, 8, 13),
+    )
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "narrow-runtime-run",
+            "payload": {
+                "country": "Benin", "review_stage": "finalization",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"CPF text " * 20},
+                "package_documents": [{"name": "package.txt", "bytes": package_text}],
+                "context_documents": [], "review_focus": "", "detail_level": "standard",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+    return context, captured["pack"]
+
+
+def test_runtime_researches_with_dated_rra_request_and_emitter(monkeypatch):
+    controller = _InjectedResearchController()
+    context, _ = _run_narrow_runtime(
+        monkeypatch,
+        b"Benin Risk and Resilience Assessment, March 2025. First segment.",
+        controller=controller,
+    )
+
+    request = controller.requests[0]
+    assert request.mode is ResearchMode.RRA_UPDATE
+    assert request.diagnostic_title == "package.txt"
+    assert request.diagnostic_date == date(2025, 3, 1)
+    assert request.diagnostic_summary == (
+        "Benin Risk and Resilience Assessment, March 2025. First segment."
+    )
+    assert controller.emits[0] is not None
+    assert context["uploaded_diagnostic"].name == "package.txt"
+    assert context["research_result"].sufficient
+
+
+def test_runtime_uses_holistic_request_without_rra(monkeypatch):
+    controller = _InjectedResearchController()
+    context, pack = _run_narrow_runtime(
+        monkeypatch, b"Package context without a diagnostic marker.", controller=controller
+    )
+
+    request = controller.requests[0]
+    assert request.mode is ResearchMode.HOLISTIC
+    assert request.diagnostic_title is None
+    assert request.diagnostic_date is None
+    assert context["uploaded_diagnostic"] is None
+    assert pack.metadata.diagnostic_mode.value == "limited_framing"
+
+
+def test_runtime_uses_holistic_request_but_rra_alignment_for_undated_rra(monkeypatch):
+    controller = _InjectedResearchController()
+    context, pack = _run_narrow_runtime(
+        monkeypatch,
+        b"Benin Risk and Resilience Assessment. Undated findings.",
+        controller=controller,
+    )
+
+    request = controller.requests[0]
+    assert request.mode is ResearchMode.HOLISTIC
+    assert request.diagnostic_title is None
+    assert request.diagnostic_date is None
+    assert context["uploaded_diagnostic"].publication_date is None
+    assert pack.metadata.diagnostic_mode.value == "rra_alignment"
+
+
+def test_runtime_appends_current_research_exactly_before_review(monkeypatch):
+    controller = _InjectedResearchController()
+    _, pack = _run_narrow_runtime(
+        monkeypatch,
+        b"No diagnostic supplied.",
+        controller=controller,
+    )
+
+    current = [item for item in pack.evidence if item.evidence_type == "current_context"]
+    actual = [
+        (item.evidence_id, item.text, item.source_url, item.confidence)
+        for item in current
+    ]
+    assert actual == [
+        ("current-001", "Exact current finding.", "https://www.worldbank.org/finding", "high"),
+        ("current-002", "Exact other finding.", "https://other.example.org/finding", "medium"),
+    ]

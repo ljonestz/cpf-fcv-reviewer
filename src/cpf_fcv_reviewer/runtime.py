@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from hashlib import sha256
 from pathlib import Path
 from secrets import compare_digest
@@ -13,6 +13,7 @@ from .contracts import (
     EvidenceLocator,
     UserCorrection,
 )
+from .diagnostic_sources import identify_uploaded_diagnostic
 from .evidence_builder import build_reproducible_evidence_pack
 from .extraction import extract_document, require_readable_primary
 from .model_gateway import AnthropicModelGateway
@@ -20,7 +21,7 @@ from .orchestrator import ReviewOrchestrator
 from .prompts import load_prompt
 from .public_research import AnthropicPublicResearchGateway
 from .registry import RegistryUnavailable, load_registry_bundle
-from .research_controller import ResearchController
+from .research_controller import ResearchController, ResearchMode, ResearchRequest
 from .review_engine import ReviewEngine
 from .sources import choose_authoritative_source
 from .validators import (
@@ -69,11 +70,28 @@ def _select_role_segments(
     return selected
 
 
+def _is_explicit_authoritative_claim(claim) -> bool:
+    authority_text = f"{claim.publisher} {claim.source_type}".casefold()
+    return any(
+        marker in authority_text
+        for marker in (
+            "world bank",
+            "multilateral",
+            "united nations",
+            "un agency",
+            " mdb",
+            "mdb ",
+        )
+    )
+
+
 def build_runtime_services(
     config: dict,
     *,
     model_gateway=None,
     research_gateway=None,
+    research_controller=None,
+    review_date_provider=date.today,
 ) -> dict:
     path = Path(config.get("REGISTRY_BUNDLE_PATH", ""))
     expected_hash = str(config.get("REGISTRY_BUNDLE_SHA256", "")).strip().lower()
@@ -98,20 +116,21 @@ def build_runtime_services(
             config["ANTHROPIC_API_KEY"],
             config["ANTHROPIC_MODEL_ID"],
         )
-    if research_gateway is None:
-        research_gateway = AnthropicPublicResearchGateway(
-            config["ANTHROPIC_API_KEY"],
-            config["ANTHROPIC_MODEL_ID"],
-            timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
+    if research_controller is None:
+        if research_gateway is None:
+            research_gateway = AnthropicPublicResearchGateway(
+                config["ANTHROPIC_API_KEY"],
+                config["ANTHROPIC_MODEL_ID"],
+                timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
+            )
+        research_controller = ResearchController(
+            research_gateway,
+            max_attempts=config["RESEARCH_MAX_ATTEMPTS"],
+            minimum_claims=config["RESEARCH_MINIMUM_CLAIMS"],
+            minimum_publishers=config["RESEARCH_MINIMUM_PUBLISHERS"],
+            total_budget_seconds=config["RESEARCH_TOTAL_BUDGET_SECONDS"],
+            retry_backoff_seconds=config["RESEARCH_RETRY_BACKOFF_SECONDS"],
         )
-    research_controller = ResearchController(
-        research_gateway,
-        max_attempts=config["RESEARCH_MAX_ATTEMPTS"],
-        minimum_claims=config["RESEARCH_MINIMUM_CLAIMS"],
-        minimum_publishers=config["RESEARCH_MINIMUM_PUBLISHERS"],
-        total_budget_seconds=config["RESEARCH_TOTAL_BUDGET_SECONDS"],
-        retry_backoff_seconds=config["RESEARCH_RETRY_BACKOFF_SECONDS"],
-    )
     review_engine = ReviewEngine(model_gateway)
 
     prohibited_terms = {term for entry in bundle.entries for term in entry.prohibited_terms}
@@ -212,6 +231,29 @@ def build_runtime_services(
             for item in corrections
         )
 
+        used_evidence_ids = {item.evidence_id for item in evidence}
+        current_index = 1
+        for claim in context["research_result"].claims:
+            evidence_id = f"current-{current_index:03d}"
+            while evidence_id in used_evidence_ids:
+                current_index += 1
+                evidence_id = f"current-{current_index:03d}"
+            evidence.append(
+                EvidenceItem(
+                    evidence_id=evidence_id,
+                    evidence_type="current_context",
+                    text=claim.text,
+                    source_url=claim.source_url,
+                    confidence=(
+                        "high"
+                        if _is_explicit_authoritative_claim(claim)
+                        else "medium"
+                    ),
+                )
+            )
+            used_evidence_ids.add(evidence_id)
+            current_index += 1
+
         document_bytes = {
             f"primary:{payload['cpf']['name']}": payload["cpf"]["bytes"]
         }
@@ -241,7 +283,11 @@ def build_runtime_services(
             run_id=context["assessment_id"],
             created_at=datetime.now(UTC),
             review_stage=payload["review_stage"],
-            diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+            diagnostic_mode=(
+                DiagnosticMode.RRA_ALIGNMENT
+                if context.get("uploaded_diagnostic") is not None
+                else DiagnosticMode.LIMITED_FRAMING
+            ),
             documents=document_bytes,
             registry_bundle=path.read_bytes(),
             detail_level=payload.get("detail_level", DetailLevel.STANDARD),
@@ -291,7 +337,55 @@ def build_runtime_services(
                     review_focus=review_focus,
                 )
             if name == "research":
-                context["public_research_gateway"] = research_gateway
+                payload = context.get("payload", {})
+                uploaded_diagnostic = identify_uploaded_diagnostic(
+                    tuple(context.get("package_documents", ()))
+                    + tuple(context.get("context_documents", ())),
+                    country=payload.get("country", ""),
+                )
+                context["uploaded_diagnostic"] = uploaded_diagnostic
+                review_date = review_date_provider()
+                dated_diagnostic = (
+                    uploaded_diagnostic
+                    if uploaded_diagnostic is not None
+                    and uploaded_diagnostic.publication_date is not None
+                    else None
+                )
+                request = ResearchRequest(
+                    country=payload["country"],
+                    review_date=review_date,
+                    mode=(
+                        ResearchMode.RRA_UPDATE
+                        if dated_diagnostic is not None
+                        else ResearchMode.HOLISTIC
+                    ),
+                    diagnostic_title=(
+                        dated_diagnostic.name if dated_diagnostic is not None else None
+                    ),
+                    diagnostic_date=(
+                        dated_diagnostic.publication_date
+                        if dated_diagnostic is not None
+                        else None
+                    ),
+                    diagnostic_summary=(
+                        " ".join(
+                            segment.text
+                            for document in (
+                                *tuple(context.get("package_documents", ())),
+                                *tuple(context.get("context_documents", ())),
+                            )
+                            if dated_diagnostic is not None
+                            and document.name == dated_diagnostic.name
+                            for segment in document.segments[:3]
+                        )[:1200]
+                        if dated_diagnostic is not None
+                        else ""
+                    ),
+                )
+                context["research_result"] = research_controller.run(
+                    request,
+                    context["_emit"],
+                )
             if name == "build_evidence":
                 return build_uploaded_evidence(context)
             if name == "validate" and {
