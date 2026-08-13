@@ -27,8 +27,8 @@
         <div class="form-heading">
           <div>
             <p class="eyebrow">GUIDED INTAKE</p>
-            <h2 id="express-review-heading">Express review</h2>
-            <p class="helper">Upload the main draft and any useful context. The review will infer the country from the primary file and tailor its advice to the selected stage.</p>
+            <h2 id="express-review-heading">Prepare a CPF review note</h2>
+            <p class="helper">Upload the draft and the most useful supporting material. The reviewer will identify the country, check the package against current FCV dynamics, and tailor the note to the selected stage.</p>
           </div>
           <button id="open-process-dialog" class="button-secondary" type="button">How it works</button>
         </div>
@@ -36,18 +36,21 @@
 
         <div class="upload-zones">
           <label class="upload-zone upload-zone-primary" id="primary-upload" for="cpf">
-            <span class="upload-zone-title">Primary document <span aria-hidden="true">*</span></span>
-            <span class="upload-zone-description">The CPF or CEN being reviewed.</span>
+            <span class="upload-badge">Required</span>
+            <span class="upload-zone-title">Draft CPF / CEN <span aria-hidden="true">*</span></span>
+            <span class="upload-zone-description">The main draft to review. Upload one PDF, Word document, or text file.</span>
             <input id="cpf" name="cpf" type="file" accept=".pdf,.docx,.txt,.md" required>
           </label>
           <label class="upload-zone" for="package-documents">
-            <span class="upload-zone-title">CPF package documents</span>
-            <span class="upload-zone-description">Supporting documents submitted with the package.</span>
+            <span class="upload-badge upload-badge-optional">Optional</span>
+            <span class="upload-zone-title">Accompanying CPF package documents</span>
+            <span class="upload-zone-description">PLRs, results frameworks, annexes, or other documents submitted with the package.</span>
             <input id="package-documents" name="package_documents" type="file" accept=".pdf,.docx,.txt,.md" multiple>
           </label>
           <label class="upload-zone" for="context-documents">
-            <span class="upload-zone-title">Wider contextual documents</span>
-            <span class="upload-zone-description">RRA, PLR, diagnostics, or other useful context.</span>
+            <span class="upload-badge upload-badge-optional">Optional</span>
+            <span class="upload-zone-title">RRA and supporting analytics</span>
+            <span class="upload-zone-description">The latest RRA, FCV diagnostic, or other country analysis. Current public research runs for every review.</span>
             <input id="context-documents" name="context_documents" type="file" accept=".pdf,.docx,.txt,.md" multiple>
           </label>
         </div>
@@ -55,7 +58,7 @@
         <div id="country-detection" class="country-detection" aria-live="polite"></div>
         <input id="country" name="country" type="hidden">
 
-        <div class="field-grid">
+        <div class="field-grid field-grid-single">
           <label for="review-stage">Review stage <span aria-hidden="true">*</span>
             <select id="review-stage" name="review_stage" required>
               <option value="early_drafting">Early drafting / PCN</option>
@@ -66,13 +69,6 @@
               <option value="response_to_comments">Response to comments</option>
             </select>
           </label>
-          <label for="detail-level">Level of detail
-            <select id="detail-level" name="detail_level">
-              <option value="brief">Brief</option>
-              <option value="standard" selected>Standard</option>
-              <option value="in_depth">In-depth</option>
-            </select>
-          </label>
         </div>
 
         <details id="additional-guidance">
@@ -81,12 +77,21 @@
           <textarea id="review-focus" name="review_focus" maxlength="4000" placeholder="Optional: identify a theme, section, or concern for the reviewer."></textarea>
         </details>
 
-        <button id="submit-review" type="submit" disabled>Run Express review</button>
+        <button id="submit-review" type="submit" disabled>Generate CPF review note</button>
       </form>
     </section>
 
     <section id="review-workspace" hidden aria-label="Review workspace">
-      <section id="progress" hidden aria-live="polite"></section>
+      <section id="progress" hidden>
+        <p class="eyebrow">REVIEW IN PROGRESS</p>
+        <h2>Preparing your CPF review note</h2>
+        <ol id="progress-steps" class="progress-steps" aria-label="Review progress">
+          <li data-progress-step="documents">Reading the CPF package</li>
+          <li data-progress-step="research">Checking current FCV dynamics</li>
+          <li data-progress-step="note">Preparing the review note</li>
+        </ol>
+        <p id="progress-message" role="status" aria-live="polite"></p>
+      </section>
       <button id="return-to-intake" type="button" hidden>Return to intake</button>
       <section id="results" hidden aria-live="polite"></section>
 

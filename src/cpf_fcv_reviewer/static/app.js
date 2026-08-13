@@ -3,6 +3,8 @@ const landingView = document.querySelector("#landing-view");
 const landingNotice = document.querySelector("#landing-notice");
 const reviewWorkspace = document.querySelector("#review-workspace");
 const progress = document.querySelector("#progress");
+const progressMessage = document.querySelector("#progress-message") || progress;
+const progressSteps = Array.from(document.querySelectorAll?.("[data-progress-step]") || []);
 const results = document.querySelector("#results");
 const corrections = document.querySelector("#corrections");
 const actions = document.querySelector("#actions");
@@ -26,6 +28,47 @@ let detectionEpoch = 0;
 const RESULT_RETRY_LIMIT = 3;
 const RESULT_RETRY_DELAY_MS = 250;
 const SOURCE_ERROR_LIMIT = 2;
+
+const progressLabels = {
+  extract: "Reading the CPF package",
+  resolve_sources: "Establishing the diagnostic baseline",
+  research: "Checking current FCV dynamics",
+  build_evidence: "Organizing traceable evidence",
+  map: "Mapping the RRA and FCV Strategy response",
+  review: "Drafting the detailed review note",
+  validate: "Checking the note and evidence links",
+  render: "Preparing the final readout",
+  research_attempt: "Checking trusted public sources",
+  research_retry: "Trying another trusted research route",
+  research_sufficient: "Current FCV context established",
+};
+
+const progressGroups = {
+  extract: "documents",
+  resolve_sources: "documents",
+  research: "research",
+  research_attempt: "research",
+  research_retry: "research",
+  research_sufficient: "research",
+  build_evidence: "note",
+  map: "note",
+  review: "note",
+  validate: "note",
+  render: "note",
+};
+
+function updateProgress(stage) {
+  const group = progressGroups[stage];
+  for (const item of progressSteps) {
+    item.classList.toggle("is-active", item.dataset.progressStep === group);
+  }
+  progressMessage.textContent = progressLabels[stage] || "Preparing the review note";
+}
+
+function resetProgress() {
+  progressMessage.textContent = "";
+  for (const item of progressSteps) item.classList.remove("is-active");
+}
 
 const failureLabels = {
   model_timeout: "The model timed out. Try the review again.",
@@ -51,6 +94,7 @@ function showProgress() {
   corrections.hidden = true;
   actions.hidden = true;
   returnToIntake.hidden = true;
+  updateProgress("extract");
 }
 
 function showResults() {
@@ -66,7 +110,7 @@ function showResults() {
 
 function showRecoverableFailure(message) {
   showProgress();
-  progress.textContent = message;
+  progressMessage.textContent = message;
   returnToIntake.hidden = false;
 }
 
@@ -367,11 +411,17 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
   source.addEventListener("step_start", (event) => {
     if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
     const data = JSON.parse(event.data);
-    progress.textContent = `Working: ${data.step}`;
+    updateProgress(data.step);
   });
+  for (const eventName of ["research_attempt", "research_retry", "research_sufficient"]) {
+    source.addEventListener(eventName, () => {
+      if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
+      updateProgress(eventName);
+    });
+  }
   source.addEventListener("run_complete", async () => {
     if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
-    progress.textContent = "Review complete";
+    progressMessage.textContent = "Review complete";
     try {
       const result = await loadResult(resultUrl, operation);
       if (!isCurrentOperation(operation) || !result) return;
@@ -410,7 +460,7 @@ form.addEventListener("submit", async (event) => {
   resetPending = false;
   const operation = ++operationEpoch;
   showProgress();
-  progress.textContent = "Uploading and validating";
+  progressMessage.textContent = "Uploading and validating";
   try {
     const response = await fetch("/api/reviews", {
       method: "POST",
@@ -453,7 +503,7 @@ submitCorrection.addEventListener("click", async () => {
     assessmentId = child.assessment_id;
     sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
     showProgress();
-    progress.textContent = "User-provided correction saved; rerun requested.";
+    progressMessage.textContent = "User-provided correction saved; rerun requested.";
     watchEvents(child.event_url, child.result_url, operation);
   } catch (_error) {
     if (!isCurrentOperation(operation)) return;
@@ -476,7 +526,7 @@ document.querySelector("#reset-review").addEventListener("click", async () => {
   sessionStorage.removeItem("cpf_fcv_assessment_id");
   assessmentId = "";
   results.replaceChildren();
-  progress.replaceChildren();
+  resetProgress();
   form.reset();
   clearCountryCorrection();
   countryInput.value = "";

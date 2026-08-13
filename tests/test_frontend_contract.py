@@ -14,7 +14,6 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
         'id="package-documents"',
         'id="context-documents"',
         'id="review-stage"',
-        'id="detail-level"',
         'id="additional-guidance"',
         'id="review-focus"',
         'id="country-detection"',
@@ -70,7 +69,7 @@ def test_guided_landing_separates_essential_and_optional_inputs():
     assert "held only for this session" in html
 
 
-def test_guided_landing_has_three_upload_zones_detail_control_and_process_dialog():
+def test_guided_landing_has_three_upload_zones_and_process_dialog():
     html = HTML.read_text(encoding="utf-8")
     css = Path("src/cpf_fcv_reviewer/static/styles.css").read_text(encoding="utf-8")
 
@@ -78,7 +77,7 @@ def test_guided_landing_has_three_upload_zones_detail_control_and_process_dialog
     assert '<div class="upload-zones">' in html
     assert 'name="package_documents"' in html
     assert 'name="context_documents"' in html
-    assert '<option value="standard" selected>Standard</option>' in html
+    assert 'id="detail-level"' not in html
     dialog_start = html.split('<dialog id="process-dialog"', 1)[1].split(">", 1)[0]
     assert " hidden" in dialog_start
     assert "How the Express review works" in html
@@ -196,3 +195,87 @@ def test_return_to_intake_respects_the_hidden_attribute_and_landing_has_notice()
     assert 'id="landing-notice"' in html
     assert 'aria-live="polite"' in html
     assert "#return-to-intake { display: block; }" not in css
+
+
+def test_task9_intake_uses_approved_labels_and_preserves_backend_field_names():
+    html = HTML.read_text(encoding="utf-8")
+
+    for label in (
+        "Draft CPF / CEN",
+        "Accompanying CPF package documents",
+        "RRA and supporting analytics",
+    ):
+        assert label in html
+    for field_name in (
+        'name="cpf"',
+        'name="package_documents"',
+        'name="context_documents"',
+        'name="review_stage"',
+        'name="review_focus"',
+        'name="country"',
+    ):
+        assert field_name in html
+    assert 'id="detail-level"' not in html
+    assert 'name="detail_level"' not in html
+    assert "Generate CPF review note" in html
+    assert "Run Express review" not in html
+
+
+def test_task9_progress_has_semantic_stages_and_live_message():
+    html = HTML.read_text(encoding="utf-8")
+
+    assert '<ol id="progress-steps"' in html
+    assert 'aria-label="Review progress"' in html
+    for step, label in (
+        ("documents", "Reading the CPF package"),
+        ("research", "Checking current FCV dynamics"),
+        ("note", "Preparing the review note"),
+    ):
+        assert f'data-progress-step="{step}"' in html
+        assert label in html
+    assert 'id="progress-message" role="status" aria-live="polite"' in html
+
+
+def test_task9_progress_mapping_uses_safe_labels_and_omits_backend_content():
+    javascript = JS.read_text(encoding="utf-8")
+
+    emitted_research_events = (
+        "research_attempt",
+        "research_retry",
+        "research_sufficient",
+    )
+    for event_name in emitted_research_events:
+        assert f'"{event_name}"' in javascript
+    assert (
+        'for (const eventName of ["research_attempt", "research_retry", '
+        '"research_sufficient"])' in javascript
+    )
+    assert "source.addEventListener(eventName" in javascript
+    for obsolete_event_name in ("research_attempt_started", "research_retrying"):
+        assert obsolete_event_name not in javascript
+    for stage in (
+        "extract",
+        "resolve_sources",
+        "research",
+        "build_evidence",
+        "map",
+        "review",
+        "validate",
+        "render",
+    ):
+        assert stage in javascript
+    for unsafe_payload in ("data.claim", "data.source", "data.prompt", "${data.step}"):
+        assert unsafe_payload not in javascript
+    assert "progress-message" in javascript
+    assert "data-progress-step" in javascript
+
+
+def test_task9_css_uses_repository_owned_screener_aligned_visual_language():
+    css = Path("src/cpf_fcv_reviewer/static/styles.css").read_text(encoding="utf-8")
+
+    assert ".site-header" in css
+    assert "linear-gradient" in css
+    assert "--cyan" in css
+    assert ".upload-badge" in css
+    assert ".progress-steps" in css
+    assert "@media (max-width: 760px)" in css
