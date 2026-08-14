@@ -420,10 +420,8 @@ def _read_bounded_body(response: Any, max_bytes: int) -> bytes:
             body.extend(chunk)
     except InstitutionalClientError:
         raise
-    except (httpx.HTTPError, TimeoutError):
+    except (httpx.HTTPError, TimeoutError, OSError):
         raise InstitutionalClientError("Institutional request failed.") from None
-    except Exception:
-        raise InstitutionalClientError("Institutional response body was invalid.") from None
     return bytes(body)
 
 

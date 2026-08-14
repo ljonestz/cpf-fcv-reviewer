@@ -191,7 +191,6 @@ class ResearchController:
 
         primary_attempts = 0
         for attempt in range(1, self.max_attempts + 1):
-            primary_attempts = attempt
             elapsed = self.monotonic() - started
             if attempt > 1 and elapsed >= self.total_budget_seconds:
                 budget_exhausted = True
@@ -202,6 +201,7 @@ class ResearchController:
                 self._event_data(attempt, accepted, rejected, elapsed),
             )
             try:
+                primary_attempts += 1
                 claims = self.gateway.search(prompt)
             except Exception as exc:
                 failure = self._classify_exception(exc)
@@ -225,7 +225,7 @@ class ResearchController:
                     started=started,
                     claims=tuple(accepted.values()),
                     rejected=rejected,
-                    attempts=attempt,
+                    attempts=primary_attempts,
                     tier=CurrentEvidenceTier.FULL,
                     limitation=None,
                     route="research_primary" if attempt == 1 else "research_salvaged",
@@ -295,6 +295,8 @@ class ResearchController:
                 emit=emit,
                 event_data={"missing_coverage": last_missing},
             )
+        if budget_exhausted:
+            raise ResearchTimeout("Research total budget was exhausted.")
         if allow_document_led and not accepted:
             return self._finish(
                 started=started,
@@ -312,8 +314,6 @@ class ResearchController:
             )
         if last_failure is not None:
             raise last_failure
-        if budget_exhausted:
-            raise ResearchTimeout("Research total budget was exhausted.")
         if not accepted and rejected:
             raise ResearchSourceRejected("All public research claims were rejected.")
         raise InsufficientResearch("Public research did not meet the sufficiency threshold.")

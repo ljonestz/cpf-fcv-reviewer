@@ -3,7 +3,9 @@ from datetime import date, datetime
 from math import inf, nan
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from anthropic import APIConnectionError, APITimeoutError
 
 from cpf_fcv_reviewer import public_research
 from cpf_fcv_reviewer.contracts import CurrentEvidenceTier
@@ -377,6 +379,49 @@ def test_transient_provider_error_retries_then_succeeds():
     assert result.tier is CurrentEvidenceTier.FULL
 
 
+@pytest.mark.parametrize(
+    ("provider_error", "expected"),
+    [
+        (
+            APIConnectionError(
+                request=httpx.Request(
+                    "POST", "https://api.anthropic.com/v1/messages"
+                )
+            ),
+            ResearchProviderFailure,
+        ),
+        (
+            APITimeoutError(
+                httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+            ),
+            ResearchTimeout,
+        ),
+    ],
+)
+def test_anthropic_transport_failures_are_retryable_and_classified(
+    monkeypatch, provider_error, expected
+):
+    calls = 0
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            nonlocal calls
+            calls += 1
+            raise provider_error
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()),
+        messages=SimpleNamespace(),
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway("key", "model")
+
+    with pytest.raises(expected):
+        controller(gateway, max_attempts=2).run(holistic_request(), lambda *_: None)
+
+    assert calls == 2
+
+
 def test_configuration_error_stops_immediately():
     class UnauthorizedError(RuntimeError):
         status_code = 401
@@ -669,8 +714,53 @@ def test_exact_budget_stops_calls_but_grades_accumulated_recent_evidence():
     ).run(holistic_request(), lambda *_: None)
 
     assert gateway.calls == 1
+    assert result.attempts == 1
     assert result.tier is CurrentEvidenceTier.REDUCED
     assert tuple(item.claim_id for item in result.claims) == ("c1",)
+
+
+def test_budget_exhaustion_precedes_earlier_provider_failure_without_evidence():
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gateway = ScriptedGateway((ConnectionError("provider"), sufficient_claims()))
+
+    with pytest.raises(ResearchTimeout, match="budget"):
+        controller(
+            gateway,
+            max_attempts=2,
+            total_budget_seconds=1.0,
+            retry_backoff_seconds=2.0,
+            monotonic=lambda: now[0],
+            sleep=sleep,
+            jitter=lambda delay: delay,
+        ).run(holistic_request(), lambda *_: None)
+
+    assert gateway.calls == 1
+
+
+def test_recent_evidence_precedes_budget_and_earlier_provider_failure():
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gateway = ScriptedGateway((ConnectionError("provider"), (claim("recent"),)))
+    result = controller(
+        gateway,
+        max_attempts=3,
+        total_budget_seconds=1.0,
+        retry_backoff_seconds=(0.0, 2.0),
+        monotonic=lambda: now[0],
+        sleep=sleep,
+        jitter=lambda delay: delay,
+    ).run(holistic_request(), lambda *_: None)
+
+    assert gateway.calls == 2
+    assert result.attempts == 2
+    assert result.tier is CurrentEvidenceTier.REDUCED
 
 
 @pytest.mark.parametrize(

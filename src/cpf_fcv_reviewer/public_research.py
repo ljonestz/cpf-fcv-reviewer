@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal, Protocol
 from urllib.parse import urlparse, urlunparse
 
-from anthropic import Anthropic
+from anthropic import Anthropic, APIConnectionError, APITimeoutError
 from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, field_validator
 
 
@@ -384,6 +384,14 @@ class AnthropicPublicResearchGateway:
         self._model_id = model_id
 
     def search(self, prompt: str) -> tuple[CurrentContextClaim, ...]:
+        try:
+            return self._search(prompt)
+        except APITimeoutError:
+            raise TimeoutError("Anthropic research request timed out.") from None
+        except APIConnectionError:
+            raise ConnectionError("Anthropic research provider was unavailable.") from None
+
+    def _search(self, prompt: str) -> tuple[CurrentContextClaim, ...]:
         messages: list[dict[str, object]] = [{"role": "user", "content": prompt}]
         response = self._create_web_search_response(messages)
         content_blocks = list(_response_content(response))

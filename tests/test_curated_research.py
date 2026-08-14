@@ -126,6 +126,20 @@ def test_bounded_client_does_not_swallow_programming_errors():
         client.get_json("https://api.worldbank.org/v2/country")
 
 
+def test_bounded_client_does_not_swallow_iterator_programming_errors():
+    class BrokenIteratorResponse(StubResponse):
+        def iter_bytes(self):
+            yield b"{"
+            raise KeyError("iterator programming defect")
+
+    client = BoundedInstitutionalClient(
+        client=StubClient(lambda *_args: BrokenIteratorResponse())
+    )
+
+    with pytest.raises(KeyError, match="iterator programming defect"):
+        client.get_json("https://api.worldbank.org/v2/country")
+
+
 def test_curated_gateway_uses_one_deadline_across_adapter_calls():
     now = [10.0]
 

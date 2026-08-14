@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from anthropic import APIStatusError
+from anthropic import APIConnectionError, APIStatusError, APITimeoutError
 from pydantic import ValidationError
 
 from cpf_fcv_reviewer import public_research
@@ -1261,6 +1261,42 @@ def test_anthropic_api_error_propagates_without_salvage(monkeypatch):
         public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
     assert raised.value is provider_error
+
+
+@pytest.mark.parametrize(
+    ("provider_error", "expected"),
+    [
+        (
+            APIConnectionError(
+                request=httpx.Request(
+                    "POST", "https://api.anthropic.com/v1/messages"
+                )
+            ),
+            ConnectionError,
+        ),
+        (
+            APITimeoutError(
+                httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+            ),
+            TimeoutError,
+        ),
+    ],
+)
+def test_anthropic_transport_failures_normalize_at_gateway_boundary(
+    monkeypatch, provider_error, expected
+):
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            raise provider_error
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()),
+        messages=SimpleNamespace(),
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    with pytest.raises(expected):
+        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
 
 def test_provider_runtime_error_propagates_without_salvage(monkeypatch):
