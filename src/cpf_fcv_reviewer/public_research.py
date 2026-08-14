@@ -111,7 +111,6 @@ def _is_public_http_url(url: str | None) -> bool:
     if url is None:
         return False
 
-
     if any(ord(character) < 32 for character in url):
         return False
     try:
@@ -389,10 +388,10 @@ class AnthropicPublicResearchGateway:
         response = self._create_web_search_response(messages)
         content_blocks = list(_response_content(response))
 
-        if getattr(response, "stop_reason", None) == "pause_turn":
+        if _value(response, "stop_reason") == "pause_turn":
             messages = [
                 *messages,
-                {"role": "assistant", "content": response.content},
+                {"role": "assistant", "content": _value(response, "content", ())},
             ]
             response = self._create_web_search_response(messages)
             content_blocks.extend(_response_content(response))
@@ -639,8 +638,6 @@ def _publisher_from_source(source: ResearchSource) -> str:
     for hosts, publisher in _INSTITUTIONAL_PUBLISHER_HOSTS.values():
         if _host_matches(source.url, hosts):
             return publisher
-    if _is_official_national_government("government of official source", source.url):
-        return "Government of official source"
     return source.title
 
 
@@ -711,7 +708,12 @@ def _salvage_grounded_segments(
 
 
 def _is_unambiguous_single_sentence(text: str) -> bool:
-    return len(re.findall(r"[.!?](?=\s|$)", text.strip())) == 1
+    text = text.strip()
+    return (
+        bool(text)
+        and text[-1] in ".!?"
+        and sum(text.count(mark) for mark in ".!?") == 1
+    )
 
 
 def load_research_prompt() -> str:

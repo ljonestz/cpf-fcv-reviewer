@@ -387,6 +387,78 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
     ]
 
 
+def test_anthropic_gateway_continues_mapping_pause_turn_once(monkeypatch):
+    beta_calls: list[dict[str, object]] = []
+    source_url = "https://www.worldbank.org/mapping-pause"
+    first_response = {
+        "content": [
+            {
+                "type": "web_search_tool_result",
+                "content": [
+                    {
+                        "type": "web_search_result",
+                        "title": "Mapping pause update",
+                        "url": source_url,
+                        "page_age": "2025-04-30",
+                    }
+                ],
+            }
+        ],
+        "stop_reason": "pause_turn",
+    }
+    second_response = {
+        "content": [
+            {
+                "type": "text",
+                "text": "The mapping pause response is grounded.",
+                "citations": [
+                    {
+                        "type": "web_search_result_location",
+                        "title": "Mapping pause update",
+                        "url": source_url,
+                        "encrypted_index": "0",
+                        "cited_text": "A provider source excerpt.",
+                    }
+                ],
+            }
+        ],
+        "stop_reason": "end_turn",
+    }
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            beta_calls.append(kwargs)
+            return (first_response, second_response)[len(beta_calls) - 1]
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            return SimpleNamespace(
+                parsed_output=public_research.ResearchClaimBatch(
+                    claims=(
+                        _claim(
+                            source_url=source_url,
+                            source_title="Mapping pause update",
+                            source_date=date(2025, 4, 30),
+                        ),
+                    )
+                )
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+    assert len(beta_calls) == 2
+    assert beta_calls[1]["messages"][1] == {
+        "role": "assistant",
+        "content": first_response["content"],
+    }
+    assert len(result) == 1
+
+
 def test_anthropic_gateway_does_not_salvage_mixed_sentence_cited_blocks(monkeypatch):
     source_url = "https://www.worldbank.org/dated-update"
 
@@ -1061,7 +1133,7 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     class FakeMessages:
         def parse(self, **kwargs):
-            return ValidationError.from_exception_data(
+            raise ValidationError.from_exception_data(
                 "ResearchClaimBatch",
                 [{"type": "missing", "loc": ("claims",), "input": {}}],
             )
@@ -1075,6 +1147,64 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     assert len(result) == 1
     assert result[0].text == "The grounded narrative."
+
+
+@pytest.mark.parametrize(
+    "narrative",
+    [
+        "Cited sentence. Uncited sentence without punctuation",
+        "Unpunctuated cited block",
+    ],
+)
+def test_salvage_rejects_ambiguous_or_unpunctuated_cited_blocks(monkeypatch, narrative):
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return _cited_response(
+                source_url="https://www.worldbank.org/ambiguous-salvage",
+                source_title="Ambiguous salvage update",
+                page_age="2025-04-30",
+                narrative=narrative,
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            raise ValidationError.from_exception_data(
+                "ResearchClaimBatch",
+                [{"type": "missing", "loc": ("claims",), "input": {}}],
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    with pytest.raises(ValidationError):
+        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+
+def test_dated_government_source_salvage_is_not_accepted(monkeypatch):
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return _cited_response(
+                source_url="https://www.gov.ke/government-update",
+                source_title="Government of Kenya update",
+                page_age="2025-04-30",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            raise ValidationError.from_exception_data(
+                "ResearchClaimBatch",
+                [{"type": "missing", "loc": ("claims",), "input": {}}],
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    with pytest.raises(ValidationError):
+        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
 
 def test_normalization_value_error_propagates_without_salvage(monkeypatch):
