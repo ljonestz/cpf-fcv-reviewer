@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from types import SimpleNamespace
 
@@ -108,34 +109,68 @@ def test_rejects_claim_without_material_relevance():
     assert rejected == {"c5": "material relevance is required"}
 
 
-def test_anthropic_gateway_parses_concatenated_json_claim_text(monkeypatch):
-    calls: list[dict[str, object]] = []
+def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
+    beta_calls: list[dict[str, object]] = []
+    parse_calls: list[dict[str, object]] = []
+    source_url = "https://example.org/update"
 
-    class FakeMessages:
+    class FakeBetaMessages:
         def create(self, **kwargs):
-            calls.append(kwargs)
+            beta_calls.append(kwargs)
             return SimpleNamespace(
                 content=(
                     SimpleNamespace(
                         type="text",
-                        text='[{"claim_id":"c1","text":"A current development.",',
+                        text="Preamble that must not reach normalization.",
+                    ),
+                    SimpleNamespace(
+                        type="server_tool_use",
+                        id="tool-1",
+                        name="web_search",
+                        input={"query": "country context"},
+                    ),
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="World Bank update",
+                                url=source_url,
+                                published_date="2026-08-01",
+                            ),
+                        ),
                     ),
                     SimpleNamespace(
                         type="text",
-                        text=(
-                            '"publisher":"World Bank","source_title":"Update",'
-                            '"source_url":"https://example.org/update",'
-                            '"source_date":"2026-08-01","source_type":"public report",'
-                            '"relevance":"Tests recency.","relationship":"establishes",'
-                            '"context_kind":"current_development",'
-                            '"licensed_data_required":false}]'
+                        text="The cited narrative supports a current development claim.",
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="World Bank update",
+                                url=source_url,
+                                cited_text=(
+                                    "The cited narrative supports a current development claim."
+                                ),
+                                published_date="2026-08-01",
+                            ),
                         ),
                     ),
-                    SimpleNamespace(type="web_search_result", text="ignored"),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            parse_calls.append(kwargs)
+            return SimpleNamespace(
+                parsed_output=public_research.ResearchClaimBatch(
+                    claims=(_claim(context_kind="current_development", relationship="establishes"),)
                 )
             )
 
-    fake_client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
     monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
     gateway = public_research.AnthropicPublicResearchGateway(
         "test-key", "test-model", timeout_seconds=12.5
@@ -143,14 +178,286 @@ def test_anthropic_gateway_parses_concatenated_json_claim_text(monkeypatch):
 
     response = gateway.search("Use this prompt exactly.")
 
-    assert calls[0]["messages"] == [
+    assert beta_calls[0]["messages"] == [
         {"role": "user", "content": "Use this prompt exactly."}
     ]
     assert isinstance(response, tuple)
     assert response[0].publisher == "World Bank"
     assert response[0].context_kind == "current_development"
     assert response[0].relationship == "establishes"
-    assert calls[0]["tools"][0]["name"] == "web_search"
+    assert beta_calls[0]["tools"][0]["name"] == "web_search"
+    assert "concise cited synthesis" in beta_calls[0]["system"]
+
+    assert len(parse_calls) == 1
+    parse_call = parse_calls[0]
+    assert parse_call["output_format"].__name__ == "ResearchClaimBatch"
+    assert "tools" not in parse_call
+    normalized_payload = json.loads(parse_call["messages"][0]["content"])
+    assert normalized_payload == {
+        "narrative": "The cited narrative supports a current development claim.",
+        "sources": [
+            {
+                "title": "World Bank update",
+                "url": source_url,
+                "published_at": "2026-08-01",
+            }
+        ],
+    }
+
+
+def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_results(monkeypatch):
+    beta_calls: list[dict[str, object]] = []
+    parse_calls: list[dict[str, object]] = []
+    source_url = "https://example.org/continued-update"
+    first_response = SimpleNamespace(
+        content=(
+            SimpleNamespace(
+                type="text", text="Searching preamble that must be excluded."
+            ),
+            SimpleNamespace(
+                type="server_tool_use", id="tool-1", name="web_search", input={"query": "context"}
+            ),
+            SimpleNamespace(
+                type="web_search_tool_result",
+                content=(
+                    SimpleNamespace(
+                        type="web_search_result",
+                        title="Continued World Bank update",
+                        url=source_url,
+                        published_date="2026-08-02",
+                    ),
+                ),
+            ),
+        ),
+        stop_reason="pause_turn",
+    )
+    second_response = SimpleNamespace(
+        content=(
+            SimpleNamespace(
+                type="text",
+                text="The continued cited narrative uses the prior search result.",
+                citations=(
+                    SimpleNamespace(
+                        type="web_search_result_location",
+                        title="Continued World Bank update",
+                        url=source_url,
+                        cited_text="The continued cited narrative uses the prior search result.",
+                        published_date="2026-08-02",
+                    ),
+                ),
+            ),
+        ),
+        stop_reason="end_turn",
+    )
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            beta_calls.append(kwargs)
+            return (first_response, second_response)[len(beta_calls) - 1]
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            parse_calls.append(kwargs)
+            return SimpleNamespace(
+                parsed_output=public_research.ResearchClaimBatch(claims=(_claim(),))
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway("test-key", "test-model")
+
+    gateway.search("Continue this prompt exactly.")
+
+    assert len(beta_calls) == 2
+    assert beta_calls[1]["messages"] == [
+        {"role": "user", "content": "Continue this prompt exactly."},
+        {"role": "assistant", "content": first_response.content},
+    ]
+    assert len(parse_calls) == 1
+    normalized_payload = json.loads(parse_calls[0]["messages"][0]["content"])
+    assert normalized_payload["narrative"] == (
+        "The continued cited narrative uses the prior search result."
+    )
+    assert normalized_payload["sources"] == [
+        {
+            "title": "Continued World Bank update",
+            "url": source_url,
+            "published_at": "2026-08-02",
+        }
+    ]
+
+
+def test_anthropic_gateway_salvages_only_dated_cited_sentences_with_stable_ids(monkeypatch):
+    source_url = "https://worldbank.org/dated-update"
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Dated World Bank update",
+                                url=source_url,
+                                published_date="2026-08-03",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text=(
+                            "The cited sentence is salvageable. "
+                            "This uncited sentence must be excluded."
+                        ),
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Dated World Bank update",
+                                url=source_url,
+                                cited_text="The cited sentence is salvageable.",
+                                published_date="2026-08-03",
+                            ),
+                        ),
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            return SimpleNamespace(parsed_output=None)
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway("test-key", "test-model")
+
+    first = gateway.search("Use dated cited evidence.")
+    second = gateway.search("Use dated cited evidence.")
+
+    assert len(first) == 1
+    assert first == second
+    assert first[0].text == "The cited sentence is salvageable."
+    assert first[0].source_date == date(2026, 8, 3)
+    assert first[0].source_url == source_url
+    assert first[0].claim_id.startswith("sha256:")
+
+
+def test_anthropic_gateway_rejects_undated_sources_during_salvage(monkeypatch):
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Undated World Bank update",
+                                url="https://worldbank.org/undated-update",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text="The source is cited but undated.",
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Undated World Bank update",
+                                url="https://worldbank.org/undated-update",
+                                cited_text="The source is cited but undated.",
+                            ),
+                        ),
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            return SimpleNamespace(parsed_output=None)
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway("test-key", "test-model")
+
+    with pytest.raises(ValueError, match="no parsed output"):
+        gateway.search("Do not invent a source date.")
+
+
+@pytest.mark.parametrize(
+    ("publisher", "source_type", "source_url"),
+    [
+        ("World Bank", "licensed event-level dataset", "https://worldbank.org/data"),
+        ("World Bank", "blog", "https://worldbank.org/blog/post"),
+        ("World Bank", "public analysis", "https://twitter.com/worldbank/status/1"),
+        ("Wikipedia contributors", "user-generated reference", "https://wikipedia.org/page"),
+        ("Independent analyst", "public analysis", "https://example.org/analysis"),
+    ],
+)
+def test_retain_public_claims_rejects_nonpermitted_public_sources(
+    publisher: str, source_type: str, source_url: str
+):
+    retained, rejected = retain_public_claims(
+        (_claim(publisher=publisher, source_type=source_type, source_url=source_url),)
+    )
+
+    assert retained == ()
+    assert rejected == {"claim-1": "permitted institutional public source is required"}
+
+
+@pytest.mark.parametrize(
+    "publisher",
+    [
+        "World Bank",
+        "United Nations Development Programme",
+        "OECD",
+        "International Monetary Fund",
+        "African Development Bank",
+        "Asian Development Bank",
+        "Inter-American Development Bank",
+        "International Committee of the Red Cross",
+        "International Organization for Migration",
+        "ReliefWeb",
+        "Government of Kenya",
+    ],
+)
+def test_retain_public_claims_accepts_permitted_institutional_publishers(publisher: str):
+    retained, rejected = retain_public_claims((_claim(publisher=publisher),))
+
+    assert len(retained) == 1
+    assert rejected == {}
+
+
+def test_public_research_models_are_frozen_and_forbid_extra_fields():
+    research_source = public_research.ResearchSource(
+        title="Update", url="https://worldbank.org/update", published_at=date(2026, 8, 4)
+    )
+    artifact = public_research.SearchArtifact(
+        narrative="A cited synthesis.", sources=(research_source,)
+    )
+    batch = public_research.ResearchClaimBatch(claims=(_claim(),))
+
+    assert artifact.sources == (research_source,)
+    assert batch.claims[0].claim_id == "claim-1"
+
+    with pytest.raises(ValidationError):
+        public_research.ResearchSource(
+            title="Update",
+            url="https://worldbank.org/update",
+            published_at=date(2026, 8, 4),
+            extra="reject",
+        )
+    with pytest.raises(ValidationError):
+        artifact.narrative = "mutated"
 
 
 def test_anthropic_gateway_configures_timeout_and_disables_retries(monkeypatch):
@@ -169,19 +476,43 @@ def test_anthropic_gateway_configures_timeout_and_disables_retries(monkeypatch):
     assert captured == {"api_key": "test-key", "timeout": 7.25, "max_retries": 0}
 
 
-@pytest.mark.parametrize("response_text", ["{\"claim_id\": \"c1\"}", "not json"])
-def test_anthropic_gateway_rejects_non_array_or_malformed_json(monkeypatch, response_text):
-    class FakeMessages:
+@pytest.mark.parametrize("parsed_output", [None, SimpleNamespace(claims=())])
+def test_anthropic_gateway_rejects_absent_or_wrong_normalized_output(
+    monkeypatch, parsed_output
+):
+    class FakeBetaMessages:
         def create(self, **kwargs):
-            return SimpleNamespace(content=(SimpleNamespace(type="text", text=response_text),))
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Update",
+                                url="https://example.org/update",
+                                published_date="2026-08-01",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(type="text", text="A final narrative without a citation."),
+                ),
+                stop_reason="end_turn",
+            )
 
-    fake_client = SimpleNamespace(beta=SimpleNamespace(messages=FakeMessages()))
+    class FakeMessages:
+        def parse(self, **kwargs):
+            return SimpleNamespace(parsed_output=parsed_output)
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
     monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
     gateway = public_research.AnthropicPublicResearchGateway(
         "test-key", "test-model", timeout_seconds=10
     )
 
-    with pytest.raises(ValueError, match="could not be parsed"):
+    with pytest.raises(ValueError, match="no parsed output"):
         gateway.search("Use this prompt exactly.")
 
 
