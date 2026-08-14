@@ -64,7 +64,14 @@ EXPECTED_OPTIONAL_EXTRACTION_ERRORS = (
     UnicodeDecodeError,
     XMLSyntaxError,
 )
-REQUIRED_DOCX_PARTS = frozenset({"[Content_Types].xml", "word/document.xml"})
+REQUIRED_DOCX_PARTS = frozenset(
+    {
+        "[Content_Types].xml",
+        "_rels/.rels",
+        "word/document.xml",
+        "word/_rels/document.xml.rels",
+    }
+)
 
 
 def _select_role_segments(

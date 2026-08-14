@@ -43,6 +43,36 @@ def _zip_bytes(entries: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
+def _docx_missing_relationship_part(missing_part: str) -> bytes:
+    entries = {
+        "[Content_Types].xml": (
+            b'<Types xmlns="http://schemas.openxmlformats.org/package/'
+            b'2006/content-types"><Default Extension="rels" ContentType="application/'
+            b'vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" '
+            b'ContentType="application/xml"/><Override PartName="/word/document.xml" '
+            b'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.'
+            b'document.main+xml"/></Types>'
+        ),
+        "word/document.xml": (
+            b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/'
+            b'2006/main"><w:body><w:p><w:r><w:t>X9K7Q</w:t></w:r></w:p>'
+            b'</w:body></w:document>'
+        ),
+        "_rels/.rels": (
+            b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+            b'relationships"><Relationship Id="rId1" Type="http://schemas.'
+            b'openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+            b'Target="word/document.xml"/></Relationships>'
+        ),
+        "word/_rels/document.xml.rels": (
+            b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
+            b'relationships"><!--X9K7Q--></Relationships>'
+        ),
+    }
+    del entries[missing_part]
+    return _zip_bytes(entries)
+
+
 MALFORMED_OPTIONAL_UPLOADS = (
     ("private-invalid-zip.docx", b"X9K7Q not a zip archive"),
     (
@@ -60,7 +90,23 @@ MALFORMED_OPTIONAL_UPLOADS = (
             }
         ),
     ),
+    (
+        "private-missing-package-relationships.docx",
+        _docx_missing_relationship_part("_rels/.rels"),
+    ),
+    (
+        "private-missing-document-relationships.docx",
+        _docx_missing_relationship_part("word/_rels/document.xml.rels"),
+    ),
     ("private-financial-token.pdf", b"X9K7Q-secret-looking-prefix"),
+)
+MALFORMED_OPTIONAL_IDS = (
+    "invalid-zip",
+    "missing-content-types",
+    "missing-document-part",
+    "missing-package-relationships",
+    "missing-document-relationships",
+    "invalid-pdf",
 )
 
 
@@ -442,12 +488,7 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
 @pytest.mark.parametrize(
     ("invalid_name", "invalid_bytes"),
     MALFORMED_OPTIONAL_UPLOADS,
-    ids=(
-        "invalid-zip",
-        "missing-content-types",
-        "missing-document-part",
-        "invalid-pdf",
-    ),
+    ids=MALFORMED_OPTIONAL_IDS,
 )
 def test_runtime_malformed_optional_bytes_are_private_and_valid_context_continues(
     monkeypatch,
@@ -543,12 +584,7 @@ def test_runtime_malformed_optional_bytes_are_private_and_valid_context_continue
 @pytest.mark.parametrize(
     ("invalid_name", "invalid_bytes"),
     MALFORMED_OPTIONAL_UPLOADS,
-    ids=(
-        "invalid-zip",
-        "missing-content-types",
-        "missing-document-part",
-        "invalid-pdf",
-    ),
+    ids=MALFORMED_OPTIONAL_IDS,
 )
 def test_runtime_malformed_optional_cannot_enable_document_led(
     monkeypatch,
