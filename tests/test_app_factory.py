@@ -45,6 +45,14 @@ def test_production_rejects_whitespace_only_api_key():
         raise AssertionError("create_app must reject a whitespace-only API key")
 
 
+def test_false_smoke_environment_does_not_relax_production_api_key(monkeypatch):
+    monkeypatch.setenv("SMOKE_MODE", "false")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY is required outside tests"):
+        create_app({"TESTING": False})
+
+
 def test_normal_create_app_cannot_enable_smoke_mode_directly():
     with pytest.raises(RuntimeError, match="create_smoke_app"):
         create_app(

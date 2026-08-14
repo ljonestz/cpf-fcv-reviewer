@@ -6,12 +6,24 @@ from numbers import Real
 from unicodedata import category
 
 
+def _environment_bool(name: str) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return False
+    normalized = value.strip().casefold()
+    if normalized in {"false", "0", "no", "off"}:
+        return False
+    if normalized in {"true", "1", "yes", "on"}:
+        return True
+    raise ValueError(f"{name} environment value is invalid.")
+
+
 def build_config(overrides: dict | None = None) -> dict:
     overrides = overrides or {}
     config = {
         "APP_RELEASE": os.getenv("APP_RELEASE", "dev"),
         "APP_ENV": os.getenv("APP_ENV", "production"),
-        "SMOKE_MODE": os.getenv("SMOKE_MODE", False),
+        "SMOKE_MODE": _environment_bool("SMOKE_MODE"),
         "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
         "ANTHROPIC_MODEL_ID": os.getenv("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
         "REGISTRY_BUNDLE_PATH": os.getenv("REGISTRY_BUNDLE_PATH", ""),

@@ -3,12 +3,22 @@ from __future__ import annotations
 import json
 from typing import Protocol, TypeVar
 
-import anthropic
 from pydantic import BaseModel
 
 from .prompts import load_prompt
 
 OutputModel = TypeVar("OutputModel", bound=BaseModel)
+
+
+class _LazyAnthropicModule:
+    @staticmethod
+    def Anthropic(*args, **kwargs):
+        from anthropic import Anthropic
+
+        return Anthropic(*args, **kwargs)
+
+
+anthropic = _LazyAnthropicModule()
 
 
 class ModelGateway(Protocol):

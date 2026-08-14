@@ -11,8 +11,13 @@ from pathlib import Path
 from typing import Literal, Protocol
 from urllib.parse import urlparse, urlunparse
 
-from anthropic import Anthropic, APIConnectionError, APITimeoutError
 from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, field_validator
+
+
+def Anthropic(*args, **kwargs):
+    from anthropic import Anthropic as AnthropicClient
+
+    return AnthropicClient(*args, **kwargs)
 
 
 class CurrentContextClaim(BaseModel):
@@ -384,6 +389,8 @@ class AnthropicPublicResearchGateway:
         self._model_id = model_id
 
     def search(self, prompt: str) -> tuple[CurrentContextClaim, ...]:
+        from anthropic import APIConnectionError, APITimeoutError
+
         try:
             return self._search(prompt)
         except APITimeoutError:

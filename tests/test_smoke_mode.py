@@ -1,6 +1,10 @@
+import os
+import subprocess
+import sys
 from datetime import date
 from io import BytesIO
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 from docx import Document
@@ -138,6 +142,93 @@ def test_smoke_mode_rejects_truthy_string_ambiguity():
                 "TESTING": True,
             }
         )
+
+
+@pytest.mark.parametrize("value", ["false", "0", "no", "off"])
+def test_smoke_mode_parses_false_environment_values(monkeypatch, value):
+    monkeypatch.setenv("SMOKE_MODE", value)
+
+    config = build_config({"TESTING": True})
+
+    assert config["SMOKE_MODE"] is False
+
+
+@pytest.mark.parametrize("value", ["true", "1", "yes", "on"])
+def test_smoke_mode_parses_true_environment_values_in_development(monkeypatch, value):
+    monkeypatch.setenv("SMOKE_MODE", value)
+
+    config = build_config({"TESTING": True, "APP_ENV": "development"})
+
+    assert config["SMOKE_MODE"] is True
+
+
+@pytest.mark.parametrize("value", ["", "2", "enabled", "true-ish"])
+def test_smoke_mode_rejects_invalid_environment_values_without_echo(monkeypatch, value):
+    monkeypatch.setenv("SMOKE_MODE", value)
+
+    with pytest.raises(ValueError) as exc_info:
+        build_config({"TESTING": True})
+
+    assert str(exc_info.value) == "SMOKE_MODE environment value is invalid."
+    if value:
+        assert value not in str(exc_info.value)
+
+
+def test_smoke_model_output_has_no_cross_country_claim_for_non_benin_payload():
+    payload = _model_payload()
+    evidence = payload["evidence_pack"]["evidence"]
+    evidence[0]["locator"]["document_title"] = "Nepal synthetic CPF.txt"
+    evidence[1]["source_url"] = "https://www.worldbank.org/synthetic-smoke/nepal/current-1"
+
+    draft = SmokeModelGateway().generate(
+        prompt_name="review",
+        payload=payload,
+        output_type=ReviewDraft,
+    )
+
+    assert "benin" not in draft.model_dump_json().casefold()
+
+
+def test_smoke_app_import_and_creation_succeed_when_anthropic_import_is_blocked():
+    project_root = Path(__file__).parents[1]
+    script = dedent(
+        """
+        import importlib.abc
+        import sys
+
+        class BlockAnthropic(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == "anthropic" or fullname.startswith("anthropic."):
+                    raise ModuleNotFoundError("provider import blocked for smoke test")
+                return None
+
+        sys.meta_path.insert(0, BlockAnthropic())
+        from cpf_fcv_reviewer.app import create_smoke_app
+
+        app = create_smoke_app(start_background_runs=False)
+        assert app.config["SMOKE_MODE"] is True
+        assert not any(
+            name == "anthropic" or name.startswith("anthropic.")
+            for name in sys.modules
+        )
+        print("SMOKE_IMPORT_OK")
+        """
+    )
+    environment = os.environ.copy()
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    environment["PYTHONPATH"] = str(project_root / "src")
+
+    completed = subprocess.run(
+        [sys.executable, "-B", "-c", script],
+        cwd=project_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "SMOKE_IMPORT_OK"
 
 
 def test_smoke_app_completes_without_anthropic_key_or_provider_construction(monkeypatch):

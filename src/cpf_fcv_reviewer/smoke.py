@@ -151,8 +151,8 @@ class SmokeModelGateway:
 
         return ReviewDraft(
             overall_read=(
-                f"{SMOKE_MARKER} The synthetic Benin review completed with a usable "
-                "document and synthetic current-context fixture."
+                f"{SMOKE_MARKER} The synthetic review completed using only the "
+                "supplied evidence identifiers and synthetic fixture metadata."
             ),
             alignment_readout=(
                 f"{SMOKE_MARKER} The submitted draft can be tested against the supplied "
