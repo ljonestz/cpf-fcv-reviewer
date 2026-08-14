@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from threading import Event, Lock
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -214,6 +216,106 @@ def test_world_bank_official_id_resolves_and_fetches_indicator_claims():
     assert all(claim.publisher == "World Bank" for claim in claims)
 
 
+@pytest.mark.parametrize(
+    ("failed_indicator", "failure_kind"),
+    [
+        (WORLDBANK_INDICATORS[0][0], "timeout"),
+        (WORLDBANK_INDICATORS[1][0], "malformed"),
+    ],
+)
+def test_world_bank_indicator_failures_preserve_other_indicator_claims(
+    failed_indicator: str,
+    failure_kind: str,
+):
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        indicator = path.rsplit("/", 1)[-1]
+        if indicator == failed_indicator:
+            if failure_kind == "timeout":
+                raise httpx.ReadTimeout("provider detail")
+            return json_response({"unexpected": "shape"})
+        return json_response(
+            [
+                {},
+                [
+                    {
+                        "indicator": {"id": indicator, "value": indicator},
+                        "countryiso3code": "BEN",
+                        "date": "2025",
+                        "value": 1,
+                    }
+                ],
+            ]
+        )
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+
+    claims = adapter.search(request())
+
+    assert [claim.claim_id for claim in claims] == [
+        f"worldbank:BEN:{indicator_id}:2025-01-01"
+        for indicator_id, _label, _context_kind in WORLDBANK_INDICATORS
+        if indicator_id != failed_indicator
+    ]
+
+
+def test_world_bank_does_not_swallow_programming_errors_during_indicator_fetch():
+    class ProgrammingErrorClient:
+        def get_json(self, url: str, *, params: object = None) -> object:
+            if urlsplit(url).path.endswith("/country"):
+                return [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            raise RuntimeError("programming defect")
+
+    adapter = WorldBankAdapter(ProgrammingErrorClient())
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        adapter.search(request())
+
+
+def test_world_bank_country_mapping_initializes_once_during_concurrent_first_use():
+    first_load_started = Event()
+    release_first_load = Event()
+    duplicate_load_started = Event()
+    counter_lock = Lock()
+    load_count = 0
+
+    class BlockingWorldBankAdapter(WorldBankAdapter):
+        def _load_country_mapping(self) -> dict[str, str]:
+            nonlocal load_count
+            with counter_lock:
+                load_count += 1
+                current_load = load_count
+            if current_load == 1:
+                first_load_started.set()
+                assert release_first_load.wait(timeout=2)
+            else:
+                duplicate_load_started.set()
+            return {"benin": "BEN"}
+
+    adapter = BlockingWorldBankAdapter(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: pytest.fail("transport should not be called"))
+        )
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(adapter._resolve_country, "Benin")
+        assert first_load_started.wait(timeout=2)
+        second = pool.submit(adapter._resolve_country, "Benin")
+        duplicate_started = duplicate_load_started.wait(timeout=0.5)
+        release_first_load.set()
+
+        assert first.result(timeout=2) == "BEN"
+        assert second.result(timeout=2) == "BEN"
+
+    assert duplicate_started is False
+    assert load_count == 1
+
+
 def test_world_bank_country_mapping_excludes_same_name_aggregate_rows():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         path = urlsplit(url).path
@@ -318,6 +420,136 @@ def test_world_bank_skips_null_malformed_and_undated_rows():
     assert adapter.search(request()) == ()
 
 
+def test_world_bank_rejects_observation_without_country_identity():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        indicator = path.rsplit("/", 1)[-1]
+        return json_response(
+            [
+                {},
+                [{"indicator": {"id": indicator}, "date": "2025", "value": 1}],
+            ]
+        )
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+
+    assert adapter.search(request()) == ()
+
+
+def test_world_bank_rejects_observation_with_malformed_country_identity():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        indicator = path.rsplit("/", 1)[-1]
+        return json_response(
+            [
+                {},
+                [
+                    {
+                        "indicator": {"id": indicator},
+                        "countryiso3code": "BEN ",
+                        "date": "2025",
+                        "value": 1,
+                    }
+                ],
+            ]
+        )
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+
+    assert adapter.search(request()) == ()
+
+
+def test_world_bank_rejects_observation_with_mismatched_country_identity():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        indicator = path.rsplit("/", 1)[-1]
+        return json_response(
+            [
+                {},
+                [
+                    {
+                        "indicator": {"id": indicator},
+                        "countryiso3code": "TGO",
+                        "date": "2025",
+                        "value": 1,
+                    }
+                ],
+            ]
+        )
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+
+    assert adapter.search(request()) == ()
+
+
+def test_world_bank_accepts_observation_on_review_date_boundary():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        indicator = path.rsplit("/", 1)[-1]
+        return json_response(
+            [
+                {},
+                [
+                    {
+                        "indicator": {"id": indicator},
+                        "countryiso3code": "ben",
+                        "date": "2026",
+                        "value": 1,
+                    }
+                ],
+            ]
+        )
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+    boundary_request = ResearchRequest("Benin", date(2026, 1, 1), ResearchMode.HOLISTIC)
+
+    assert len(adapter.search(boundary_request)) == len(WORLDBANK_INDICATORS)
+
+
+def test_world_bank_rejects_observation_after_review_date():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        indicator = path.rsplit("/", 1)[-1]
+        return json_response(
+            [
+                {},
+                [
+                    {
+                        "indicator": {"id": indicator},
+                        "countryiso3code": "BEN",
+                        "date": "2027",
+                        "value": 1,
+                    }
+                ],
+            ]
+        )
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+    review_request = ResearchRequest("Benin", date(2026, 12, 31), ResearchMode.HOLISTIC)
+
+    assert adapter.search(review_request) == ()
+
+
 def test_reliefweb_is_skipped_without_trimmed_app_name():
     transport = StubClient(lambda *_args: pytest.fail("ReliefWeb should be skipped"))
     gateway = CuratedResearchGateway(
@@ -405,7 +637,19 @@ def test_gateway_combines_deduplicates_and_sorts_independent_adapter_outputs():
             if urlsplit(url).path.endswith("/country"):
                 return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
             indicator = urlsplit(url).path.rsplit("/", 1)[-1]
-            return json_response([{}, [{"indicator": {"id": indicator, "value": indicator}, "date": "2025", "value": 1}]])
+            return json_response(
+                [
+                    {},
+                    [
+                        {
+                            "indicator": {"id": indicator, "value": indicator},
+                            "countryiso3code": "BEN",
+                            "date": "2025",
+                            "value": 1,
+                        }
+                    ],
+                ]
+            )
         return json_response({"data": [{"fields": {"title": "RW", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}}]})
 
     transport = StubClient(handler)
@@ -478,3 +722,15 @@ def test_gateway_returns_empty_when_both_adapters_fail():
     )
 
     assert gateway.search(request()) == ()
+
+
+def test_gateway_does_not_swallow_programming_errors():
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=StubClient(lambda *_args: json_response({})))
+    )
+    gateway.world_bank.search = lambda _request: (_ for _ in ()).throw(
+        RuntimeError("programming defect")
+    )
+
+    with pytest.raises(RuntimeError, match="programming defect"):
+        gateway.search(request())

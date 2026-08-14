@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from math import isfinite
 from numbers import Real
+from threading import Lock
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -29,6 +30,10 @@ WORLDBANK_INDICATORS = (
 
 class InstitutionalClientError(ValueError):
     """Safe, provider-neutral error for bounded institutional HTTP requests."""
+
+
+class _InstitutionalResponseShapeError(ValueError):
+    """Expected failure for malformed institutional response structures."""
 
 
 class BoundedInstitutionalClient:
@@ -115,6 +120,7 @@ class WorldBankAdapter:
     def __init__(self, client: BoundedInstitutionalClient) -> None:
         self.client = client
         self._country_name_to_iso3: dict[str, str] | None = None
+        self._country_mapping_lock = Lock()
 
     def search(self, request: ResearchRequest) -> tuple[CurrentContextClaim, ...]:
         iso3 = self._resolve_country(request.country)
@@ -123,26 +129,31 @@ class WorldBankAdapter:
 
         claims: list[CurrentContextClaim] = []
         for indicator_id, label, context_kind in WORLDBANK_INDICATORS:
-            payload = self.client.get_json(
-                f"https://api.worldbank.org/v2/country/{iso3}/indicator/{indicator_id}",
-                params={"format": "json", "per_page": "5"},
-            )
-            claims.extend(
-                _world_bank_claims(
-                    payload,
-                    request=request,
-                    iso3=iso3,
-                    indicator_id=indicator_id,
-                    fallback_label=label,
-                    context_kind=context_kind,
+            try:
+                payload = self.client.get_json(
+                    f"https://api.worldbank.org/v2/country/{iso3}/indicator/{indicator_id}",
+                    params={"format": "json", "per_page": "5"},
                 )
-            )
+                claims.extend(
+                    _world_bank_claims(
+                        payload,
+                        request=request,
+                        iso3=iso3,
+                        indicator_id=indicator_id,
+                        fallback_label=label,
+                        context_kind=context_kind,
+                    )
+                )
+            except (InstitutionalClientError, _InstitutionalResponseShapeError):
+                continue
         return tuple(claims)
 
     def _resolve_country(self, country: str) -> str | None:
         key = _country_key(country)
         if self._country_name_to_iso3 is None:
-            self._country_name_to_iso3 = self._load_country_mapping()
+            with self._country_mapping_lock:
+                if self._country_name_to_iso3 is None:
+                    self._country_name_to_iso3 = self._load_country_mapping()
         return self._country_name_to_iso3.get(key)
 
     def _load_country_mapping(self) -> dict[str, str]:
@@ -151,7 +162,7 @@ class WorldBankAdapter:
             params={"format": "json", "per_page": "400"},
         )
         if not isinstance(payload, list) or len(payload) < 2 or not isinstance(payload[1], list):
-            raise ValueError("Institutional response shape was invalid.")
+            raise _InstitutionalResponseShapeError("Institutional response shape was invalid.")
 
         mapping: dict[str, str] = {}
         for row in payload[1]:
@@ -216,7 +227,7 @@ class ReliefWebAdapter:
         ]
         payload = self.client.get_json("https://api.reliefweb.int/v2/reports", params=params)
         if not isinstance(payload, Mapping) or not isinstance(payload.get("data"), list):
-            raise ValueError("Institutional response shape was invalid.")
+            raise _InstitutionalResponseShapeError("Institutional response shape was invalid.")
 
         claims: list[CurrentContextClaim] = []
         for row in payload["data"]:
@@ -245,7 +256,7 @@ class CuratedResearchGateway:
         for adapter in (self.world_bank, self.reliefweb):
             try:
                 claims = adapter.search(request)
-            except Exception:
+            except (InstitutionalClientError, _InstitutionalResponseShapeError):
                 continue
             candidates.extend(claims)
 
@@ -363,7 +374,7 @@ def _world_bank_claims(
     context_kind: str,
 ) -> tuple[CurrentContextClaim, ...]:
     if not isinstance(payload, list) or len(payload) < 2 or not isinstance(payload[1], list):
-        raise ValueError("Institutional response shape was invalid.")
+        raise _InstitutionalResponseShapeError("Institutional response shape was invalid.")
 
     claims: list[CurrentContextClaim] = []
     source_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/{indicator_id}"
@@ -372,7 +383,11 @@ def _world_bank_claims(
             continue
         value = _explicit_value(row.get("value"))
         observation_date = _world_bank_date(row.get("date"))
-        if value is None or observation_date is None:
+        if (
+            value is None
+            or observation_date is None
+            or observation_date > request.review_date
+        ):
             continue
         response_indicator = row.get("indicator")
         if (
@@ -382,11 +397,9 @@ def _world_bank_claims(
             continue
         response_label = _nonblank_string(response_indicator.get("value"))
         label = response_label or fallback_label
-        raw_iso3 = row.get("countryiso3code")
-        if raw_iso3 is not None:
-            row_iso3 = _iso3(raw_iso3)
-            if row_iso3 is None or row_iso3 != iso3:
-                continue
+        row_iso3 = _iso3(row.get("countryiso3code"))
+        if row_iso3 != iso3:
+            continue
         claims.append(
             CurrentContextClaim(
                 claim_id=f"worldbank:{iso3}:{indicator_id}:{observation_date.isoformat()}",
