@@ -46,6 +46,12 @@ class DiagnosticMode(StrEnum):
     LIMITED_FRAMING = "limited_framing"
 
 
+class CurrentEvidenceTier(StrEnum):
+    FULL = "full"
+    REDUCED = "reduced"
+    DOCUMENT_LED = "document_led"
+
+
 class DetailLevel(StrEnum):
     BRIEF = "brief"
     STANDARD = "standard"

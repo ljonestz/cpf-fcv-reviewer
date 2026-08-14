@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 from math import isfinite
 from numbers import Real
+from random import uniform
 from time import monotonic as default_monotonic
 from time import sleep as default_sleep
 from typing import Protocol
 from urllib.parse import urlsplit, urlunsplit
 
+from .contracts import CurrentEvidenceTier
 from .public_research import (
     CurrentContextClaim,
     load_research_prompt,
@@ -18,6 +22,9 @@ from .public_research import (
 )
 
 # The gateway owns per-attempt network timeouts; this controller only bounds work between calls.
+
+
+logger = logging.getLogger(__name__)
 
 
 class ResearchMode(StrEnum):
@@ -62,7 +69,14 @@ class ResearchResult:
     claims: tuple[CurrentContextClaim, ...]
     rejected: dict[str, str]
     attempts: int
-    sufficient: bool
+    tier: CurrentEvidenceTier
+    limitation: str | None = None
+
+    @property
+    def sufficient(self) -> bool:
+        """Compatibility view for consumers that only need the full-evidence gate."""
+
+        return self.tier is CurrentEvidenceTier.FULL
 
 
 class ResearchFailure(RuntimeError):
@@ -97,7 +111,15 @@ class ResearchGateway(Protocol):
     def search(self, prompt: str) -> tuple[CurrentContextClaim, ...]: ...
 
 
+class RecoveryGateway(Protocol):
+    def search(self, request: ResearchRequest) -> tuple[CurrentContextClaim, ...]: ...
+
+
 Emitter = Callable[[str, dict[str, object]], None]
+
+
+def _default_jitter(delay: float) -> float:
+    return uniform(delay * 0.9, delay * 1.1)
 
 
 class ResearchController:
@@ -105,6 +127,7 @@ class ResearchController:
         self,
         gateway: ResearchGateway,
         *,
+        recovery_gateway: RecoveryGateway | None = None,
         max_attempts: int = 3,
         minimum_claims: int = 4,
         minimum_publishers: int = 2,
@@ -112,6 +135,7 @@ class ResearchController:
         retry_backoff_seconds: float | Sequence[float] = 1.0,
         monotonic: Callable[[], float] = default_monotonic,
         sleep: Callable[[float], None] = default_sleep,
+        jitter: Callable[[float], float] | None = None,
     ) -> None:
         _require_positive_int(max_attempts, "max_attempts")
         _require_positive_int(minimum_claims, "minimum_claims")
@@ -128,14 +152,26 @@ class ResearchController:
             _require_finite_number(retry_backoff_seconds, "retry_backoff_seconds", positive=False)
             self._backoff = (float(retry_backoff_seconds),)
         self.gateway = gateway
+        self.recovery_gateway = recovery_gateway
         self.max_attempts = max_attempts
         self.minimum_claims = minimum_claims
         self.minimum_publishers = minimum_publishers
         self.total_budget_seconds = total_budget_seconds
         self.monotonic = monotonic
         self.sleep = sleep
+        if jitter is not None and not callable(jitter):
+            raise ValueError("jitter must be callable when provided.")
+        self.jitter = jitter or _default_jitter
 
-    def run(self, request: ResearchRequest, emit: Emitter) -> ResearchResult:
+    def run(
+        self,
+        request: ResearchRequest,
+        emit: Emitter,
+        *,
+        allow_document_led: bool = False,
+    ) -> ResearchResult:
+        if type(allow_document_led) is not bool:
+            raise ValueError("allow_document_led must be a boolean.")
         started = self.monotonic()
         accepted: dict[str, CurrentContextClaim] = {}
         accepted_urls: set[str] = set()
@@ -143,7 +179,9 @@ class ResearchController:
         last_missing: tuple[str, ...] = ()
         last_failure: ResearchFailure | None = None
 
+        primary_attempts = 0
         for attempt in range(1, self.max_attempts + 1):
+            primary_attempts = attempt
             elapsed = self.monotonic() - started
             if attempt > 1 and elapsed >= self.total_budget_seconds:
                 raise ResearchTimeout("Research total budget was exhausted.")
@@ -160,39 +198,100 @@ class ResearchController:
                     raise failure from None
                 last_failure = failure
                 if attempt >= self.max_attempts:
-                    raise failure from None
+                    break
                 last_missing = ("provider response",)
                 if not self._prepare_retry(attempt, started, last_missing, emit):
                     raise ResearchTimeout("Research total budget was exhausted.") from None
                 continue
 
-            retained, source_rejections = retain_public_claims(tuple(claims))
-            for key, reason in source_rejections.items():
-                rejected[key] = reason
-            for item in retained:
-                claim_key = item.claim_id.casefold()
-                url_key = _normalize_source_url(item.source_url or "")
-                if claim_key in accepted:
-                    rejected[f"duplicate_id:{item.claim_id}"] = "duplicate claim ID"
-                elif url_key in accepted_urls:
-                    rejected["duplicate_url"] = "duplicate source URL"
-                else:
-                    accepted[claim_key] = item
-                    accepted_urls.add(url_key)
+            self._merge_claims(claims, accepted, accepted_urls, rejected)
 
             last_missing = self._missing_coverage(tuple(accepted.values()), request)
             elapsed = self.monotonic() - started
             if not last_missing:
-                result = ResearchResult(tuple(accepted.values()), rejected, attempt, True)
-                emit(
-                    "research_sufficient",
-                    self._event_data(attempt, accepted, rejected, elapsed),
+                return self._finish(
+                    started=started,
+                    claims=tuple(accepted.values()),
+                    rejected=rejected,
+                    attempts=attempt,
+                    tier=CurrentEvidenceTier.FULL,
+                    limitation=None,
+                    route="research_primary" if attempt == 1 else "research_salvaged",
+                    emit=emit,
+                    event_data=self._event_data(attempt, accepted, rejected, elapsed),
                 )
-                return result
             if attempt < self.max_attempts:
                 if not self._prepare_retry(attempt, started, last_missing, emit):
                     raise ResearchTimeout("Research total budget was exhausted.")
 
+        if (
+            self.recovery_gateway is not None
+            and self.monotonic() - started < self.total_budget_seconds
+        ):
+            recovery_succeeded = False
+            try:
+                recovery_claims = self.recovery_gateway.search(request)
+                recovery_succeeded = True
+            except Exception as exc:
+                failure = self._classify_exception(exc)
+                if isinstance(failure, ResearchConfigurationError):
+                    raise failure from None
+            else:
+                self._merge_claims(recovery_claims, accepted, accepted_urls, rejected)
+            if recovery_succeeded:
+                last_missing = self._missing_coverage(tuple(accepted.values()), request)
+                emit("research_curated_recovery", {"accepted_count": len(accepted)})
+                if not last_missing:
+                    return self._finish(
+                        started=started,
+                        claims=tuple(accepted.values()),
+                        rejected=rejected,
+                        attempts=primary_attempts,
+                        tier=CurrentEvidenceTier.FULL,
+                        limitation=None,
+                        route="research_curated_recovery",
+                        emit=emit,
+                        event_data=self._event_data(
+                            primary_attempts,
+                            accepted,
+                            rejected,
+                            self.monotonic() - started,
+                        ),
+                    )
+
+        if accepted:
+            accepted_claims = tuple(accepted.values())
+            last_missing = self._missing_coverage(accepted_claims, request)
+        else:
+            accepted_claims = ()
+        if accepted_claims and self._recent_claim_count(accepted_claims, request):
+            limitation = self._reduced_limitation(accepted_claims, last_missing, request)
+            return self._finish(
+                started=started,
+                claims=accepted_claims,
+                rejected=rejected,
+                attempts=primary_attempts,
+                tier=CurrentEvidenceTier.REDUCED,
+                limitation=limitation,
+                route="research_reduced",
+                emit=emit,
+                event_data={"missing_coverage": last_missing},
+            )
+        if allow_document_led and not accepted:
+            return self._finish(
+                started=started,
+                claims=(),
+                rejected=rejected,
+                attempts=primary_attempts,
+                tier=CurrentEvidenceTier.DOCUMENT_LED,
+                limitation=(
+                    "Independent current-country research could not be established; "
+                    "review is based primarily on submitted documents."
+                ),
+                route="research_document_led",
+                emit=emit,
+                event_data={"reason": "independent_evidence_unavailable"},
+            )
         if last_failure is not None:
             raise last_failure
         if not accepted and rejected:
@@ -206,16 +305,101 @@ class ResearchController:
         missing: tuple[str, ...],
         emit: Emitter,
     ) -> bool:
-        delay = self._backoff[min(attempt - 1, len(self._backoff) - 1)]
+        configured_delay = self._backoff[min(attempt - 1, len(self._backoff) - 1)]
+        delay = self.jitter(configured_delay)
+        _require_finite_number(delay, "jitter result", positive=False)
         elapsed = self.monotonic() - started
-        if elapsed + delay >= self.total_budget_seconds:
+        remaining = self.total_budget_seconds - elapsed
+        if remaining <= 0:
             return False
+        delay = min(delay, remaining)
         emit(
             "research_retry",
             {"attempt": attempt, "next_attempt": attempt + 1, "missing_coverage": missing},
         )
         self.sleep(delay)
         return True
+
+    @staticmethod
+    def _merge_claims(
+        claims: tuple[CurrentContextClaim, ...],
+        accepted: dict[str, CurrentContextClaim],
+        accepted_urls: set[str],
+        rejected: dict[str, str],
+    ) -> None:
+        retained, source_rejections = retain_public_claims(tuple(claims))
+        rejected.update(source_rejections)
+        for item in retained:
+            claim_key = item.claim_id.casefold()
+            url_key = _normalize_source_url(item.source_url or "")
+            if claim_key in accepted:
+                rejected[f"duplicate_id:{item.claim_id}"] = "duplicate claim ID"
+            elif url_key in accepted_urls:
+                rejected["duplicate_url"] = "duplicate source URL"
+            else:
+                accepted[claim_key] = item
+                accepted_urls.add(url_key)
+
+    def _finish(
+        self,
+        *,
+        started: float,
+        claims: tuple[CurrentContextClaim, ...],
+        rejected: dict[str, str],
+        attempts: int,
+        tier: CurrentEvidenceTier,
+        limitation: str | None,
+        route: str,
+        emit: Emitter,
+        event_data: dict[str, object],
+    ) -> ResearchResult:
+        elapsed = self.monotonic() - started
+        result = ResearchResult(claims, rejected, attempts, tier, limitation)
+        logger.info(
+            "research_terminal route=%s duration_seconds=%.3f accepted_count=%d "
+            "rejected_count=%d attempts=%d",
+            route,
+            elapsed,
+            len(claims),
+            len(rejected),
+            attempts,
+        )
+        if tier is CurrentEvidenceTier.FULL:
+            emit("research_sufficient", event_data)
+        elif tier is CurrentEvidenceTier.REDUCED:
+            emit("research_reduced", event_data)
+        else:
+            emit("research_document_led", event_data)
+        return result
+
+    def _recent_claim_count(
+        self,
+        claims: tuple[CurrentContextClaim, ...],
+        request: ResearchRequest,
+    ) -> int:
+        return sum(1 for claim in claims if self._is_recent(claim, request))
+
+    def _reduced_limitation(
+        self,
+        claims: tuple[CurrentContextClaim, ...],
+        missing: tuple[str, ...],
+        request: ResearchRequest,
+    ) -> str:
+        recent_count = self._recent_claim_count(claims, request)
+        source_word = "source" if recent_count == 1 else "sources"
+        count_word = "one" if recent_count == 1 else str(recent_count)
+        labels = {
+            "claims": "the minimum number of claims",
+            "publishers": "publisher diversity",
+            "structural_dynamic": "structural dynamics",
+            "current_development": "current developments",
+            "recent": "recent evidence",
+        }
+        gaps = ", ".join(labels.get(item, item) for item in missing)
+        return (
+            f"Only {count_word} public {source_word} was established recently; "
+            f"current-country coverage remains incomplete for {gaps}."
+        )
 
     def _prompt(
         self,
@@ -312,6 +496,8 @@ class ResearchController:
 
     @staticmethod
     def _classify_exception(exc: Exception) -> ResearchFailure:
+        if isinstance(exc, (AssertionError, AttributeError, NameError, TypeError)):
+            raise exc
         if isinstance(exc, ResearchConfigurationError):
             return exc
         if getattr(exc, "status_code", None) in {401, 403}:

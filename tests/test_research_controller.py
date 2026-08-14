@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime
 from math import inf, nan
 from types import SimpleNamespace
@@ -5,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from cpf_fcv_reviewer import public_research
+from cpf_fcv_reviewer.contracts import CurrentEvidenceTier
 from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.research_controller import (
     InsufficientResearch,
@@ -86,6 +88,18 @@ class ScriptedGateway:
         return response
 
 
+class ScriptedRecoveryGateway:
+    def __init__(self, response):
+        self.response = response
+        self.calls = 0
+
+    def search(self, request):
+        self.calls += 1
+        if isinstance(self.response, BaseException):
+            raise self.response
+        return self.response
+
+
 def controller(gateway, **overrides):
     settings = {
         "max_attempts": 3,
@@ -105,8 +119,185 @@ def test_controller_stops_after_first_sufficient_attempt():
     result = controller(gateway).run(holistic_request(), lambda *event: events.append(event))
 
     assert gateway.calls == 1
-    assert result.sufficient is True
+    assert result.tier is CurrentEvidenceTier.FULL
     assert events[-1][0] == "research_sufficient"
+
+
+def test_full_evidence_returns_explicit_full_tier():
+    result = controller(ScriptedGateway((sufficient_claims(),))).run(
+        holistic_request(), lambda *_: None
+    )
+
+    assert result.tier is CurrentEvidenceTier.FULL
+    assert result.limitation is None
+
+
+def test_thin_recent_public_evidence_returns_reduced_tier_with_limitation():
+    events = []
+    result = controller(
+        ScriptedGateway(((claim("one"),),)),
+        max_attempts=1,
+    ).run(holistic_request(), lambda *event: events.append(event))
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert "one public source" in result.limitation
+    reduced = [data for kind, data in events if kind == "research_reduced"]
+    assert len(reduced) == 1
+    assert set(reduced[0]) == {"missing_coverage"}
+
+
+def test_primary_and_recovery_claims_merge_and_deduplicate():
+    primary = sufficient_claims()[:1]
+    recovery = ScriptedRecoveryGateway((sufficient_claims()[0],) + sufficient_claims()[1:])
+    events = []
+
+    result = controller(
+        ScriptedGateway((primary,)),
+        recovery_gateway=recovery,
+        max_attempts=1,
+    ).run(holistic_request(), lambda *event: events.append(event))
+
+    assert recovery.calls == 1
+    assert result.tier is CurrentEvidenceTier.FULL
+    assert len(result.claims) == 4
+    assert [data for kind, data in events if kind == "research_curated_recovery"] == [
+        {"accepted_count": 4}
+    ]
+
+
+def test_recovery_failure_does_not_discard_usable_primary_evidence():
+    result = controller(
+        ScriptedGateway(((claim("primary"),),)),
+        recovery_gateway=ScriptedRecoveryGateway(TimeoutError("temporary")),
+        max_attempts=1,
+    ).run(holistic_request(), lambda *_: None)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert result.claims[0].claim_id == "primary"
+
+
+def test_provider_failure_and_recovery_failure_preserve_primary_exception():
+    with pytest.raises(ResearchTimeout):
+        controller(
+            ScriptedGateway((TimeoutError(),)),
+            recovery_gateway=ScriptedRecoveryGateway(TimeoutError()),
+            max_attempts=1,
+        ).run(holistic_request(), lambda *_: None)
+
+
+def test_document_led_requires_explicit_opt_in_and_no_accepted_claims():
+    recovery = ScriptedRecoveryGateway(())
+    result = controller(
+        ScriptedGateway((TimeoutError(),)),
+        recovery_gateway=recovery,
+        max_attempts=1,
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert result.claims == ()
+    assert result.limitation
+
+    with pytest.raises(ResearchTimeout):
+        controller(
+            ScriptedGateway((TimeoutError(),)),
+            recovery_gateway=ScriptedRecoveryGateway(()),
+            max_attempts=1,
+        ).run(holistic_request(), lambda *_: None)
+
+
+def test_rejected_claims_cannot_enable_reduced_mode():
+    rejected = claim("licensed").model_copy(update={"licensed_data_required": True})
+
+    with pytest.raises(ResearchSourceRejected):
+        controller(
+            ScriptedGateway(((rejected,),)),
+            recovery_gateway=ScriptedRecoveryGateway(()),
+            max_attempts=1,
+        ).run(holistic_request(), lambda *_: None)
+
+
+def test_recovery_configuration_error_is_not_isolated():
+    with pytest.raises(ResearchConfigurationError):
+        controller(
+            ScriptedGateway(((claim("primary"),),)),
+            recovery_gateway=ScriptedRecoveryGateway(ResearchConfigurationError()),
+            max_attempts=1,
+        ).run(holistic_request(), lambda *_: None)
+
+
+def test_terminal_route_log_is_stable_and_contains_no_research_content(caplog):
+    with caplog.at_level(logging.INFO, logger="cpf_fcv_reviewer.research_controller"):
+        result = controller(
+            ScriptedGateway(((claim("private"),),)),
+            max_attempts=1,
+        ).run(holistic_request(), lambda *_: None)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    terminal = [
+        record.getMessage()
+        for record in caplog.records
+        if "research_terminal" in record.getMessage()
+    ]
+    assert len(terminal) == 1
+    assert "route=research_reduced" in terminal[0]
+    assert "duration_seconds=" in terminal[0]
+    assert "accepted_count=1" in terminal[0]
+    assert not any(value in terminal[0] for value in ("Benin", "Claim", "https://"))
+
+
+def test_injected_jitter_is_applied_and_sleep_does_not_exceed_budget():
+    now = [0.0]
+    sleeps = []
+
+    def clock():
+        return now[0]
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    with pytest.raises(ResearchTimeout):
+        controller(
+            ScriptedGateway(((), TimeoutError())),
+            max_attempts=2,
+            total_budget_seconds=1.0,
+            retry_backoff_seconds=0.25,
+            jitter=lambda delay: delay * 2,
+            monotonic=clock,
+            sleep=sleep,
+        ).run(holistic_request(), lambda *_: None)
+
+    assert sleeps == [0.5]
+
+
+def test_jittered_backoff_is_capped_to_remaining_budget():
+    now = [0.0]
+    sleeps = []
+
+    def clock():
+        return now[0]
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    class DelayedGateway:
+        def search(self, prompt):
+            now[0] += 0.75
+            return ()
+
+    with pytest.raises(ResearchTimeout):
+        controller(
+            DelayedGateway(),
+            max_attempts=2,
+            total_budget_seconds=1.0,
+            retry_backoff_seconds=2.0,
+            jitter=lambda delay: delay,
+            monotonic=clock,
+            sleep=sleep,
+        ).run(holistic_request(), lambda *_: None)
+
+    assert sleeps == [0.25]
 
 
 def test_controller_uses_targeted_fallback_for_thin_result():
@@ -116,11 +307,11 @@ def test_controller_uses_targeted_fallback_for_thin_result():
 
     assert gateway.calls == 2
     assert "missing coverage" in gateway.prompts[1]
-    assert result.sufficient is True
+    assert result.tier is CurrentEvidenceTier.FULL
 
 
 def test_controller_blocks_after_all_attempts_are_insufficient():
-    gateway = ScriptedGateway(((claim("c1"),),) * 3)
+    gateway = ScriptedGateway(((claim("c1", source_date=date(2023, 1, 1)),),) * 3)
 
     with pytest.raises(InsufficientResearch):
         controller(gateway).run(holistic_request(), lambda *_: None)
@@ -134,7 +325,7 @@ def test_transient_provider_error_retries_then_succeeds():
     result = controller(gateway).run(holistic_request(), lambda *_: None)
 
     assert gateway.calls == 2
-    assert result.sufficient is True
+    assert result.tier is CurrentEvidenceTier.FULL
 
 
 def test_configuration_error_stops_immediately():
@@ -214,10 +405,10 @@ def test_other_provider_error_retries_then_raises_provider_failure():
 
 def test_sufficiency_requires_publisher_diversity_structural_current_and_recent():
     claims = (
-        claim("c1", source_date=date(2025, 1, 1)),
-        claim("c2", source_date=date(2025, 2, 1)),
-        claim("c3", context_kind="current_development", source_date=date(2025, 3, 1)),
-        claim("c4", source_date=date(2025, 4, 1)),
+        claim("c1", source_date=date(2023, 1, 1)),
+        claim("c2", source_date=date(2023, 2, 1)),
+        claim("c3", context_kind="current_development", source_date=date(2023, 3, 1)),
+        claim("c4", source_date=date(2023, 4, 1)),
     )
 
     with pytest.raises(InsufficientResearch):
@@ -227,7 +418,7 @@ def test_sufficiency_requires_publisher_diversity_structural_current_and_recent(
 
 
 def test_rra_recent_window_and_prompt_are_explicit():
-    gateway = ScriptedGateway(((claim("c1"),),))
+    gateway = ScriptedGateway(((claim("c1", source_date=date(2022, 1, 1)),),))
     with pytest.raises(InsufficientResearch):
         controller(gateway, max_attempts=1).run(rra_request(), lambda *_: None)
 
@@ -237,7 +428,7 @@ def test_rra_recent_window_and_prompt_are_explicit():
 
 
 def test_holistic_recent_window_is_bounded_to_24_months():
-    gateway = ScriptedGateway(((claim("c1"),),))
+    gateway = ScriptedGateway(((claim("c1", source_date=date(2024, 7, 31)),),))
     with pytest.raises(InsufficientResearch):
         controller(gateway, max_attempts=1).run(holistic_request(), lambda *_: None)
 
@@ -278,9 +469,18 @@ def test_holistic_recency_uses_calendar_years_with_leap_day_fallback():
 
 
 def test_duplicate_url_and_claim_id_are_not_accumulated():
-    first = claim("same", source_url="https://www.worldbank.org/same")
-    second = claim("same", publisher="United Nations", source_url="https://www.un.org/other")
-    third = claim("other", source_url="https://www.worldbank.org/same")
+    first = claim(
+        "same", source_date=date(2023, 1, 1), source_url="https://www.worldbank.org/same"
+    )
+    second = claim(
+        "same",
+        source_date=date(2023, 2, 1),
+        publisher="United Nations",
+        source_url="https://www.un.org/other",
+    )
+    third = claim(
+        "other", source_date=date(2023, 3, 1), source_url="https://www.worldbank.org/same"
+    )
     gateway = ScriptedGateway(((first,), (second, third)))
 
     events = []
@@ -304,7 +504,7 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
                                 type="web_search_result",
                                 title="Same update",
                                 url=source_url,
-                                page_age="2025-04-30",
+                                page_age="2020-04-30",
                             ),
                         ),
                     ),
@@ -334,7 +534,7 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
                 ).model_copy(
                     update={
                         "source_title": "Same update",
-                        "source_date": date(2025, 4, 30),
+                        "source_date": date(2020, 4, 30),
                     }
                 ),
                 claim(
@@ -343,7 +543,7 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
                 ).model_copy(
                     update={
                         "source_title": "Same update",
-                        "source_date": date(2025, 4, 30),
+                        "source_date": date(2020, 4, 30),
                     }
                 ),
             )
@@ -368,7 +568,7 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
 
 def test_events_are_count_only():
     events = []
-    gateway = ScriptedGateway(((claim("c1"),),))
+    gateway = ScriptedGateway(((claim("c1", source_date=date(2021, 1, 1)),),))
     with pytest.raises(InsufficientResearch):
         controller(gateway, max_attempts=1).run(
             rra_request(), lambda kind, data: events.append((kind, data))

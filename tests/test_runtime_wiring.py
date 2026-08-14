@@ -6,6 +6,7 @@ import pytest
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
+    CurrentEvidenceTier,
     DocumentRole,
     EvidenceLocator,
     EvidencePack,
@@ -84,7 +85,7 @@ class _InjectedResearchController:
     def run(self, request, emit):
         self.requests.append(request)
         self.emits.append(emit)
-        return ResearchResult(_current_claims(), {}, 1, True)
+        return ResearchResult(_current_claims(), {}, 1, CurrentEvidenceTier.FULL)
 
 
 def test_production_startup_fails_closed_for_missing_registry(tmp_path):
@@ -648,7 +649,7 @@ def test_runtime_evidence_truncation_keeps_complete_words(monkeypatch):
                 ),
                 warnings=(),
             ),
-            "research_result": ResearchResult((), {}, 0, True),
+            "research_result": ResearchResult((), {}, 0, CurrentEvidenceTier.FULL),
         }
     )
     evidence = next(
@@ -850,7 +851,7 @@ def test_runtime_researches_with_dated_rra_request_and_emitter(monkeypatch):
     )
     assert controller.emits[0] is not None
     assert context["uploaded_diagnostic"].name == "package.txt"
-    assert context["research_result"].sufficient
+    assert context["research_result"].tier is CurrentEvidenceTier.FULL
 
 
 def test_runtime_uses_holistic_request_without_rra(monkeypatch):

@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from cpf_fcv_reviewer.contracts import (
+    CurrentEvidenceTier,
     DetailLevel,
     DiagnosticMode,
     DocumentCoverage,
@@ -19,6 +20,12 @@ from cpf_fcv_reviewer.contracts import (
     SensitivityCategory,
     UserCorrection,
 )
+
+
+def test_current_evidence_tier_is_shared_and_serializes_as_stable_values():
+    assert CurrentEvidenceTier.FULL.value == "full"
+    assert CurrentEvidenceTier.REDUCED.value == "reduced"
+    assert CurrentEvidenceTier.DOCUMENT_LED.value == "document_led"
 
 
 def locator() -> EvidenceLocator:
