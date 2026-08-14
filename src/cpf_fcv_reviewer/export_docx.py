@@ -11,7 +11,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-from .contracts import EvidenceItem, EvidenceLocator, ReviewResult
+from .contracts import CurrentEvidenceTier, EvidenceItem, EvidenceLocator, ReviewResult
 
 BLUE = RGBColor(0x2E, 0x74, 0xB5)
 DARK_BLUE = RGBColor(0x1F, 0x4D, 0x78)
@@ -22,6 +22,11 @@ PAGE_WIDTH_DXA = 9360
 LIST_TEXT_INDENT_DXA = 720
 LIST_HANGING_DXA = 360
 APPLICATION_AUTHOR = "CPF FCV Reviewer"
+EVIDENCE_STATUS_LABELS = {
+    CurrentEvidenceTier.FULL: "Current evidence established",
+    CurrentEvidenceTier.REDUCED: "Current evidence partially established",
+    CurrentEvidenceTier.DOCUMENT_LED: "Review based primarily on submitted documents",
+}
 
 
 class EvidenceCompletenessError(ValueError):
@@ -323,6 +328,11 @@ def _add_reproducibility_metadata(document: Document, result: ReviewResult) -> N
         ("Model", metadata.model_id),
         ("Diagnostic mode", metadata.diagnostic_mode.value),
         ("Detail level", metadata.detail_level.value),
+        ("Current evidence tier", metadata.current_evidence_tier.value),
+        (
+            "Current evidence limitation",
+            metadata.current_evidence_limitation or "None",
+        ),
         ("Repair count", str(metadata.repair_count)),
         (
             "Source scan",
@@ -416,6 +426,7 @@ def build_docx(
     else:
         document.add_paragraph("No priority areas were returned for this review.")
 
+    document.add_paragraph(EVIDENCE_STATUS_LABELS[result.metadata.current_evidence_tier])
     document.add_heading("Limitations and document coverage", level=1)
     if result.limitations:
         for limitation in result.limitations:

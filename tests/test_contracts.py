@@ -28,6 +28,72 @@ def test_current_evidence_tier_is_shared_and_serializes_as_stable_values():
     assert CurrentEvidenceTier.DOCUMENT_LED.value == "document_led"
 
 
+def _run_metadata_values(**overrides):
+    values = {
+        "run_id": "run-status",
+        "created_at": datetime.now(UTC),
+        "review_stage": "concept_review",
+        "diagnostic_mode": DiagnosticMode.LIMITED_FRAMING,
+        "app_release": "0.1.0",
+        "schema_version": "1.0.0",
+        "rubric_version": "1.0.0",
+        "prompt_bundle_version": "1.0.0",
+        "registry_versions": {"fcv_strategy": "1.0.0"},
+        "model_id": "test-model",
+    }
+    values.update(overrides)
+    return values
+
+
+@pytest.mark.parametrize(
+    ("tier", "limitation"),
+    (
+        (CurrentEvidenceTier.FULL, " "),
+        (CurrentEvidenceTier.REDUCED, None),
+        (CurrentEvidenceTier.REDUCED, "   "),
+        (CurrentEvidenceTier.DOCUMENT_LED, None),
+        (CurrentEvidenceTier.DOCUMENT_LED, "\t"),
+    ),
+)
+def test_run_metadata_rejects_inconsistent_current_evidence_status(tier, limitation):
+    with pytest.raises(ValidationError, match="current_evidence"):
+        RunMetadata(
+            **_run_metadata_values(
+                current_evidence_tier=tier,
+                current_evidence_limitation=limitation,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "tier",
+    [CurrentEvidenceTier.REDUCED, CurrentEvidenceTier.DOCUMENT_LED],
+)
+def test_run_metadata_current_evidence_status_is_immutable_and_serializable(tier):
+    limitation = "Independent current evidence remains incomplete."
+    metadata = RunMetadata(
+        **_run_metadata_values(
+            current_evidence_tier=tier,
+            current_evidence_limitation=limitation,
+        )
+    )
+
+    assert metadata.current_evidence_tier is tier
+    assert metadata.current_evidence_limitation == limitation
+    assert metadata.model_dump(mode="json")["current_evidence_tier"] == tier.value
+    with pytest.raises(ValidationError):
+        metadata.current_evidence_tier = CurrentEvidenceTier.FULL
+    invalid = metadata.model_dump()
+    invalid.update(
+        {
+            "current_evidence_tier": CurrentEvidenceTier.FULL,
+            "current_evidence_limitation": limitation,
+        }
+    )
+    with pytest.raises(ValidationError):
+        RunMetadata.model_validate(invalid)
+
+
 def locator() -> EvidenceLocator:
     return EvidenceLocator(
         document_title="CPF.docx",

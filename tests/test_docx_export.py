@@ -9,6 +9,7 @@ import pytest
 from docx import Document
 
 from cpf_fcv_reviewer.app import create_app
+from cpf_fcv_reviewer.contracts import CurrentEvidenceTier
 from cpf_fcv_reviewer.export_docx import build_docx
 from cpf_fcv_reviewer.registry import load_registry_bundle
 
@@ -267,6 +268,74 @@ def test_docx_empty_narrative_collections_have_explicit_empty_states(make_valid_
 
     assert "No revision summary was returned for this review." in text
     assert "No priority areas were returned for this review." in text
+
+
+@pytest.mark.parametrize(
+    ("tier", "status", "limitation"),
+    (
+        (CurrentEvidenceTier.FULL, "Current evidence established", None),
+        (
+            CurrentEvidenceTier.REDUCED,
+            "Current evidence partially established",
+            "Only one public source was established recently.",
+        ),
+        (
+            CurrentEvidenceTier.DOCUMENT_LED,
+            "Review based primarily on submitted documents",
+            "Independent current-country research was unavailable.",
+        ),
+    ),
+)
+def test_docx_places_exact_evidence_status_before_limitations(
+    make_valid_result,
+    tier,
+    status,
+    limitation,
+):
+    result, evidence = make_valid_result
+    metadata = result.metadata.model_copy(
+        update={
+            "current_evidence_tier": tier,
+            "current_evidence_limitation": limitation,
+        }
+    )
+    limitations = result.limitations if limitation is None else (*result.limitations, limitation)
+    result = result.model_copy(update={"metadata": metadata, "limitations": limitations})
+
+    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    limitations_heading = paragraphs.index("Limitations and document coverage")
+
+    assert paragraphs[limitations_heading - 1] == status
+    assert paragraphs.count(status) == 1
+    if limitation is not None:
+        assert paragraphs.count(limitation) == 1
+
+
+def test_docx_reproducibility_metadata_includes_evidence_status(make_valid_result):
+    result, evidence = make_valid_result
+    limitation = "Independent current-country research was unavailable."
+    result = result.model_copy(
+        update={
+            "metadata": result.metadata.model_copy(
+                update={
+                    "current_evidence_tier": CurrentEvidenceTier.DOCUMENT_LED,
+                    "current_evidence_limitation": limitation,
+                }
+            ),
+            "limitations": (*result.limitations, limitation),
+        }
+    )
+
+    text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    )
+
+    assert "Current evidence tier: document_led" in text
+    assert f"Current evidence limitation: {limitation}" in text
 
 
 def test_export_route_requires_a_completed_traceable_result(make_valid_result):

@@ -96,6 +96,45 @@ def _truncate_at_word_boundary(text: str, maximum: int) -> str:
     return parts[0].rstrip() if len(parts) == 2 else truncated
 
 
+def _has_usable_uploaded_document(document) -> bool:
+    return document is not None and any(
+        isinstance(segment.text, str) and segment.text.strip()
+        for segment in document.segments
+    )
+
+
+def _allow_document_led(context: dict) -> bool:
+    if _has_usable_uploaded_document(context.get("primary_document")):
+        return True
+    return any(
+        _has_usable_uploaded_document(document)
+        for document in context.get("context_documents", ())
+    )
+
+
+def _append_limitation_once(
+    values: tuple[str, ...], limitation: str | None
+) -> tuple[str, ...]:
+    if not isinstance(limitation, str) or not limitation.strip():
+        return values
+    return tuple(value for value in values if value != limitation) + (limitation,)
+
+
+def _preserve_research_limitation(context: dict):
+    result = context.get("result")
+    research_result = context.get("research_result")
+    if result is None or research_result is None:
+        return result
+    return result.model_copy(
+        update={
+            "limitations": _append_limitation_once(
+                result.limitations,
+                research_result.limitation,
+            )
+        }
+    )
+
+
 def build_runtime_services(
     config: dict,
     *,
@@ -319,6 +358,8 @@ def build_runtime_services(
             documents=document_bytes,
             registry_bundle=path.read_bytes(),
             detail_level=payload.get("detail_level", DetailLevel.STANDARD),
+            current_evidence_tier=context["research_result"].tier,
+            current_evidence_limitation=context["research_result"].limitation,
             guidance=review_focus,
             prompt_bytes=prompt_bytes,
             model_id=config["ANTHROPIC_MODEL_ID"],
@@ -328,7 +369,10 @@ def build_runtime_services(
             diagnostic_entries=(),
             material_diagnostic_ids=(),
             corrections=corrections,
-            warnings=tuple(context.get("extraction_warnings", ())),
+            warnings=_append_limitation_once(
+                tuple(context.get("extraction_warnings", ())),
+                context["research_result"].limitation,
+            ),
             correction_ids=tuple(item["correction_id"] for item in correction_payloads),
             parent_run_id=payload.get("parent_assessment_id"),
         )
@@ -364,6 +408,7 @@ def build_runtime_services(
                     context["evidence_pack"],
                     review_focus=review_focus,
                 )
+                context["result"] = _preserve_research_limitation(context)
             if name == "research":
                 payload = context.get("payload", {})
                 uploaded_diagnostic = identify_uploaded_diagnostic(
@@ -413,6 +458,7 @@ def build_runtime_services(
                 context["research_result"] = research_controller.run(
                     request,
                     context["_emit"],
+                    allow_document_led=_allow_document_led(context),
                 )
             if name == "build_evidence":
                 return build_uploaded_evidence(context)
@@ -438,6 +484,7 @@ def build_runtime_services(
                 prohibited_terms,
             ),
         )
+        context["result"] = _preserve_research_limitation(context)
         context["validation_issues"] = review_validation_issues(context)
         return context
 

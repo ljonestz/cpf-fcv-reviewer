@@ -78,14 +78,17 @@ def _current_claims():
 
 
 class _InjectedResearchController:
-    def __init__(self):
+    def __init__(self, result=None):
         self.requests = []
         self.emits = []
+        self.allow_document_led = []
+        self.result = result
 
-    def run(self, request, emit):
+    def run(self, request, emit, *, allow_document_led=False):
         self.requests.append(request)
         self.emits.append(emit)
-        return ResearchResult(_current_claims(), {}, 1, CurrentEvidenceTier.FULL)
+        self.allow_document_led.append(allow_document_led)
+        return self.result or ResearchResult(_current_claims(), {}, 1, CurrentEvidenceTier.FULL)
 
 
 def test_production_startup_fails_closed_for_missing_registry(tmp_path):
@@ -917,3 +920,171 @@ def test_runtime_appends_registry_evidence_to_model_pack(monkeypatch):
         for entry in bundle.entries
     ]
     assert all(item.confidence == "high" for item in registry)
+
+
+@pytest.mark.parametrize(
+    ("primary_segments", "context_segments", "expected"),
+    (
+        (("Readable primary",), (), True),
+        ((), ("Readable context",), True),
+        ((), (), False),
+    ),
+)
+def test_runtime_passes_document_led_only_for_usable_uploaded_evidence(
+    monkeypatch,
+    primary_segments,
+    context_segments,
+    expected,
+):
+    controller = _InjectedResearchController(
+        ResearchResult(
+            (),
+            {},
+            1,
+            CurrentEvidenceTier.DOCUMENT_LED,
+            "Independent current-country research was unavailable.",
+        )
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=object(),
+        research_controller=controller,
+    )
+    research = dict(services["review_orchestrator"].steps)["research"]
+
+    def document(name, segments):
+        return ExtractedDocument(
+            name=name,
+            segments=tuple(
+                ExtractedSegment(text=text, page=None, heading=None, element="Paragraph 1")
+                for text in segments
+            ),
+            warnings=(),
+        )
+
+    context = research(
+        {
+            "payload": {"country": "Benin"},
+            "primary_document": document("benin-cpf.txt", primary_segments),
+            "package_documents": (),
+            "context_documents": (document("context.txt", context_segments),),
+            "_emit": lambda *_: None,
+        }
+    )
+
+    assert context["research_result"].tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert controller.allow_document_led == [expected]
+
+
+def test_runtime_does_not_turn_uploaded_rra_into_current_context(monkeypatch):
+    limitation = "Independent current-country research was unavailable."
+    controller = _InjectedResearchController(
+        ResearchResult((), {}, 1, CurrentEvidenceTier.DOCUMENT_LED, limitation)
+    )
+    captured = {}
+
+    class ModelGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
+            return output_type(
+                overall_read="The uploaded draft can be reviewed with caution.",
+                alignment_readout="Independent current context was unavailable.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                limitations=(),
+                coverage_note="The review covers the uploaded CPF and RRA.",
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", ModelGateway)
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=controller,
+    )
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "rra-is-not-current-context",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"CPF text " * 20},
+                "package_documents": [
+                    {
+                        "name": "benin-rra.txt",
+                        "bytes": b"Benin Risk and Resilience Assessment. " * 20,
+                    }
+                ],
+                "context_documents": [],
+                "review_focus": "",
+                "detail_level": "standard",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    assert controller.allow_document_led == [True]
+    assert not [
+        item for item in captured["pack"].evidence if item.evidence_type == "current_context"
+    ]
+    assert context["evidence_pack"].metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
+
+
+def test_runtime_preserves_research_limitation_once_through_repair(monkeypatch):
+    limitation = "Independent current-country research was unavailable."
+    controller = _InjectedResearchController(
+        ResearchResult((), {}, 1, CurrentEvidenceTier.DOCUMENT_LED, limitation)
+    )
+
+    class ModelGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            if prompt_name == "repair":
+                overall_read = "The draft requires cautious review."
+                limitations = ()
+            else:
+                overall_read = "This package is eligible for special treatment."
+                limitations = (limitation, limitation)
+            return output_type(
+                overall_read=overall_read,
+                alignment_readout="Independent current context was unavailable.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                limitations=limitations,
+                coverage_note="The review covers the uploaded CPF.",
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", ModelGateway)
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=controller,
+    )
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "document-led-repair",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"CPF text " * 20},
+                "package_documents": [],
+                "context_documents": [],
+                "review_focus": "",
+                "detail_level": "standard",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    result = context["result"]
+    assert context["evidence_pack"].warnings.count(limitation) == 1
+    assert result.limitations.count(limitation) == 1
+    assert result.metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert result.metadata.current_evidence_limitation == limitation
+    assert result.metadata.repair_count == 1

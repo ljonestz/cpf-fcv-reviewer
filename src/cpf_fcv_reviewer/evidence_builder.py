@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from .contracts import (
+    CurrentEvidenceTier,
     DetailLevel,
     DiagnosticEntry,
     DiagnosticMode,
@@ -89,6 +90,8 @@ def build_reproducible_evidence_pack(
     review_stage: str,
     detail_level: DetailLevel | str = DetailLevel.STANDARD,
     diagnostic_mode: DiagnosticMode | str,
+    current_evidence_tier: CurrentEvidenceTier | str = CurrentEvidenceTier.FULL,
+    current_evidence_limitation: str | None = None,
     documents: Mapping[str, bytes],
     registry_bundle: bytes,
     guidance: str,
@@ -113,6 +116,8 @@ def build_reproducible_evidence_pack(
         review_stage=review_stage,
         detail_level=detail_level,
         diagnostic_mode=diagnostic_mode,
+        current_evidence_tier=current_evidence_tier,
+        current_evidence_limitation=current_evidence_limitation,
         documents=documents,
         registry_bundle=registry_bundle,
         guidance=guidance,

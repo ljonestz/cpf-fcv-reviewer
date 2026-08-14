@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from cpf_fcv_reviewer.contracts import DetailLevel, DiagnosticMode
+from cpf_fcv_reviewer.contracts import CurrentEvidenceTier, DetailLevel, DiagnosticMode
 from cpf_fcv_reviewer.evidence_builder import build_reproducible_evidence_pack
 from cpf_fcv_reviewer.reproducibility import build_run_metadata, sha256_bytes
 
@@ -55,6 +55,37 @@ def test_metadata_records_every_reproducibility_input():
     assert metadata.correction_ids == ("c-1",)
     assert metadata.parent_run_id == "run-0"
     assert metadata.detail_level is DetailLevel.BRIEF
+    assert metadata.current_evidence_tier is CurrentEvidenceTier.FULL
+    assert metadata.current_evidence_limitation is None
+
+
+def test_metadata_threads_reduced_evidence_status_without_changing_hashes():
+    common = dict(
+        run_id="run-status",
+        created_at=datetime(2026, 8, 10, tzinfo=UTC),
+        review_stage="concept_review",
+        diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+        documents={"CPF draft": b"synthetic input"},
+        registry_bundle=b"registry",
+        guidance="guidance",
+        prompt_bytes={"review": b"review-v1"},
+        model_id="test-model",
+        source_scan_at=datetime(2026, 8, 10, tzinfo=UTC),
+        output_language="en",
+    )
+    full = build_run_metadata(**common)
+    reduced = build_run_metadata(
+        **common,
+        current_evidence_tier=CurrentEvidenceTier.REDUCED,
+        current_evidence_limitation="Only one public source was established.",
+    )
+
+    assert reduced.current_evidence_tier is CurrentEvidenceTier.REDUCED
+    assert reduced.current_evidence_limitation == "Only one public source was established."
+    assert reduced.document_fingerprints == full.document_fingerprints
+    assert reduced.registry_bundle_hash == full.registry_bundle_hash
+    assert reduced.guidance_hash == full.guidance_hash
+    assert reduced.prompt_hashes == full.prompt_hashes
 
 
 def test_metadata_hash_mappings_are_sorted_deterministically_and_immutable():
@@ -123,12 +154,19 @@ def test_evidence_pack_builder_constructs_metadata_before_model_use():
         evidence=(),
         diagnostic_entries=(),
         material_diagnostic_ids=(),
+        current_evidence_tier=CurrentEvidenceTier.DOCUMENT_LED,
+        current_evidence_limitation="Independent current-country research was unavailable.",
     )
 
     assert pack.metadata.document_fingerprints == {"CPF draft": sha256_bytes(b"synthetic document")}
     assert pack.metadata.registry_bundle_hash == sha256_bytes(b"synthetic registry")
     assert pack.metadata.prompt_hashes == {"review": sha256_bytes(b"review prompt")}
     assert pack.metadata.detail_level is DetailLevel.IN_DEPTH
+    assert pack.metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert (
+        pack.metadata.current_evidence_limitation
+        == "Independent current-country research was unavailable."
+    )
 
 
 def test_public_research_prompt_bytes_affect_prompt_hashes():

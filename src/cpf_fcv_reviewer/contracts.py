@@ -232,6 +232,8 @@ class RunMetadata(FrozenModel):
     prompt_bundle_version: str
     registry_versions: dict[str, str]
     model_id: str
+    current_evidence_tier: CurrentEvidenceTier = CurrentEvidenceTier.FULL
+    current_evidence_limitation: str | None = None
     source_scan_at: datetime | None = None
     output_language: Literal["en"] = "en"
     detail_level: DetailLevel = DetailLevel.STANDARD
@@ -255,6 +257,19 @@ class RunMetadata(FrozenModel):
     @classmethod
     def freezes_registry_versions(cls, value: dict[str, str]) -> dict[str, str]:
         return ImmutableRegistryVersions(value)
+
+    @model_validator(mode="after")
+    def validates_current_evidence_status(self) -> RunMetadata:
+        if self.current_evidence_tier is CurrentEvidenceTier.FULL:
+            if self.current_evidence_limitation is not None:
+                raise ValueError(
+                    "current_evidence_limitation must be None for full current evidence."
+                )
+        elif self.current_evidence_limitation is None or not self.current_evidence_limitation.strip():
+            raise ValueError(
+                "current_evidence_limitation must be nonblank for reduced or document-led evidence."
+            )
+        return self
 
 
 class EvidencePack(FrozenModel):

@@ -1,8 +1,12 @@
 from io import BytesIO
+from pathlib import Path
 
 from docx import Document
 
+from cpf_fcv_reviewer.app import create_app
+from cpf_fcv_reviewer.contracts import CurrentEvidenceTier
 from cpf_fcv_reviewer.export_docx import build_docx
+from cpf_fcv_reviewer.registry import load_registry_bundle
 
 
 def test_browser_fields_are_present_in_docx(make_valid_result):
@@ -39,3 +43,72 @@ def test_docx_and_web_note_share_empty_state_language(make_valid_result):
 
     assert "No revision summary was returned for this review." in text
     assert "No priority areas were returned for this review." in text
+
+
+def test_browser_json_exposes_evidence_status_from_review_metadata(make_valid_result):
+    result, evidence = make_valid_result
+    registry = load_registry_bundle(
+        Path("tests/fixtures/registry_bundle.synthetic.json"),
+        allow_synthetic=True,
+    )
+    app = create_app(
+        {"TESTING": True, "START_BACKGROUND_RUNS": False},
+        services={"registry_bundle": registry},
+    )
+    assessment_id = app.extensions["session_store"].create({"status": "created"})
+    app.extensions["session_store"].update(
+        assessment_id,
+        status="complete",
+        result=result.model_dump(mode="json"),
+        evidence_by_id={key: item.model_dump(mode="json") for key, item in evidence.items()},
+    )
+
+    response = app.test_client().get(f"/api/reviews/{assessment_id}/result")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["metadata"] == result.metadata.model_dump(mode="json")
+
+
+def test_browser_json_and_docx_share_document_led_evidence_status(make_valid_result):
+    result, evidence = make_valid_result
+    limitation = "Independent current-country research was unavailable."
+    result = result.model_copy(
+        update={
+            "metadata": result.metadata.model_copy(
+                update={
+                        "current_evidence_tier": CurrentEvidenceTier.DOCUMENT_LED,
+                    "current_evidence_limitation": limitation,
+                }
+            ),
+            "limitations": (*result.limitations, limitation),
+        }
+    )
+    registry = load_registry_bundle(
+        Path("tests/fixtures/registry_bundle.synthetic.json"),
+        allow_synthetic=True,
+    )
+    app = create_app(
+        {"TESTING": True, "START_BACKGROUND_RUNS": False},
+        services={"registry_bundle": registry},
+    )
+    assessment_id = app.extensions["session_store"].create({"status": "created"})
+    app.extensions["session_store"].update(
+        assessment_id,
+        status="complete",
+        result=result.model_dump(mode="json"),
+        evidence_by_id={key: item.model_dump(mode="json") for key, item in evidence.items()},
+    )
+
+    payload = app.test_client().get(f"/api/reviews/{assessment_id}/result").get_json()
+    docx_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    )
+
+    assert payload["metadata"]["current_evidence_tier"] == "document_led"
+    assert payload["metadata"]["current_evidence_limitation"] == limitation
+    assert "Review based primarily on submitted documents" in docx_text
+    assert limitation in docx_text
