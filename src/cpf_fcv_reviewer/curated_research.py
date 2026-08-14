@@ -158,7 +158,7 @@ class WorldBankAdapter:
             if not isinstance(row, Mapping):
                 continue
             name = _nonblank_string(row.get("name"))
-            iso3 = _iso3(row.get("iso3Code"))
+            iso3 = _iso3(row.get("id"))
             region = row.get("region")
             region_id = (
                 _nonblank_string(region.get("id"))

@@ -135,7 +135,7 @@ def test_world_bank_country_mapping_is_cached_and_claims_are_stable():
     def handler(_method: str, url: str, kwargs: dict[str, object]) -> StubResponse:
         path = urlsplit(url).path
         if path.endswith("/country"):
-            return json_response([{}, [{"name": "Benin", "iso3Code": "BEN", "region": {"id": "AFR", "value": "Africa"}}]])
+            return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
         indicator = path.rsplit("/", 1)[-1]
         return json_response(
             [
@@ -173,6 +173,47 @@ def test_world_bank_country_mapping_is_cached_and_claims_are_stable():
     assert all(call[2]["params"] == {"format": "json", "per_page": "5"} for call in transport.calls[1:])
 
 
+def test_world_bank_official_id_resolves_and_fetches_indicator_claims():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [
+                    {},
+                    [
+                        {
+                            "id": "BEN",
+                            "name": "Benin",
+                            "region": {"id": "AFR", "value": "Africa"},
+                        }
+                    ],
+                ]
+            )
+        indicator = path.rsplit("/", 1)[-1]
+        return json_response(
+            [
+                {},
+                [
+                    {
+                        "indicator": {"id": indicator, "value": indicator},
+                        "countryiso3code": "BEN",
+                        "date": "2025",
+                        "value": 0,
+                    }
+                ],
+            ]
+        )
+
+    transport = StubClient(handler)
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=transport))
+
+    claims = adapter.search(request("Benin"))
+
+    assert claims
+    assert any("/country/BEN/indicator/" in call[1] for call in transport.calls)
+    assert all(claim.publisher == "World Bank" for claim in claims)
+
+
 def test_world_bank_country_mapping_excludes_same_name_aggregate_rows():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         path = urlsplit(url).path
@@ -183,12 +224,12 @@ def test_world_bank_country_mapping_excludes_same_name_aggregate_rows():
                     [
                         {
                             "name": "Same-name country",
-                            "iso3Code": "AGG",
+                            "id": "AGG",
                             "region": {"id": "NA", "value": "Aggregates"},
                         },
                         {
                             "name": "Same-name country",
-                            "iso3Code": "VLD",
+                            "id": "VLD",
                             "region": {"id": "AFR", "value": "Africa"},
                         },
                     ],
@@ -220,7 +261,7 @@ def test_world_bank_country_mapping_excludes_same_name_aggregate_rows():
 def test_world_bank_requires_matching_indicator_id_and_finite_numeric_values():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         if urlsplit(url).path.endswith("/country"):
-            return json_response([{}, [{"name": "Benin", "iso3Code": "BEN", "region": {"id": "AFR", "value": "Africa"}}]])
+            return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
         indicator = urlsplit(url).path.rsplit("/", 1)[-1]
         invalid_rows = [
             {"indicator": {"id": indicator, "value": indicator}, "date": "2025", "value": "0"},
@@ -257,7 +298,7 @@ def test_world_bank_requires_matching_indicator_id_and_finite_numeric_values():
 def test_world_bank_skips_null_malformed_and_undated_rows():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         if urlsplit(url).path.endswith("/country"):
-            return json_response([{}, [{"name": "Benin", "iso3Code": "BEN", "region": {"id": "AFR", "value": "Africa"}}]])
+            return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
         return json_response(
             [
                 {},
@@ -362,7 +403,7 @@ def test_gateway_combines_deduplicates_and_sorts_independent_adapter_outputs():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         if "worldbank.org" in url:
             if urlsplit(url).path.endswith("/country"):
-                return json_response([{}, [{"name": "Benin", "iso3Code": "BEN", "region": {"id": "AFR", "value": "Africa"}}]])
+                return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
             indicator = urlsplit(url).path.rsplit("/", 1)[-1]
             return json_response([{}, [{"indicator": {"id": indicator, "value": indicator}, "date": "2025", "value": 1}]])
         return json_response({"data": [{"fields": {"title": "RW", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}}]})
@@ -384,7 +425,7 @@ def test_gateway_duplicate_winner_is_stable_when_payload_order_is_reversed():
         def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
             path = urlsplit(url).path
             if path.endswith("/country"):
-                return json_response([{}, [{"name": "Benin", "iso3Code": "BEN", "region": {"id": "AFR", "value": "Africa"}}]])
+                return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
             indicator = path.rsplit("/", 1)[-1]
             return json_response(
                 [
