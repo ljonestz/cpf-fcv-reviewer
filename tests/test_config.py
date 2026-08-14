@@ -43,6 +43,26 @@ def test_recovery_settings_accept_environment_values_and_trim_app_name(monkeypat
     assert config["RELIEFWEB_APP_NAME"] == "approved-app"
 
 
+@pytest.mark.parametrize("value", ["\n", " \n ", "\u0085"])
+def test_reliefweb_app_name_rejects_raw_environment_control_characters(monkeypatch, value):
+    monkeypatch.setenv("RELIEFWEB_APP_NAME", value)
+
+    with pytest.raises(ValueError):
+        build_config({"TESTING": True})
+
+
+@pytest.mark.parametrize("value", ["\n", " \n ", "\u0085"])
+def test_reliefweb_app_name_rejects_raw_override_control_characters(value):
+    with pytest.raises(ValueError):
+        build_config({"TESTING": True, "RELIEFWEB_APP_NAME": value})
+
+
+def test_reliefweb_app_name_strips_ordinary_whitespace_to_empty_value():
+    config = build_config({"TESTING": True, "RELIEFWEB_APP_NAME": "   "})
+
+    assert config["RELIEFWEB_APP_NAME"] == ""
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

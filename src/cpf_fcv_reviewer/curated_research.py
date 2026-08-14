@@ -158,8 +158,25 @@ class WorldBankAdapter:
             if not isinstance(row, Mapping):
                 continue
             name = _nonblank_string(row.get("name"))
-            iso3 = _iso3(row.get("iso3Code")) or _iso3(row.get("id"))
-            if name is None or iso3 is None:
+            iso3 = _iso3(row.get("iso3Code"))
+            region = row.get("region")
+            region_id = (
+                _nonblank_string(region.get("id"))
+                if isinstance(region, Mapping)
+                else None
+            )
+            region_value = (
+                _nonblank_string(region.get("value"))
+                if isinstance(region, Mapping)
+                else None
+            )
+            if (
+                name is None
+                or iso3 is None
+                or region_id is None
+                or region_id.casefold() == "na"
+                or (region_value is not None and region_value.casefold() == "aggregates")
+            ):
                 continue
             mapping.setdefault(_country_key(name), iso3)
         return mapping
@@ -224,25 +241,49 @@ class CuratedResearchGateway:
         self.reliefweb = ReliefWebAdapter(client, reliefweb_app_name)
 
     def search(self, request: ResearchRequest) -> tuple[CurrentContextClaim, ...]:
-        by_id: dict[str, CurrentContextClaim] = {}
+        candidates: list[CurrentContextClaim] = []
         for adapter in (self.world_bank, self.reliefweb):
             try:
                 claims = adapter.search(request)
             except Exception:
                 continue
-            for claim in claims:
-                by_id.setdefault(claim.claim_id, claim)
+            candidates.extend(claims)
+
+        by_id: dict[str, CurrentContextClaim] = {}
+        by_source_url: dict[str, CurrentContextClaim] = {}
+        # The lexicographically smallest complete claim key is the deterministic winner.
+        for claim in sorted(candidates, key=_claim_stable_key):
+            if claim.claim_id in by_id:
+                continue
+            if claim.source_url is not None and claim.source_url in by_source_url:
+                continue
+            by_id[claim.claim_id] = claim
+            if claim.source_url is not None:
+                by_source_url[claim.source_url] = claim
         return tuple(
             sorted(
                 by_id.values(),
-                key=lambda claim: (
-                    claim.claim_id,
-                    claim.source_date,
-                    claim.source_url or "",
-                    claim.text,
-                ),
+                key=_claim_stable_key,
             )
         )
+
+
+def _claim_stable_key(claim: CurrentContextClaim) -> tuple[object, ...]:
+    """Return every claim field in a total, deterministic ordering key."""
+
+    return (
+        claim.claim_id,
+        claim.text,
+        claim.publisher,
+        claim.source_title,
+        claim.source_url or "",
+        claim.source_date.isoformat(),
+        claim.source_type,
+        claim.relevance,
+        claim.context_kind,
+        claim.relationship,
+        claim.licensed_data_required,
+    )
 
 
 def _validate_institutional_url(url: str) -> None:
@@ -334,11 +375,12 @@ def _world_bank_claims(
         if value is None or observation_date is None:
             continue
         response_indicator = row.get("indicator")
-        response_label = (
-            _nonblank_string(response_indicator.get("value"))
-            if isinstance(response_indicator, Mapping)
-            else None
-        )
+        if (
+            not isinstance(response_indicator, Mapping)
+            or response_indicator.get("id") != indicator_id
+        ):
+            continue
+        response_label = _nonblank_string(response_indicator.get("value"))
         label = response_label or fallback_label
         raw_iso3 = row.get("countryiso3code")
         if raw_iso3 is not None:
@@ -407,10 +449,9 @@ def _country_key(value: str) -> str:
 
 
 def _iso3(value: object) -> str | None:
-    if not isinstance(value, str):
+    if not isinstance(value, str) or len(value) != 3:
         return None
-    value = value.strip().upper()
-    return value if len(value) == 3 and value.isascii() and value.isalpha() else None
+    return value.upper() if value.isascii() and value.isalpha() else None
 
 
 def _nonblank_string(value: object) -> str | None:
@@ -419,14 +460,10 @@ def _nonblank_string(value: object) -> str | None:
     return value.strip()
 
 
-def _explicit_value(value: object) -> str | int | float | None:
-    if isinstance(value, bool) or value is None:
+def _explicit_value(value: object) -> int | float | None:
+    if type(value) not in (int, float) or not isfinite(value):
         return None
-    if isinstance(value, str):
-        return value.strip() or None
-    if isinstance(value, Real):
-        return value if value == value and value not in (float("inf"), float("-inf")) else None
-    return None
+    return value
 
 
 def _world_bank_date(value: object) -> date | None:
@@ -439,8 +476,9 @@ def _world_bank_date(value: object) -> date | None:
 
 
 def _reliefweb_date(value: object) -> date | None:
-    if isinstance(value, Mapping):
-        value = value.get("created") or value.get("original")
+    if not isinstance(value, Mapping):
+        return None
+    value = value.get("created")
     if not isinstance(value, str) or not value.strip():
         return None
     text = value.strip().replace("Z", "+00:00")

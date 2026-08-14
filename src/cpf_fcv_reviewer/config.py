@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from math import isfinite
 from numbers import Real
+from unicodedata import category
 
 
 def build_config(overrides: dict | None = None) -> dict:
@@ -35,7 +36,7 @@ def build_config(overrides: dict | None = None) -> dict:
         "RESEARCH_RECOVERY_MAX_BYTES": int(
             os.getenv("RESEARCH_RECOVERY_MAX_BYTES", "500000")
         ),
-        "RELIEFWEB_APP_NAME": os.getenv("RELIEFWEB_APP_NAME", "").strip(),
+        "RELIEFWEB_APP_NAME": os.getenv("RELIEFWEB_APP_NAME", ""),
         "SESSION_TTL_SECONDS": (
             overrides["SESSION_TTL_SECONDS"]
             if "SESSION_TTL_SECONDS" in overrides
@@ -73,7 +74,9 @@ def build_config(overrides: dict | None = None) -> dict:
         config["RELIEFWEB_APP_NAME"] = ""
     elif not isinstance(config["RELIEFWEB_APP_NAME"], str):
         raise ValueError("RELIEFWEB_APP_NAME must be a string.")
-    if any(ord(character) < 32 or ord(character) == 127 for character in config["RELIEFWEB_APP_NAME"]):
+    elif any(
+        category(character) == "Cc" for character in config["RELIEFWEB_APP_NAME"]
+    ):
         raise ValueError("RELIEFWEB_APP_NAME cannot contain control characters.")
     config["RELIEFWEB_APP_NAME"] = config["RELIEFWEB_APP_NAME"].strip()
     config["ANTHROPIC_API_KEY"] = config["ANTHROPIC_API_KEY"].strip()
