@@ -1,0 +1,319 @@
+from __future__ import annotations
+
+from datetime import date
+import json
+from urllib.parse import parse_qs, urlsplit
+
+import httpx
+import pytest
+
+from cpf_fcv_reviewer.curated_research import (
+    BoundedInstitutionalClient,
+    CuratedResearchGateway,
+    WorldBankAdapter,
+)
+from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchRequest
+
+
+class StubResponse:
+    def __init__(
+        self,
+        *,
+        status_code: int = 200,
+        headers: dict[str, str] | None = None,
+        chunks: tuple[bytes, ...] = (b"{}",),
+    ) -> None:
+        self.status_code = status_code
+        self.headers = headers or {"content-type": "application/json"}
+        self._chunks = chunks
+
+    def __enter__(self) -> StubResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def iter_bytes(self):
+        yield from self._chunks
+
+
+class StubClient:
+    def __init__(self, handler):
+        self.handler = handler
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def stream(self, method: str, url: str, **kwargs: object) -> StubResponse:
+        self.calls.append((method, url, kwargs))
+        return self.handler(method, url, kwargs)
+
+
+def request(country: str = "Benin") -> ResearchRequest:
+    return ResearchRequest(country, date(2026, 8, 14), ResearchMode.HOLISTIC)
+
+
+def json_response(value: object, *, content_length: int | None = None) -> StubResponse:
+    body = json.dumps(value).encode("utf-8")
+    headers = {"content-type": "application/json"}
+    if content_length is not None:
+        headers["content-length"] = str(content_length)
+    return StubResponse(headers=headers, chunks=(body,))
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://api.worldbank.org/v2/country",
+        "https://api.worldbank.org:444/v2/country",
+        "https://user:pass@api.worldbank.org/v2/country",
+        "https://api.worldbank.org/v2/country#fragment",
+        "https://api.worldbank.org.evil.example/v2/country",
+        "https://127.0.0.1/v2/country",
+        "https://[::1]/v2/country",
+        "https://api.worldbank.org:bad/v2/country",
+        "https://api.worldbank.org./v2/country",
+    ],
+)
+def test_bounded_client_rejects_unsafe_urls_before_transport(url):
+    transport = StubClient(lambda *_args: pytest.fail("transport should not be called"))
+    client = BoundedInstitutionalClient(client=transport)
+
+    with pytest.raises(ValueError):
+        client.get_json(url)
+
+    assert transport.calls == []
+
+
+def test_bounded_client_allows_only_exact_https_hosts():
+    transport = StubClient(lambda *_args: json_response({"ok": True}))
+    client = BoundedInstitutionalClient(client=transport)
+
+    assert client.get_json("https://api.worldbank.org/v2/country") == {"ok": True}
+
+    assert transport.calls[0][0] == "GET"
+    assert transport.calls[0][2]["follow_redirects"] is False
+    timeout = transport.calls[0][2]["timeout"]
+    assert isinstance(timeout, httpx.Timeout)
+    assert timeout.connect == timeout.read == timeout.write == timeout.pool == 8.0
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        StubResponse(status_code=302, headers={"location": "https://evil.example"}),
+        StubResponse(status_code=500, chunks=(b"provider secret body",)),
+        StubResponse(headers={"content-type": "text/html"}),
+        StubResponse(headers={"content-type": "application/json", "content-length": "bad"}),
+        StubResponse(headers={"content-type": "application/json", "content-length": "10001"}, chunks=(b"{}",)),
+    ],
+)
+def test_bounded_client_rejects_redirects_status_content_type_and_bad_length(response):
+    transport = StubClient(lambda *_args: response)
+    client = BoundedInstitutionalClient(client=transport, max_bytes=10_000)
+
+    with pytest.raises(ValueError) as error:
+        client.get_json("https://api.worldbank.org/v2/country?token=secret-token")
+
+    assert "secret-token" not in str(error.value)
+    assert "provider secret body" not in str(error.value)
+
+
+def test_bounded_client_rejects_incremental_body_over_cap_without_content_length():
+    transport = StubClient(
+        lambda *_args: StubResponse(
+            headers={"content-type": "application/json"},
+            chunks=(b"{" + b"a" * 10_000, b"}"),
+        )
+    )
+    client = BoundedInstitutionalClient(client=transport, max_bytes=10_000)
+
+    with pytest.raises(ValueError):
+        client.get_json("https://api.worldbank.org/v2/country")
+
+
+def test_world_bank_country_mapping_is_cached_and_claims_are_stable():
+    def handler(_method: str, url: str, kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response([{}, [{"name": "Benin", "iso3Code": "BEN"}]])
+        indicator = path.rsplit("/", 1)[-1]
+        return json_response(
+            [
+                {},
+                [
+                    {
+                        "indicator": {"id": indicator, "value": indicator},
+                        "countryiso3code": "BEN",
+                        "date": "2025",
+                        "value": 12.5,
+                    }
+                ],
+            ]
+        )
+
+    transport = StubClient(handler)
+    bounded = BoundedInstitutionalClient(client=transport)
+    adapter = WorldBankAdapter(bounded)
+
+    first = adapter.search(request("  benin "))
+    second = adapter.search(request("Benin"))
+
+    assert first == second
+    assert first
+    assert all(claim.publisher == "World Bank" for claim in first)
+    assert all(claim.source_type == "institutional public data" for claim in first)
+    assert all(claim.licensed_data_required is False for claim in first)
+    assert all(urlsplit(claim.source_url or "").netloc == "api.worldbank.org" for claim in first)
+    assert len([call for call in transport.calls if call[1].endswith("/country")]) == 1
+    assert [claim.claim_id for claim in first] == [claim.claim_id for claim in second]
+
+    country_query = parse_qs(urlsplit(transport.calls[0][1]).query)
+    assert country_query == {}
+    assert transport.calls[0][2]["params"] == {"format": "json", "per_page": "400"}
+    assert all(call[2]["params"] == {"format": "json", "per_page": "5"} for call in transport.calls[1:])
+
+
+def test_world_bank_skips_null_malformed_and_undated_rows():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        if urlsplit(url).path.endswith("/country"):
+            return json_response([{}, [{"name": "Benin", "iso3Code": "BEN"}]])
+        return json_response(
+            [
+                {},
+                [
+                    {"date": "2025", "value": None},
+                    {"date": "not-a-date", "value": 1},
+                    {"value": 1},
+                    {"date": "2025", "value": {"unexpected": True}},
+                    {"date": "2025", "value": 1, "countryiso3code": "B"},
+                ],
+            ]
+        )
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+
+    assert adapter.search(request()) == ()
+
+
+def test_reliefweb_is_skipped_without_trimmed_app_name():
+    transport = StubClient(lambda *_args: pytest.fail("ReliefWeb should be skipped"))
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=transport), reliefweb_app_name="   "
+    )
+
+    assert gateway.reliefweb.search(request()) == ()
+    assert transport.calls == []
+
+
+def test_reliefweb_uses_v2_appname_country_date_and_minimum_fields():
+    def handler(_method: str, url: str, kwargs: dict[str, object]) -> StubResponse:
+        assert url == "https://api.reliefweb.int/v2/reports"
+        params = kwargs["params"]
+        assert isinstance(params, list)
+        assert ("appname", "approved.example") in params
+        assert ("query[value]", "Benin") in params
+        assert ("filter[conditions][0][field]", "primary_country") in params
+        assert ("filter[conditions][0][value]", "Benin") in params
+        assert ("filter[conditions][1][field]", "date.created") in params
+        assert ("fields[include][]", "title") in params
+        assert ("fields[include][]", "url") in params
+        assert ("fields[include][]", "date.created") in params
+        assert ("fields[include][]", "source.name") in params
+        return json_response(
+            {
+                "data": [
+                    {
+                        "fields": {
+                            "title": "Benin humanitarian update",
+                            "url": "https://reliefweb.int/report/benin/update",
+                            "date": {"created": "2026-08-01T00:00:00+00:00"},
+                            "source": [{"name": "UN OCHA"}],
+                            "body": "do not ingest this body",
+                        }
+                    }
+                ]
+            }
+        )
+
+    transport = StubClient(handler)
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=transport), reliefweb_app_name="  approved.example "
+    )
+
+    claims = gateway.reliefweb.search(request())
+
+    assert len(claims) == 1
+    claim = claims[0]
+    assert claim.publisher == "ReliefWeb"
+    assert claim.source_title == "Benin humanitarian update"
+    assert claim.source_date == date(2026, 8, 1)
+    assert "do not ingest" not in claim.text
+    assert urlsplit(claim.source_url or "").hostname in {"reliefweb.int", "api.reliefweb.int"}
+
+
+def test_reliefweb_skips_rows_without_explicit_valid_fields():
+    def handler(_method: str, _url: str, _kwargs: dict[str, object]) -> StubResponse:
+        return json_response(
+            {
+                "data": [
+                    {"fields": {"title": "No date", "url": "https://reliefweb.int/a"}},
+                    {"fields": {"url": "https://reliefweb.int/b", "date": {"created": "2026-08-01"}}},
+                    {"fields": {"title": "Bad URL", "url": "https://evil.example/b", "date": {"created": "2026-08-01"}}},
+                    {"fields": {"title": "Bad date", "url": "https://reliefweb.int/c", "date": {"created": "not-a-date"}}},
+                    {"fields": {"title": "No source", "url": "https://reliefweb.int/d", "date": {"created": "2026-08-01"}, "source": []}},
+                    {"fields": {"title": "Too old", "url": "https://reliefweb.int/e", "date": {"created": "2023-08-01"}, "source": [{"name": "UN"}]}},
+                    {"fields": {"title": "Too new", "url": "https://reliefweb.int/f", "date": {"created": "2026-08-15"}, "source": [{"name": "UN"}]}},
+                ]
+            }
+        )
+
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=StubClient(handler)), reliefweb_app_name="app"
+    )
+
+    assert gateway.reliefweb.search(request()) == ()
+
+
+def test_gateway_combines_deduplicates_and_sorts_independent_adapter_outputs():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        if "worldbank.org" in url:
+            if urlsplit(url).path.endswith("/country"):
+                return json_response([{}, [{"name": "Benin", "iso3Code": "BEN"}]])
+            indicator = urlsplit(url).path.rsplit("/", 1)[-1]
+            return json_response([{}, [{"indicator": {"value": indicator}, "date": "2025", "value": 1}]])
+        return json_response({"data": [{"fields": {"title": "RW", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}}]})
+
+    transport = StubClient(handler)
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=transport), reliefweb_app_name="app"
+    )
+
+    claims = gateway.search(request())
+
+    assert tuple(claim.claim_id for claim in claims) == tuple(sorted({claim.claim_id for claim in claims}))
+    assert len(claims) == len({claim.claim_id for claim in claims})
+    assert {claim.publisher for claim in claims} == {"World Bank", "ReliefWeb"}
+
+
+def test_gateway_continues_when_one_adapter_times_out():
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        if "worldbank.org" in url:
+            raise httpx.ReadTimeout("secret provider detail")
+        return json_response({"data": [{"fields": {"title": "RW", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}}]})
+
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=StubClient(handler)), reliefweb_app_name="app"
+    )
+
+    claims = gateway.search(request())
+
+    assert len(claims) == 1
+    assert claims[0].publisher == "ReliefWeb"
+
+
+def test_gateway_returns_empty_when_both_adapters_fail():
+    transport = StubClient(lambda *_args: (_ for _ in ()).throw(httpx.ConnectError("secret")))
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=transport), reliefweb_app_name="app"
+    )
+
+    assert gateway.search(request()) == ()

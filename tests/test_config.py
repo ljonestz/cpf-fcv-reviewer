@@ -14,6 +14,9 @@ def test_research_settings_have_bounded_defaults():
     assert config["RESEARCH_MINIMUM_CLAIMS"] == 4
     assert config["RESEARCH_MINIMUM_PUBLISHERS"] == 2
     assert config["RESEARCH_RETRY_BACKOFF_SECONDS"] == 1.0
+    assert config["RESEARCH_RECOVERY_TIMEOUT_SECONDS"] == 8.0
+    assert config["RESEARCH_RECOVERY_MAX_BYTES"] == 500000
+    assert config["RELIEFWEB_APP_NAME"] == ""
 
 
 def test_research_settings_accept_overrides(monkeypatch):
@@ -26,6 +29,18 @@ def test_research_settings_accept_overrides(monkeypatch):
     assert config["RESEARCH_MAX_ATTEMPTS"] == 5
     assert config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"] == 12.5
     assert config["RESEARCH_TOTAL_BUDGET_SECONDS"] == 60.0
+
+
+def test_recovery_settings_accept_environment_values_and_trim_app_name(monkeypatch):
+    monkeypatch.setenv("RESEARCH_RECOVERY_TIMEOUT_SECONDS", "4.5")
+    monkeypatch.setenv("RESEARCH_RECOVERY_MAX_BYTES", "10000")
+    monkeypatch.setenv("RELIEFWEB_APP_NAME", "  approved-app  ")
+
+    config = build_config({"TESTING": True})
+
+    assert config["RESEARCH_RECOVERY_TIMEOUT_SECONDS"] == 4.5
+    assert config["RESEARCH_RECOVERY_MAX_BYTES"] == 10000
+    assert config["RELIEFWEB_APP_NAME"] == "approved-app"
 
 
 @pytest.mark.parametrize(
@@ -57,5 +72,25 @@ def test_research_settings_reject_nonpositive_or_inconsistent_values(overrides):
     ],
 )
 def test_research_settings_reject_wrong_types_or_nonfinite_values(name, value):
+    with pytest.raises(ValueError):
+        build_config({"TESTING": True, name: value})
+
+
+@pytest.mark.parametrize(
+    "name, value",
+    [
+        ("RESEARCH_RECOVERY_TIMEOUT_SECONDS", True),
+        ("RESEARCH_RECOVERY_TIMEOUT_SECONDS", 0),
+        ("RESEARCH_RECOVERY_TIMEOUT_SECONDS", nan),
+        ("RESEARCH_RECOVERY_TIMEOUT_SECONDS", inf),
+        ("RESEARCH_RECOVERY_MAX_BYTES", True),
+        ("RESEARCH_RECOVERY_MAX_BYTES", 9999),
+        ("RESEARCH_RECOVERY_MAX_BYTES", 2_000_001),
+        ("RESEARCH_RECOVERY_MAX_BYTES", 10_000.0),
+        ("RESEARCH_RECOVERY_MAX_BYTES", "500000"),
+        ("RELIEFWEB_APP_NAME", "bad\nname"),
+    ],
+)
+def test_recovery_settings_reject_invalid_values(name, value):
     with pytest.raises(ValueError):
         build_config({"TESTING": True, name: value})

@@ -29,6 +29,13 @@ def build_config(overrides: dict | None = None) -> dict:
         "RESEARCH_RETRY_BACKOFF_SECONDS": float(
             os.getenv("RESEARCH_RETRY_BACKOFF_SECONDS", "1")
         ),
+        "RESEARCH_RECOVERY_TIMEOUT_SECONDS": float(
+            os.getenv("RESEARCH_RECOVERY_TIMEOUT_SECONDS", "8.0")
+        ),
+        "RESEARCH_RECOVERY_MAX_BYTES": int(
+            os.getenv("RESEARCH_RECOVERY_MAX_BYTES", "500000")
+        ),
+        "RELIEFWEB_APP_NAME": os.getenv("RELIEFWEB_APP_NAME", "").strip(),
         "SESSION_TTL_SECONDS": (
             overrides["SESSION_TTL_SECONDS"]
             if "SESSION_TTL_SECONDS" in overrides
@@ -49,6 +56,7 @@ def build_config(overrides: dict | None = None) -> dict:
         ("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", True),
         ("RESEARCH_TOTAL_BUDGET_SECONDS", True),
         ("RESEARCH_RETRY_BACKOFF_SECONDS", False),
+        ("RESEARCH_RECOVERY_TIMEOUT_SECONDS", True),
     ):
         value = config[name]
         if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):
@@ -57,6 +65,17 @@ def build_config(overrides: dict | None = None) -> dict:
             raise ValueError(f"{name} has an invalid bound.")
     if config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"] > config["RESEARCH_TOTAL_BUDGET_SECONDS"]:
         raise ValueError("Research attempt timeout cannot exceed total budget.")
+    if type(config["RESEARCH_RECOVERY_MAX_BYTES"]) is not int or not (
+        10_000 <= config["RESEARCH_RECOVERY_MAX_BYTES"] <= 2_000_000
+    ):
+        raise ValueError("RESEARCH_RECOVERY_MAX_BYTES must be an integer from 10000 to 2000000.")
+    if config["RELIEFWEB_APP_NAME"] is None:
+        config["RELIEFWEB_APP_NAME"] = ""
+    elif not isinstance(config["RELIEFWEB_APP_NAME"], str):
+        raise ValueError("RELIEFWEB_APP_NAME must be a string.")
+    if any(ord(character) < 32 or ord(character) == 127 for character in config["RELIEFWEB_APP_NAME"]):
+        raise ValueError("RELIEFWEB_APP_NAME cannot contain control characters.")
+    config["RELIEFWEB_APP_NAME"] = config["RELIEFWEB_APP_NAME"].strip()
     config["ANTHROPIC_API_KEY"] = config["ANTHROPIC_API_KEY"].strip()
     if not config["TESTING"] and not config["ANTHROPIC_API_KEY"]:
         raise RuntimeError("ANTHROPIC_API_KEY is required outside tests.")
