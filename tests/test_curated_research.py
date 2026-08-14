@@ -99,6 +99,56 @@ def test_bounded_client_allows_only_exact_https_hosts():
     assert timeout.connect == timeout.read == timeout.write == timeout.pool == 8.0
 
 
+def test_bounded_client_caps_each_call_timeout_to_remaining_deadline():
+    now = [10.0]
+    transport = StubClient(lambda *_args: json_response({"ok": True}))
+    client = BoundedInstitutionalClient(
+        client=transport,
+        timeout_seconds=8.0,
+        monotonic=lambda: now[0],
+    )
+
+    assert client.get_json(
+        "https://api.worldbank.org/v2/country", deadline=12.5
+    ) == {"ok": True}
+
+    timeout = transport.calls[0][2]["timeout"]
+    assert timeout.connect == timeout.read == timeout.write == timeout.pool == 2.5
+
+
+def test_bounded_client_does_not_swallow_programming_errors():
+    def fail(*_args):
+        raise KeyError("programming defect")
+
+    client = BoundedInstitutionalClient(client=StubClient(fail))
+
+    with pytest.raises(KeyError, match="programming defect"):
+        client.get_json("https://api.worldbank.org/v2/country")
+
+
+def test_curated_gateway_uses_one_deadline_across_adapter_calls():
+    now = [10.0]
+
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        now[0] += 0.25
+        if urlsplit(url).path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        return json_response([{}, []])
+
+    transport = StubClient(handler)
+    client = BoundedInstitutionalClient(client=transport, monotonic=lambda: now[0])
+    gateway = CuratedResearchGateway(client)
+
+    gateway.search(request(), timeout_seconds=1.0)
+
+    timeouts = [call[2]["timeout"].connect for call in transport.calls]
+    assert timeouts[0] == 1.0
+    assert all(0 < timeout <= 1.0 for timeout in timeouts)
+    assert timeouts == sorted(timeouts, reverse=True)
+
+
 @pytest.mark.parametrize(
     "response",
     [

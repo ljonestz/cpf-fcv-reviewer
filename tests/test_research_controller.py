@@ -16,6 +16,7 @@ from cpf_fcv_reviewer.research_controller import (
     ResearchMode,
     ResearchProviderFailure,
     ResearchRequest,
+    ResearchResult,
     ResearchSourceRejected,
     ResearchTimeout,
     _normalize_source_url,
@@ -89,12 +90,17 @@ class ScriptedGateway:
 
 
 class ScriptedRecoveryGateway:
-    def __init__(self, response):
+    def __init__(self, response, *, on_search=None):
         self.response = response
+        self.on_search = on_search
         self.calls = 0
+        self.timeouts = []
 
-    def search(self, request):
+    def search(self, request, *, timeout_seconds):
         self.calls += 1
+        self.timeouts.append(timeout_seconds)
+        if self.on_search is not None:
+            self.on_search(timeout_seconds)
         if isinstance(self.response, BaseException):
             raise self.response
         return self.response
@@ -130,6 +136,12 @@ def test_full_evidence_returns_explicit_full_tier():
 
     assert result.tier is CurrentEvidenceTier.FULL
     assert result.limitation is None
+
+
+@pytest.mark.parametrize("tier", [True, False, "full", 1, None])
+def test_research_result_rejects_legacy_boolean_and_invalid_tiers(tier):
+    with pytest.raises(ValueError, match="tier"):
+        ResearchResult((), {}, 1, tier)
 
 
 def test_thin_recent_public_evidence_returns_reduced_tier_with_limitation():
@@ -174,6 +186,34 @@ def test_recovery_failure_does_not_discard_usable_primary_evidence():
 
     assert result.tier is CurrentEvidenceTier.REDUCED
     assert result.claims[0].claim_id == "primary"
+
+
+def test_recovery_is_bounded_and_late_claims_are_not_accepted():
+    now = [0.0]
+    primary = claim("primary")
+
+    class DelayedPrimaryGateway:
+        def search(self, _prompt):
+            now[0] += 0.25
+            return (primary,)
+
+    def finish_after_deadline(timeout_seconds):
+        now[0] += timeout_seconds + 0.01
+
+    recovery = ScriptedRecoveryGateway(
+        sufficient_claims(), on_search=finish_after_deadline
+    )
+    result = controller(
+        DelayedPrimaryGateway(),
+        recovery_gateway=recovery,
+        max_attempts=1,
+        total_budget_seconds=1.0,
+        monotonic=lambda: now[0],
+    ).run(holistic_request(), lambda *_: None)
+
+    assert recovery.timeouts == [0.75]
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert result.claims == (primary,)
 
 
 def test_provider_failure_and_recovery_failure_preserve_primary_exception():
@@ -221,6 +261,15 @@ def test_recovery_configuration_error_is_not_isolated():
         controller(
             ScriptedGateway(((claim("primary"),),)),
             recovery_gateway=ScriptedRecoveryGateway(ResearchConfigurationError()),
+            max_attempts=1,
+        ).run(holistic_request(), lambda *_: None)
+
+
+def test_recovery_programming_error_propagates_immediately():
+    with pytest.raises(KeyError, match="missing"):
+        controller(
+            ScriptedGateway(((claim("primary"),),)),
+            recovery_gateway=ScriptedRecoveryGateway(KeyError("missing")),
             max_attempts=1,
         ).run(holistic_request(), lambda *_: None)
 
@@ -401,6 +450,19 @@ def test_other_provider_error_retries_then_raises_provider_failure():
 
     with pytest.raises(ResearchProviderFailure):
         controller(gateway).run(holistic_request(), lambda *_: None)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [KeyError("missing"), IndexError("bad index"), ZeroDivisionError("division")],
+)
+def test_programming_errors_propagate_immediately(error):
+    gateway = ScriptedGateway((error, sufficient_claims()))
+
+    with pytest.raises(type(error)):
+        controller(gateway).run(holistic_request(), lambda *_: None)
+
+    assert gateway.calls == 1
 
 
 def test_sufficiency_requires_publisher_diversity_structural_current_and_recent():
@@ -587,7 +649,7 @@ def test_all_source_rejections_raise_source_rejected():
         )
 
 
-def test_total_budget_stops_before_next_attempt():
+def test_exact_budget_stops_calls_but_grades_accumulated_recent_evidence():
     now = [0.0]
 
     def clock():
@@ -597,16 +659,18 @@ def test_total_budget_stops_before_next_attempt():
         now[0] += seconds
 
     gateway = ScriptedGateway(((claim("c1"),), sufficient_claims()))
-    with pytest.raises(ResearchTimeout):
-        controller(
-            gateway,
-            total_budget_seconds=1.0,
-            retry_backoff_seconds=2.0,
-            monotonic=clock,
-            sleep=sleep,
-        ).run(holistic_request(), lambda *_: None)
+    result = controller(
+        gateway,
+        total_budget_seconds=1.0,
+        retry_backoff_seconds=2.0,
+        monotonic=clock,
+        sleep=sleep,
+        jitter=lambda delay: delay,
+    ).run(holistic_request(), lambda *_: None)
 
     assert gateway.calls == 1
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert tuple(item.claim_id for item in result.claims) == ("c1",)
 
 
 @pytest.mark.parametrize(

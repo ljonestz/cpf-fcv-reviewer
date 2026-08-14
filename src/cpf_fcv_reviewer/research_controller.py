@@ -72,6 +72,10 @@ class ResearchResult:
     tier: CurrentEvidenceTier
     limitation: str | None = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.tier, CurrentEvidenceTier):
+            raise ValueError("Research result tier is invalid.")
+
     @property
     def sufficient(self) -> bool:
         """Compatibility view for consumers that only need the full-evidence gate."""
@@ -112,7 +116,12 @@ class ResearchGateway(Protocol):
 
 
 class RecoveryGateway(Protocol):
-    def search(self, request: ResearchRequest) -> tuple[CurrentContextClaim, ...]: ...
+    def search(
+        self,
+        request: ResearchRequest,
+        *,
+        timeout_seconds: float,
+    ) -> tuple[CurrentContextClaim, ...]: ...
 
 
 Emitter = Callable[[str, dict[str, object]], None]
@@ -178,13 +187,15 @@ class ResearchController:
         rejected: dict[str, str] = {}
         last_missing: tuple[str, ...] = ()
         last_failure: ResearchFailure | None = None
+        budget_exhausted = False
 
         primary_attempts = 0
         for attempt in range(1, self.max_attempts + 1):
             primary_attempts = attempt
             elapsed = self.monotonic() - started
             if attempt > 1 and elapsed >= self.total_budget_seconds:
-                raise ResearchTimeout("Research total budget was exhausted.")
+                budget_exhausted = True
+                break
             prompt = self._prompt(request, attempt, last_missing)
             emit(
                 "research_attempt",
@@ -201,7 +212,8 @@ class ResearchController:
                     break
                 last_missing = ("provider response",)
                 if not self._prepare_retry(attempt, started, last_missing, emit):
-                    raise ResearchTimeout("Research total budget was exhausted.") from None
+                    budget_exhausted = True
+                    break
                 continue
 
             self._merge_claims(claims, accepted, accepted_urls, rejected)
@@ -222,22 +234,28 @@ class ResearchController:
                 )
             if attempt < self.max_attempts:
                 if not self._prepare_retry(attempt, started, last_missing, emit):
-                    raise ResearchTimeout("Research total budget was exhausted.")
+                    budget_exhausted = True
+                    break
 
-        if (
-            self.recovery_gateway is not None
-            and self.monotonic() - started < self.total_budget_seconds
-        ):
+        remaining = self.total_budget_seconds - (self.monotonic() - started)
+        if self.recovery_gateway is not None and remaining > 0:
             recovery_succeeded = False
             try:
-                recovery_claims = self.recovery_gateway.search(request)
-                recovery_succeeded = True
+                recovery_claims = self.recovery_gateway.search(
+                    request, timeout_seconds=remaining
+                )
+                recovery_succeeded = (
+                    self.monotonic() - started < self.total_budget_seconds
+                )
             except Exception as exc:
                 failure = self._classify_exception(exc)
                 if isinstance(failure, ResearchConfigurationError):
                     raise failure from None
             else:
-                self._merge_claims(recovery_claims, accepted, accepted_urls, rejected)
+                if recovery_succeeded:
+                    self._merge_claims(
+                        recovery_claims, accepted, accepted_urls, rejected
+                    )
             if recovery_succeeded:
                 last_missing = self._missing_coverage(tuple(accepted.values()), request)
                 emit("research_curated_recovery", {"accepted_count": len(accepted)})
@@ -294,6 +312,8 @@ class ResearchController:
             )
         if last_failure is not None:
             raise last_failure
+        if budget_exhausted:
+            raise ResearchTimeout("Research total budget was exhausted.")
         if not accepted and rejected:
             raise ResearchSourceRejected("All public research claims were rejected.")
         raise InsufficientResearch("Public research did not meet the sufficiency threshold.")
@@ -496,9 +516,20 @@ class ResearchController:
 
     @staticmethod
     def _classify_exception(exc: Exception) -> ResearchFailure:
-        if isinstance(exc, (AssertionError, AttributeError, NameError, TypeError)):
+        if isinstance(
+            exc,
+            (
+                ArithmeticError,
+                AssertionError,
+                AttributeError,
+                LookupError,
+                NameError,
+                NotImplementedError,
+                TypeError,
+            ),
+        ):
             raise exc
-        if isinstance(exc, ResearchConfigurationError):
+        if isinstance(exc, ResearchFailure):
             return exc
         if getattr(exc, "status_code", None) in {401, 403}:
             return ResearchConfigurationError("Public research configuration failed.")
@@ -506,7 +537,9 @@ class ResearchController:
             return ResearchTimeout("Public research timed out.")
         if isinstance(exc, ValueError):
             return MalformedResearch("Public research response was malformed.")
-        return ResearchProviderFailure("Public research provider failed.")
+        if isinstance(exc, (OSError, RuntimeError)) or getattr(exc, "status_code", None):
+            return ResearchProviderFailure("Public research provider failed.")
+        raise exc
 
 
 def _require_positive_int(value: object, name: str) -> None:

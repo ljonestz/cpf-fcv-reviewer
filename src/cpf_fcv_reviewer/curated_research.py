@@ -7,6 +7,7 @@ from datetime import date, datetime
 from math import isfinite
 from numbers import Real
 from threading import Lock
+from time import monotonic as default_monotonic
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
@@ -44,6 +45,7 @@ class BoundedInstitutionalClient:
         max_bytes: int = 500_000,
         client: Any | None = None,
         transport: httpx.BaseTransport | None = None,
+        monotonic: Any = default_monotonic,
     ) -> None:
         if (
             isinstance(timeout_seconds, bool)
@@ -60,6 +62,9 @@ class BoundedInstitutionalClient:
 
         self.timeout_seconds = float(timeout_seconds)
         self.max_bytes = max_bytes
+        if not callable(monotonic):
+            raise ValueError("monotonic must be callable.")
+        self.monotonic = monotonic
         self.timeout = httpx.Timeout(
             connect=self.timeout_seconds,
             read=self.timeout_seconds,
@@ -81,14 +86,16 @@ class BoundedInstitutionalClient:
         url: str,
         *,
         params: Mapping[str, object] | Sequence[tuple[str, object]] | None = None,
+        deadline: float | None = None,
     ) -> object:
         _validate_institutional_url(url)
+        timeout = self._timeout_for(deadline)
         try:
             with self._client.stream(
                 "GET",
                 url,
                 params=params,
-                timeout=self.timeout,
+                timeout=timeout,
                 follow_redirects=False,
             ) as response:
                 if not 200 <= response.status_code < 300:
@@ -100,15 +107,24 @@ class BoundedInstitutionalClient:
                 body = _read_bounded_body(response, self.max_bytes)
         except InstitutionalClientError:
             raise
-        except (httpx.HTTPError, TimeoutError):
-            raise InstitutionalClientError("Institutional request failed.") from None
-        except Exception:
+        except (httpx.HTTPError, TimeoutError, OSError):
             raise InstitutionalClientError("Institutional request failed.") from None
 
         try:
             return json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise InstitutionalClientError("Institutional response was not valid JSON.") from None
+
+    def _timeout_for(self, deadline: float | None) -> httpx.Timeout:
+        if deadline is None:
+            return self.timeout
+        if isinstance(deadline, bool) or not isinstance(deadline, Real) or not isfinite(deadline):
+            raise ValueError("Institutional deadline must be finite.")
+        remaining = float(deadline) - self.monotonic()
+        if remaining <= 0:
+            raise InstitutionalClientError("Institutional request deadline expired.")
+        seconds = min(self.timeout_seconds, remaining)
+        return httpx.Timeout(connect=seconds, read=seconds, write=seconds, pool=seconds)
 
     def close(self) -> None:
         close = getattr(self._client, "close", None)
@@ -122,17 +138,21 @@ class WorldBankAdapter:
         self._country_name_to_iso3: dict[str, str] | None = None
         self._country_mapping_lock = Lock()
 
-    def search(self, request: ResearchRequest) -> tuple[CurrentContextClaim, ...]:
-        iso3 = self._resolve_country(request.country)
+    def search(
+        self, request: ResearchRequest, *, deadline: float | None = None
+    ) -> tuple[CurrentContextClaim, ...]:
+        iso3 = self._resolve_country(request.country, deadline=deadline)
         if iso3 is None:
             return ()
 
         claims: list[CurrentContextClaim] = []
         for indicator_id, label, context_kind in WORLDBANK_INDICATORS:
             try:
-                payload = self.client.get_json(
+                payload = _get_json(
+                    self.client,
                     f"https://api.worldbank.org/v2/country/{iso3}/indicator/{indicator_id}",
                     params={"format": "json", "per_page": "5"},
+                    deadline=deadline,
                 )
                 claims.extend(
                     _world_bank_claims(
@@ -148,18 +168,25 @@ class WorldBankAdapter:
                 continue
         return tuple(claims)
 
-    def _resolve_country(self, country: str) -> str | None:
+    def _resolve_country(self, country: str, *, deadline: float | None = None) -> str | None:
         key = _country_key(country)
         if self._country_name_to_iso3 is None:
             with self._country_mapping_lock:
                 if self._country_name_to_iso3 is None:
-                    self._country_name_to_iso3 = self._load_country_mapping()
+                    if deadline is None:
+                        self._country_name_to_iso3 = self._load_country_mapping()
+                    else:
+                        self._country_name_to_iso3 = self._load_country_mapping(
+                            deadline=deadline
+                        )
         return self._country_name_to_iso3.get(key)
 
-    def _load_country_mapping(self) -> dict[str, str]:
-        payload = self.client.get_json(
+    def _load_country_mapping(self, *, deadline: float | None = None) -> dict[str, str]:
+        payload = _get_json(
+            self.client,
             "https://api.worldbank.org/v2/country",
             params={"format": "json", "per_page": "400"},
+            deadline=deadline,
         )
         if not isinstance(payload, list) or len(payload) < 2 or not isinstance(payload[1], list):
             raise _InstitutionalResponseShapeError("Institutional response shape was invalid.")
@@ -198,7 +225,9 @@ class ReliefWebAdapter:
         self.client = client
         self.app_name = (app_name or "").strip()
 
-    def search(self, request: ResearchRequest) -> tuple[CurrentContextClaim, ...]:
+    def search(
+        self, request: ResearchRequest, *, deadline: float | None = None
+    ) -> tuple[CurrentContextClaim, ...]:
         if not self.app_name:
             return ()
         if _has_control_character(self.app_name):
@@ -225,7 +254,10 @@ class ReliefWebAdapter:
             ("limit", "20"),
             ("sort[]", "date.created:desc"),
         ]
-        payload = self.client.get_json("https://api.reliefweb.int/v2/reports", params=params)
+        payload = _get_json(
+            self.client,
+            "https://api.reliefweb.int/v2/reports", params=params, deadline=deadline
+        )
         if not isinstance(payload, Mapping) or not isinstance(payload.get("data"), list):
             raise _InstitutionalResponseShapeError("Institutional response shape was invalid.")
 
@@ -248,14 +280,33 @@ class CuratedResearchGateway:
         *,
         reliefweb_app_name: str | None = None,
     ) -> None:
+        self.client = client
         self.world_bank = WorldBankAdapter(client)
         self.reliefweb = ReliefWebAdapter(client, reliefweb_app_name)
 
-    def search(self, request: ResearchRequest) -> tuple[CurrentContextClaim, ...]:
+    def search(
+        self,
+        request: ResearchRequest,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> tuple[CurrentContextClaim, ...]:
+        deadline = None
+        if timeout_seconds is not None:
+            if (
+                isinstance(timeout_seconds, bool)
+                or not isinstance(timeout_seconds, Real)
+                or not isfinite(timeout_seconds)
+                or timeout_seconds <= 0
+            ):
+                raise ValueError("Recovery timeout must be a finite positive number.")
+            deadline = self.client.monotonic() + float(timeout_seconds)
         candidates: list[CurrentContextClaim] = []
         for adapter in (self.world_bank, self.reliefweb):
             try:
-                claims = adapter.search(request)
+                if deadline is None:
+                    claims = adapter.search(request)
+                else:
+                    claims = adapter.search(request, deadline=deadline)
             except (InstitutionalClientError, _InstitutionalResponseShapeError):
                 continue
             candidates.extend(claims)
@@ -277,6 +328,18 @@ class CuratedResearchGateway:
                 key=_claim_stable_key,
             )
         )
+
+
+def _get_json(
+    client: Any,
+    url: str,
+    *,
+    params: Mapping[str, object] | Sequence[tuple[str, object]] | None,
+    deadline: float | None,
+) -> object:
+    if deadline is None:
+        return client.get_json(url, params=params)
+    return client.get_json(url, params=params, deadline=deadline)
 
 
 def _claim_stable_key(claim: CurrentContextClaim) -> tuple[object, ...]:
