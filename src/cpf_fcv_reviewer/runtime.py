@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from secrets import compare_digest
+from urllib.parse import unquote, urlsplit
 from zipfile import BadZipFile, ZipFile
 
 from docx.opc.exceptions import PackageNotFoundError
-from lxml.etree import XMLSyntaxError
+from lxml.etree import XMLParser, XMLSyntaxError, fromstring
 from pypdf.errors import PdfReadError
 
 from .contracts import (
@@ -64,12 +65,17 @@ EXPECTED_OPTIONAL_EXTRACTION_ERRORS = (
     UnicodeDecodeError,
     XMLSyntaxError,
 )
-REQUIRED_DOCX_PARTS = frozenset(
+REQUIRED_DOCX_ROOT_PARTS = frozenset({"[Content_Types].xml", "_rels/.rels"})
+RELATIONSHIPS_NAMESPACE = (
+    "http://schemas.openxmlformats.org/package/2006/relationships"
+)
+RELATIONSHIPS_TAG = f"{{{RELATIONSHIPS_NAMESPACE}}}Relationships"
+RELATIONSHIP_TAG = f"{{{RELATIONSHIPS_NAMESPACE}}}Relationship"
+OFFICE_DOCUMENT_RELATIONSHIP_TYPES = frozenset(
     {
-        "[Content_Types].xml",
-        "_rels/.rels",
-        "word/document.xml",
-        "word/_rels/document.xml.rels",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+        "officeDocument",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument",
     }
 )
 
@@ -134,6 +140,115 @@ def _has_usable_uploaded_document(document) -> bool:
     )
 
 
+def _relationship_source_directory(relationship_part: str) -> PurePosixPath | None:
+    if relationship_part == "_rels/.rels":
+        return PurePosixPath()
+    path = PurePosixPath(relationship_part)
+    if path.parent.name != "_rels" or not path.name.endswith(".rels"):
+        return None
+    source_part = path.parent.parent / path.name.removesuffix(".rels")
+    return source_part.parent
+
+
+def _resolve_internal_relationship_target(
+    relationship_part: str,
+    target: str,
+) -> str | None:
+    try:
+        parsed = urlsplit(target)
+    except ValueError:
+        return None
+    if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+        return None
+    decoded_path = unquote(parsed.path)
+    if not decoded_path or decoded_path.startswith("/") or "\\" in decoded_path:
+        return None
+    target_path = PurePosixPath(decoded_path)
+    if any(part in {"", ".", ".."} for part in target_path.parts):
+        return None
+    source_directory = _relationship_source_directory(relationship_part)
+    if source_directory is None:
+        return None
+    return str(source_directory / target_path)
+
+
+def _parse_relationship_part(data: bytes) -> tuple[dict[str, str], ...] | None:
+    parser = XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
+    try:
+        root = fromstring(data, parser=parser)
+    except XMLSyntaxError:
+        return None
+    if root.tag != RELATIONSHIPS_TAG or root.getroottree().docinfo.doctype:
+        return None
+    relationships = []
+    for child in root:
+        if not isinstance(child.tag, str):
+            continue
+        if child.tag != RELATIONSHIP_TAG:
+            return None
+        attributes = {
+            name: child.get(name)
+            for name in ("Id", "Type", "Target", "TargetMode")
+            if child.get(name) is not None
+        }
+        if not all(
+            attributes.get(name, "").strip() for name in ("Id", "Type", "Target")
+        ):
+            return None
+        if attributes.get("TargetMode") not in {None, "External"}:
+            return None
+        relationships.append(attributes)
+    return tuple(relationships)
+
+
+def _has_valid_docx_container(data: bytes) -> bool:
+    try:
+        with ZipFile(BytesIO(data)) as archive:
+            archive_names = archive.namelist()
+            archive_name_set = frozenset(archive_names)
+            if len(archive_names) != len(archive_name_set) or not (
+                REQUIRED_DOCX_ROOT_PARTS <= archive_name_set
+            ):
+                return False
+            relationship_parts = tuple(
+                name
+                for name in archive_names
+                if name == "_rels/.rels"
+                or (
+                    PurePosixPath(name).parent.name == "_rels"
+                    and PurePosixPath(name).name.endswith(".rels")
+                )
+            )
+            office_document_targets = []
+            for relationship_part in relationship_parts:
+                relationships = _parse_relationship_part(
+                    archive.read(relationship_part)
+                )
+                if relationships is None:
+                    return False
+                for relationship in relationships:
+                    is_external = relationship.get("TargetMode") == "External"
+                    is_office_document = (
+                        relationship_part == "_rels/.rels"
+                        and relationship["Type"] in OFFICE_DOCUMENT_RELATIONSHIP_TYPES
+                    )
+                    if is_office_document and is_external:
+                        return False
+                    if is_external:
+                        continue
+                    resolved_target = _resolve_internal_relationship_target(
+                        relationship_part,
+                        relationship["Target"],
+                    )
+                    if resolved_target not in archive_name_set:
+                        return False
+                    if is_office_document:
+                        office_document_targets.append(resolved_target)
+            return len(office_document_targets) == 1
+    except BadZipFile:
+        return False
+
+
 def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
     if suffix == ".pdf":
         return (
@@ -144,11 +259,7 @@ def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
             and data[7:8].isdigit()
         )
     if suffix == ".docx":
-        try:
-            with ZipFile(BytesIO(data)) as archive:
-                return REQUIRED_DOCX_PARTS.issubset(archive.namelist())
-        except BadZipFile:
-            return False
+        return _has_valid_docx_container(data)
     return True
 
 

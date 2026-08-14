@@ -1,7 +1,7 @@
 from datetime import date
 from hashlib import sha256
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
@@ -43,69 +43,148 @@ def _zip_bytes(entries: dict[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
-def _docx_missing_relationship_part(missing_part: str) -> bytes:
+RELATIONSHIPS_NAMESPACE = (
+    "http://schemas.openxmlformats.org/package/2006/relationships"
+)
+OFFICE_DOCUMENT_RELATIONSHIP = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+    "officeDocument"
+)
+
+
+def _relationship_xml(*relationships: tuple[str, str, str, str | None]) -> bytes:
+    body = "".join(
+        (
+            f'<Relationship Id="{relationship_id}" Type="{relationship_type}" '
+            f'Target="{target}"'
+            f'{f" TargetMode={target_mode!r}" if target_mode else ""}/>'
+        )
+        for relationship_id, relationship_type, target, target_mode in relationships
+    )
+    return (
+        f'<Relationships xmlns="{RELATIONSHIPS_NAMESPACE}">{body}</Relationships>'.encode()
+    )
+
+
+def _docx_bytes(
+    *,
+    main_part: str = "custom/main.xml",
+    root_relationships: bytes | None = None,
+    document_relationships: bytes | None = None,
+    include_main_part: bool = True,
+    extra_entries: dict[str, bytes] | None = None,
+) -> bytes:
+    if root_relationships is None:
+        root_relationships = _relationship_xml(
+            ("rId1", OFFICE_DOCUMENT_RELATIONSHIP, main_part, None)
+        )
     entries = {
         "[Content_Types].xml": (
             b'<Types xmlns="http://schemas.openxmlformats.org/package/'
             b'2006/content-types"><Default Extension="rels" ContentType="application/'
             b'vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" '
-            b'ContentType="application/xml"/><Override PartName="/word/document.xml" '
-            b'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.'
+            b'ContentType="application/xml"/><Override PartName="/'
+            + main_part.encode()
+            + b'" '
+            b'ContentType="application/vnd.openxmlformats-officedocument.'
+            b'wordprocessingml.'
             b'document.main+xml"/></Types>'
         ),
-        "word/document.xml": (
-            b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/'
-            b'2006/main"><w:body><w:p><w:r><w:t>X9K7Q</w:t></w:r></w:p>'
-            b'</w:body></w:document>'
-        ),
-        "_rels/.rels": (
-            b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
-            b'relationships"><Relationship Id="rId1" Type="http://schemas.'
-            b'openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
-            b'Target="word/document.xml"/></Relationships>'
-        ),
-        "word/_rels/document.xml.rels": (
-            b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/'
-            b'relationships"><!--X9K7Q--></Relationships>'
-        ),
+        "_rels/.rels": root_relationships,
     }
-    del entries[missing_part]
+    if include_main_part:
+        entries[main_part] = (
+            b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/'
+            b'2006/main"><w:body><w:p><w:r><w:t>Minimal semantic OOXML evidence.'
+            b'</w:t></w:r></w:p>'
+            b'</w:body></w:document>'
+        )
+    if document_relationships is not None:
+        main_path = PurePosixPath(main_part)
+        relationship_part = main_path.parent / "_rels" / f"{main_path.name}.rels"
+        entries[str(relationship_part)] = document_relationships
+    entries.update(extra_entries or {})
     return _zip_bytes(entries)
 
 
+VALID_MINIMAL_DOCX = _docx_bytes()
 MALFORMED_OPTIONAL_UPLOADS = (
     ("private-invalid-zip.docx", b"X9K7Q not a zip archive"),
     (
         "private-missing-content-types.docx",
-        _zip_bytes({"word/document.xml": b"<w:document>X9K7Q</w:document>"}),
-    ),
-    (
-        "private-missing-document-part.docx",
         _zip_bytes(
             {
-                "[Content_Types].xml": (
-                    b'<Types xmlns="http://schemas.openxmlformats.org/package/'
-                    b'2006/content-types"><!--X9K7Q--></Types>'
-                )
+                "_rels/.rels": _relationship_xml(
+                    ("rId1", OFFICE_DOCUMENT_RELATIONSHIP, "custom/main.xml", None)
+                ),
+                "custom/main.xml": b"<w:document>X9K7Q</w:document>",
             }
         ),
     ),
     (
         "private-missing-package-relationships.docx",
-        _docx_missing_relationship_part("_rels/.rels"),
+        _zip_bytes(
+            {
+                "[Content_Types].xml": (
+                    b'<Types xmlns="http://schemas.openxmlformats.org/package/'
+                    b'2006/content-types"><!--X9K7Q--></Types>'
+                ),
+                "custom/main.xml": b"<w:document>X9K7Q</w:document>",
+            }
+        ),
     ),
     (
-        "private-missing-document-relationships.docx",
-        _docx_missing_relationship_part("word/_rels/document.xml.rels"),
+        "private-root-without-office-document.docx",
+        _docx_bytes(root_relationships=_relationship_xml()),
+    ),
+    (
+        "private-missing-office-document-target.docx",
+        _docx_bytes(main_part="custom/X9K7Q-missing.xml", include_main_part=False),
+    ),
+    (
+        "private-malformed-root-relationships.docx",
+        _docx_bytes(root_relationships=b"<Relationships>X9K7Q"),
+    ),
+    (
+        "private-missing-internal-target.docx",
+        _docx_bytes(
+            document_relationships=_relationship_xml(
+                (
+                    "rId2",
+                    "http://schemas.openxmlformats.org/officeDocument/2006/"
+                    "relationships/styles",
+                    "X9K7Q-missing.xml",
+                    None,
+                )
+            )
+        ),
+    ),
+    (
+        "private-traversal-target.docx",
+        _docx_bytes(
+            document_relationships=_relationship_xml(
+                (
+                    "rId2",
+                    "http://schemas.openxmlformats.org/officeDocument/2006/"
+                    "relationships/styles",
+                    "../X9K7Q.xml",
+                    None,
+                )
+            ),
+            extra_entries={"X9K7Q.xml": b"unsafe traversal destination"},
+        ),
     ),
     ("private-financial-token.pdf", b"X9K7Q-secret-looking-prefix"),
 )
 MALFORMED_OPTIONAL_IDS = (
     "invalid-zip",
     "missing-content-types",
-    "missing-document-part",
     "missing-package-relationships",
-    "missing-document-relationships",
+    "root-without-office-document",
+    "missing-office-document-target",
+    "malformed-root-relationships",
+    "missing-internal-target",
+    "traversal-target",
     "invalid-pdf",
 )
 
@@ -483,6 +562,58 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
         "package:2:usable-package.txt",
         "context:2:usable-context.txt",
     }
+
+
+def test_runtime_accepts_minimal_docx_without_document_relationships(monkeypatch):
+    with ZipFile(BytesIO(VALID_MINIMAL_DOCX)) as archive:
+        assert "custom/_rels/main.xml.rels" not in archive.namelist()
+
+    controller = _InjectedResearchController()
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=object(),
+        research_controller=controller,
+    )
+    steps = dict(services["review_orchestrator"].steps)
+    context = steps["extract"](
+        {
+            "assessment_id": "valid-minimal-docx",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "detail_level": "standard",
+                "cpf": {
+                    "name": "benin-cpf.txt",
+                    "bytes": b"Readable primary evidence. " * 10,
+                },
+                "package_documents": [],
+                "context_documents": [
+                    {"name": "minimal-context.docx", "bytes": VALID_MINIMAL_DOCX}
+                ],
+                "review_focus": "",
+                "corrections": [],
+            },
+        }
+    )
+
+    assert context["extraction_warnings"] == ()
+    assert [document.name for document in context["context_documents"]] == [
+        "minimal-context.docx"
+    ]
+    assert context["context_documents"][0].segments[0].text == (
+        "Minimal semantic OOXML evidence."
+    )
+
+    context["primary_document"] = ExtractedDocument("benin-cpf.txt", (), ())
+    context["_emit"] = lambda *_: None
+    context = steps["research"](context)
+    assert controller.allow_document_led == [True]
+    context = steps["build_evidence"](context)
+    assert any(
+        item.locator.document_title == "minimal-context.docx"
+        and item.text == "Minimal semantic OOXML evidence."
+        for item in context["evidence_pack"].evidence
+    )
 
 
 @pytest.mark.parametrize(
