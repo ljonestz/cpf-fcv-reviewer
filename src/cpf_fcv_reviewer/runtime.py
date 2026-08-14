@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 from secrets import compare_digest
-from zipfile import BadZipFile
+from zipfile import BadZipFile, ZipFile
 
 from docx.opc.exceptions import PackageNotFoundError
 from lxml.etree import XMLSyntaxError
@@ -63,6 +64,7 @@ EXPECTED_OPTIONAL_EXTRACTION_ERRORS = (
     UnicodeDecodeError,
     XMLSyntaxError,
 )
+REQUIRED_DOCX_PARTS = frozenset({"[Content_Types].xml", "word/document.xml"})
 
 
 def _select_role_segments(
@@ -125,6 +127,24 @@ def _has_usable_uploaded_document(document) -> bool:
     )
 
 
+def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
+    if suffix == ".pdf":
+        return (
+            len(data) >= 8
+            and data.startswith(b"%PDF-")
+            and data[5:6].isdigit()
+            and data[6:7] == b"."
+            and data[7:8].isdigit()
+        )
+    if suffix == ".docx":
+        try:
+            with ZipFile(BytesIO(data)) as archive:
+                return REQUIRED_DOCX_PARTS.issubset(archive.namelist())
+        except BadZipFile:
+            return False
+    return True
+
+
 def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[str, ...]]:
     documents = []
     retained_uploads = []
@@ -132,7 +152,10 @@ def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[
     for index, item in enumerate(items, start=1):
         name = item["name"]
         data = item["bytes"]
-        if Path(name).suffix.lower() not in SUPPORTED_UPLOAD_SUFFIXES:
+        suffix = Path(name).suffix.lower()
+        if suffix not in SUPPORTED_UPLOAD_SUFFIXES or not _has_valid_optional_container(
+            data, suffix
+        ):
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         try:

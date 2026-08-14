@@ -1,6 +1,8 @@
 from datetime import date
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
@@ -28,6 +30,38 @@ from cpf_fcv_reviewer.runtime import _truncate_at_word_boundary, build_runtime_s
 from cpf_fcv_reviewer.sources import SourceCandidate
 
 FIXTURE = Path("tests/fixtures/registry_bundle.synthetic.json")
+OPTIONAL_UPLOAD_WARNING = (
+    "An optional uploaded document could not be read and was excluded."
+)
+
+
+def _zip_bytes(entries: dict[str, bytes]) -> bytes:
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        for name, data in entries.items():
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+MALFORMED_OPTIONAL_UPLOADS = (
+    ("private-invalid-zip.docx", b"X9K7Q not a zip archive"),
+    (
+        "private-missing-content-types.docx",
+        _zip_bytes({"word/document.xml": b"<w:document>X9K7Q</w:document>"}),
+    ),
+    (
+        "private-missing-document-part.docx",
+        _zip_bytes(
+            {
+                "[Content_Types].xml": (
+                    b'<Types xmlns="http://schemas.openxmlformats.org/package/'
+                    b'2006/content-types"><!--X9K7Q--></Types>'
+                )
+            }
+        ),
+    ),
+    ("private-financial-token.pdf", b"X9K7Q-secret-looking-prefix"),
+)
 
 
 def test_explicit_services_are_registered_without_runtime_rebuild():
@@ -405,6 +439,163 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
     }
 
 
+@pytest.mark.parametrize(
+    ("invalid_name", "invalid_bytes"),
+    MALFORMED_OPTIONAL_UPLOADS,
+    ids=(
+        "invalid-zip",
+        "missing-content-types",
+        "missing-document-part",
+        "invalid-pdf",
+    ),
+)
+def test_runtime_malformed_optional_bytes_are_private_and_valid_context_continues(
+    monkeypatch,
+    caplog,
+    capsys,
+    invalid_name,
+    invalid_bytes,
+):
+    secret_marker = "X9K7Q"
+    controller = _InjectedResearchController(
+        ResearchResult(
+            (),
+            {},
+            1,
+            CurrentEvidenceTier.DOCUMENT_LED,
+            "Independent current-country research was unavailable.",
+        )
+    )
+
+    class ModelGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            return output_type(
+                overall_read="The uploaded draft can be reviewed with caution.",
+                alignment_readout="The draft provides bounded contextual evidence.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                limitations=(),
+                coverage_note="The review covers the readable submitted documents.",
+            )
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", ModelGateway)
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=controller,
+    )
+    events = []
+    caplog.clear()
+
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "private-optional-preflight",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "cpf": {
+                    "name": "benin-cpf.txt",
+                    "bytes": b"Readable primary evidence. " * 10,
+                },
+                "package_documents": [],
+                "context_documents": [
+                    {
+                        "name": invalid_name,
+                        "bytes": invalid_bytes,
+                    },
+                    {
+                        "name": "usable-context.txt",
+                        "bytes": b"Usable current-context evidence.",
+                    },
+                ],
+                "review_focus": "",
+                "detail_level": "standard",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: events.append((kind, data)),
+    )
+
+    assert [document.name for document in context["context_documents"]] == [
+        "usable-context.txt"
+    ]
+    assert context["extraction_warnings"] == (OPTIONAL_UPLOAD_WARNING,)
+    assert context["evidence_pack"].warnings.count(OPTIONAL_UPLOAD_WARNING) == 1
+    assert controller.allow_document_led == [True]
+    assert events[-1][0] == "run_complete"
+    captured = capsys.readouterr()
+    disclosed = " ".join(
+        (
+            caplog.text,
+            captured.out,
+            captured.err,
+            repr(events),
+            context["result"].model_dump_json(),
+        )
+    )
+    assert secret_marker not in disclosed
+    assert invalid_name not in disclosed
+
+
+@pytest.mark.parametrize(
+    ("invalid_name", "invalid_bytes"),
+    MALFORMED_OPTIONAL_UPLOADS,
+    ids=(
+        "invalid-zip",
+        "missing-content-types",
+        "missing-document-part",
+        "invalid-pdf",
+    ),
+)
+def test_runtime_malformed_optional_cannot_enable_document_led(
+    monkeypatch,
+    invalid_name,
+    invalid_bytes,
+):
+    controller = _InjectedResearchController()
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=object(),
+        research_controller=controller,
+    )
+    steps = dict(services["review_orchestrator"].steps)
+    primary_without_text = ExtractedDocument("benin-cpf.txt", (), ())
+
+    def allow_document_led_for(context_documents):
+        context = steps["extract"](
+            {
+                "payload": {
+                    "country": "Benin",
+                    "cpf": {
+                        "name": "benin-cpf.txt",
+                        "bytes": b"Readable primary evidence. " * 10,
+                    },
+                    "package_documents": [],
+                    "context_documents": context_documents,
+                }
+            }
+        )
+        context["primary_document"] = primary_without_text
+        context["_emit"] = lambda *_: None
+        steps["research"](context)
+        return controller.allow_document_led[-1]
+
+    invalid_upload = {
+        "name": invalid_name,
+        "bytes": invalid_bytes,
+    }
+    assert allow_document_led_for([invalid_upload]) is False
+    assert allow_document_led_for(
+        [
+            invalid_upload,
+            {"name": "usable-context.txt", "bytes": b"Usable context evidence."},
+        ]
+    ) is True
+
+
 def test_runtime_optional_extraction_does_not_swallow_programming_defects(monkeypatch):
     services = _runtime_services(monkeypatch)
     extract = dict(services["review_orchestrator"].steps)["extract"]
@@ -423,11 +614,11 @@ def test_runtime_optional_extraction_does_not_swallow_programming_defects(monkey
                 ),
                 warnings=(),
             )
-        raise AssertionError("programming defect")
+        raise KeyError("programming defect")
 
     monkeypatch.setattr("cpf_fcv_reviewer.runtime.extract_document", fake_extract)
 
-    with pytest.raises(AssertionError, match="programming defect"):
+    with pytest.raises(KeyError, match="programming defect"):
         extract(
             {
                 "payload": {
