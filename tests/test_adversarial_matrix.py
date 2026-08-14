@@ -330,7 +330,7 @@ def test_public_contradiction_is_retained_with_its_qualifying_relationship():
         text="A public update contradicts an earlier contextual assumption.",
         publisher="World Bank",
         source_title="Synthetic context update",
-        source_url="https://example.org/update",
+        source_url="https://www.worldbank.org/update",
         source_date=date(2026, 8, 10),
         source_type="public analysis",
         relevance="Qualifies the supplied CPF context.",

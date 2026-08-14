@@ -19,18 +19,9 @@ analysis available without a licence may be used when it is otherwise suitable.
 Distinguish source-supported fact from interpretation, identify source dates, represent credible
 disagreement, and avoid overstating certainty in conflict-sensitive contexts.
 
-Return a strict JSON array only, with no markdown or surrounding explanation. Every object must
-contain exactly these fields:
+Return a concise plain text cited synthesis, not JSON. Use the provider's citations for each
+source-grounded narrative segment and preserve source titles, public URLs, and publication dates
+when they are available. Keep the synthesis focused on the requested mode and country question.
 
-- `claim_id`: unique nonblank string
-- `text`: nonblank source-grounded claim
-- `publisher`: nonblank publisher or institution name
-- `source_title`: nonblank title of the cited source
-- `source_url`: public HTTP(S) URL or null
-- `source_date`: ISO YYYY-MM-DD publication date
-- `source_type`: nonblank source type
-- `relevance`: nonblank explanation of relevance to the specified mode and question
-- `context_kind`: exactly `structural_dynamic`, `current_development`, `resilience_factor`, or
-  `implementation_condition`
-- `relationship`: exactly `corroborates`, `qualifies`, `contradicts`, `unresolved`, or `establishes`
-- `licensed_data_required`: boolean, and it must be false for every retained public claim
+Do not return a schema, field list, claim IDs, or surrounding JSON. The application will normalize
+the cited synthesis into its structured research-claim contract in a separate step.

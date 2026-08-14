@@ -5,11 +5,11 @@ import json
 import re
 from collections import Counter
 from collections.abc import Mapping
-from datetime import date
+from datetime import date, datetime
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Literal, Protocol
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from anthropic import Anthropic
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
@@ -186,35 +186,55 @@ def _is_valid_public_hostname(hostname: str) -> bool:
     )
 
 
-_INSTITUTIONAL_PUBLISHER_PATTERNS = (
-    r"\bworld bank\b",
-    r"\bunited nations\b",
-    r"\b(?:unhcr|undp|ocha|wfp|who|unicef|unep|unodc|undrr|un women)\b",
-    r"\boecd\b",
-    r"\b(?:international monetary fund|imf)\b",
-    r"\b(?:african development bank|afdb)\b",
-    r"\b(?:asian development bank|adb)\b",
-    r"\b(?:inter american development bank|iadb|idb)\b",
-    r"\b(?:european bank for reconstruction and development|ebrd)\b",
-    r"\b(?:european investment bank|eib)\b",
-    r"\b(?:islamic development bank|isdb)\b",
-    r"\b(?:caribbean development bank|central american bank for economic integration)\b",
-    r"\b(?:international committee of the red cross|icrc)\b",
-    r"\b(?:international organization for migration|iom)\b",
-    r"\breliefweb\b",
+_INSTITUTIONAL_PUBLISHER_HOSTS = (
+    (("world bank",), ("worldbank.org",), "World Bank"),
+    (("united nations development programme", "undp"), ("undp.org",), "UNDP"),
+    (("unhcr", "united nations high commissioner for refugees"), ("unhcr.org",), "UNHCR"),
+    (("ocha", "office for the coordination of humanitarian affairs"), ("unocha.org",), "OCHA"),
+    (("wfp", "world food programme"), ("wfp.org",), "WFP"),
+    (("who", "world health organization"), ("who.int",), "WHO"),
+    (("unicef",), ("unicef.org",), "UNICEF"),
+    (("unep", "united nations environment programme"), ("unep.org",), "UNEP"),
+    (("unodc",), ("unodc.org",), "UNODC"),
+    (("undrr",), ("undrr.org",), "UNDRR"),
+    (("un women", "unwomen"), ("unwomen.org",), "UN Women"),
+    (("united nations",), ("un.org",), "United Nations"),
+    (("oecd",), ("oecd.org",), "OECD"),
+    (("international monetary fund", "imf"), ("imf.org",), "IMF"),
+    (("african development bank", "afdb"), ("afdb.org",), "AfDB"),
+    (("asian development bank", "adb"), ("adb.org",), "ADB"),
+    (("inter american development bank", "iadb", "idb"), ("iadb.org",), "IDB"),
+    (
+        ("european bank for reconstruction and development", "ebrd"),
+        ("ebrd.com",),
+        "EBRD",
+    ),
+    (("european investment bank", "eib"), ("eib.org",), "EIB"),
+    (("islamic development bank", "isdb"), ("isdb.org",), "IsDB"),
+    (
+        ("international committee of the red cross", "icrc"),
+        ("icrc.org",),
+        "ICRC",
+    ),
+    (("international organization for migration", "iom"), ("iom.int",), "IOM"),
+    (("reliefweb",), ("reliefweb.int",), "ReliefWeb"),
 )
 
-_DISALLOWED_SOURCE_TYPE_TERMS = (
+_DISALLOWED_SOURCE_MARKERS = (
     "licensed",
     "blog",
+    "blogs",
+    "social",
     "social media",
-    "user-generated",
     "user generated",
     "forum",
+    "forums",
+    "community",
     "crowdsourced",
-    "crowd-sourced",
-    "personal website",
-    "personal blog",
+    "crowd sourced",
+    "wikipedia",
+    "personal",
+    "profile",
 )
 
 _SOCIAL_MEDIA_HOSTS = {
@@ -230,12 +250,52 @@ _SOCIAL_MEDIA_HOSTS = {
 
 
 def _is_permitted_public_source(claim: CurrentContextClaim) -> bool:
-    normalized_publisher = re.sub(r"[^a-z0-9]+", " ", claim.publisher.casefold()).strip()
-    is_institutional = any(
-        re.search(pattern, normalized_publisher) for pattern in _INSTITUTIONAL_PUBLISHER_PATTERNS
+    if _is_disallowed_source_material(claim):
+        return False
+
+    normalized_publisher = _normalize_text(claim.publisher)
+    source_url = _normalize_source_url(claim.source_url)
+    if source_url is None:
+        return False
+
+    allowed_hosts = _publisher_host_allowlist(normalized_publisher)
+    if allowed_hosts and _host_matches(source_url, allowed_hosts):
+        return True
+    return _is_official_national_government(normalized_publisher, source_url)
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+
+
+def _publisher_host_allowlist(publisher: str) -> tuple[str, ...]:
+    for markers, hosts, _ in _INSTITUTIONAL_PUBLISHER_HOSTS:
+        if any(marker in publisher for marker in markers):
+            return hosts
+    return ()
+
+
+def _hostname(url: str | None) -> str | None:
+    if url is None:
+        return None
+    try:
+        hostname = urlparse(url).hostname
+    except ValueError:
+        return None
+    return hostname.rstrip(".").casefold() if hostname else None
+
+
+def _host_matches(url: str, allowed_hosts: tuple[str, ...]) -> bool:
+    hostname = _hostname(url)
+    return bool(
+        hostname
+        and any(hostname == domain or hostname.endswith(f".{domain}") for domain in allowed_hosts)
     )
-    is_national_government = any(
-        phrase in normalized_publisher
+
+
+def _is_official_national_government(publisher: str, url: str) -> bool:
+    publisher_marker = any(
+        phrase in publisher
         for phrase in (
             "government of ",
             "ministry of ",
@@ -243,15 +303,57 @@ def _is_permitted_public_source(claim: CurrentContextClaim) -> bool:
             "national statistics office",
             "federal government of ",
             "republic of ",
+            "official national government",
         )
     )
-    if not (is_institutional or is_national_government):
+    hostname = _hostname(url)
+    if not publisher_marker or hostname is None:
         return False
+    return any(
+        label in {"gov", "gouv", "go", "gob", "govt", "government"}
+        for label in hostname.split(".")[:-1]
+    )
 
-    normalized_source_type = claim.source_type.casefold()
-    if any(term in normalized_source_type for term in _DISALLOWED_SOURCE_TYPE_TERMS):
-        return False
-    return not _is_social_media_url(claim.source_url)
+
+def _is_disallowed_source_material(claim: CurrentContextClaim) -> bool:
+    if _contains_source_marker(claim.source_type) or _contains_source_marker(claim.source_title):
+        return True
+    url = _normalize_source_url(claim.source_url)
+    if url is None:
+        return True
+    if _is_social_media_url(url):
+        return True
+    parsed = urlparse(url)
+    path_markers = {
+        "blog",
+        "blogs",
+        "community",
+        "forum",
+        "forums",
+        "profile",
+        "social",
+        "status",
+        "user",
+        "users",
+    }
+    path_labels = {label for label in parsed.path.casefold().split("/") if label}
+    host_labels = set((_hostname(url) or "").split("."))
+    path_has_marker = bool(
+        path_labels & path_markers
+        or re.search(
+            r"(?:^|[/_-])(?:blogs?|community|forums?|profiles?|social|status|users?)(?:$|[/_-])",
+            parsed.path.casefold(),
+        )
+    )
+    return bool(path_has_marker or host_labels & {"blog", "blogs", "forum", "forums"})
+
+
+def _contains_source_marker(value: str) -> bool:
+    normalized = _normalize_text(value)
+    return any(
+        re.search(rf"\b{re.escape(marker)}\b", normalized)
+        for marker in _DISALLOWED_SOURCE_MARKERS
+    )
 
 
 def _is_social_media_url(url: str | None) -> bool:
@@ -301,27 +403,36 @@ class AnthropicPublicResearchGateway:
             response = self._create_web_search_response(messages)
             content_blocks.extend(_response_content(response))
 
-        artifact, cited_sentences = _extract_search_artifact(tuple(content_blocks))
-        normalization_response = self._client.messages.parse(
-            model=self._model_id,
-            max_tokens=5000,
-            system=(
-                "Normalize the cited research synthesis into the supplied output schema. "
-                "Use only the cited narrative and preserve its source metadata."
-            ),
-            messages=[
-                {
-                    "role": "user",
-                    "content": artifact.model_dump_json(),
-                }
-            ],
-            output_format=ResearchClaimBatch,
-        )
+        artifact, grounded_segments = _extract_search_artifact(tuple(content_blocks))
+        try:
+            normalization_response = self._client.messages.parse(
+                model=self._model_id,
+                max_tokens=5000,
+                system=(
+                    "Normalize the cited research synthesis into the supplied output schema. "
+                    "Use only the cited narrative and preserve its source metadata."
+                ),
+                messages=[
+                    {
+                        "role": "user",
+                        "content": artifact.model_dump_json(),
+                    }
+                ],
+                output_format=ResearchClaimBatch,
+            )
+        except Exception:
+            salvaged = _salvage_grounded_segments(grounded_segments)
+            if salvaged:
+                return salvaged
+            raise
+
         parsed_output = getattr(normalization_response, "parsed_output", None)
         if isinstance(parsed_output, ResearchClaimBatch):
-            return tuple(parsed_output.claims)
+            valid_claims = _validate_normalized_claims(parsed_output.claims, artifact)
+            if valid_claims:
+                return valid_claims
 
-        salvaged = _salvage_cited_sentences(cited_sentences)
+        salvaged = _salvage_grounded_segments(grounded_segments)
         if salvaged:
             return salvaged
         raise ValueError("Anthropic response contained no parsed output.")
@@ -366,28 +477,64 @@ def _as_nonblank_string(value: object) -> str | None:
     return normalized or None
 
 
+def _normalize_source_url(url: object) -> str | None:
+    value = _as_nonblank_string(url)
+    if value is None or any(ord(character) < 32 for character in value):
+        return None
+    try:
+        parsed = urlparse(value)
+        if parsed.username is not None or parsed.password is not None:
+            return value
+        hostname = parsed.hostname
+        if parsed.scheme not in {"http", "https"} or hostname is None:
+            return value
+        port = parsed.port
+    except ValueError:
+        return value
+
+    netloc = hostname.casefold()
+    if port is not None:
+        netloc = f"{netloc}:{port}"
+    return urlunparse(
+        (parsed.scheme.casefold(), netloc, parsed.path, parsed.params, parsed.query, "")
+    )
+
+
 def _parse_source_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date):
         return value
     if not isinstance(value, str):
         return None
     normalized = value.strip()
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
-        return None
-    try:
-        return date.fromisoformat(normalized)
-    except ValueError:
-        return None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
+        try:
+            return date.fromisoformat(normalized)
+        except ValueError:
+            return None
+    for display_format in ("%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(normalized, display_format).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _source_metadata(item: object) -> tuple[str | None, str | None, date | None]:
     title = _as_nonblank_string(_value(item, "title"))
-    url = _as_nonblank_string(_value(item, "url"))
+    url = _normalize_source_url(_value(item, "url"))
     published_at = _parse_source_date(
         next(
             (
                 _value(item, field)
-                for field in ("published_at", "published_date", "publication_date", "date")
+                for field in (
+                    "page_age",
+                    "published_at",
+                    "published_date",
+                    "publication_date",
+                    "date",
+                )
                 if _value(item, field) is not None
             ),
             None,
@@ -403,18 +550,19 @@ def _merge_source(
     url: str | None,
     published_at: date | None,
 ) -> ResearchSource | None:
-    if not title or not url:
+    normalized_url = _normalize_source_url(url)
+    if not title or normalized_url is None:
         return None
-    previous = sources.get(url)
+    previous = sources.get(normalized_url)
     if previous is None:
-        source = ResearchSource(title=title, url=url, published_at=published_at)
+        source = ResearchSource(title=title.strip(), url=normalized_url, published_at=published_at)
     else:
         source = ResearchSource(
-            title=previous.title or title,
+            title=previous.title or title.strip(),
             url=previous.url,
             published_at=previous.published_at or published_at,
         )
-    sources[url] = source
+    sources[normalized_url] = source
     return source
 
 
@@ -438,9 +586,9 @@ def _citation_items(block: object) -> tuple[object, ...]:
 
 def _extract_search_artifact(
     content_blocks: tuple[object, ...],
-) -> tuple[SearchArtifact, tuple[tuple[str, ResearchSource], ...]]:
+) -> tuple[SearchArtifact, tuple[tuple[str, tuple[ResearchSource, ...]], ...]]:
     sources: dict[str, ResearchSource] = {}
-    final_text_block: object | None = None
+    grounded_segments: list[tuple[str, tuple[ResearchSource, ...]]] = []
     saw_search_result = False
 
     for block in content_blocks:
@@ -457,128 +605,101 @@ def _extract_search_artifact(
                 )
         elif block_type == "text" and saw_search_result:
             text = _as_nonblank_string(_value(block, "text"))
-            if text:
-                final_text_block = block
+            citations = _citation_items(block)
+            if not text or not citations:
+                continue
+            attached_sources: list[ResearchSource] = []
+            for citation in citations:
+                title, url, _ = _source_metadata(citation)
+                if url is None:
+                    continue
+                source = sources.get(url)
+                if source is None or (title is not None and title != source.title):
+                    continue
+                if source not in attached_sources:
+                    attached_sources.append(source)
+            grounded_segments.append((text, tuple(attached_sources)))
 
-    if final_text_block is None:
+    if not grounded_segments:
         raise ValueError("Public research response contained no cited synthesis.")
 
-    narrative = _as_nonblank_string(_value(final_text_block, "text"))
-    if narrative is None:
-        raise ValueError("Public research response contained no cited synthesis.")
-
-    cited_sentences: list[tuple[str, ResearchSource]] = []
-    for citation in _citation_items(final_text_block):
-        title, url, published_at = _source_metadata(citation)
-        source = _merge_source(
-            sources,
-            title=title,
-            url=url,
-            published_at=published_at,
-        )
-        if source is None or source.url not in sources:
-            continue
-        sentence = _sentence_for_citation(narrative, citation)
-        if sentence:
-            cited_sentences.append((sentence, sources[source.url]))
-
+    narrative = "\n".join(segment for segment, _ in grounded_segments)
     return SearchArtifact(narrative=narrative, sources=tuple(sources.values())), tuple(
-        cited_sentences
+        grounded_segments
     )
-
-
-def _sentence_spans(text: str) -> tuple[tuple[int, int, str], ...]:
-    spans: list[tuple[int, int, str]] = []
-    for match in re.finditer(r"[^.!?]+(?:[.!?]+|$)", text, flags=re.DOTALL):
-        sentence = match.group(0).strip()
-        if not sentence:
-            continue
-        start = match.start() + (len(match.group(0)) - len(match.group(0).lstrip()))
-        end = start + len(sentence)
-        spans.append((start, end, sentence))
-    return tuple(spans)
-
-
-def _sentence_for_citation(text: str, citation: object) -> str | None:
-    cited_text = _as_nonblank_string(_value(citation, "cited_text"))
-    if cited_text:
-        cited_start = text.find(cited_text)
-        if cited_start >= 0:
-            cited_end = cited_start + len(cited_text)
-            for start, end, sentence in _sentence_spans(text):
-                if start <= cited_start and cited_end <= end:
-                    return sentence
-
-    start = _value(citation, "start_char_index")
-    end = _value(citation, "end_char_index")
-    if isinstance(start, int) and isinstance(end, int) and start < end:
-        for sentence_start, sentence_end, sentence in _sentence_spans(text):
-            if sentence_start < end and start < sentence_end:
-                return sentence
-    return None
 
 
 def _publisher_from_source(source: ResearchSource) -> str:
-    hostname = urlparse(source.url).hostname or ""
-    normalized_hostname = hostname.rstrip(".").casefold()
-    host_publishers = (
-        (("worldbank.org",), "World Bank"),
-        (("un.org",), "United Nations"),
-        (("oecd.org",), "OECD"),
-        (("imf.org",), "International Monetary Fund"),
-        (("afdb.org",), "African Development Bank"),
-        (("adb.org",), "Asian Development Bank"),
-        (("iadb.org",), "Inter-American Development Bank"),
-        (("icrc.org",), "International Committee of the Red Cross"),
-        (("iom.int",), "International Organization for Migration"),
-        (("reliefweb.int",), "ReliefWeb"),
-    )
-    for domains, publisher in host_publishers:
-        if any(
-            normalized_hostname == domain or normalized_hostname.endswith(f".{domain}")
-            for domain in domains
-        ):
+    for _, hosts, publisher in _INSTITUTIONAL_PUBLISHER_HOSTS:
+        if _host_matches(source.url, hosts):
             return publisher
+    if _is_official_national_government("official national government", source.url):
+        return "Official national government"
     return source.title
 
 
-def _salvage_cited_sentences(
-    cited_sentences: tuple[tuple[str, ResearchSource], ...],
+def _validate_normalized_claims(
+    claims: tuple[CurrentContextClaim, ...], artifact: SearchArtifact
+) -> tuple[CurrentContextClaim, ...]:
+    sources_by_url = {source.url: source for source in artifact.sources}
+    matched_claims: list[CurrentContextClaim] = []
+    for claim in claims:
+        source_url = _normalize_source_url(claim.source_url)
+        if source_url is None:
+            continue
+        source = sources_by_url.get(source_url)
+        if source is None:
+            continue
+        if claim.source_title != source.title:
+            continue
+        if source.published_at is None or claim.source_date != source.published_at:
+            continue
+        matched_claims.append(claim)
+
+    retained, _ = retain_public_claims(tuple(matched_claims))
+    return retained
+
+
+def _salvage_grounded_segments(
+    grounded_segments: tuple[tuple[str, tuple[ResearchSource, ...]], ...],
 ) -> tuple[CurrentContextClaim, ...]:
     claims: list[CurrentContextClaim] = []
     seen: set[tuple[str, str]] = set()
-    for sentence, source in cited_sentences:
-        if source.published_at is None:
-            continue
-        key = (sentence, source.url)
-        if key in seen:
-            continue
-        seen.add(key)
-        digest_input = json.dumps(
-            {
-                "source_date": source.published_at.isoformat(),
-                "source_title": source.title,
-                "source_url": source.url,
-                "text": sentence,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-        claims.append(
-            CurrentContextClaim(
-                claim_id=f"sha256:{hashlib.sha256(digest_input).hexdigest()}",
-                text=sentence,
-                publisher=_publisher_from_source(source),
-                source_title=source.title,
-                source_url=source.url,
-                source_date=source.published_at,
-                source_type="public institutional source",
-                relevance="Salvaged from a sentence with an explicit source citation.",
-                context_kind="current_development",
-                relationship="establishes",
-                licensed_data_required=False,
+    for narrative, sources in grounded_segments:
+        for source in sources:
+            if source.published_at is None:
+                continue
+            key = (narrative, source.url)
+            if key in seen:
+                continue
+            seen.add(key)
+            digest_input = json.dumps(
+                {
+                    "source_date": source.published_at.isoformat(),
+                    "source_title": source.title,
+                    "source_url": source.url,
+                    "text": narrative,
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+            claims.append(
+                CurrentContextClaim(
+                    claim_id=f"sha256:{hashlib.sha256(digest_input).hexdigest()}",
+                    text=narrative,
+                    publisher=_publisher_from_source(source),
+                    source_title=source.title,
+                    source_url=source.url,
+                    source_date=source.published_at,
+                    source_type="public institutional source",
+                    relevance="Salvaged from a cited synthesis block.",
+                    context_kind="current_development",
+                    relationship="establishes",
+                    licensed_data_required=False,
+                )
             )
-        )
-    return tuple(claims)
+
+    retained, _ = retain_public_claims(tuple(claims))
+    return retained
 
 
 def load_research_prompt() -> str:

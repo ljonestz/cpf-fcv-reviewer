@@ -27,12 +27,15 @@ def claim(
     source_date: date = date(2026, 7, 1),
     source_url: str | None = None,
 ) -> CurrentContextClaim:
+    if source_url is None:
+        source_host = "www.un.org" if publisher == "United Nations" else "www.worldbank.org"
+        source_url = f"https://{source_host}/{claim_id}"
     return CurrentContextClaim(
         claim_id=claim_id,
         text=f"Claim {claim_id} establishes a bounded context finding.",
         publisher=publisher,
         source_title=f"Source {claim_id}",
-        source_url=source_url or f"https://example.org/{claim_id}",
+        source_url=source_url,
         source_date=source_date,
         source_type="public report",
         relevance="Relevant to the current-country research question.",
@@ -273,9 +276,9 @@ def test_holistic_recency_uses_calendar_years_with_leap_day_fallback():
 
 
 def test_duplicate_url_and_claim_id_are_not_accumulated():
-    first = claim("same", source_url="https://example.org/same")
-    second = claim("same", publisher="United Nations", source_url="https://example.org/other")
-    third = claim("other", publisher="United Nations", source_url="https://example.org/same")
+    first = claim("same", source_url="https://www.worldbank.org/same")
+    second = claim("same", publisher="United Nations", source_url="https://www.un.org/other")
+    third = claim("other", source_url="https://www.worldbank.org/same")
     gateway = ScriptedGateway(((first,), (second, third)))
 
     events = []
