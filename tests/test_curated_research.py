@@ -699,6 +699,62 @@ def test_gateway_duplicate_winner_is_stable_when_payload_order_is_reversed():
     assert all(": 1 (2025)." in claim.text for claim in forward)
 
 
+def test_gateway_preserves_distinct_dated_world_bank_observations():
+    indicator_id = WORLDBANK_INDICATORS[0][0]
+
+    def run(observations: tuple[tuple[str, int], ...]):
+        def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+            path = urlsplit(url).path
+            if path.endswith("/country"):
+                return json_response(
+                    [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+                )
+            requested_indicator = path.rsplit("/", 1)[-1]
+            if requested_indicator != indicator_id:
+                return json_response([{}, []])
+            return json_response(
+                [
+                    {},
+                    [
+                        {
+                            "indicator": {"id": indicator_id, "value": indicator_id},
+                            "countryiso3code": "BEN",
+                            "date": observation_year,
+                            "value": value,
+                        }
+                        for observation_year, value in observations
+                    ],
+                ]
+            )
+
+        gateway = CuratedResearchGateway(
+            BoundedInstitutionalClient(client=StubClient(handler))
+        )
+        return gateway.search(request())
+
+    observations = (("2025", 2), ("2024", 1), ("2025", 2))
+    forward = run(observations)
+    reverse = run(tuple(reversed(observations)))
+
+    assert forward == reverse
+    assert [claim.source_date for claim in forward] == [date(2024, 1, 1), date(2025, 1, 1)]
+    assert len({claim.claim_id for claim in forward}) == 2
+    assert len({claim.source_url for claim in forward}) == 2
+    assert {
+        parse_qs(urlsplit(claim.source_url or "").query)["date"][0]
+        for claim in forward
+    } == {"2024", "2025"}
+    assert all(urlsplit(claim.source_url or "").scheme == "https" for claim in forward)
+    assert all(
+        urlsplit(claim.source_url or "").hostname == "api.worldbank.org"
+        for claim in forward
+    )
+    assert any(
+        claim.source_date == date(2025, 1, 1) and ": 2 (2025)." in claim.text
+        for claim in forward
+    )
+
+
 def test_gateway_continues_when_one_adapter_times_out():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         if "worldbank.org" in url:

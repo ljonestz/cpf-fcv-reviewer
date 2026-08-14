@@ -8,7 +8,7 @@ from math import isfinite
 from numbers import Real
 from threading import Lock
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -377,7 +377,7 @@ def _world_bank_claims(
         raise _InstitutionalResponseShapeError("Institutional response shape was invalid.")
 
     claims: list[CurrentContextClaim] = []
-    source_url = f"https://api.worldbank.org/v2/country/{iso3}/indicator/{indicator_id}"
+    source_url_base = f"https://api.worldbank.org/v2/country/{iso3}/indicator/{indicator_id}"
     for row in payload[1]:
         if not isinstance(row, Mapping):
             continue
@@ -400,6 +400,7 @@ def _world_bank_claims(
         row_iso3 = _iso3(row.get("countryiso3code"))
         if row_iso3 != iso3:
             continue
+        source_url = f"{source_url_base}?{urlencode({'date': observation_date.year})}"
         claims.append(
             CurrentContextClaim(
                 claim_id=f"worldbank:{iso3}:{indicator_id}:{observation_date.isoformat()}",
