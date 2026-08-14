@@ -186,39 +186,50 @@ def _is_valid_public_hostname(hostname: str) -> bool:
     )
 
 
-_INSTITUTIONAL_PUBLISHER_HOSTS = (
-    (("world bank",), ("worldbank.org",), "World Bank"),
-    (("united nations development programme", "undp"), ("undp.org",), "UNDP"),
-    (("unhcr", "united nations high commissioner for refugees"), ("unhcr.org",), "UNHCR"),
-    (("ocha", "office for the coordination of humanitarian affairs"), ("unocha.org",), "OCHA"),
-    (("wfp", "world food programme"), ("wfp.org",), "WFP"),
-    (("who", "world health organization"), ("who.int",), "WHO"),
-    (("unicef",), ("unicef.org",), "UNICEF"),
-    (("unep", "united nations environment programme"), ("unep.org",), "UNEP"),
-    (("unodc",), ("unodc.org",), "UNODC"),
-    (("undrr",), ("undrr.org",), "UNDRR"),
-    (("un women", "unwomen"), ("unwomen.org",), "UN Women"),
-    (("united nations",), ("un.org",), "United Nations"),
-    (("oecd",), ("oecd.org",), "OECD"),
-    (("international monetary fund", "imf"), ("imf.org",), "IMF"),
-    (("african development bank", "afdb"), ("afdb.org",), "AfDB"),
-    (("asian development bank", "adb"), ("adb.org",), "ADB"),
-    (("inter american development bank", "iadb", "idb"), ("iadb.org",), "IDB"),
-    (
-        ("european bank for reconstruction and development", "ebrd"),
-        ("ebrd.com",),
-        "EBRD",
-    ),
-    (("european investment bank", "eib"), ("eib.org",), "EIB"),
-    (("islamic development bank", "isdb"), ("isdb.org",), "IsDB"),
-    (
-        ("international committee of the red cross", "icrc"),
-        ("icrc.org",),
-        "ICRC",
-    ),
-    (("international organization for migration", "iom"), ("iom.int",), "IOM"),
-    (("reliefweb",), ("reliefweb.int",), "ReliefWeb"),
-)
+_INSTITUTIONAL_PUBLISHER_HOSTS = {
+    "world bank": (("worldbank.org",), "World Bank"),
+    "world bank group": (("worldbank.org",), "World Bank"),
+    "the world bank": (("worldbank.org",), "World Bank"),
+    "united nations development programme": (("undp.org",), "UNDP"),
+    "undp": (("undp.org",), "UNDP"),
+    "unhcr": (("unhcr.org",), "UNHCR"),
+    "united nations high commissioner for refugees": (("unhcr.org",), "UNHCR"),
+    "ocha": (("unocha.org",), "OCHA"),
+    "office for the coordination of humanitarian affairs": (("unocha.org",), "OCHA"),
+    "wfp": (("wfp.org",), "WFP"),
+    "world food programme": (("wfp.org",), "WFP"),
+    "who": (("who.int",), "WHO"),
+    "world health organization": (("who.int",), "WHO"),
+    "unicef": (("unicef.org",), "UNICEF"),
+    "unep": (("unep.org",), "UNEP"),
+    "united nations environment programme": (("unep.org",), "UNEP"),
+    "unodc": (("unodc.org",), "UNODC"),
+    "undrr": (("undrr.org",), "UNDRR"),
+    "un women": (("unwomen.org",), "UN Women"),
+    "unwomen": (("unwomen.org",), "UN Women"),
+    "united nations": (("un.org",), "United Nations"),
+    "oecd": (("oecd.org",), "OECD"),
+    "international monetary fund": (("imf.org",), "IMF"),
+    "imf": (("imf.org",), "IMF"),
+    "african development bank": (("afdb.org",), "AfDB"),
+    "afdb": (("afdb.org",), "AfDB"),
+    "asian development bank": (("adb.org",), "ADB"),
+    "adb": (("adb.org",), "ADB"),
+    "inter american development bank": (("iadb.org",), "IDB"),
+    "iadb": (("iadb.org",), "IDB"),
+    "idb": (("iadb.org",), "IDB"),
+    "european bank for reconstruction and development": (("ebrd.com",), "EBRD"),
+    "ebrd": (("ebrd.com",), "EBRD"),
+    "european investment bank": (("eib.org",), "EIB"),
+    "eib": (("eib.org",), "EIB"),
+    "islamic development bank": (("isdb.org",), "IsDB"),
+    "isdb": (("isdb.org",), "IsDB"),
+    "international committee of the red cross": (("icrc.org",), "ICRC"),
+    "icrc": (("icrc.org",), "ICRC"),
+    "international organization for migration": (("iom.int",), "IOM"),
+    "iom": (("iom.int",), "IOM"),
+    "reliefweb": (("reliefweb.int",), "ReliefWeb"),
+}
 
 _DISALLOWED_SOURCE_MARKERS = (
     "licensed",
@@ -269,10 +280,8 @@ def _normalize_text(value: str) -> str:
 
 
 def _publisher_host_allowlist(publisher: str) -> tuple[str, ...]:
-    for markers, hosts, _ in _INSTITUTIONAL_PUBLISHER_HOSTS:
-        if any(marker in publisher for marker in markers):
-            return hosts
-    return ()
+    entry = _INSTITUTIONAL_PUBLISHER_HOSTS.get(publisher)
+    return entry[0] if entry is not None else ()
 
 
 def _hostname(url: str | None) -> str | None:
@@ -295,23 +304,26 @@ def _host_matches(url: str, allowed_hosts: tuple[str, ...]) -> bool:
 
 def _is_official_national_government(publisher: str, url: str) -> bool:
     publisher_marker = any(
-        phrase in publisher
-        for phrase in (
-            "government of ",
-            "ministry of ",
-            "national bureau of statistics",
-            "national statistics office",
-            "federal government of ",
-            "republic of ",
-            "official national government",
+        re.match(pattern, publisher)
+        for pattern in (
+            r"^government of ",
+            r"^ministry of ",
+            r"^republic of ",
+            r"^federal government of ",
+            r"^national statistics office$",
+            r"^national bureau of statistics$",
         )
     )
     hostname = _hostname(url)
     if not publisher_marker or hostname is None:
         return False
-    return any(
-        label in {"gov", "gouv", "go", "gob", "govt", "government"}
-        for label in hostname.split(".")[:-1]
+    if hostname.endswith(".gov"):
+        return True
+    labels = hostname.split(".")
+    return (
+        len(labels) >= 2
+        and labels[-2] in {"gov", "gouv", "go", "gob", "govt"}
+        and re.fullmatch(r"[a-z]{2}", labels[-1]) is not None
     )
 
 
@@ -492,11 +504,20 @@ def _normalize_source_url(url: object) -> str | None:
     except ValueError:
         return value
 
+    normalized_scheme = parsed.scheme.casefold()
     netloc = hostname.casefold()
-    if port is not None:
+    if ":" in netloc:
+        netloc = f"[{netloc}]"
+    if port is not None and not (
+        (normalized_scheme == "http" and port == 80)
+        or (normalized_scheme == "https" and port == 443)
+    ):
         netloc = f"{netloc}:{port}"
+    path = parsed.path or "/"
+    if path != "/":
+        path = path.rstrip("/") or "/"
     return urlunparse(
-        (parsed.scheme.casefold(), netloc, parsed.path, parsed.params, parsed.query, "")
+        (normalized_scheme, netloc, path, parsed.params, parsed.query, "")
     )
 
 
@@ -618,7 +639,8 @@ def _extract_search_artifact(
                     continue
                 if source not in attached_sources:
                     attached_sources.append(source)
-            grounded_segments.append((text, tuple(attached_sources)))
+            if attached_sources:
+                grounded_segments.append((text, tuple(attached_sources)))
 
     if not grounded_segments:
         raise ValueError("Public research response contained no cited synthesis.")
@@ -630,11 +652,11 @@ def _extract_search_artifact(
 
 
 def _publisher_from_source(source: ResearchSource) -> str:
-    for _, hosts, publisher in _INSTITUTIONAL_PUBLISHER_HOSTS:
+    for hosts, publisher in _INSTITUTIONAL_PUBLISHER_HOSTS.values():
         if _host_matches(source.url, hosts):
             return publisher
-    if _is_official_national_government("official national government", source.url):
-        return "Official national government"
+    if _is_official_national_government("government of official source", source.url):
+        return "Government of official source"
     return source.title
 
 

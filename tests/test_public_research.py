@@ -226,6 +226,73 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
     }
 
 
+def test_unresolved_citation_blocks_are_excluded_from_payload_and_salvage(monkeypatch):
+    source_url = "https://www.worldbank.org/resolved"
+    parse_calls: list[dict[str, object]] = []
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Resolved update",
+                                url=source_url,
+                                page_age="2025-04-30",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text="Unsupported narrative must not be grounded.",
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Unsupported update",
+                                url="https://www.un.org/not-retrieved",
+                                encrypted_index="1",
+                                cited_text="Unsupported source excerpt.",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text="Resolved narrative is grounded.",
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Resolved update",
+                                url=source_url,
+                                encrypted_index="0",
+                                cited_text="Resolved source excerpt.",
+                            ),
+                        ),
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            parse_calls.append(kwargs)
+            return SimpleNamespace(parsed_output=None)
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+    normalized_payload = json.loads(parse_calls[0]["messages"][0]["content"])
+    assert normalized_payload["narrative"] == "Resolved narrative is grounded."
+    assert all("Unsupported" not in claim.text for claim in result)
+    assert [claim.text for claim in result] == ["Resolved narrative is grounded."]
+
+
 def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_results(monkeypatch):
     beta_calls: list[dict[str, object]] = []
     parse_calls: list[dict[str, object]] = []
@@ -464,6 +531,13 @@ def test_anthropic_gateway_rejects_undated_sources_during_salvage(monkeypatch):
             "https://www.worldbank.org/update",
             "Update",
         ),
+        ("Not World Bank", "public analysis", "https://www.worldbank.org/update", "Update"),
+        (
+            "World Bank affiliate",
+            "public analysis",
+            "https://www.worldbank.org/update",
+            "Update",
+        ),
     ],
 )
 def test_retain_public_claims_rejects_nonpermitted_public_sources(
@@ -506,7 +580,9 @@ def test_retain_public_claims_rejects_nonpermitted_public_sources(
         ("International Organization for Migration", "https://www.iom.int/update"),
         ("ReliefWeb", "https://reliefweb.int/update"),
         ("Government of Kenya", "https://www.gov.ke/update"),
-        ("Official national government", "https://www.gov.ke/update"),
+        ("National statistics office", "https://stats.gov.ke/update"),
+        ("Ministry of Finance", "https://treasury.gov/update"),
+        ("Government of Benin", "https://www.gouv.bj/update"),
     ],
 )
 def test_retain_public_claims_accepts_permitted_institutional_publishers(
@@ -527,6 +603,9 @@ def test_retain_public_claims_accepts_permitted_institutional_publishers(
         ("World Bank", "https://worldbank.org.example.org/update"),
         ("Government of Kenya", "https://government-kenya.example.org/update"),
         ("Government of Kenya", "https://www.kenya.example.org/update"),
+        ("Government of Kenya", "https://www.gov.evil.example.org/update"),
+        ("Not Government of Kenya", "https://www.gov.ke/update"),
+        ("National statistics office of Kenya", "https://stats.gov.ke/update"),
     ],
 )
 def test_retain_public_claims_rejects_publisher_host_mismatches(
@@ -698,8 +777,21 @@ def test_page_age_parses_iso_and_provider_display_dates_but_not_relative_ages():
     assert public_research._parse_source_date("2 days ago") is None
 
 
+def test_canonical_source_urls_strip_default_ports_slashes_and_fragments():
+    assert public_research._normalize_source_url(
+        "HTTPS://WWW.WORLDBANK.ORG:443/bound/?q=1#section"
+    ) == "https://www.worldbank.org/bound?q=1"
+    assert public_research._normalize_source_url(
+        "http://www.worldbank.org:80/bound/"
+    ) == "http://www.worldbank.org/bound"
+    assert public_research._normalize_source_url(
+        "https://www.worldbank.org/bound?q=1"
+    ) != public_research._normalize_source_url("https://www.worldbank.org/bound?q=2")
+
+
 def test_normalized_claims_must_match_retrieved_source_metadata(monkeypatch):
-    source_url = "https://www.worldbank.org/bound"
+    source_url = "https://www.worldbank.org/bound?q=1"
+    retrieved_url = "HTTPS://WWW.WORLDBANK.ORG:443/bound/?q=1#section"
     source_title = "Bound update"
     source_date = date(2025, 4, 30)
     valid = _claim(
@@ -722,7 +814,7 @@ def test_normalized_claims_must_match_retrieved_source_metadata(monkeypatch):
     class FakeBetaMessages:
         def create(self, **kwargs):
             return _cited_response(
-                source_url=source_url,
+                source_url=retrieved_url,
                 source_title=source_title,
                 page_age="2025-04-30",
             )
