@@ -6,7 +6,9 @@ from numbers import Real
 from unicodedata import category
 
 
-def _environment_bool(name: str) -> bool:
+def _environment_bool(name: str, *, use_environment: bool = True) -> bool:
+    if not use_environment:
+        return False
     value = os.getenv(name)
     if value is None:
         return False
@@ -18,43 +20,54 @@ def _environment_bool(name: str) -> bool:
     raise ValueError(f"{name} environment value is invalid.")
 
 
-def build_config(overrides: dict | None = None) -> dict:
+def build_config(
+    overrides: dict | None = None,
+    *,
+    use_environment: bool = True,
+) -> dict:
     overrides = overrides or {}
+
+    def environment(name: str, default: str) -> str:
+        return os.getenv(name, default) if use_environment else default
+
     config = {
-        "APP_RELEASE": os.getenv("APP_RELEASE", "dev"),
-        "APP_ENV": os.getenv("APP_ENV", "production"),
-        "SMOKE_MODE": _environment_bool("SMOKE_MODE"),
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
-        "ANTHROPIC_MODEL_ID": os.getenv("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
-        "REGISTRY_BUNDLE_PATH": os.getenv("REGISTRY_BUNDLE_PATH", ""),
-        "REGISTRY_BUNDLE_SHA256": os.getenv("REGISTRY_BUNDLE_SHA256", ""),
+        "APP_RELEASE": environment("APP_RELEASE", "dev"),
+        "APP_ENV": environment("APP_ENV", "production"),
+        "SMOKE_MODE": _environment_bool(
+            "SMOKE_MODE",
+            use_environment=use_environment,
+        ),
+        "ANTHROPIC_API_KEY": environment("ANTHROPIC_API_KEY", ""),
+        "ANTHROPIC_MODEL_ID": environment("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
+        "REGISTRY_BUNDLE_PATH": environment("REGISTRY_BUNDLE_PATH", ""),
+        "REGISTRY_BUNDLE_SHA256": environment("REGISTRY_BUNDLE_SHA256", ""),
         "ALLOW_SYNTHETIC_REGISTRY": False,
         "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
-        "RESEARCH_MAX_ATTEMPTS": int(os.getenv("RESEARCH_MAX_ATTEMPTS", "3")),
+        "RESEARCH_MAX_ATTEMPTS": int(environment("RESEARCH_MAX_ATTEMPTS", "3")),
         "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": float(
-            os.getenv("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "90")
+            environment("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "90")
         ),
         "RESEARCH_TOTAL_BUDGET_SECONDS": float(
-            os.getenv("RESEARCH_TOTAL_BUDGET_SECONDS", "300")
+            environment("RESEARCH_TOTAL_BUDGET_SECONDS", "300")
         ),
-        "RESEARCH_MINIMUM_CLAIMS": int(os.getenv("RESEARCH_MINIMUM_CLAIMS", "4")),
+        "RESEARCH_MINIMUM_CLAIMS": int(environment("RESEARCH_MINIMUM_CLAIMS", "4")),
         "RESEARCH_MINIMUM_PUBLISHERS": int(
-            os.getenv("RESEARCH_MINIMUM_PUBLISHERS", "2")
+            environment("RESEARCH_MINIMUM_PUBLISHERS", "2")
         ),
         "RESEARCH_RETRY_BACKOFF_SECONDS": float(
-            os.getenv("RESEARCH_RETRY_BACKOFF_SECONDS", "1")
+            environment("RESEARCH_RETRY_BACKOFF_SECONDS", "1")
         ),
         "RESEARCH_RECOVERY_TIMEOUT_SECONDS": float(
-            os.getenv("RESEARCH_RECOVERY_TIMEOUT_SECONDS", "8.0")
+            environment("RESEARCH_RECOVERY_TIMEOUT_SECONDS", "8.0")
         ),
         "RESEARCH_RECOVERY_MAX_BYTES": int(
-            os.getenv("RESEARCH_RECOVERY_MAX_BYTES", "500000")
+            environment("RESEARCH_RECOVERY_MAX_BYTES", "500000")
         ),
-        "RELIEFWEB_APP_NAME": os.getenv("RELIEFWEB_APP_NAME", ""),
+        "RELIEFWEB_APP_NAME": environment("RELIEFWEB_APP_NAME", ""),
         "SESSION_TTL_SECONDS": (
             overrides["SESSION_TTL_SECONDS"]
             if "SESSION_TTL_SECONDS" in overrides
-            else int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+            else int(environment("SESSION_TTL_SECONDS", "3600"))
         ),
         "START_BACKGROUND_RUNS": True,
         "TESTING": False,

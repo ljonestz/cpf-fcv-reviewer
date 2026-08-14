@@ -148,6 +148,11 @@ class SmokeModelGateway:
         )
         scale = RecommendationScale(scale_value)
         locator = EvidenceLocator.model_validate(target_locator)
+        comment_reference = (
+            f"{SMOKE_MARKER} Synthetic comment fixture"
+            if scale is RecommendationScale.COMMENT_RESPONSE
+            else None
+        )
 
         return ReviewDraft(
             overall_read=(
@@ -181,6 +186,7 @@ class SmokeModelGateway:
                     recommendation_scale=scale,
                     evidence_ids=cited_ids,
                     sensitivity=SensitivityCategory.CAUTIOUS,
+                    comment_reference=comment_reference,
                 ),
             ),
             institutional_referral_ids=(),

@@ -14,9 +14,11 @@ from .session_store import VolatileSessionStore
 def create_app(
     overrides: dict | None = None,
     services: dict | None = None,
+    *,
+    use_environment: bool = True,
 ) -> Flask:
     app = Flask(__name__)
-    app_config = build_config(overrides)
+    app_config = build_config(overrides, use_environment=use_environment)
     if app_config["SMOKE_MODE"] and not (
         services is not None and services.get("_smoke_mode") is True
     ):
@@ -51,6 +53,7 @@ def create_smoke_app(*, start_background_runs: bool = True) -> Flask:
     registry = root / "tests" / "fixtures" / "registry_bundle.synthetic.json"
     registry_hash = sha256(registry.read_bytes()).hexdigest()
     config = {
+        "APP_RELEASE": "deterministic-smoke",
         "APP_ENV": "development",
         "SMOKE_MODE": True,
         "START_BACKGROUND_RUNS": start_background_runs,
@@ -59,10 +62,22 @@ def create_smoke_app(*, start_background_runs: bool = True) -> Flask:
         "ALLOW_SYNTHETIC_REGISTRY": True,
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_MODEL_ID": "deterministic-smoke",
+        "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
+        "RESEARCH_MAX_ATTEMPTS": 1,
+        "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": 5.0,
+        "RESEARCH_TOTAL_BUDGET_SECONDS": 15.0,
+        "RESEARCH_MINIMUM_CLAIMS": 4,
+        "RESEARCH_MINIMUM_PUBLISHERS": 2,
+        "RESEARCH_RETRY_BACKOFF_SECONDS": 0.0,
+        "RESEARCH_RECOVERY_TIMEOUT_SECONDS": 1.0,
+        "RESEARCH_RECOVERY_MAX_BYTES": 500_000,
+        "RELIEFWEB_APP_NAME": "",
+        "SESSION_TTL_SECONDS": 3_600,
+        "TESTING": False,
     }
     from .smoke import build_smoke_services
 
-    config = build_config(config)
+    config = build_config(config, use_environment=False)
     services = build_smoke_services(config)
     services["_smoke_mode"] = True
-    return create_app(config, services=services)
+    return create_app(config, services=services, use_environment=False)

@@ -11,9 +11,10 @@ from docx import Document
 
 from cpf_fcv_reviewer.app import create_smoke_app
 from cpf_fcv_reviewer.config import build_config
-from cpf_fcv_reviewer.contracts import ReviewDraft
+from cpf_fcv_reviewer.contracts import ReviewDraft, ReviewResult
 from cpf_fcv_reviewer.public_research import retain_public_claims
 from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchRequest
+from cpf_fcv_reviewer.review_profiles import STAGE_PROFILES
 from cpf_fcv_reviewer.routes import run_assessment
 from cpf_fcv_reviewer.smoke import SmokeModelGateway, SmokeResearchGateway
 
@@ -95,6 +96,24 @@ def _model_payload() -> dict:
     }
 
 
+def _submit_smoke_review(client, review_stage: str = "decision_review") -> dict:
+    response = client.post(
+        "/api/reviews",
+        data={
+            "country": "Benin",
+            "review_stage": review_stage,
+            "review_focus": "Synthetic smoke review focus.",
+            "cpf": (
+                BytesIO((FIXTURES / "synthetic_en.txt").read_bytes()),
+                "Benin-synthetic-CPF.txt",
+            ),
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 201
+    return response.get_json()
+
+
 def test_smoke_model_gateway_returns_schema_valid_review_and_repair_from_supplied_ids():
     gateway = SmokeModelGateway()
     payload = _model_payload()
@@ -125,6 +144,21 @@ def test_smoke_model_gateway_returns_schema_valid_review_and_repair_from_supplie
     assert isinstance(repaired, ReviewDraft)
     assert set(repaired.priority_areas[0].evidence_ids) <= set(
         draft.priority_areas[0].evidence_ids
+    )
+
+
+def test_smoke_model_gateway_adds_synthetic_comment_reference_for_comment_responses():
+    payload = _model_payload()
+    payload["stage_profile"]["allowed_scales"] = ["comment_response"]
+
+    draft = SmokeModelGateway().generate(
+        prompt_name="review",
+        payload=payload,
+        output_type=ReviewDraft,
+    )
+
+    assert draft.priority_areas[0].comment_reference == (
+        "[SYNTHETIC SMOKE] Synthetic comment fixture"
     )
 
 
@@ -229,6 +263,82 @@ def test_smoke_app_import_and_creation_succeed_when_anthropic_import_is_blocked(
 
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == "SMOKE_IMPORT_OK"
+
+
+def test_smoke_app_configuration_ignores_poisoned_environment(monkeypatch):
+    poisoned = {
+        "APP_RELEASE": "poison-release",
+        "APP_ENV": "production",
+        "SMOKE_MODE": "not-a-boolean",
+        "ANTHROPIC_API_KEY": "poison-secret",
+        "ANTHROPIC_MODEL_ID": "poison-model",
+        "REGISTRY_BUNDLE_PATH": "poison-path",
+        "REGISTRY_BUNDLE_SHA256": "poison-hash",
+        "RESEARCH_MAX_ATTEMPTS": "invalid",
+        "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": "invalid",
+        "RESEARCH_TOTAL_BUDGET_SECONDS": "invalid",
+        "RESEARCH_MINIMUM_CLAIMS": "invalid",
+        "RESEARCH_MINIMUM_PUBLISHERS": "invalid",
+        "RESEARCH_RETRY_BACKOFF_SECONDS": "invalid",
+        "RESEARCH_RECOVERY_TIMEOUT_SECONDS": "invalid",
+        "RESEARCH_RECOVERY_MAX_BYTES": "invalid",
+        "RELIEFWEB_APP_NAME": "poison-app-name",
+        "SESSION_TTL_SECONDS": "invalid",
+    }
+    for name, value in poisoned.items():
+        monkeypatch.setenv(name, value)
+
+    app = create_smoke_app(start_background_runs=False)
+    expected = {
+        "APP_RELEASE": "deterministic-smoke",
+        "APP_ENV": "development",
+        "SMOKE_MODE": True,
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_MODEL_ID": "deterministic-smoke",
+        "ALLOW_SYNTHETIC_REGISTRY": True,
+        "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
+        "RESEARCH_MAX_ATTEMPTS": 1,
+        "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": 5.0,
+        "RESEARCH_TOTAL_BUDGET_SECONDS": 15.0,
+        "RESEARCH_MINIMUM_CLAIMS": 4,
+        "RESEARCH_MINIMUM_PUBLISHERS": 2,
+        "RESEARCH_RETRY_BACKOFF_SECONDS": 0.0,
+        "RESEARCH_RECOVERY_TIMEOUT_SECONDS": 1.0,
+        "RESEARCH_RECOVERY_MAX_BYTES": 500_000,
+        "RELIEFWEB_APP_NAME": "",
+        "SESSION_TTL_SECONDS": 3_600,
+        "START_BACKGROUND_RUNS": False,
+        "TESTING": False,
+    }
+    assert {name: app.config[name] for name in expected} == expected
+
+    client = app.test_client()
+    created = _submit_smoke_review(client)
+    run_assessment(app, created["assessment_id"])
+    result = client.get(created["result_url"]).get_json()
+    assert result["metadata"]["model_id"] == "deterministic-smoke"
+    assert result["metadata"]["current_evidence_tier"] == "full"
+
+
+@pytest.mark.parametrize("review_stage", tuple(STAGE_PROFILES))
+def test_smoke_routes_complete_with_schema_for_every_review_stage(review_stage):
+    app = create_smoke_app(start_background_runs=False)
+    client = app.test_client()
+    created = _submit_smoke_review(client, review_stage)
+
+    run_assessment(app, created["assessment_id"])
+
+    response = client.get(created["result_url"])
+    assert response.status_code == 200
+    payload = response.get_json()
+    evidence_by_id = payload.pop("evidence_by_id")
+    result = ReviewResult.model_validate(payload)
+    assert evidence_by_id
+    assert result.metadata.review_stage == review_stage
+    assert result.metadata.model_id == "deterministic-smoke"
+    assert result.metadata.current_evidence_tier.value == "full"
+    if review_stage == "response_to_comments":
+        assert result.priority_areas[0].comment_reference
 
 
 def test_smoke_app_completes_without_anthropic_key_or_provider_construction(monkeypatch):
