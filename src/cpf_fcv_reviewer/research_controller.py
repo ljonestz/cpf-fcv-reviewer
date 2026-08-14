@@ -75,6 +75,11 @@ class ResearchResult:
     def __post_init__(self) -> None:
         if not isinstance(self.tier, CurrentEvidenceTier):
             raise ValueError("Research result tier is invalid.")
+        if self.tier is CurrentEvidenceTier.FULL:
+            if self.limitation is not None:
+                raise ValueError("Full research results cannot include a limitation.")
+        elif not isinstance(self.limitation, str) or not self.limitation.strip():
+            raise ValueError("Non-full research results require a nonblank limitation.")
 
     @property
     def sufficient(self) -> bool:

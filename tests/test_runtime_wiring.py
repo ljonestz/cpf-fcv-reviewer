@@ -15,7 +15,12 @@ from cpf_fcv_reviewer.contracts import (
     RevisionSummaryItem,
     SensitivityCategory,
 )
-from cpf_fcv_reviewer.extraction import ExtractedDocument, ExtractedSegment
+from cpf_fcv_reviewer.extraction import (
+    DocumentUnreadable,
+    ExtractedDocument,
+    ExtractedSegment,
+    ExtractionLimitExceeded,
+)
 from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchResult
@@ -320,6 +325,142 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
     )
     assert gateway_calls == ["review", "repair"]
     assert events[-1][0] == "run_complete"
+
+
+def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
+    services = _runtime_services(monkeypatch)
+    steps = dict(services["review_orchestrator"].steps)
+
+    def document(name, text):
+        return ExtractedDocument(
+            name=name,
+            segments=(
+                ExtractedSegment(
+                    text=text,
+                    page=None,
+                    heading=None,
+                    element="Paragraph 1",
+                ),
+            ) if text else (),
+            warnings=(),
+        )
+
+    def fake_extract(data, name, *, max_pdf_pages=None):
+        if name == "benin-cpf.txt":
+            return document(name, "Readable primary evidence. " * 10)
+        if name == "malformed-package.pdf":
+            raise ExtractionLimitExceeded("PRIVATE_FORMAT_DETAIL")
+        if name == "empty-context.txt":
+            return document(name, "")
+        return document(name, "Usable optional evidence.")
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.extract_document", fake_extract)
+    payload = {
+        "country": "Benin",
+        "review_stage": "finalization",
+        "detail_level": "standard",
+        "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+        "package_documents": [
+            {"name": "malformed-package.pdf", "bytes": b"PRIVATE_PACKAGE_TEXT"},
+            {"name": "usable-package.txt", "bytes": b"usable package"},
+        ],
+        "context_documents": [
+            {"name": "empty-context.txt", "bytes": b"PRIVATE_CONTEXT_TEXT"},
+            {"name": "usable-context.txt", "bytes": b"usable context"},
+        ],
+        "review_focus": "",
+        "corrections": [],
+    }
+
+    context = steps["extract"]({"assessment_id": "optional-isolation", "payload": payload})
+
+    assert [item.name for item in context["package_documents"]] == [
+        "usable-package.txt"
+    ]
+    assert [item.name for item in context["context_documents"]] == [
+        "usable-context.txt"
+    ]
+    warning = "An optional uploaded document could not be read and was excluded."
+    assert context["extraction_warnings"] == (warning, warning)
+    assert not any(
+        value in " ".join(context["extraction_warnings"])
+        for value in (
+            "malformed-package.pdf",
+            "empty-context.txt",
+            "PRIVATE_FORMAT_DETAIL",
+            "PRIVATE_PACKAGE_TEXT",
+            "PRIVATE_CONTEXT_TEXT",
+        )
+    )
+
+    context["research_result"] = ResearchResult(
+        _current_claims(), {}, 1, CurrentEvidenceTier.FULL
+    )
+    context = steps["build_evidence"](context)
+
+    assert set(context["evidence_pack"].metadata.document_fingerprints) == {
+        "primary:benin-cpf.txt",
+        "package:2:usable-package.txt",
+        "context:2:usable-context.txt",
+    }
+
+
+def test_runtime_optional_extraction_does_not_swallow_programming_defects(monkeypatch):
+    services = _runtime_services(monkeypatch)
+    extract = dict(services["review_orchestrator"].steps)["extract"]
+
+    def fake_extract(data, name, *, max_pdf_pages=None):
+        if name == "benin-cpf.txt":
+            return ExtractedDocument(
+                name=name,
+                segments=(
+                    ExtractedSegment(
+                        text="Readable primary evidence. " * 10,
+                        page=None,
+                        heading=None,
+                        element="Paragraph 1",
+                    ),
+                ),
+                warnings=(),
+            )
+        raise AssertionError("programming defect")
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.extract_document", fake_extract)
+
+    with pytest.raises(AssertionError, match="programming defect"):
+        extract(
+            {
+                "payload": {
+                    "country": "Benin",
+                    "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                    "package_documents": [
+                        {"name": "optional.txt", "bytes": b"optional"}
+                    ],
+                    "context_documents": [],
+                }
+            }
+        )
+
+
+def test_runtime_primary_document_remains_fail_closed(monkeypatch):
+    services = _runtime_services(monkeypatch)
+    extract = dict(services["review_orchestrator"].steps)["extract"]
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.extract_document",
+        lambda data, name, *, max_pdf_pages=None: ExtractedDocument(name, (), ()),
+    )
+
+    with pytest.raises(DocumentUnreadable):
+        extract(
+            {
+                "payload": {
+                    "country": "Benin",
+                    "cpf": {"name": "benin-cpf.txt", "bytes": b""},
+                    "package_documents": [],
+                    "context_documents": [],
+                }
+            }
+        )
 
 
 def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch):
@@ -1034,9 +1175,19 @@ def test_runtime_does_not_turn_uploaded_rra_into_current_context(monkeypatch):
 
 
 def test_runtime_preserves_research_limitation_once_through_repair(monkeypatch):
+    authoritative_limitation = (
+        "  Independent current-country\n research   was unavailable.  "
+    )
     limitation = "Independent current-country research was unavailable."
+    unrelated_limitation = "  Model caveat keeps spacing.  "
     controller = _InjectedResearchController(
-        ResearchResult((), {}, 1, CurrentEvidenceTier.DOCUMENT_LED, limitation)
+        ResearchResult(
+            (),
+            {},
+            1,
+            CurrentEvidenceTier.DOCUMENT_LED,
+            authoritative_limitation,
+        )
     )
 
     class ModelGateway:
@@ -1046,10 +1197,16 @@ def test_runtime_preserves_research_limitation_once_through_repair(monkeypatch):
         def generate(self, *, prompt_name, payload, output_type):
             if prompt_name == "repair":
                 overall_read = "The draft requires cautious review."
-                limitations = ()
+                limitations = (
+                    "\tIndependent current-country research was   unavailable.\n",
+                    unrelated_limitation,
+                )
             else:
                 overall_read = "This package is eligible for special treatment."
-                limitations = (limitation, limitation)
+                limitations = (
+                    "Independent current-country  research was unavailable.",
+                    unrelated_limitation,
+                )
             return output_type(
                 overall_read=overall_read,
                 alignment_readout="Independent current context was unavailable.",
@@ -1085,6 +1242,7 @@ def test_runtime_preserves_research_limitation_once_through_repair(monkeypatch):
     result = context["result"]
     assert context["evidence_pack"].warnings.count(limitation) == 1
     assert result.limitations.count(limitation) == 1
+    assert result.limitations == (unrelated_limitation, limitation)
     assert result.metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
     assert result.metadata.current_evidence_limitation == limitation
     assert result.metadata.repair_count == 1

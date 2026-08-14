@@ -146,6 +146,32 @@ def test_research_result_rejects_legacy_boolean_and_invalid_tiers(tier):
         ResearchResult((), {}, 1, tier)
 
 
+@pytest.mark.parametrize(
+    ("tier", "limitation"),
+    [
+        (CurrentEvidenceTier.FULL, "Unexpected limitation"),
+        (CurrentEvidenceTier.REDUCED, None),
+        (CurrentEvidenceTier.REDUCED, ""),
+        (CurrentEvidenceTier.REDUCED, "   \n\t"),
+        (CurrentEvidenceTier.DOCUMENT_LED, None),
+        (CurrentEvidenceTier.DOCUMENT_LED, 1),
+    ],
+)
+def test_research_result_rejects_inconsistent_tier_and_limitation(tier, limitation):
+    with pytest.raises(ValueError, match="limitation"):
+        ResearchResult((), {}, 1, tier, limitation)
+
+
+@pytest.mark.parametrize(
+    "tier",
+    [CurrentEvidenceTier.REDUCED, CurrentEvidenceTier.DOCUMENT_LED],
+)
+def test_research_result_accepts_nonblank_limitation_for_nonfull_tiers(tier):
+    result = ResearchResult((), {}, 1, tier, "Current evidence is limited.")
+
+    assert result.limitation == "Current evidence is limited."
+
+
 def test_thin_recent_public_evidence_returns_reduced_tier_with_limitation():
     events = []
     result = controller(
