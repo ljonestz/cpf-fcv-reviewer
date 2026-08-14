@@ -6,7 +6,8 @@ from io import BytesIO
 from pathlib import Path, PurePosixPath
 from secrets import compare_digest
 from urllib.parse import unquote, urlsplit
-from zipfile import BadZipFile, ZipFile
+from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile
+from zlib import error as ZlibError
 
 from docx.opc.exceptions import PackageNotFoundError
 from lxml.etree import XMLParser, XMLSyntaxError, fromstring
@@ -66,6 +67,16 @@ EXPECTED_OPTIONAL_EXTRACTION_ERRORS = (
     XMLSyntaxError,
 )
 REQUIRED_DOCX_ROOT_PARTS = frozenset({"[Content_Types].xml", "_rels/.rels"})
+SUPPORTED_DOCX_COMPRESSION_TYPES = frozenset({ZIP_STORED, ZIP_DEFLATED})
+CONTENT_TYPES_NAMESPACE = (
+    "http://schemas.openxmlformats.org/package/2006/content-types"
+)
+CONTENT_TYPES_TAG = f"{{{CONTENT_TYPES_NAMESPACE}}}Types"
+CONTENT_TYPE_OVERRIDE_TAG = f"{{{CONTENT_TYPES_NAMESPACE}}}Override"
+MAIN_DOCUMENT_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml."
+    "document.main+xml"
+)
 RELATIONSHIPS_NAMESPACE = (
     "http://schemas.openxmlformats.org/package/2006/relationships"
 )
@@ -224,14 +235,54 @@ def _parse_relationship_part(data: bytes) -> tuple[dict[str, str], ...] | None:
     return tuple(relationships)
 
 
+def _read_docx_part(archive: ZipFile, part_name: str) -> bytes | None:
+    try:
+        return archive.read(part_name)
+    except (BadZipFile, NotImplementedError, RuntimeError, ZlibError, OSError):
+        return None
+
+
+def _has_valid_main_content_type(data: bytes, main_part: str) -> bool:
+    parser = XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
+    try:
+        root = fromstring(data, parser=parser)
+    except XMLSyntaxError:
+        return False
+    if root.tag != CONTENT_TYPES_TAG or root.getroottree().docinfo.doctype:
+        return False
+    matching_overrides = []
+    for child in root:
+        if not isinstance(child.tag, str):
+            continue
+        if child.tag != CONTENT_TYPE_OVERRIDE_TAG:
+            continue
+        part_name = child.get("PartName")
+        content_type = child.get("ContentType")
+        if not part_name or not content_type:
+            return False
+        if part_name == f"/{main_part}":
+            matching_overrides.append(content_type)
+    return matching_overrides == [MAIN_DOCUMENT_CONTENT_TYPE]
+
+
 def _has_valid_docx_container(data: bytes) -> bool:
     try:
         with ZipFile(BytesIO(data)) as archive:
-            archive_names = archive.namelist()
+            archive_entries = archive.infolist()
+            if any(
+                entry.flag_bits & 0x1
+                or entry.compress_type not in SUPPORTED_DOCX_COMPRESSION_TYPES
+                for entry in archive_entries
+            ):
+                return False
+            archive_names = [entry.filename for entry in archive_entries]
             archive_name_set = frozenset(archive_names)
             if len(archive_names) != len(archive_name_set) or not (
                 REQUIRED_DOCX_ROOT_PARTS <= archive_name_set
             ):
+                return False
+            content_types = _read_docx_part(archive, "[Content_Types].xml")
+            if content_types is None:
                 return False
             relationship_parts = tuple(
                 name
@@ -244,9 +295,10 @@ def _has_valid_docx_container(data: bytes) -> bool:
             )
             office_document_targets = []
             for relationship_part in relationship_parts:
-                relationships = _parse_relationship_part(
-                    archive.read(relationship_part)
-                )
+                relationship_data = _read_docx_part(archive, relationship_part)
+                if relationship_data is None:
+                    return False
+                relationships = _parse_relationship_part(relationship_data)
                 if relationships is None:
                     return False
                 for relationship in relationships:
@@ -267,7 +319,10 @@ def _has_valid_docx_container(data: bytes) -> bool:
                         return False
                     if is_office_document:
                         office_document_targets.append(resolved_target)
-            return len(office_document_targets) == 1
+            return len(office_document_targets) == 1 and _has_valid_main_content_type(
+                content_types,
+                office_document_targets[0],
+            )
     except BadZipFile:
         return False
 

@@ -2,6 +2,7 @@ from datetime import date
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path, PurePosixPath
+from struct import pack_into, unpack_from
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
@@ -54,6 +55,9 @@ OFFICE_DOCUMENT_RELATIONSHIP = (
 CUSTOM_XML_RELATIONSHIP = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"
 )
+MAIN_DOCUMENT_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
+)
 
 
 def _relationship_xml(*relationships: tuple[str, str, str, str | None]) -> bytes:
@@ -70,6 +74,28 @@ def _relationship_xml(*relationships: tuple[str, str, str, str | None]) -> bytes
     )
 
 
+def _content_types_xml(
+    main_part: str,
+    *,
+    include_override: bool = True,
+    override_part: str | None = None,
+    content_type: str = MAIN_DOCUMENT_CONTENT_TYPE,
+) -> bytes:
+    override = ""
+    if include_override:
+        override = (
+            f'<Override PartName="/{override_part or main_part}" '
+            f'ContentType="{content_type}"/>'
+        )
+    return (
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/'
+        'vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        f'{override}<!--X9K7Q--></Types>'
+    ).encode()
+
+
 def _docx_bytes(
     *,
     main_part: str = "custom/main.xml",
@@ -77,23 +103,14 @@ def _docx_bytes(
     document_relationships: bytes | None = None,
     include_main_part: bool = True,
     extra_entries: dict[str, bytes] | None = None,
+    content_types: bytes | None = None,
 ) -> bytes:
     if root_relationships is None:
         root_relationships = _relationship_xml(
             ("rId1", OFFICE_DOCUMENT_RELATIONSHIP, main_part, None)
         )
     entries = {
-        "[Content_Types].xml": (
-            b'<Types xmlns="http://schemas.openxmlformats.org/package/'
-            b'2006/content-types"><Default Extension="rels" ContentType="application/'
-            b'vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" '
-            b'ContentType="application/xml"/><Override PartName="/'
-            + main_part.encode()
-            + b'" '
-            b'ContentType="application/vnd.openxmlformats-officedocument.'
-            b'wordprocessingml.'
-            b'document.main+xml"/></Types>'
-        ),
+        "[Content_Types].xml": content_types or _content_types_xml(main_part),
         "_rels/.rels": root_relationships,
     }
     if include_main_part:
@@ -109,6 +126,56 @@ def _docx_bytes(
         entries[str(relationship_part)] = document_relationships
     entries.update(extra_entries or {})
     return _zip_bytes(entries)
+
+
+def _mutate_zip_entry_metadata(
+    data: bytes,
+    entry_name: str,
+    *,
+    encrypted: bool = False,
+    compression_type: int | None = None,
+) -> bytes:
+    mutated = bytearray(data)
+    with ZipFile(BytesIO(data)) as archive:
+        info = archive.getinfo(entry_name)
+    local_offset = info.header_offset
+    assert mutated[local_offset : local_offset + 4] == b"PK\x03\x04"
+    if encrypted:
+        local_flags = unpack_from("<H", mutated, local_offset + 6)[0]
+        pack_into("<H", mutated, local_offset + 6, local_flags | 0x1)
+    if compression_type is not None:
+        pack_into("<H", mutated, local_offset + 8, compression_type)
+
+    central_offset = 0
+    while True:
+        central_offset = mutated.find(b"PK\x01\x02", central_offset)
+        if central_offset < 0:
+            raise AssertionError("ZIP central-directory entry was not found.")
+        name_length = unpack_from("<H", mutated, central_offset + 28)[0]
+        extra_length = unpack_from("<H", mutated, central_offset + 30)[0]
+        comment_length = unpack_from("<H", mutated, central_offset + 32)[0]
+        name_start = central_offset + 46
+        name_end = name_start + name_length
+        if bytes(mutated[name_start:name_end]).decode() == entry_name:
+            if encrypted:
+                central_flags = unpack_from("<H", mutated, central_offset + 8)[0]
+                pack_into("<H", mutated, central_offset + 8, central_flags | 0x1)
+            if compression_type is not None:
+                pack_into("<H", mutated, central_offset + 10, compression_type)
+            return bytes(mutated)
+        central_offset = name_end + extra_length + comment_length
+
+
+def _corrupt_zip_entry(data: bytes, entry_name: str) -> bytes:
+    corrupted = bytearray(data)
+    with ZipFile(BytesIO(data)) as archive:
+        info = archive.getinfo(entry_name)
+    name_length = unpack_from("<H", corrupted, info.header_offset + 26)[0]
+    extra_length = unpack_from("<H", corrupted, info.header_offset + 28)[0]
+    data_start = info.header_offset + 30 + name_length + extra_length
+    assert info.compress_size > 2
+    corrupted[data_start + info.compress_size // 2] ^= 0xFF
+    return bytes(corrupted)
 
 
 def _python_docx_with_custom_xml_relationship() -> bytes:
@@ -143,6 +210,26 @@ PYTHON_DOCX_WITH_CUSTOM_XML = _python_docx_with_custom_xml_relationship()
 MALFORMED_OPTIONAL_UPLOADS = (
     ("private-invalid-zip.docx", b"X9K7Q not a zip archive"),
     (
+        "private-encrypted-relationships.docx",
+        _mutate_zip_entry_metadata(
+            VALID_MINIMAL_DOCX,
+            "_rels/.rels",
+            encrypted=True,
+        ),
+    ),
+    (
+        "private-unsupported-compression.docx",
+        _mutate_zip_entry_metadata(
+            VALID_MINIMAL_DOCX,
+            "_rels/.rels",
+            compression_type=99,
+        ),
+    ),
+    (
+        "private-corrupt-deflate.docx",
+        _corrupt_zip_entry(VALID_MINIMAL_DOCX, "_rels/.rels"),
+    ),
+    (
         "private-missing-content-types.docx",
         _zip_bytes(
             {
@@ -176,6 +263,37 @@ MALFORMED_OPTIONAL_UPLOADS = (
     (
         "private-malformed-root-relationships.docx",
         _docx_bytes(root_relationships=b"<Relationships>X9K7Q"),
+    ),
+    (
+        "private-missing-main-override.docx",
+        _docx_bytes(
+            content_types=_content_types_xml(
+                "custom/main.xml",
+                include_override=False,
+            )
+        ),
+    ),
+    (
+        "private-wrong-main-content-type.docx",
+        _docx_bytes(
+            content_types=_content_types_xml(
+                "custom/main.xml",
+                content_type="application/X9K7Q-wrong",
+            )
+        ),
+    ),
+    (
+        "private-wrong-main-override-part.docx",
+        _docx_bytes(
+            content_types=_content_types_xml(
+                "custom/main.xml",
+                override_part="custom/X9K7Q-wrong.xml",
+            )
+        ),
+    ),
+    (
+        "private-malformed-content-types.docx",
+        _docx_bytes(content_types=b"<Types>X9K7Q"),
     ),
     (
         "private-missing-internal-target.docx",
@@ -233,11 +351,18 @@ MALFORMED_OPTIONAL_UPLOADS = (
 )
 MALFORMED_OPTIONAL_IDS = (
     "invalid-zip",
+    "encrypted-relationships",
+    "unsupported-compression",
+    "corrupt-deflate",
     "missing-content-types",
     "missing-package-relationships",
     "root-without-office-document",
     "missing-office-document-target",
     "malformed-root-relationships",
+    "missing-main-override",
+    "wrong-main-content-type",
+    "wrong-main-override-part",
+    "malformed-content-types",
     "missing-internal-target",
     "root-escape-target",
     "encoded-traversal-target",
