@@ -5,6 +5,7 @@ from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
+from docx import Document
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
@@ -49,6 +50,9 @@ RELATIONSHIPS_NAMESPACE = (
 OFFICE_DOCUMENT_RELATIONSHIP = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
     "officeDocument"
+)
+CUSTOM_XML_RELATIONSHIP = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"
 )
 
 
@@ -107,7 +111,35 @@ def _docx_bytes(
     return _zip_bytes(entries)
 
 
+def _python_docx_with_custom_xml_relationship() -> bytes:
+    document = Document()
+    document.add_paragraph("Python-docx custom XML evidence.")
+    buffer = BytesIO()
+    document.save(buffer)
+    with ZipFile(BytesIO(buffer.getvalue())) as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+    relationship = (
+        f'<Relationship Id="rIdCustomXml" Type="{CUSTOM_XML_RELATIONSHIP}" '
+        'Target="../customXml/item1.xml"/>'
+    ).encode()
+    relationships_name = "word/_rels/document.xml.rels"
+    entries[relationships_name] = entries[relationships_name].replace(
+        b"</Relationships>",
+        relationship + b"</Relationships>",
+    )
+    entries["customXml/item1.xml"] = b"<context>standard custom XML</context>"
+    return _zip_bytes(entries)
+
+
 VALID_MINIMAL_DOCX = _docx_bytes()
+SAFE_PARENT_TARGET_DOCX = _docx_bytes(
+    main_part="word/document.xml",
+    document_relationships=_relationship_xml(
+        ("rId2", CUSTOM_XML_RELATIONSHIP, "../customXml/item1.xml", None)
+    ),
+    extra_entries={"customXml/item1.xml": b"<context>safe parent target</context>"},
+)
+PYTHON_DOCX_WITH_CUSTOM_XML = _python_docx_with_custom_xml_relationship()
 MALFORMED_OPTIONAL_UPLOADS = (
     ("private-invalid-zip.docx", b"X9K7Q not a zip archive"),
     (
@@ -160,18 +192,41 @@ MALFORMED_OPTIONAL_UPLOADS = (
         ),
     ),
     (
-        "private-traversal-target.docx",
+        "private-root-escape-target.docx",
         _docx_bytes(
             document_relationships=_relationship_xml(
                 (
                     "rId2",
                     "http://schemas.openxmlformats.org/officeDocument/2006/"
                     "relationships/styles",
-                    "../X9K7Q.xml",
+                    "../../X9K7Q.xml",
                     None,
                 )
             ),
             extra_entries={"X9K7Q.xml": b"unsafe traversal destination"},
+        ),
+    ),
+    (
+        "private-encoded-traversal-target.docx",
+        _docx_bytes(
+            document_relationships=_relationship_xml(
+                ("rId2", CUSTOM_XML_RELATIONSHIP, "%2e%2e/X9K7Q.xml", None)
+            ),
+            extra_entries={"X9K7Q.xml": b"encoded traversal destination"},
+        ),
+    ),
+    (
+        "private-encoded-separator-target.docx",
+        _docx_bytes(
+            document_relationships=_relationship_xml(
+                (
+                    "rId2",
+                    CUSTOM_XML_RELATIONSHIP,
+                    "../customXml%2fX9K7Q.xml",
+                    None,
+                )
+            ),
+            extra_entries={"customXml/X9K7Q.xml": b"encoded separator destination"},
         ),
     ),
     ("private-financial-token.pdf", b"X9K7Q-secret-looking-prefix"),
@@ -184,7 +239,9 @@ MALFORMED_OPTIONAL_IDS = (
     "missing-office-document-target",
     "malformed-root-relationships",
     "missing-internal-target",
-    "traversal-target",
+    "root-escape-target",
+    "encoded-traversal-target",
+    "encoded-separator-target",
     "invalid-pdf",
 )
 
@@ -614,6 +671,61 @@ def test_runtime_accepts_minimal_docx_without_document_relationships(monkeypatch
         and item.text == "Minimal semantic OOXML evidence."
         for item in context["evidence_pack"].evidence
     )
+
+
+@pytest.mark.parametrize(
+    ("name", "docx_bytes", "expected_text"),
+    (
+        (
+            "safe-parent-context.docx",
+            SAFE_PARENT_TARGET_DOCX,
+            "Minimal semantic OOXML evidence.",
+        ),
+        (
+            "python-docx-context.docx",
+            PYTHON_DOCX_WITH_CUSTOM_XML,
+            "Python-docx custom XML evidence.",
+        ),
+    ),
+    ids=("explicit-safe-parent", "python-docx-custom-xml"),
+)
+def test_runtime_accepts_safe_parent_relationship_targets(
+    monkeypatch,
+    name,
+    docx_bytes,
+    expected_text,
+):
+    with ZipFile(BytesIO(docx_bytes)) as archive:
+        relationships = archive.read("word/_rels/document.xml.rels")
+    assert b'Target="../customXml/item1.xml"' in relationships
+
+    controller = _InjectedResearchController()
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=object(),
+        research_controller=controller,
+    )
+    steps = dict(services["review_orchestrator"].steps)
+    context = steps["extract"](
+        {
+            "payload": {
+                "country": "Benin",
+                "cpf": {
+                    "name": "benin-cpf.txt",
+                    "bytes": b"Readable primary evidence. " * 10,
+                },
+                "package_documents": [],
+                "context_documents": [{"name": name, "bytes": docx_bytes}],
+            }
+        }
+    )
+
+    assert context["extraction_warnings"] == ()
+    assert context["context_documents"][0].segments[0].text == expected_text
+    context["primary_document"] = ExtractedDocument("benin-cpf.txt", (), ())
+    context["_emit"] = lambda *_: None
+    steps["research"](context)
+    assert controller.allow_document_led == [True]
 
 
 @pytest.mark.parametrize(

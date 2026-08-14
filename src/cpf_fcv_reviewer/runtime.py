@@ -78,6 +78,7 @@ OFFICE_DOCUMENT_RELATIONSHIP_TYPES = frozenset(
         "http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument",
     }
 )
+HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 
 def _select_role_segments(
@@ -160,16 +161,38 @@ def _resolve_internal_relationship_target(
         return None
     if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
         return None
-    decoded_path = unquote(parsed.path)
-    if not decoded_path or decoded_path.startswith("/") or "\\" in decoded_path:
-        return None
-    target_path = PurePosixPath(decoded_path)
-    if any(part in {"", ".", ".."} for part in target_path.parts):
+    if not parsed.path or parsed.path.startswith("/") or "\\" in parsed.path:
         return None
     source_directory = _relationship_source_directory(relationship_part)
     if source_directory is None:
         return None
-    return str(source_directory / target_path)
+    resolved_parts = list(source_directory.parts)
+    for raw_part in parsed.path.split("/"):
+        if not raw_part:
+            return None
+        for index, character in enumerate(raw_part):
+            if character == "%" and (
+                index + 2 >= len(raw_part)
+                or raw_part[index + 1] not in HEX_DIGITS
+                or raw_part[index + 2] not in HEX_DIGITS
+            ):
+                return None
+        decoded_part = unquote(raw_part)
+        if "/" in decoded_part or "\\" in decoded_part:
+            return None
+        if decoded_part in {".", ".."} and decoded_part != raw_part:
+            return None
+        if decoded_part == ".":
+            return None
+        if decoded_part == "..":
+            if not resolved_parts:
+                return None
+            resolved_parts.pop()
+            continue
+        if not decoded_part:
+            return None
+        resolved_parts.append(decoded_part)
+    return "/".join(resolved_parts)
 
 
 def _parse_relationship_part(data: bytes) -> tuple[dict[str, str], ...] | None:
