@@ -2,7 +2,9 @@ import json
 from datetime import date
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from anthropic import APIStatusError
 from pydantic import ValidationError
 
 from cpf_fcv_reviewer import public_research
@@ -587,10 +589,17 @@ def test_retain_public_claims_allows_institutional_titles_with_generic_words(sou
         ),
         ("International Organization for Migration", "https://www.iom.int/update"),
         ("ReliefWeb", "https://reliefweb.int/update"),
-        ("Government of Kenya", "https://www.gov.ke/update"),
-        ("National statistics office", "https://stats.gov.ke/update"),
-        ("Ministry of Finance", "https://treasury.gov/update"),
-        ("Government of Benin", "https://www.gouv.bj/update"),
+        ("United Nations Children's Fund", "https://www.unicef.org/update"),
+        ("UN Development Programme", "https://www.undp.org/update"),
+        ("United Nations Office on Drugs and Crime", "https://www.unodc.org/update"),
+        (
+            "United Nations Office for Disaster Risk Reduction",
+            "https://www.undrr.org/update",
+        ),
+        (
+            "United Nations Entity for Gender Equality and the Empowerment of Women",
+            "https://www.unwomen.org/update",
+        ),
     ],
 )
 def test_retain_public_claims_accepts_permitted_institutional_publishers(
@@ -612,8 +621,17 @@ def test_retain_public_claims_accepts_permitted_institutional_publishers(
         ("Government of Kenya", "https://government-kenya.example.org/update"),
         ("Government of Kenya", "https://www.kenya.example.org/update"),
         ("Government of Kenya", "https://www.gov.evil.example.org/update"),
+        ("Government of Kenya", "https://www.gov.ke/update"),
+        ("National statistics office", "https://stats.gov.ke/update"),
+        ("Ministry of Finance", "https://treasury.gov/update"),
+        ("Government of Benin", "https://www.gouv.bj/update"),
         ("Not Government of Kenya", "https://www.gov.ke/update"),
         ("National statistics office of Kenya", "https://stats.gov.ke/update"),
+        (
+            "United Nations Children's Fund affiliate",
+            "https://www.unicef.org/update",
+        ),
+        ("UN Development Programme affiliate", "https://www.undp.org/update"),
     ],
 )
 def test_retain_public_claims_rejects_publisher_host_mismatches(
@@ -803,11 +821,12 @@ def test_canonical_source_urls_strip_default_ports_slashes_and_fragments():
 def test_normalized_claims_must_match_retrieved_source_metadata(monkeypatch):
     source_url = "https://www.worldbank.org/bound?q=1"
     retrieved_url = "HTTPS://WWW.WORLDBANK.ORG:443/bound/?q=1#section"
+    claim_url = "HTTPS://WWW.WORLDBANK.ORG.:443/bound/?q=1#section"
     source_title = "Bound update"
     source_date = date(2025, 4, 30)
     valid = _claim(
         claim_id="valid",
-        source_url=source_url,
+        source_url=claim_url,
         source_title=source_title,
         source_date=source_date,
         publisher="World Bank",
@@ -845,7 +864,9 @@ def test_normalized_claims_must_match_retrieved_source_metadata(monkeypatch):
 
     result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
-    assert result == (valid,)
+    assert len(result) == 1
+    assert result[0].source_url == source_url
+    assert result[0] != valid
 
 
 def test_uncited_retrieved_sources_are_unavailable_to_normalization(monkeypatch):
@@ -1040,7 +1061,10 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     class FakeMessages:
         def parse(self, **kwargs):
-            raise ValueError("normalization failed")
+            return ValidationError.from_exception_data(
+                "ResearchClaimBatch",
+                [{"type": "missing", "loc": ("claims",), "input": {}}],
+            )
 
     fake_client = SimpleNamespace(
         beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
@@ -1051,6 +1075,62 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     assert len(result) == 1
     assert result[0].text == "The grounded narrative."
+
+
+def test_normalization_value_error_propagates_without_salvage(monkeypatch):
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return _cited_response(
+                source_url="https://www.worldbank.org/value-error",
+                source_title="Value error update",
+                page_age="2025-04-30",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            raise ValueError("invalid JSON shape")
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    with pytest.raises(ValueError, match="invalid JSON shape"):
+        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+
+def test_anthropic_api_error_propagates_without_salvage(monkeypatch):
+    response = httpx.Response(
+        401,
+        request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"),
+    )
+    provider_error = APIStatusError(
+        "provider authentication failed",
+        response=response,
+        body={"error": {"message": "secret details"}},
+    )
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return _cited_response(
+                source_url="https://www.worldbank.org/api-error",
+                source_title="API error update",
+                page_age="2025-04-30",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            raise provider_error
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    with pytest.raises(APIStatusError) as raised:
+        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+    assert raised.value is provider_error
 
 
 def test_provider_runtime_error_propagates_without_salvage(monkeypatch):
@@ -1181,7 +1261,6 @@ def test_public_research_prompt_requests_plain_text_cited_synthesis():
         "regional development banks",
         "ICRC",
         "IOM",
-        "official national government sources",
         "ReliefWeb",
     )
     for term in permitted_hierarchy:
@@ -1190,6 +1269,7 @@ def test_public_research_prompt_requests_plain_text_cited_synthesis():
     assert "public analytics" not in prompt
     assert "trusted media" not in prompt
     assert "licensed ACLED" in prompt
+    assert "official national government sources" not in prompt
 
 
 @pytest.mark.parametrize(
@@ -1270,13 +1350,12 @@ def test_public_research_prompt_requires_exact_modes_and_source_hierarchy():
         "focus on developments after its",
         "publication date",
         "Never call the output an RRA",
-            "Use only public sources from this permitted hierarchy",
-            "World Bank, UN entities, OECD, IMF",
-            "regional development banks",
-            "ICRC, IOM",
-            "official national government sources",
-            "ReliefWeb",
-            "licensed event-level data",
+        "Use only public sources from this permitted hierarchy",
+        "World Bank, UN entities, OECD, IMF",
+        "regional development banks",
+        "ICRC, IOM",
+        "ReliefWeb",
+        "licensed event-level data",
     ):
         assert term in prompt
 
@@ -1362,7 +1441,9 @@ def test_rejects_all_special_use_hostname_suffixes(source_url: str):
 
 
 def test_rejects_deprecated_ipv6_site_local_source_url():
-    retained, rejected = retain_public_claims((_claim(source_url="https://[fec0::1]/context-update"),))
+    retained, rejected = retain_public_claims(
+        (_claim(source_url="https://[fec0::1]/context-update"),)
+    )
 
     assert retained == ()
     assert rejected == {"claim-1": "public source URL is required"}

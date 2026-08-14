@@ -1,8 +1,10 @@
 from datetime import date, datetime
 from math import inf, nan
+from types import SimpleNamespace
 
 import pytest
 
+from cpf_fcv_reviewer import public_research
 from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.research_controller import (
     InsufficientResearch,
@@ -284,6 +286,82 @@ def test_duplicate_url_and_claim_id_are_not_accumulated():
     events = []
     with pytest.raises(InsufficientResearch):
         controller(gateway).run(holistic_request(), lambda *event: events.append(event))
+
+    assert any(data["rejected_count"] > 0 for kind, data in events if kind == "research_attempt")
+
+
+def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
+    source_url = "https://www.worldbank.org/same"
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Same update",
+                                url=source_url,
+                                page_age="2025-04-30",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text="The same source supports this context.",
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Same update",
+                                url=source_url,
+                                encrypted_index="0",
+                                cited_text="Source excerpt.",
+                            ),
+                        ),
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            claims = (
+                claim(
+                    "first",
+                    source_url="HTTPS://WWW.WORLDBANK.ORG:443/same/",
+                ).model_copy(
+                    update={
+                        "source_title": "Same update",
+                        "source_date": date(2025, 4, 30),
+                    }
+                ),
+                claim(
+                    "second",
+                    source_url="https://www.worldbank.org/same",
+                ).model_copy(
+                    update={
+                        "source_title": "Same update",
+                        "source_date": date(2025, 4, 30),
+                    }
+                ),
+            )
+            return SimpleNamespace(
+                parsed_output=public_research.ResearchClaimBatch(claims=claims)
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway("key", "model")
+    events = []
+
+    with pytest.raises(InsufficientResearch):
+        controller(gateway, max_attempts=2).run(
+            holistic_request(), lambda *event: events.append(event)
+        )
 
     assert any(data["rejected_count"] > 0 for kind, data in events if kind == "research_attempt")
 

@@ -12,7 +12,7 @@ The request will specify exactly one mode. Follow that mode and do not combine t
   is available. Never call the output an RRA.
 
 Use only public sources from this permitted hierarchy: World Bank, UN entities, OECD, IMF,
-regional development banks, ICRC, IOM, official national government sources, and ReliefWeb. Do
+regional development banks, ICRC, IOM, and ReliefWeb. Do
 not use licensed event-level data, including licensed ACLED data.
 
 Distinguish source-supported fact from interpretation, identify source dates, represent credible

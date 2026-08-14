@@ -192,22 +192,34 @@ _INSTITUTIONAL_PUBLISHER_HOSTS = {
     "the world bank": (("worldbank.org",), "World Bank"),
     "united nations development programme": (("undp.org",), "UNDP"),
     "undp": (("undp.org",), "UNDP"),
+    "un development programme": (("undp.org",), "UNDP"),
     "unhcr": (("unhcr.org",), "UNHCR"),
     "united nations high commissioner for refugees": (("unhcr.org",), "UNHCR"),
     "ocha": (("unocha.org",), "OCHA"),
     "office for the coordination of humanitarian affairs": (("unocha.org",), "OCHA"),
+    "united nations office for the coordination of humanitarian affairs": (
+        ("unocha.org",),
+        "OCHA",
+    ),
     "wfp": (("wfp.org",), "WFP"),
     "world food programme": (("wfp.org",), "WFP"),
     "who": (("who.int",), "WHO"),
     "world health organization": (("who.int",), "WHO"),
     "unicef": (("unicef.org",), "UNICEF"),
+    "united nations children s fund": (("unicef.org",), "UNICEF"),
     "unep": (("unep.org",), "UNEP"),
     "united nations environment programme": (("unep.org",), "UNEP"),
     "unodc": (("unodc.org",), "UNODC"),
+    "united nations office on drugs and crime": (("unodc.org",), "UNODC"),
     "undrr": (("undrr.org",), "UNDRR"),
+    "united nations office for disaster risk reduction": (("undrr.org",), "UNDRR"),
     "un women": (("unwomen.org",), "UN Women"),
     "unwomen": (("unwomen.org",), "UN Women"),
     "united nations": (("un.org",), "United Nations"),
+    "united nations entity for gender equality and the empowerment of women": (
+        ("unwomen.org",),
+        "UN Women",
+    ),
     "oecd": (("oecd.org",), "OECD"),
     "international monetary fund": (("imf.org",), "IMF"),
     "imf": (("imf.org",), "IMF"),
@@ -267,9 +279,7 @@ def _is_permitted_public_source(claim: CurrentContextClaim) -> bool:
         return False
 
     allowed_hosts = _publisher_host_allowlist(normalized_publisher)
-    if allowed_hosts and _host_matches(source_url, allowed_hosts):
-        return True
-    return _is_official_national_government(normalized_publisher, source_url)
+    return bool(allowed_hosts and _host_matches(source_url, allowed_hosts))
 
 
 def _normalize_text(value: str) -> str:
@@ -296,31 +306,6 @@ def _host_matches(url: str, allowed_hosts: tuple[str, ...]) -> bool:
     return bool(
         hostname
         and any(hostname == domain or hostname.endswith(f".{domain}") for domain in allowed_hosts)
-    )
-
-
-def _is_official_national_government(publisher: str, url: str) -> bool:
-    publisher_marker = any(
-        re.match(pattern, publisher)
-        for pattern in (
-            r"^government of ",
-            r"^ministry of ",
-            r"^republic of ",
-            r"^federal government of ",
-            r"^national statistics office$",
-            r"^national bureau of statistics$",
-        )
-    )
-    hostname = _hostname(url)
-    if not publisher_marker or hostname is None:
-        return False
-    if hostname.endswith(".gov"):
-        return True
-    labels = hostname.split(".")
-    return (
-        len(labels) >= 2
-        and labels[-2] in {"gov", "gouv", "go", "gob", "govt"}
-        and re.fullmatch(r"[a-z]{2}", labels[-1]) is not None
     )
 
 
@@ -429,7 +414,7 @@ class AnthropicPublicResearchGateway:
                 ],
                 output_format=ResearchClaimBatch,
             )
-        except (ValidationError, ValueError):
+        except ValidationError:
             salvaged = _salvage_grounded_segments(grounded_segments)
             if salvaged:
                 return salvaged
@@ -467,7 +452,7 @@ class AnthropicPublicResearchGateway:
 
 
 def _response_content(response: object) -> tuple[object, ...]:
-    content = getattr(response, "content", ())
+    content = _value(response, "content", ())
     if content is None:
         return ()
     return tuple(content)
@@ -675,7 +660,7 @@ def _validate_normalized_claims(
             continue
         if source.published_at is None or claim.source_date != source.published_at:
             continue
-        matched_claims.append(claim)
+        matched_claims.append(claim.model_copy(update={"source_url": source.url}))
 
     retained, _ = retain_public_claims(tuple(matched_claims))
     return retained
