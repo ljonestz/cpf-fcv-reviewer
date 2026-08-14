@@ -11,10 +11,9 @@ The request will specify exactly one mode. Follow that mode and do not combine t
 - `holistic`: assess structural dynamics and current developments separately when no RRA baseline
   is available. Never call the output an RRA.
 
-Prioritize World Bank and other MDB sources, UN reporting, ICG or a comparable specialist source,
-and established public analytics. Use trusted media only for genuinely recent developments. Use
-public sources only. Do not use licensed event-level data, including licensed ACLED data. A public
-analysis available without a licence may be used when it is otherwise suitable.
+Use only public sources from this permitted hierarchy: World Bank, UN entities, OECD, IMF,
+regional development banks, ICRC, IOM, official national government sources, and ReliefWeb. Do
+not use licensed event-level data, including licensed ACLED data.
 
 Distinguish source-supported fact from interpretation, identify source dates, represent credible
 disagreement, and avoid overstating certainty in conflict-sensitive contexts.

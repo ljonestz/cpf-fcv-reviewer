@@ -12,7 +12,7 @@ from typing import Literal, Protocol
 from urllib.parse import urlparse, urlunparse
 
 from anthropic import Anthropic
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, field_validator
 
 
 class CurrentContextClaim(BaseModel):
@@ -235,17 +235,14 @@ _DISALLOWED_SOURCE_MARKERS = (
     "licensed",
     "blog",
     "blogs",
-    "social",
     "social media",
     "user generated",
     "forum",
     "forums",
-    "community",
     "crowdsourced",
     "crowd sourced",
+    "personal website",
     "wikipedia",
-    "personal",
-    "profile",
 )
 
 _SOCIAL_MEDIA_HOSTS = {
@@ -432,7 +429,7 @@ class AnthropicPublicResearchGateway:
                 ],
                 output_format=ResearchClaimBatch,
             )
-        except Exception:
+        except (ValidationError, ValueError):
             salvaged = _salvage_grounded_segments(grounded_segments)
             if salvaged:
                 return salvaged
@@ -505,7 +502,7 @@ def _normalize_source_url(url: object) -> str | None:
         return value
 
     normalized_scheme = parsed.scheme.casefold()
-    netloc = hostname.casefold()
+    netloc = hostname.rstrip(".").casefold()
     if ":" in netloc:
         netloc = f"[{netloc}]"
     if port is not None and not (
@@ -646,9 +643,11 @@ def _extract_search_artifact(
         raise ValueError("Public research response contained no cited synthesis.")
 
     narrative = "\n".join(segment for segment, _ in grounded_segments)
-    return SearchArtifact(narrative=narrative, sources=tuple(sources.values())), tuple(
-        grounded_segments
-    )
+    resolved_urls = {
+        source.url for _, attached_sources in grounded_segments for source in attached_sources
+    }
+    resolved_sources = tuple(source for url, source in sources.items() if url in resolved_urls)
+    return SearchArtifact(narrative=narrative, sources=resolved_sources), tuple(grounded_segments)
 
 
 def _publisher_from_source(source: ResearchSource) -> str:
@@ -688,6 +687,8 @@ def _salvage_grounded_segments(
     claims: list[CurrentContextClaim] = []
     seen: set[tuple[str, str]] = set()
     for narrative, sources in grounded_segments:
+        if not _is_unambiguous_single_sentence(narrative):
+            continue
         for source in sources:
             if source.published_at is None:
                 continue
@@ -722,6 +723,10 @@ def _salvage_grounded_segments(
 
     retained, _ = retain_public_claims(tuple(claims))
     return retained
+
+
+def _is_unambiguous_single_sentence(text: str) -> bool:
+    return len(re.findall(r"[.!?](?=\s|$)", text.strip())) == 1
 
 
 def load_research_prompt() -> str:

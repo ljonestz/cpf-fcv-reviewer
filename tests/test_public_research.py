@@ -385,7 +385,7 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
     ]
 
 
-def test_anthropic_gateway_salvages_only_dated_cited_sentences_with_stable_ids(monkeypatch):
+def test_anthropic_gateway_does_not_salvage_mixed_sentence_cited_blocks(monkeypatch):
     source_url = "https://www.worldbank.org/dated-update"
 
     class FakeBetaMessages:
@@ -433,17 +433,8 @@ def test_anthropic_gateway_salvages_only_dated_cited_sentences_with_stable_ids(m
     monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
     gateway = public_research.AnthropicPublicResearchGateway("test-key", "test-model")
 
-    first = gateway.search("Use dated cited evidence.")
-    second = gateway.search("Use dated cited evidence.")
-
-    assert len(first) == 1
-    assert first == second
-    assert first[0].text == (
-        "The cited sentence is salvageable. This uncited sentence must be excluded."
-    )
-    assert first[0].source_date == date(2025, 4, 30)
-    assert first[0].source_url == source_url
-    assert first[0].claim_id.startswith("sha256:")
+    with pytest.raises(ValueError, match="no parsed output"):
+        gateway.search("Use dated cited evidence.")
 
 
 def test_anthropic_gateway_rejects_undated_sources_during_salvage(monkeypatch):
@@ -556,6 +547,23 @@ def test_retain_public_claims_rejects_nonpermitted_public_sources(
 
     assert retained == ()
     assert rejected == {"claim-1": "permitted institutional public source is required"}
+
+
+@pytest.mark.parametrize(
+    "source_title",
+    [
+        "Social Protection Update",
+        "Community Resilience Assessment",
+        "Benin Country Profile",
+    ],
+)
+def test_retain_public_claims_allows_institutional_titles_with_generic_words(source_title: str):
+    retained, rejected = retain_public_claims(
+        (_claim(source_title=source_title, source_url="https://www.worldbank.org/update"),)
+    )
+
+    assert len(retained) == 1
+    assert rejected == {}
 
 
 @pytest.mark.parametrize(
@@ -785,6 +793,9 @@ def test_canonical_source_urls_strip_default_ports_slashes_and_fragments():
         "http://www.worldbank.org:80/bound/"
     ) == "http://www.worldbank.org/bound"
     assert public_research._normalize_source_url(
+        "https://www.worldbank.org./bound"
+    ) == "https://www.worldbank.org/bound"
+    assert public_research._normalize_source_url(
         "https://www.worldbank.org/bound?q=1"
     ) != public_research._normalize_source_url("https://www.worldbank.org/bound?q=2")
 
@@ -837,6 +848,148 @@ def test_normalized_claims_must_match_retrieved_source_metadata(monkeypatch):
     assert result == (valid,)
 
 
+def test_uncited_retrieved_sources_are_unavailable_to_normalization(monkeypatch):
+    source_a = "https://www.worldbank.org/cited"
+    source_b = "https://www.worldbank.org/uncited"
+    claim_a = _claim(
+        claim_id="cited",
+        source_url=source_a,
+        source_title="Cited update",
+        source_date=date(2025, 4, 30),
+    )
+    claim_b = _claim(
+        claim_id="uncited",
+        source_url=source_b,
+        source_title="Uncited update",
+        source_date=date(2025, 4, 30),
+    )
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Cited update",
+                                url=source_a,
+                                page_age="2025-04-30",
+                            ),
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Uncited update",
+                                url=source_b,
+                                page_age="2025-04-30",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text="Only the cited source supports this narrative.",
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Cited update",
+                                url=source_a,
+                                encrypted_index="0",
+                                cited_text="Cited source excerpt.",
+                            ),
+                        ),
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            return SimpleNamespace(
+                parsed_output=public_research.ResearchClaimBatch(claims=(claim_a, claim_b))
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+    assert result == (claim_a,)
+
+
+def test_mapping_shaped_provider_blocks_are_extracted():
+    artifact, segments = public_research._extract_search_artifact(
+        (
+            {
+                "type": "web_search_tool_result",
+                "content": {
+                    "type": "web_search_result",
+                    "title": "Mapped update",
+                    "url": "https://www.worldbank.org/mapped",
+                    "page_age": "2025-04-30",
+                },
+            },
+            {
+                "type": "text",
+                "text": "Mapped cited narrative.",
+                "citations": [
+                    {
+                        "type": "web_search_result_location",
+                        "title": "Mapped update",
+                        "url": "https://www.worldbank.org/mapped",
+                        "encrypted_index": "0",
+                        "cited_text": "Mapped source excerpt.",
+                    }
+                ],
+            },
+        )
+    )
+
+    assert artifact.sources[0].title == "Mapped update"
+    assert artifact.narrative == "Mapped cited narrative."
+    assert segments[0][1] == artifact.sources
+
+
+def test_web_search_error_content_fails_safely_without_logging(caplog, monkeypatch):
+    error_message = "provider secret error details"
+    parse_called = False
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return {
+                "content": [
+                    {
+                        "type": "web_search_tool_result",
+                        "content": {
+                            "type": "web_search_tool_result_error",
+                            "error_code": "unavailable",
+                            "error_message": error_message,
+                        },
+                    }
+                ],
+                "stop_reason": "end_turn",
+            }
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            nonlocal parse_called
+            parse_called = True
+            return SimpleNamespace(parsed_output=None)
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    caplog.set_level("DEBUG")
+
+    with pytest.raises(ValueError, match="no cited synthesis"):
+        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+    assert not parse_called
+    assert error_message not in caplog.text
+
+
 def test_invalid_normalized_claims_fall_back_to_block_level_salvage(monkeypatch):
     source_url = "https://www.worldbank.org/fallback"
     source_title = "Fallback update"
@@ -887,7 +1040,7 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     class FakeMessages:
         def parse(self, **kwargs):
-            raise RuntimeError("normalization failed")
+            raise ValueError("normalization failed")
 
     fake_client = SimpleNamespace(
         beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
@@ -898,6 +1051,31 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     assert len(result) == 1
     assert result[0].text == "The grounded narrative."
+
+
+def test_provider_runtime_error_propagates_without_salvage(monkeypatch):
+    class ProviderError(RuntimeError):
+        pass
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return _cited_response(
+                source_url="https://www.worldbank.org/provider-error",
+                source_title="Provider error update",
+                page_age="2025-04-30",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            raise ProviderError("provider permission denied")
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+
+    with pytest.raises(ProviderError, match="provider permission denied"):
+        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
 
 def test_normalization_exception_is_reraised_when_salvage_is_empty(monkeypatch):
@@ -995,6 +1173,24 @@ def test_public_research_prompt_requests_plain_text_cited_synthesis():
         assert term in prompt
     assert "strict JSON array only" not in prompt
 
+    permitted_hierarchy = (
+        "World Bank",
+        "UN entities",
+        "OECD",
+        "IMF",
+        "regional development banks",
+        "ICRC",
+        "IOM",
+        "official national government sources",
+        "ReliefWeb",
+    )
+    for term in permitted_hierarchy:
+        assert term in prompt
+    assert "ICG" not in prompt
+    assert "public analytics" not in prompt
+    assert "trusted media" not in prompt
+    assert "licensed ACLED" in prompt
+
 
 @pytest.mark.parametrize(
     "source_url",
@@ -1074,12 +1270,13 @@ def test_public_research_prompt_requires_exact_modes_and_source_hierarchy():
         "focus on developments after its",
         "publication date",
         "Never call the output an RRA",
-        "World Bank and other MDB sources",
-        "UN reporting",
-        "ICG or a comparable specialist source",
-        "established public analytics",
-        "trusted media only for genuinely recent developments",
-        "Do not use licensed event-level data",
+            "Use only public sources from this permitted hierarchy",
+            "World Bank, UN entities, OECD, IMF",
+            "regional development banks",
+            "ICRC, IOM",
+            "official national government sources",
+            "ReliefWeb",
+            "licensed event-level data",
     ):
         assert term in prompt
 
