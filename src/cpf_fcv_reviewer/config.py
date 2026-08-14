@@ -10,6 +10,8 @@ def build_config(overrides: dict | None = None) -> dict:
     overrides = overrides or {}
     config = {
         "APP_RELEASE": os.getenv("APP_RELEASE", "dev"),
+        "APP_ENV": os.getenv("APP_ENV", "production"),
+        "SMOKE_MODE": os.getenv("SMOKE_MODE", False),
         "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY", ""),
         "ANTHROPIC_MODEL_ID": os.getenv("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
         "REGISTRY_BUNDLE_PATH": os.getenv("REGISTRY_BUNDLE_PATH", ""),
@@ -46,6 +48,13 @@ def build_config(overrides: dict | None = None) -> dict:
         "TESTING": False,
     }
     config.update(overrides or {})
+    if not isinstance(config["APP_ENV"], str) or not config["APP_ENV"].strip():
+        raise ValueError("APP_ENV must be a nonblank string.")
+    config["APP_ENV"] = config["APP_ENV"].strip().casefold()
+    if type(config["SMOKE_MODE"]) is not bool:
+        raise ValueError("SMOKE_MODE must be a boolean.")
+    if config["SMOKE_MODE"] and config["APP_ENV"] != "development":
+        raise RuntimeError("SMOKE_MODE is development only.")
     for name in (
         "RESEARCH_MAX_ATTEMPTS",
         "RESEARCH_MINIMUM_CLAIMS",
@@ -80,6 +89,6 @@ def build_config(overrides: dict | None = None) -> dict:
         raise ValueError("RELIEFWEB_APP_NAME cannot contain control characters.")
     config["RELIEFWEB_APP_NAME"] = config["RELIEFWEB_APP_NAME"].strip()
     config["ANTHROPIC_API_KEY"] = config["ANTHROPIC_API_KEY"].strip()
-    if not config["TESTING"] and not config["ANTHROPIC_API_KEY"]:
+    if not config["TESTING"] and not config["ANTHROPIC_API_KEY"] and not config["SMOKE_MODE"]:
         raise RuntimeError("ANTHROPIC_API_KEY is required outside tests.")
     return config

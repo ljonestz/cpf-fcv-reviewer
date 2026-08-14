@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from cpf_fcv_reviewer.app import create_app
 
 
@@ -41,6 +43,17 @@ def test_production_rejects_whitespace_only_api_key():
         assert str(exc) == "ANTHROPIC_API_KEY is required outside tests."
     else:
         raise AssertionError("create_app must reject a whitespace-only API key")
+
+
+def test_normal_create_app_cannot_enable_smoke_mode_directly():
+    with pytest.raises(RuntimeError, match="create_smoke_app"):
+        create_app(
+            {
+                "TESTING": True,
+                "APP_ENV": "development",
+                "SMOKE_MODE": True,
+            }
+        )
 
 
 def test_session_ttl_override_skips_malformed_environment_value(monkeypatch):
