@@ -256,6 +256,10 @@ class ResearchController:
                     self._merge_claims(
                         recovery_claims, accepted, accepted_urls, rejected
                     )
+            finally:
+                budget_exhausted = budget_exhausted or (
+                    self.monotonic() - started >= self.total_budget_seconds
+                )
             if recovery_succeeded:
                 last_missing = self._missing_coverage(tuple(accepted.values()), request)
                 emit("research_curated_recovery", {"accepted_count": len(accepted)})

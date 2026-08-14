@@ -218,6 +218,83 @@ def test_recovery_is_bounded_and_late_claims_are_not_accepted():
     assert result.claims == (primary,)
 
 
+@pytest.mark.parametrize("allow_document_led", [False, True])
+def test_late_empty_recovery_raises_timeout_even_with_document_led_opt_in(
+    allow_document_led,
+):
+    now = [0.0]
+    events = []
+
+    def finish_after_deadline(timeout_seconds):
+        now[0] += timeout_seconds + 0.01
+
+    recovery = ScriptedRecoveryGateway((), on_search=finish_after_deadline)
+
+    with pytest.raises(ResearchTimeout, match="budget"):
+        controller(
+            ScriptedGateway(((),)),
+            recovery_gateway=recovery,
+            max_attempts=1,
+            total_budget_seconds=1.0,
+            monotonic=lambda: now[0],
+        ).run(
+            holistic_request(),
+            lambda kind, data: events.append((kind, data)),
+            allow_document_led=allow_document_led,
+        )
+
+    assert recovery.calls == 1
+    _assert_events_are_privacy_safe(events)
+
+
+def test_late_all_rejected_recovery_raises_timeout():
+    now = [0.0]
+    events = []
+    rejected = claim("licensed").model_copy(update={"licensed_data_required": True})
+
+    def finish_after_deadline(timeout_seconds):
+        now[0] += timeout_seconds + 0.01
+
+    recovery = ScriptedRecoveryGateway((rejected,), on_search=finish_after_deadline)
+
+    with pytest.raises(ResearchTimeout, match="budget"):
+        controller(
+            ScriptedGateway(((),)),
+            recovery_gateway=recovery,
+            max_attempts=1,
+            total_budget_seconds=1.0,
+            monotonic=lambda: now[0],
+        ).run(
+            holistic_request(), lambda kind, data: events.append((kind, data))
+        )
+
+    assert recovery.calls == 1
+    _assert_events_are_privacy_safe(events)
+
+
+def test_primary_recent_evidence_precedes_late_recovery_timeout():
+    now = [0.0]
+    events = []
+    primary = claim("primary-recent")
+
+    def finish_after_deadline(timeout_seconds):
+        now[0] += timeout_seconds + 0.01
+
+    recovery = ScriptedRecoveryGateway((), on_search=finish_after_deadline)
+    result = controller(
+        ScriptedGateway(((primary,),)),
+        recovery_gateway=recovery,
+        max_attempts=1,
+        total_budget_seconds=1.0,
+        monotonic=lambda: now[0],
+    ).run(holistic_request(), lambda kind, data: events.append((kind, data)))
+
+    assert recovery.calls == 1
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert result.claims == (primary,)
+    _assert_events_are_privacy_safe(events)
+
+
 def test_provider_failure_and_recovery_failure_preserve_primary_exception():
     with pytest.raises(ResearchTimeout):
         controller(
@@ -682,6 +759,12 @@ def test_events_are_count_only():
         )
 
     forbidden = ("Benin", "Risk", "Claim", "https://", "prompt")
+    for _, data in events:
+        assert not any(value in str(data) for value in forbidden)
+
+
+def _assert_events_are_privacy_safe(events):
+    forbidden = ("Benin", "Risk", "Claim", "https://", "prompt", "licensed")
     for _, data in events:
         assert not any(value in str(data) for value in forbidden)
 
