@@ -82,15 +82,37 @@
     </section>
 
     <section id="review-workspace" hidden aria-label="Review workspace">
-      <section id="progress" hidden>
-        <p class="eyebrow">REVIEW IN PROGRESS</p>
-        <h2>Preparing your CPF review note</h2>
+      <section id="progress" hidden aria-labelledby="progress-title">
+        <p id="progress-kicker" class="eyebrow">BUILDING YOUR FCV REVIEW</p>
+        <div class="progress-heading">
+          <div>
+            <p id="progress-country" class="progress-country"></p>
+            <h2 id="progress-title">Building your FCV review</h2>
+          </div>
+          <p class="journey-timing" aria-label="Review timing">
+            <span id="elapsed-time">0:00 elapsed</span>
+            <span id="remaining-time">About 4-11 minutes remaining</span>
+          </p>
+        </div>
         <ol id="progress-steps" class="progress-steps" aria-label="Review progress">
-          <li data-progress-step="documents">Reading the CPF package</li>
-          <li data-progress-step="research">Checking current FCV dynamics</li>
-          <li data-progress-step="note">Preparing the review note</li>
+          <li class="progress-stage" data-progress-step="documents">
+            <span class="progress-stage-label">Reading documents</span>
+            <span class="progress-stage-status" data-progress-status>Waiting</span>
+          </li>
+          <li class="progress-stage" data-progress-step="research">
+            <span class="progress-stage-label">Establishing current country evidence</span>
+            <span class="progress-stage-status" data-progress-status>Waiting</span>
+          </li>
+          <li class="progress-stage" data-progress-step="note">
+            <span class="progress-stage-label">Drafting and validating the review</span>
+            <span class="progress-stage-status" data-progress-status>Waiting</span>
+          </li>
         </ol>
         <p id="progress-message" role="status" aria-live="polite"></p>
+        <aside id="while-we-work" aria-live="off" aria-labelledby="while-we-work-title">
+          <h3 id="while-we-work-title">While we work</h3>
+          <p id="guidance-card" class="guidance-card"></p>
+        </aside>
       </section>
       <section id="research-recovery" hidden aria-labelledby="research-recovery-heading">
         <p class="eyebrow">RESEARCH UNAVAILABLE</p>
@@ -111,6 +133,10 @@
             <button id="reset-review" class="button-secondary" type="button">Start a new review</button>
           </nav>
         </header>
+        <aside id="evidence-status" role="status" aria-labelledby="evidence-status-label">
+          <strong id="evidence-status-label"></strong>
+          <span id="evidence-status-limitation"></span>
+        </aside>
         <div class="result-tabs" role="tablist" aria-label="Review result views">
           <button id="result-tab-summary" role="tab" aria-selected="true" aria-controls="summary-panel" tabindex="0" data-result-view="summary" type="button">Five-minute readout</button>
           <button id="result-tab-detailed" role="tab" aria-selected="false" aria-controls="detailed-panel" tabindex="-1" data-result-view="detailed" type="button">Detailed analysis</button>

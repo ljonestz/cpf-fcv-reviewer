@@ -90,15 +90,42 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .evidence-locator { overflow-wrap: anywhere; }
 .evidence-excerpt { max-width: 78ch; }
 .coverage-primary, .coverage-package, .coverage-context, .coverage-note { max-width: 78ch; }
-.progress-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0; list-style: none; }
-.progress-steps li { padding: 14px; border: 1px solid var(--rule); border-radius: 8px; color: var(--muted); font-weight: 700; }
-.progress-steps li.is-active { border-color: var(--cyan); background: var(--blue-soft); color: var(--navy); box-shadow: inset 0 3px 0 var(--cyan); }
+.progress-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 30px 0 20px; padding: 0; list-style: none; }
+.progress-stage { position: relative; min-height: 112px; padding: 18px; border: 1px solid var(--rule); border-radius: 10px; color: var(--muted); font-weight: 700; transition: border-color .2s ease, background .2s ease, color .2s ease, transform .2s ease; }
+.progress-stage::before { display: block; width: 10px; height: 10px; margin-bottom: 14px; border-radius: 50%; background: var(--rule); content: ""; transition: background .2s ease, box-shadow .2s ease; }
+.progress-stage.is-active { border-color: var(--cyan); background: var(--blue-soft); color: var(--navy); box-shadow: inset 0 3px 0 var(--cyan); transform: translateY(-2px); }
+.progress-stage.is-active::before { background: var(--cyan); box-shadow: 0 0 0 5px rgba(0, 184, 217, .14); animation: progress-pulse 2.5s ease-in-out infinite; }
+.progress-stage.is-complete { border-color: #a8d9e5; color: var(--navy); }
+.progress-stage.is-complete::before { background: var(--blue); }
+.progress-stage-status { display: block; margin-top: 7px; color: var(--muted); font-size: .82rem; font-weight: 600; }
+.progress-stage.is-active .progress-stage-status { color: var(--navy); }
+.progress-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+.progress-heading h2 { margin: 0; }
+.progress-country { margin: 0 0 4px; color: var(--muted); font-weight: 700; }
+.journey-timing { display: flex; flex-direction: column; align-items: end; gap: 3px; margin: 0; color: var(--muted); font-size: .9rem; text-align: right; }
+.journey-timing span:first-child { color: var(--navy); font-size: 1.05rem; font-weight: 700; }
+#progress { min-height: min(680px, calc(100vh - 150px)); display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
 #progress-message { margin-bottom: 0; color: var(--navy); font-weight: 700; }
+#while-we-work { margin-top: 28px; padding: 18px 20px; border-left: 4px solid var(--cyan); background: var(--blue-soft); }
+#while-we-work h3 { margin: 0 0 4px; font-size: 1rem; }
+.guidance-card { min-height: 1.6em; margin: 0; color: var(--navy); animation: guidance-in .3s ease both; }
+.progress-steps li:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+@keyframes progress-pulse { 0%, 100% { box-shadow: 0 0 0 5px rgba(0, 184, 217, .12); } 50% { box-shadow: 0 0 0 8px rgba(0, 184, 217, .03); } }
+@keyframes guidance-in { from { opacity: .55; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+#evidence-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin: 18px 0 0; padding: 12px 14px; border-left: 4px solid var(--cyan); background: var(--blue-soft); color: var(--navy); }
+#evidence-status-limitation { color: var(--muted); }
 #research-recovery { border-left: 4px solid var(--blue); }
 #research-recovery h2 { margin-top: 0; }
 #research-recovery-message { max-width: 72ch; }
+@media (prefers-reduced-motion: reduce) {
+  .progress-stage, .progress-stage::before, .guidance-card { animation: none; transition: none; }
+}
 @media (max-width: 760px) {
   .upload-zones, .steps, .field-grid, .progress-steps { grid-template-columns: 1fr; }
+  #progress { min-height: auto; }
+  .progress-heading { display: block; }
+  .journey-timing { align-items: start; margin-top: 18px; text-align: left; }
+  .progress-stage { min-height: auto; }
   .form-heading { display: block; }
   .result-header { display: block; }
   #actions { align-items: stretch; flex-direction: column; }

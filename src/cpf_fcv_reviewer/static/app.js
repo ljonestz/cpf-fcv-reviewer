@@ -5,6 +5,11 @@ const reviewWorkspace = document.querySelector("#review-workspace");
 const progress = document.querySelector("#progress");
 const progressMessage = document.querySelector("#progress-message") || progress;
 const progressSteps = Array.from(document.querySelectorAll?.("[data-progress-step]") || []);
+const progressStatusSlots = Array.from(document.querySelectorAll?.("[data-progress-status]") || []);
+const progressCountry = document.querySelector("#progress-country") || document.createElement("p");
+const elapsedTime = document.querySelector("#elapsed-time") || document.createElement("span");
+const remainingTime = document.querySelector("#remaining-time") || document.createElement("span");
+const guidanceCard = document.querySelector("#guidance-card") || document.createElement("p");
 const results = document.querySelector("#results");
 const resultTitle = document.querySelector("#result-title") || document.createElement("h2");
 const resultContext = document.querySelector("#result-context") || document.createElement("p");
@@ -27,6 +32,9 @@ const openProcessDialog = document.querySelector("#open-process-dialog");
 const closeProcessDialog = document.querySelector("#close-process-dialog");
 const submitCorrection = document.querySelector("#submit-correction");
 const resetReviewButton = document.querySelector("#reset-review");
+const evidenceStatus = document.querySelector("#evidence-status") || document.createElement("aside");
+const evidenceStatusLabel = document.querySelector("#evidence-status-label") || document.createElement("strong");
+const evidenceStatusLimitation = document.querySelector("#evidence-status-limitation") || document.createElement("span");
 let assessmentId = sessionStorage.getItem("cpf_fcv_assessment_id") || "";
 let activeEventSource;
 let operationEpoch = 0;
@@ -45,27 +53,45 @@ const retryableResearchCodes = new Set([
   "research_insufficient",
 ]);
 
+const stageOrder = ["documents", "research", "note"];
+const stageEstimates = {
+  documents: [45, 120],
+  research: [90, 300],
+  note: [90, 240],
+};
+const guidanceCards = [
+  "Strong FCV reviews connect context, design choices, delivery arrangements, and results.",
+  "A useful recommendation identifies both the change and where it belongs in the draft.",
+  "Uploaded diagnostics and independently retrieved evidence remain clearly separated.",
+];
+
 const progressLabels = {
-  extract: "Reading the CPF package",
-  resolve_sources: "Establishing the diagnostic baseline",
-  research: "Checking current FCV dynamics",
-  build_evidence: "Organizing traceable evidence",
-  map: "Mapping the RRA and FCV Strategy response",
-  review: "Drafting the detailed review note",
-  validate: "Checking the note and evidence links",
+  extract: "Reading the submitted documents",
+  resolve_sources: "Selecting the submitted evidence",
+  research: "Checking recent public country evidence",
+  build_evidence: "Cross-checking evidence across institutional sources",
+  map: "Connecting evidence to the review focus",
+  review: "Drafting findings and practical options",
+  validate: "Validating the review and evidence links",
   render: "Preparing the final readout",
-  research_attempt: "Checking trusted public sources",
-  research_retry: "Trying another trusted research route",
-  research_sufficient: "Current FCV context established",
+  research_attempt: "Checking recent public country evidence",
+  research_retry: "Working from available country evidence",
+  research_sufficient: "Current country evidence established",
+  research_reduced: "Current country evidence partially established",
+  research_document_led: "Working from the submitted evidence",
+  research_curated_recovery: "Cross-checking available institutional evidence",
 };
 
-const progressGroups = {
+const sseStageMap = {
   extract: "documents",
   resolve_sources: "documents",
   research: "research",
   research_attempt: "research",
   research_retry: "research",
   research_sufficient: "research",
+  research_reduced: "research",
+  research_document_led: "research",
+  research_curated_recovery: "research",
   build_evidence: "note",
   map: "note",
   review: "note",
@@ -73,17 +99,120 @@ const progressGroups = {
   render: "note",
 };
 
-function updateProgress(stage) {
-  const group = progressGroups[stage];
-  for (const item of progressSteps) {
-    item.classList.toggle("is-active", item.dataset.progressStep === group);
+const evidenceStatusLabels = {
+  full: "Current evidence established",
+  reduced: "Current evidence partially established",
+  document_led: "Review based primarily on submitted documents",
+};
+
+let journeyStartedAt;
+let journeyStageStartedAt;
+let journeyCurrentStage = "documents";
+let journeyClock;
+let guidanceRotation;
+let guidanceIndex = 0;
+
+function formatElapsed(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}
+
+function approximateMinutes(seconds) {
+  return Math.max(1, Math.ceil(seconds / 60));
+}
+
+function updateJourneyClock() {
+  if (!journeyStartedAt) return;
+  const currentTime = performance.now();
+  const elapsedSeconds = Math.max(0, (currentTime - journeyStartedAt) / 1000);
+  const stageIndex = stageOrder.indexOf(journeyCurrentStage);
+  const currentStageElapsed = Math.max(0, (currentTime - journeyStageStartedAt) / 1000);
+  const remaining = stageOrder.slice(Math.max(0, stageIndex)).reduce(
+    (range, stage, index) => {
+      const [minimum, maximum] = stageEstimates[stage];
+      if (index === 0) {
+        return [
+          range[0] + Math.max(1, minimum - currentStageElapsed),
+          range[1] + Math.max(1, maximum - currentStageElapsed),
+        ];
+      }
+      return [range[0] + minimum, range[1] + maximum];
+    },
+    [0, 0],
+  );
+  const minimumMinutes = approximateMinutes(remaining[0]);
+  const maximumMinutes = Math.max(minimumMinutes, approximateMinutes(remaining[1]));
+  elapsedTime.textContent = `${formatElapsed(elapsedSeconds)} elapsed`;
+  remainingTime.textContent = `About ${minimumMinutes}-${maximumMinutes} minutes remaining`;
+}
+
+function rotateGuidanceCard() {
+  guidanceCard.textContent = guidanceCards[guidanceIndex % guidanceCards.length];
+  guidanceIndex += 1;
+}
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function startJourneyClock() {
+  stopJourneyClock();
+  journeyStartedAt = performance.now();
+  journeyStageStartedAt = journeyStartedAt;
+  journeyCurrentStage = "documents";
+  guidanceIndex = 0;
+  rotateGuidanceCard();
+  updateJourneyClock();
+  if (!prefersReducedMotion()) {
+    guidanceRotation = window.setInterval?.(rotateGuidanceCard, 8000);
   }
-  progressMessage.textContent = progressLabels[stage] || "Preparing the review note";
+  journeyClock = window.setInterval?.(updateJourneyClock, 1000);
+}
+
+function stopJourneyClock() {
+  if (journeyClock !== undefined) window.clearInterval?.(journeyClock);
+  if (guidanceRotation !== undefined) window.clearInterval?.(guidanceRotation);
+  journeyClock = undefined;
+  guidanceRotation = undefined;
+  journeyStartedAt = undefined;
+  journeyStageStartedAt = undefined;
+}
+
+function updateProgress(stage) {
+  const group = sseStageMap[stage];
+  if (!group) return;
+  if (journeyCurrentStage !== group) {
+    journeyCurrentStage = group;
+    journeyStageStartedAt = performance.now();
+  }
+  const activeIndex = stageOrder.indexOf(group);
+  for (const [index, item] of progressSteps.entries()) {
+    const isComplete = index < activeIndex;
+    const isActive = index === activeIndex;
+    item.classList.toggle("is-complete", isComplete);
+    item.classList.toggle("is-active", isActive);
+    if (isActive) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+    const status = progressStatusSlots[index];
+    if (status) status.textContent = isComplete ? "Complete" : isActive ? "In progress" : "Waiting";
+  }
+  progressMessage.textContent = progressLabels[stage] || "Building the review";
+  updateJourneyClock();
 }
 
 function resetProgress() {
+  stopJourneyClock();
   progressMessage.textContent = "";
-  for (const item of progressSteps) item.classList.remove("is-active");
+  for (const [index, item] of progressSteps.entries()) {
+    item.classList.remove("is-active", "is-complete");
+    item.removeAttribute("aria-current");
+    const status = progressStatusSlots[index];
+    if (status) status.textContent = "Waiting";
+  }
+  elapsedTime.textContent = "0:00 elapsed";
+  remainingTime.textContent = "About 4-11 minutes remaining";
 }
 
 const failureLabels = {
@@ -94,6 +223,7 @@ const failureLabels = {
 };
 
 function showLanding(notice = "") {
+  stopJourneyClock();
   landingView.hidden = false;
   reviewWorkspace.hidden = true;
   returnToIntake.hidden = true;
@@ -104,6 +234,7 @@ function showLanding(notice = "") {
 }
 
 function showProgress() {
+  stopJourneyClock();
   landingView.hidden = true;
   landingNotice.hidden = true;
   reviewWorkspace.hidden = false;
@@ -114,10 +245,15 @@ function showProgress() {
   returnToIntake.hidden = true;
   researchRecovery.hidden = true;
   retryResearchButton.hidden = true;
+  progressCountry.textContent = countryInput?.value?.trim()
+    ? `For ${countryInput.value.trim()}`
+    : "For the selected country";
+  startJourneyClock();
   updateProgress("extract");
 }
 
 function showResults() {
+  stopJourneyClock();
   landingView.hidden = true;
   reviewWorkspace.hidden = false;
   progress.hidden = true;
@@ -132,6 +268,7 @@ function showResults() {
 
 function showRecoverableFailure(message) {
   showProgress();
+  stopJourneyClock();
   resetProgress();
   progressMessage.textContent = message;
   retryResearchButton.hidden = true;
@@ -141,6 +278,7 @@ function showRecoverableFailure(message) {
 
 function showResearchFailure(message) {
   showProgress();
+  stopJourneyClock();
   resetProgress();
   progress.hidden = true;
   researchRecoveryMessage.textContent = message;
@@ -487,6 +625,15 @@ for (const tab of resultTabs) {
   tab.addEventListener("keydown", handleResultTabKeydown);
 }
 
+function renderEvidenceStatus(result) {
+  const label = evidenceStatusLabels[result.metadata?.current_evidence_tier];
+  const limitation = result.metadata?.current_evidence_limitation;
+  evidenceStatusLabel.textContent = label || "";
+  evidenceStatusLimitation.textContent = limitation || "";
+  evidenceStatusLimitation.hidden = !limitation;
+  evidenceStatus.hidden = !label;
+}
+
 function renderResult(result) {
   if (summaryPanel === detailedPanel) {
     results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysis(result));
@@ -500,6 +647,7 @@ function renderResult(result) {
   const stage = reviewStage ? ` · ${reviewStage.replaceAll("_", " ")}` : "";
   resultTitle.textContent = `${country} ${documentType} FCV review`;
   resultContext.textContent = `${result.document_coverage.primary_document}${stage}`;
+  renderEvidenceStatus(result);
   setResultView("summary");
   showResults();
   resultTitle.focus({preventScroll: true});
@@ -545,10 +693,16 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
   let sourceErrors = 0;
   source.addEventListener("step_start", (event) => {
     if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
-    const data = JSON.parse(event.data);
-    updateProgress(data.step);
+    const step = JSON.parse(event.data).step;
+    if (typeof step === "string" && sseStageMap[step]) updateProgress(step);
   });
   for (const eventName of ["research_attempt", "research_retry", "research_sufficient"]) {
+    source.addEventListener(eventName, () => {
+      if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
+      updateProgress(eventName);
+    });
+  }
+  for (const eventName of ["research_reduced", "research_document_led", "research_curated_recovery"]) {
     source.addEventListener(eventName, () => {
       if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
       updateProgress(eventName);
@@ -706,6 +860,10 @@ async function resetReview() {
   }
   resultContext.textContent = "";
   resultTitle.textContent = "CPF / CEN FCV review";
+  evidenceStatusLabel.textContent = "";
+  evidenceStatusLimitation.textContent = "";
+  evidenceStatus.hidden = true;
+  stopJourneyClock();
   resetProgress();
   form.reset();
   clearCountryCorrection();

@@ -282,13 +282,78 @@ def test_task9_progress_has_semantic_stages_and_live_message():
     assert '<ol id="progress-steps"' in html
     assert 'aria-label="Review progress"' in html
     for step, label in (
-        ("documents", "Reading the CPF package"),
-        ("research", "Checking current FCV dynamics"),
-        ("note", "Preparing the review note"),
+        ("documents", "Reading documents"),
+        ("research", "Establishing current country evidence"),
+        ("note", "Drafting and validating the review"),
     ):
         assert f'data-progress-step="{step}"' in html
         assert label in html
     assert 'id="progress-message" role="status" aria-live="polite"' in html
+
+
+def test_guided_journey_has_stage_timing_and_rotating_guidance():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    for fragment in (
+        'id="progress-kicker"',
+        'id="elapsed-time"',
+        'id="remaining-time"',
+        'id="while-we-work"',
+        'id="guidance-card"',
+    ):
+        assert fragment in html
+    assert html.count('data-progress-step="') == 3
+    for fragment in (
+        "const stageEstimates",
+        "const guidanceCards",
+        "function startJourneyClock",
+        "function updateJourneyClock",
+        "function stopJourneyClock",
+        "function rotateGuidanceCard",
+        "performance.now()",
+        'matchMedia("(prefers-reduced-motion: reduce)")',
+    ):
+        assert fragment in javascript
+
+
+def test_progress_events_never_render_backend_payload_text():
+    javascript = JS.read_text(encoding="utf-8")
+
+    for unsafe in (
+        "data.claim",
+        "data.source",
+        "data.prompt",
+        "data.reason",
+        "data.missing_coverage",
+        "${data.step}",
+    ):
+        assert unsafe not in javascript
+    for fragment in (
+        "const sseStageMap",
+        "is-complete",
+        "is-active",
+        "clearInterval",
+        "evidenceStatusLabels",
+        "current_evidence_tier",
+        "current_evidence_limitation",
+    ):
+        assert fragment in javascript
+
+
+def test_result_has_static_evidence_status_region():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'id="evidence-status"' in html
+    assert 'id="evidence-status-label"' in html
+    assert 'id="evidence-status-limitation"' in html
+    for label in (
+        "Current evidence established",
+        "Current evidence partially established",
+        "Review based primarily on submitted documents",
+    ):
+        assert label in javascript
 
 
 def test_task9_progress_mapping_uses_safe_labels_and_omits_backend_content():

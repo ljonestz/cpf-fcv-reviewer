@@ -58,6 +58,34 @@ def test_failure_and_reset_are_recoverable_and_keep_review_states_separate():
     assert "landingNotice.hidden = !notice" in javascript
 
 
+def test_guided_journey_cleanup_is_wired_to_existing_lifecycle_boundaries():
+    javascript = JS.read_text(encoding="utf-8")
+
+    for function_name in (
+        "showResults",
+        "showRecoverableFailure",
+        "showResearchFailure",
+        "resetReview",
+    ):
+        start = javascript.index(f"function {function_name}")
+        end = javascript.index("\n}\n", start)
+        assert "stopJourneyClock()" in javascript[start:end]
+    assert "activeEventSource?.close();" in javascript
+    assert "operationEpoch" in javascript
+
+
+def test_progress_status_uses_allowlisted_event_names_only():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'source.addEventListener("step_start"' in javascript
+    assert 'source.addEventListener("run_complete"' in javascript
+    assert 'source.addEventListener("run_failed"' in javascript
+    assert 'source.addEventListener("expired"' in javascript
+    assert "JSON.parse(event.data).step" in javascript
+    assert "data.error" in javascript
+    assert "event.data" in javascript
+
+
 def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_clicks():
     harness = textwrap.dedent(
         """

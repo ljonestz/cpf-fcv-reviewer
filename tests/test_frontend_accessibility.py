@@ -106,3 +106,25 @@ def test_mobile_result_tabs_stay_horizontal_for_left_right_navigation():
 
     assert "#actions, .result-tabs" not in mobile
     assert ".result-tabs { flex-wrap: wrap; }" in mobile
+
+
+def test_guided_journey_has_live_regions_and_reduced_motion_support():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+    css = CSS.read_text(encoding="utf-8")
+
+    assert 'id="progress" hidden aria-labelledby="progress-title"' in html
+    assert 'id="progress-message" role="status" aria-live="polite"' in html
+    assert 'id="while-we-work" aria-live="off"' in html
+    assert 'id="evidence-status" role="status"' in html
+    assert "aria-current" in javascript
+    assert ".progress-stage" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
+    assert ".progress-stage, .progress-stage::before, .guidance-card" in css
+
+
+def test_guided_journey_focus_styles_are_visible():
+    css = CSS.read_text(encoding="utf-8")
+
+    assert ":focus-visible" in css
+    assert ".progress-steps li:focus-visible" in css
