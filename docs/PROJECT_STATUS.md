@@ -1,6 +1,6 @@
 # Project status
 
-Updated 2026-08-13. The advisory CPF FCV Reviewer MVP is on `feat/mvp-review-run`; latest functional commit: `b749948`. Semantic application version is `0.1.0`.
+Updated 2026-08-15. The advisory CPF FCV Reviewer MVP is on `fix/research-resilience-guided-journey`; latest verified local commit: `a76a27d`. Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Its health endpoint reported `ok` with `volatile` storage. The Render health release label `4acca30` is stale: it is neither the Git commit nor the application version.
 
@@ -16,13 +16,14 @@ Latest verified suite on 2026-08-13: 458 passed in 5.83s; Ruff clean; `git diff 
 - Structured model output, application-owned metadata, one bounded repair attempt, safe failure codes, and prohibited-language validation.
 - Supporting-PDF extraction is bounded while the primary CPF remains fully extracted.
 - Deterministic synthetic early-drafting, decision-review, and finalization quality cases passed as part of the automated suite. These are not a substitute for approved-material reference evaluation.
+- Guided review journey browser QA passed at 1280px and 390px using the deterministic local smoke server and the Benin test base. The final result view hides the progress panel, preserves the evidence-status label, and triggers the DOCX download without horizontal overflow.
 
 ## Remaining considerations
 
 1. Update Render's stale `APP_RELEASE` deployment label so `/health` identifies the deployed Git commit accurately; deployment state was not changed in this session.
 2. Keep the approved public registry current, versioned, checksummed, and non-confidential.
 3. Keep any internal OPCS/ITS implementation in a separate governed track; do not expand the public bundle with internal policy detail.
-4. Rerun and record validation after material model, prompt, registry, extraction, deployment, or UI changes. Approved-material reference evaluation remains unavailable in this session because the required environment variables are absent.
+4. Rerun and record validation after material model, prompt, registry, extraction, deployment, or UI changes. The 2026-08-15 browser validation is recorded in `docs/validation/2026-08-15-guided-journey-benin-browser-qa.md`. Approved-material reference evaluation remains unavailable because the local smoke server uses deterministic synthetic output and the required provider environment variables are absent.
 5. Production use would require separately approved identity, retention, audit, monitoring, authoritative source access, and information-security controls.
 
 ## Future-session checklist
