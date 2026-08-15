@@ -5,6 +5,7 @@ from cpf_fcv_reviewer.app import create_app
 
 HTML = Path("src/cpf_fcv_reviewer/templates/index.html")
 JS = Path("src/cpf_fcv_reviewer/static/app.js")
+CSS = Path("src/cpf_fcv_reviewer/static/styles.css")
 
 
 def test_interface_has_required_review_controls_and_advisory_boundary():
@@ -399,6 +400,13 @@ def test_task9_css_uses_repository_owned_screener_aligned_visual_language():
     assert ".upload-badge" in css
     assert ".progress-steps" in css
     assert "@media (max-width: 760px)" in css
+
+
+def test_hidden_sections_remain_hidden_when_layout_rules_set_display():
+    css = CSS.read_text(encoding="utf-8")
+
+    assert "[hidden]" in css
+    assert "display: none !important" in css
 
 
 def test_results_have_accessible_summary_and_detailed_tabs():

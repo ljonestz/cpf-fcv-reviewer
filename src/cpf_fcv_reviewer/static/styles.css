@@ -11,6 +11,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 "Open Sans", Arial, sans-serif; }
 header, main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
 .site-header { width: 100%; padding: 52px max(20px, calc((100% - 1120px) / 2)) 30px; background: linear-gradient(135deg, #001b36 0%, var(--navy) 58%, #004a70 100%); color: white; }
