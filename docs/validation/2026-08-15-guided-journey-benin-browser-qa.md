@@ -2,7 +2,7 @@
 
 Date: 2026-08-15  
 Branch: `fix/research-resilience-guided-journey`  
-Validation commit: `a76a27d`
+Validation commit: `9736ed6`
 
 This record covers local browser QA for the guided review journey. It is not a production-readiness assessment and does not authorize operational use, deployment, or connection to the stable FCV Project Screener.
 
@@ -38,5 +38,14 @@ The browser check found and fixed a CSS regression in which the author rule `#pr
 - Full suite attempt: `868 passed`, `22` setup errors caused by the known Windows `WinError 5` access failure while pytest scans the shared temporary root. No assertion failures were observed.
 - Ruff: blocked by Windows Application Control `WinError 4551`.
 - `git diff --check`: passed with expected line-ending warnings only.
+
+## Deployment verification
+
+The Render service `cpf-fcv-review-prototype` was manually deployed to the exact validated commit `9736ed656e9d65f4cecd93d2e5aa83567c284870`. Render reported a successful build and live service. The public checks returned:
+
+- `/health`: HTTP 200, `status: ok`, `storage: volatile`, `release: 9736ed6`;
+- `/`: HTTP 200 with the guided-progress markup present.
+
+The service is configured against the existing `feat/mvp-review-run` branch, so this exact-commit deployment was intentionally targeted. Future release work should preserve that explicit deployment and release-label discipline.
 
 No raw document contents, model output, secrets, or live assessment identifiers are included in this record. The public prototype remains non-production, volatile, and public-web-only for current context.
