@@ -82,6 +82,14 @@ def test_render_uses_threaded_worker_without_late_ssl_monkey_patch():
 def test_render_python_matches_the_validated_runtime_line():
     assert Path(".python-version").read_text(encoding="utf-8").strip() == "3.13"
 
+def test_gunicorn_default_timeout_covers_background_review_budget():
+    namespace = {}
+    config = Path("gunicorn.conf.py").read_text(encoding="utf-8")
+    exec(compile(config, "gunicorn.conf.py", "exec"), namespace)
+
+    assert namespace["timeout"] == 1200
+
+
 
 def test_wsgi_patches_gevent_before_importing_application_dependencies():
     wsgi = Path("wsgi.py").read_text(encoding="utf-8")
