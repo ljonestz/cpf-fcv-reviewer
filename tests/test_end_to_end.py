@@ -42,7 +42,7 @@ SYNTHETIC_INPUTS = (
 
 
 STRATEGY_REGISTRY_EVIDENCE_IDS = tuple(
-    f"registry-SYN-PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
+    f"registry-PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
 )
 
 
@@ -209,7 +209,7 @@ def synthetic_services():
         )
         registry_evidence = tuple(
             EvidenceItem(
-                evidence_id=f"registry-{entry.entry_id}",
+                evidence_id=f"registry-{entry.entry_id.removeprefix('SYN-')}",
                 evidence_type="registry_language",
                 text=entry.approved_text,
                 confidence="high",

@@ -56,6 +56,7 @@ def _assessment_evidence(payload):
             item["evidence_id"]
             for item in evidence
             if item.get("evidence_type") == "registry_language"
+            and "PUB-FCV-STRAT-" in item["evidence_id"]
         )
         document_ids = tuple(
             item["evidence_id"]
@@ -128,7 +129,6 @@ def _valid_review_draft(output_type, payload, **values):
     else:
         values["rra_driver_assessments"] = ()
     return output_type(**values)
-
 
 
 FIXTURE = Path("tests/fixtures/registry_bundle.synthetic.json")

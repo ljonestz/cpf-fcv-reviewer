@@ -50,7 +50,7 @@ class FakeGateway:
 
 
 STRATEGY_REGISTRY_EVIDENCE_IDS = tuple(
-    f"registry-SYN-PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
+    f"registry-PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
 )
 
 
