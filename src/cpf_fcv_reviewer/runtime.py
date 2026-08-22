@@ -54,6 +54,10 @@ STEP_NAMES = (
     "render",
 )
 
+REQUIRED_PRODUCTION_STRATEGY_REGISTRY_ENTRY_IDS = frozenset(
+    f"PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
+)
+
 OPTIONAL_UPLOAD_EXCLUDED_WARNING = (
     "An optional uploaded document could not be read and was excluded."
 )
@@ -550,6 +554,17 @@ def build_runtime_services(
         )
     except RegistryUnavailable as exc:
         raise RuntimeError(str(exc)) from exc
+    if not bundle.synthetic:
+        missing_strategy_entries = (
+            REQUIRED_PRODUCTION_STRATEGY_REGISTRY_ENTRY_IDS
+            - {entry.entry_id for entry in bundle.entries}
+        )
+        if missing_strategy_entries:
+            missing = ", ".join(sorted(missing_strategy_entries))
+            raise RuntimeError(
+                "Approved production registry bundle is missing required FCV Strategy "
+                f"registry entries: {missing}."
+            )
 
     if model_gateway is None:
         model_gateway = AnthropicModelGateway(
@@ -881,6 +896,11 @@ def build_runtime_services(
             forbidden_phrases=matched_prohibited_policy_phrases(
                 result_text(context["result"]),
                 prohibited_terms,
+            ),
+            evidence_ids=(
+                {item.evidence_id for item in context["evidence_pack"].evidence}
+                if "evidence_pack" in context
+                else None
             ),
         )
         context["result"] = _preserve_research_limitation(context)

@@ -625,16 +625,66 @@ def test_repair_conservatively_normalizes_missing_and_duplicate_strategy_rows():
         ],
     )
 
-    assert tuple(
-        row.strategic_shift for row in repaired.fcv_strategy_assessments
-    ) == tuple(FCVStrategicShift)
-    assert repaired.fcv_strategy_assessments[0] == rows[0]
-    for row in (
-        repaired.fcv_strategy_assessments[1],
-        repaired.fcv_strategy_assessments[3],
-    ):
-        assert row.status is AssessmentStatus.NOT_ASSESSABLE
-        assert row.confidence is AssessmentConfidence.LOW
+    assert repaired.fcv_strategy_assessments == rows
+
+
+def test_repair_preserves_evidence_safe_original_strategy_rows_when_repair_omits_them():
+    meta = metadata()
+    initial = result_for(meta)
+    repaired_draft = draft_for(meta).model_copy(
+        update={"fcv_strategy_assessments": ()}
+    )
+    gateway = FakeGateway(repaired_draft)
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [{"code": "incomplete_strategy_assessment", "message": "Rows omitted."}],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments == strategy_rows()
+
+
+def test_repair_rejects_unsafe_repaired_strategy_rows_in_favour_of_safe_originals():
+    meta = metadata()
+    initial = result_for(meta)
+    unsafe_repaired_row = strategy_rows()[0].model_copy(
+        update={"evidence_ids": ("unknown-evidence",)}
+    )
+    repaired_draft = draft_for(meta).model_copy(
+        update={
+            "fcv_strategy_assessments": (
+                unsafe_repaired_row,
+                *strategy_rows()[1:],
+            )
+        }
+    )
+    gateway = FakeGateway(repaired_draft)
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [{"code": "unknown_assessment_evidence", "message": "Unknown evidence."}],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0] == strategy_rows()[0]
+
+
+def test_repair_preserves_rra_rows_when_broad_repair_omits_them():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    initial = result_for(meta)
+    repaired_draft = draft_for(meta).model_copy(
+        update={"rra_driver_assessments": ()}
+    )
+    gateway = FakeGateway(repaired_draft)
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [{"code": "missing_rra_driver_assessment", "message": "Rows omitted."}],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == initial.rra_driver_assessments
 def test_repair_rejects_unsupported_metadata_stage_before_gateway_call():
     meta = metadata(stage="unsupported")
     gateway = FakeGateway(draft_for(meta))

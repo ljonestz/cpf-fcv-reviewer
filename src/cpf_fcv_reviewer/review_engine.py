@@ -61,28 +61,123 @@ def _serialize_detail_profile(profile) -> dict[str, object]:
     }
 
 
-def _normalize_strategy_assessments(draft: ReviewDraft) -> ReviewDraft:
-    rows_by_shift = {}
-    for row in draft.fcv_strategy_assessments:
-        rows_by_shift.setdefault(row.strategic_shift, row)
+STRATEGY_REGISTRY_EVIDENCE_IDS = {
+    shift: f"registry-PUB-FCV-STRAT-{index:03d}"
+    for index, shift in enumerate(FCVStrategicShift, start=1)
+}
 
-    normalized = tuple(
-        rows_by_shift.get(shift)
-        or FCVStrategyAssessment(
-            assessment_id=f"repair-strategy-{shift.value}",
-            strategic_shift=shift,
-            assessment=(
-                "This strategic shift was not assessable after validation repair "
-                "because a complete model-authored row was unavailable."
-            ),
-            status=AssessmentStatus.NOT_ASSESSABLE,
-            confidence=AssessmentConfidence.LOW,
-            gap_locus=None,
-            evidence_ids=(),
-        )
-        for shift in FCVStrategicShift
+
+def _is_evidence_safe(row, evidence_ids: set[str]) -> bool:
+    return set(row.evidence_ids).issubset(evidence_ids)
+
+
+def _is_evidence_safe_strategy_row(
+    row: FCVStrategyAssessment,
+    evidence_ids: set[str],
+) -> bool:
+    if not _is_evidence_safe(row, evidence_ids):
+        return False
+    if row.status is AssessmentStatus.NOT_ASSESSABLE:
+        return True
+    required_registry_id = STRATEGY_REGISTRY_EVIDENCE_IDS[row.strategic_shift]
+    return required_registry_id in row.evidence_ids and required_registry_id in evidence_ids
+
+
+def _fallback_strategy_assessment(shift: FCVStrategicShift) -> FCVStrategyAssessment:
+    return FCVStrategyAssessment(
+        assessment_id=f"repair-strategy-{shift.value}",
+        strategic_shift=shift,
+        assessment=(
+            "This strategic shift was not assessable after validation repair "
+            "because a complete model-authored row was unavailable."
+        ),
+        status=AssessmentStatus.NOT_ASSESSABLE,
+        confidence=AssessmentConfidence.LOW,
+        gap_locus=None,
+        evidence_ids=(),
     )
-    return draft.model_copy(update={"fcv_strategy_assessments": normalized})
+
+
+def _merge_rra_assessments(
+    original_rows,
+    repaired_rows,
+    evidence_ids: set[str],
+):
+    safe_repaired = {
+        row.assessment_id: row
+        for row in repaired_rows
+        if _is_evidence_safe(row, evidence_ids)
+    }
+    merged = []
+    used_ids = set()
+    for original_row in original_rows:
+        repaired_row = safe_repaired.get(original_row.assessment_id)
+        if repaired_row is not None:
+            merged.append(repaired_row)
+            used_ids.add(repaired_row.assessment_id)
+        elif _is_evidence_safe(original_row, evidence_ids):
+            merged.append(original_row)
+            used_ids.add(original_row.assessment_id)
+    for repaired_row in repaired_rows:
+        if (
+            repaired_row.assessment_id not in used_ids
+            and _is_evidence_safe(repaired_row, evidence_ids)
+        ):
+            merged.append(repaired_row)
+            used_ids.add(repaired_row.assessment_id)
+    return tuple(merged)
+
+
+def _normalize_repaired_assessments(
+    original: ReviewResult,
+    draft: ReviewDraft,
+    evidence_ids: set[str] | None,
+) -> ReviewDraft:
+    allowed_evidence_ids = (
+        set(evidence_ids)
+        if evidence_ids is not None
+        else {
+            evidence_id
+            for row in (
+                *original.fcv_strategy_assessments,
+                *draft.fcv_strategy_assessments,
+                *original.rra_driver_assessments,
+                *draft.rra_driver_assessments,
+            )
+            for evidence_id in row.evidence_ids
+        }
+    )
+    normalized_strategy = []
+    for shift in FCVStrategicShift:
+        original_row = next(
+            (
+                row
+                for row in original.fcv_strategy_assessments
+                if row.strategic_shift is shift
+                and _is_evidence_safe_strategy_row(row, allowed_evidence_ids)
+            ),
+            None,
+        )
+        repaired_row = next(
+            (
+                row
+                for row in draft.fcv_strategy_assessments
+                if row.strategic_shift is shift
+                and _is_evidence_safe_strategy_row(row, allowed_evidence_ids)
+            ),
+            None,
+        )
+        normalized_strategy.append(original_row or repaired_row or _fallback_strategy_assessment(shift))
+    return draft.model_copy(
+        update={
+            "rra_driver_assessments": _merge_rra_assessments(
+                original.rra_driver_assessments,
+                draft.rra_driver_assessments,
+                allowed_evidence_ids,
+            ),
+            "fcv_strategy_assessments": tuple(normalized_strategy),
+        }
+    )
 
 
 
@@ -147,6 +242,7 @@ class ReviewEngine:
         issues: list[dict],
         *,
         forbidden_phrases: tuple[str, ...] = (),
+        evidence_ids: set[str] | None = None,
     ) -> ReviewResult:
         stage = result.metadata.review_stage
         if stage not in STAGE_PROFILES:
@@ -175,7 +271,7 @@ class ReviewEngine:
         coverage = result.document_coverage.model_copy(
             update={"coverage_note": draft.coverage_note}
         )
-        draft = _normalize_strategy_assessments(draft)
+        draft = _normalize_repaired_assessments(result, draft, evidence_ids)
         content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})
         return ReviewResult(

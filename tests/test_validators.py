@@ -313,6 +313,27 @@ def test_assessable_strategy_rows_require_strategy_registry_evidence():
     assert "incomplete_strategy_assessment" in {issue.code for issue in issues}
 
 
+def test_assessable_strategy_rows_require_shift_specific_registry_evidence():
+    reviewed = result(
+        strategy_assessments_override=strategy_rows(
+            status=AssessmentStatus.ALIGNED,
+            evidence_ids=("registry-PUB-FCV-STRAT-002",),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"registry-PUB-FCV-STRAT-002"},
+        prohibited_terms=set(),
+    )
+
+    assert any(
+        issue.code == "incomplete_strategy_assessment"
+        and "strategy-anticipate_better" in issue.message
+        for issue in issues
+    )
+
+
 def test_not_assessable_rows_cannot_support_a_priority_by_themselves():
     reviewed = result(
         areas=(area(evidence_ids=("strategy-anticipate_better",)),),
@@ -336,6 +357,40 @@ def test_summary_titles_are_short_and_link_once_to_priority_areas():
     issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
 
     assert "unknown_priority_area" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    "title",
+    (
+        "Clarify ev-1",
+        "Revise the delivery logic on page 4",
+        "Clarify the section 2.1 narrative",
+        "Tighten paragraph 12",
+    ),
+)
+def test_summary_titles_reject_raw_evidence_ids_and_locator_instructions(title):
+    reviewed = result(
+        summaries=(RevisionSummaryItem(priority_area_id="pa-1", title=title),)
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "invalid_revision_summary_title" in {issue.code for issue in issues}
+
+
+def test_summary_titles_allow_ordinary_words_that_match_synthetic_evidence_ids():
+    reviewed = result(
+        summaries=(
+            RevisionSummaryItem(
+                priority_area_id="pa-1",
+                title="Strengthen the regional narrative",
+            ),
+        )
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"regional"}, prohibited_terms=set())
+
+    assert "invalid_revision_summary_title" not in {issue.code for issue in issues}
 
 
 def test_actionable_priority_requires_current_context_when_available():

@@ -163,6 +163,20 @@ def test_repair_prompt_preserves_complete_structured_assessment_schema():
         assert phrase in prompt
 
 
+def test_repair_prompt_requires_canonical_four_shift_strategy_rows():
+    prompt = normalize_whitespace(load_prompt("repair"))
+
+    for phrase in (
+        "exactly one row for each of the four FCV Strategy strategic shifts",
+        "Anticipate better",
+        "Differentiated approach",
+        "One WBG approach to jobs",
+        "Toolkit, partnerships, and staffing",
+        "not_assessable with low confidence and no evidence_ids",
+    ):
+        assert phrase in prompt
+
+
 def test_in_depth_profile_uses_canonical_integrated_note_range():
     profile = DETAIL_PROFILES[DetailLevel.IN_DEPTH]
 

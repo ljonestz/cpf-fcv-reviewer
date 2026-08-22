@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from hashlib import sha256
 from io import BytesIO
@@ -584,6 +585,24 @@ def test_production_rejects_synthetic_registry_even_with_valid_hash():
         build_runtime_services(production_config())
 
 
+def test_production_rejects_registry_without_required_fcv_strategy_entries(tmp_path):
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    payload["synthetic"] = False
+    payload["entries"] = [
+        entry
+        for entry in payload["entries"]
+        if entry["entry_id"] != "SYN-PUB-FCV-STRAT-004"
+    ]
+    path = tmp_path / "production-incomplete.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="required FCV Strategy registry entries"):
+        build_runtime_services(
+            production_config(
+                REGISTRY_BUNDLE_PATH=str(path),
+                REGISTRY_BUNDLE_SHA256=sha256(path.read_bytes()).hexdigest(),
+            )
+        )
 def test_runtime_builds_exact_named_step_sequence(monkeypatch):
     class FakeModelGateway:
         def __init__(self, api_key, model_id, *, timeout_seconds=None):

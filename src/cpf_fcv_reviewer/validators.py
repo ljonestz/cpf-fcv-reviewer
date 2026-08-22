@@ -41,6 +41,16 @@ FINALIZATION_OVERREACH_TERMS = (
     "rebuild the entire",
     "redesign the whole",
 )
+SUMMARY_TITLE_LOCATOR_PATTERN = re.compile(
+    r"\b(?:pages?|p\.?|pp\.?|sections?|paras?|paragraphs?)\s*"
+    r"(?:no\.?\s*)?\d+(?:\.\d+)*(?:\s*[-–]\s*\d+(?:\.\d+)*)?\b",
+    re.IGNORECASE,
+)
+STRATEGY_REGISTRY_EVIDENCE_IDS = {
+    shift: f"registry-PUB-FCV-STRAT-{index:03d}"
+    for index, shift in enumerate(FCVStrategicShift, start=1)
+}
+
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,7 @@ ValidationIssueCode = Literal[
     "limited_mode_overclaim",
     "unknown_priority_area",
     "unknown_evidence",
+    "invalid_revision_summary_title",
     "unknown_assessment_evidence",
     "missing_rra_driver_assessment",
     "incomplete_strategy_assessment",
@@ -227,19 +238,18 @@ def validate_review(
             evidence_ids,
             issue_code="unknown_assessment_evidence",
         )
-        if (
-            assessment.status is not AssessmentStatus.NOT_ASSESSABLE
-            and not any(
-                evidence_id.startswith("registry-PUB-FCV-STRAT-")
-                for evidence_id in set(assessment.evidence_ids) & evidence_ids
-            )
-        ):
-            issues.append(
-                ValidationIssue(
-                    "incomplete_strategy_assessment",
-                    f"{assessment.assessment_id} requires FCV Strategy registry evidence.",
+        if assessment.status is not AssessmentStatus.NOT_ASSESSABLE:
+            required_registry_id = STRATEGY_REGISTRY_EVIDENCE_IDS[
+                assessment.strategic_shift
+            ]
+            if required_registry_id not in set(assessment.evidence_ids) & evidence_ids:
+                issues.append(
+                    ValidationIssue(
+                        "incomplete_strategy_assessment",
+                        f"{assessment.assessment_id} requires shift-specific FCV Strategy "
+                        f"registry evidence: {required_registry_id}.",
+                    )
                 )
-            )
 
     priority_area_counts = Counter(
         priority_area.priority_area_id for priority_area in result.priority_areas
@@ -278,6 +288,7 @@ def validate_review(
                     f"{summary.priority_area_id}",
                 )
             )
+        _append_invalid_summary_title_issue(issues, summary, evidence_ids)
 
     for priority_area in result.priority_areas:
         _append_unknown_evidence_issue(
@@ -347,6 +358,36 @@ def _append_unknown_evidence_issue(
                 f"{item_id} cites unknown evidence: {unknown}",
             )
         )
+
+
+def _append_invalid_summary_title_issue(
+    issues: list[ValidationIssue],
+    summary,
+    evidence_ids: set[str],
+) -> None:
+    title = summary.title.casefold()
+    raw_ids = sorted(
+        evidence_id
+        for evidence_id in evidence_ids
+        if (
+            evidence_id
+            and re.search(r"[-_]\d", evidence_id)
+            and evidence_id.casefold() in title
+        )
+    )
+    if raw_ids:
+        message = (
+            f"{summary.priority_area_id} revision summary title must not include raw "
+            f"evidence IDs: {raw_ids}."
+        )
+    elif SUMMARY_TITLE_LOCATOR_PATTERN.search(summary.title):
+        message = (
+            f"{summary.priority_area_id} revision summary title must not include "
+            "page, section, or paragraph locators."
+        )
+    else:
+        return
+    issues.append(ValidationIssue("invalid_revision_summary_title", message))
 
 
 def validate_stage_behavior(
