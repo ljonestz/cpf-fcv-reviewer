@@ -104,6 +104,7 @@ const evidenceStatusLabels = {
   reduced: "Current evidence partially established",
   document_led: "Review based primarily on submitted documents",
 };
+const COUNTRY_DETECTION_MAX_BYTES = 2 * 1024 * 1024;
 
 const assessmentStatusLabels = {
   aligned: "Aligned",
@@ -381,6 +382,15 @@ async function detectCountry() {
     return;
   }
 
+  if (file.size > COUNTRY_DETECTION_MAX_BYTES) {
+    countryDetection.textContent = "This primary document exceeds the 2 MiB automatic detector budget. Enter the country manually to continue.";
+    countryRequiresConfirmation = true;
+    showCountryCorrection("");
+    detectionPending = false;
+    updateSubmitState();
+    return;
+  }
+
   detectionPending = true;
   countryDetection.textContent = "Identifying the country from the primary document…";
   updateSubmitState();
@@ -443,6 +453,50 @@ function labelledParagraph(label, value, className) {
   return paragraph;
 }
 
+function splitNarrativeIntoChunks(value) {
+  const source = String(value || "").trim();
+  if (!source) return [];
+  let sentences = [];
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter(undefined, {granularity: "sentence"});
+    sentences = Array.from(segmenter.segment(source), ({segment}) => segment.trim()).filter(Boolean);
+  }
+  if (!sentences.length) {
+    sentences = (source.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) || [source])
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+  }
+  const chunks = [];
+  for (let index = 0; index < sentences.length; index += 4) {
+    chunks.push(sentences.slice(index, index + 4));
+  }
+  return chunks;
+}
+
+function renderNarrative(value, className = "") {
+  const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  for (const sentences of splitNarrativeIntoChunks(value)) {
+    const paragraph = document.createElement("p");
+    paragraph.className = className ? "narrative-chunk " + className : "narrative-chunk";
+    const activeSentence = text("strong", sentences[0]);
+    const remainingSentences = sentences.slice(1).join(" ");
+    paragraph.append(
+      activeSentence,
+      document.createTextNode(remainingSentences ? " " + remainingSentences : ""),
+    );
+    fragment.append(paragraph);
+  }
+  return fragment;
+}
+
+function renderDisclosure(label, className, content) {
+  const details = document.createElement("details");
+  details.className = className;
+  details.append(text("summary", label));
+  if (content) details.append(content);
+  return details;
+}
+
 function locatorLabel(locator) {
   if (!locator) return "";
   return [
@@ -475,15 +529,26 @@ function evidenceSourceLabel(item) {
 }
 
 function renderEvidenceGroup(result, evidenceIds) {
+  return renderTraceability(result, evidenceIds);
+}
+
+function renderTraceability(result) {
+  return renderTraceabilityForEvidence(result, arguments[1]);
+}
+
+function renderTraceabilityForEvidence(result, evidenceIds) {
   const resolvedItems = (evidenceIds || [])
     .map((evidenceId) => result.evidence_by_id?.[evidenceId])
     .filter(Boolean);
   if (!resolvedItems.length) {
     return text("p", "No supporting evidence was recorded for this assessment.", "empty-state");
   }
-  const details = document.createElement("details");
-  details.className = "evidence-group";
-  details.append(text("summary", "Evidence and document locations"));
+  const summary = text("summary", "Evidence and document locations");
+  const traceabilityLabel = text("summary", "Traceability");
+  summary.textContent = traceabilityLabel.textContent;
+  summary.setAttribute?.("aria-label", "Traceability - Evidence and document locations");
+  const details = renderDisclosure("Traceability", "evidence-group traceability-panel");
+  details.replaceChildren(summary, text("p", "Evidence and document locations", "traceability-caption"));
   for (const item of resolvedItems) {
     const excerpt = item.locator && item.locator.excerpt || item.text;
     details.append(
@@ -494,6 +559,19 @@ function renderEvidenceGroup(result, evidenceIds) {
   return details;
 }
 
+function renderEvidenceStatusDisclosure(result) {
+  const content = document.createDocumentFragment?.() || document.createElement("div");
+  const label = evidenceStatusLabels[result.metadata?.current_evidence_tier]
+    || "Evidence status is not available.";
+  content.append(text("p", label, "evidence-status-label"));
+  const limitation = result.metadata?.current_evidence_limitation;
+  if (limitation) content.append(renderNarrative(limitation, "evidence-status-limitation"));
+  const details = document.createElement("details");
+  details.className = "evidence-status-panel";
+  details.append(text("summary", "Evidence status"), content);
+  return details;
+}
+
 function assessmentValueLabel(value) {
   if (!value) return "Not specified";
   return String(value)
@@ -501,12 +579,13 @@ function assessmentValueLabel(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+
 function appendAssessmentField(definitions, label, value, className = "") {
   const term = document.createElement("dt");
   term.textContent = label;
   const description = document.createElement("dd");
   description.className = className;
-  description.textContent = value || "Not specified";
+  description.append(renderNarrative(value || "Not specified", "assessment-narrative"));
   definitions.append(term, description);
 }
 
@@ -649,9 +728,9 @@ function renderPriorityAreas(result, anchorIds) {
     section.className = "priority-area";
     section.append(
       text("h3", area.heading),
-      text("p", area.assessment),
-      text("p", area.why_it_matters),
-      labelledParagraph("Recommended action", area.recommended_action, "recommended-action"),
+      renderNarrative(area.assessment, "priority-assessment"),
+      renderNarrative(area.why_it_matters, "priority-why-it-matters"),
+      labelledNarrative("Recommended action", area.recommended_action, "recommended-action"),
       labelledParagraph("Target", locatorLabel(area.target_locator), "target-location"),
     );
     if (area.comment_reference) {
@@ -668,23 +747,52 @@ function renderPriorityAreas(result, anchorIds) {
   return fragment;
 }
 
+function labelledNarrative(label, value, className) {
+  const wrapper = document.createElement("div");
+  wrapper.className = className;
+  wrapper.append(text("strong", label + "."), renderNarrative(value));
+  return wrapper;
+}
+
 function renderCoverage(result) {
-  const fragment = document.createDocumentFragment?.() || document.createElement("div");
-  fragment.append(text("h2", "Limitations and document coverage"));
-  if (result.limitations.length) {
+  return renderCoverageView(result, arguments[1]);
+}
+
+function renderCoverageView(result, collapsible = true) {
+  const content = document.createDocumentFragment?.() || document.createElement("div");
+  if (collapsible) content.append(text("h3", "Limitations and document coverage"));
+  else content.append(text("h2", "Limitations and document coverage"));
+  const limitations = result.limitations || [];
+  if (limitations.length) {
     const list = document.createElement("ul");
-    for (const limitation of result.limitations) list.append(text("li", limitation));
-    fragment.append(list);
+    for (const limitation of limitations) {
+      const item = document.createElement("li");
+      item.append(renderNarrative(limitation));
+      list.append(item);
+    }
+    content.append(list);
   }
   const coverage = result.document_coverage;
   if (coverage) {
-    fragment.append(
+    content.append(
       labelledParagraph("Primary document", coverage.primary_document, "coverage-primary"),
       labelledParagraph("Package documents", coverage.package_documents.join(", ") || "None supplied", "coverage-package"),
       labelledParagraph("Context documents", coverage.context_documents.join(", ") || "None supplied", "coverage-context"),
-      labelledParagraph("Coverage note", coverage.coverage_note, "coverage-note"),
+      labelledNarrative("Coverage note", coverage.coverage_note, "coverage-note"),
     );
   }
+  if (!collapsible) return content;
+  const details = document.createElement("details");
+  details.className = "coverage-panel";
+  details.append(text("summary", "Coverage and limitations"), content);
+  return details;
+}
+
+function renderStrategyReadout(result) {
+  const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  const assessments = result.fcv_strategy_assessments || [];
+  for (const assessment of assessments) fragment.append(renderNarrative(assessment.assessment, "strategy-readout"));
+  if (!assessments.length) fragment.append(text("p", "No FCV Strategy alignment assessment was returned for this review.", "empty-state"));
   return fragment;
 }
 
@@ -694,9 +802,11 @@ function renderFiveMinuteReadout(result) {
   fragment.append(
     text("p", "Five-minute readout", "read-time"),
     text("h2", "Overall assessment"),
-    text("p", result.overall_read, "overall-read"),
-    text("h2", "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy"),
-    text("p", result.alignment_readout, "alignment-readout"),
+    renderNarrative(result.overall_read, "overall-read"),
+    text("h2", "How well does the CPF respond to the RRA and current FCV dynamics?", "readout-question"),
+    renderNarrative(result.alignment_readout, "alignment-readout"),
+    text("h2", "How does the CPF contribute to current FCV Strategy priorities?", "readout-question"),
+    renderStrategyReadout(result),
     text("h2", "Priority measures to strengthen the CPF / CEN"),
     renderRevisionSummary(result, anchorIds),
   );
@@ -704,16 +814,38 @@ function renderFiveMinuteReadout(result) {
 }
 
 function renderDetailedAnalysis(result) {
+  return renderDetailedAnalysisView(result, true);
+}
+
+function renderDetailedAnalysisView(result, includeDisclosurePanels = true) {
   const anchorIds = priorityAreaAnchorIds(result);
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
-  fragment.append(text("h2", "Overall assessment"));
-  fragment.append(text("p", result.overall_read, "overall-read"));
-  fragment.append(text("h2", "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy"));
-  fragment.append(text("p", result.alignment_readout, "alignment-readout"));
-  fragment.append(renderRraAssessments(result));
-  fragment.append(renderStrategyAssessments(result));
+  fragment.append(
+    text("h2", "Overall assessment"),
+    renderNarrative(result.overall_read, "overall-read"),
+  );
+  if (includeDisclosurePanels) fragment.append(renderEvidenceStatusDisclosure(result));
+  if (includeDisclosurePanels) {
+    const hasEvidence = Object.keys(result.evidence_by_id || {}).length > 0;
+    const traceability = document.createElement("details");
+    traceability.className = "traceability-panel";
+    traceability.append(
+      text("summary", "Traceability"),
+      text("p", "Evidence and document locations", "traceability-caption"),
+      text("p", hasEvidence ? "Evidence and document locations are shown within the relevant assessments." : "No supporting evidence was recorded for this review.", hasEvidence ? "traceability-note" : "empty-state"),
+    );
+    fragment.append(traceability);
+  }
+  fragment.append(
+    text("h2", "How well does the CPF respond to the RRA and current FCV dynamics?", "readout-question"),
+    renderNarrative(result.alignment_readout, "alignment-readout"),
+    renderRraAssessments(result),
+    text("h2", "How does the CPF contribute to current FCV Strategy priorities?", "readout-question"),
+    renderStrategyReadout(result),
+    renderStrategyAssessments(result),
+  );
   fragment.append(renderPriorityAreas(result, anchorIds));
-  fragment.append(renderCoverage(result));
+  fragment.append(renderCoverageView(result, includeDisclosurePanels));
   return fragment;
 }
 
@@ -778,10 +910,10 @@ function renderEvidenceStatus(result) {
 
 function renderResult(result) {
   if (summaryPanel === detailedPanel) {
-    results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysis(result));
+    results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysisView(result, false));
   } else {
     summaryPanel.replaceChildren(renderFiveMinuteReadout(result));
-    detailedPanel.replaceChildren(renderDetailedAnalysis(result));
+    detailedPanel.replaceChildren(renderDetailedAnalysisView(result, true));
   }
   const country = countryInput.value.trim();
   const documentType = inferDocumentType(result.document_coverage.primary_document);
@@ -1053,5 +1185,7 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     getActiveSource: () => activeEventSource,
     setAssessmentId: (value) => { assessmentId = value; },
     watchEvents,
+    renderDetailedAnalysis,
+    splitNarrativeIntoChunks,
   };
 }
