@@ -83,6 +83,7 @@ def test_synthetic_fcv_strategy_entries_hydrate_and_match_public_entries():
         assert list(entry.prohibited_terms) == public_entry["prohibited_terms"]
         assert referral["approved_text"] == public_entry["approved_text"]
 
+
 def test_unknown_registry_id_fails_closed():
     bundle = load_registry_bundle(FIXTURE, allow_synthetic=True)
     with pytest.raises(RegistryUnavailable, match="Unknown registry entry"):
@@ -244,3 +245,12 @@ def test_checked_in_public_guardrail_bundle_is_valid_and_hash_pinned():
         "PUB-FCV-STRAT-003",
         "PUB-FCV-STRAT-004",
     )
+
+    v1_0_bundle = load_registry_bundle(
+        V1_0_BUNDLE,
+        allow_synthetic=False,
+        now=datetime(2026, 8, 23, tzinfo=UTC),
+    )
+    assert tuple(
+        entry.model_dump() for entry in v1_0_bundle.entries[:4]
+    ) == tuple(entry.model_dump() for entry in bundle.entries[:4])
