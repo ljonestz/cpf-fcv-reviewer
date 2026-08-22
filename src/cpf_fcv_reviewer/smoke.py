@@ -26,6 +26,14 @@ from .runtime import build_runtime_services
 
 SMOKE_REVIEW_DATE = date(2026, 8, 14)
 SMOKE_MARKER = "[SYNTHETIC SMOKE]"
+SMOKE_STRATEGY_ENTRY_IDS = {
+    FCVStrategicShift.ANTICIPATE_BETTER: "registry-SYN-PUB-FCV-STRAT-001",
+    FCVStrategicShift.DIFFERENTIATED_APPROACH: "registry-SYN-PUB-FCV-STRAT-002",
+    FCVStrategicShift.ONE_WBG_JOBS: "registry-SYN-PUB-FCV-STRAT-003",
+    FCVStrategicShift.TOOLKIT_PARTNERSHIPS_STAFFING: (
+        "registry-SYN-PUB-FCV-STRAT-004"
+    ),
+}
 
 
 def _country_slug(country: str) -> str:
@@ -139,6 +147,8 @@ class SmokeModelGateway:
         if output_type is not ReviewDraft:
             raise ValueError("Smoke model only supports ReviewDraft output.")
         if prompt_name == "repair":
+            # Deterministic repair validates and preserves the supplied draft
+            # while exercising the provider-free repair path.
             draft = payload.get("draft")
             if not isinstance(draft, dict):
                 raise ValueError("Smoke repair requires a supplied draft.")
@@ -169,11 +179,13 @@ class SmokeModelGateway:
         registry_ids = tuple(
             evidence_id
             for evidence_id in evidence_ids
-            if evidence_id.startswith(
-                ("registry-PUB-FCV-STRAT-", "registry-SYN-PUB-FCV-STRAT-")
-            )
+            if "PUB-FCV-STRAT-" in evidence_id
         )
-        if len(registry_ids) != len(FCVStrategicShift):
+        expected_registry_ids = tuple(SMOKE_STRATEGY_ENTRY_IDS.values())
+        if (
+            len(registry_ids) != len(expected_registry_ids)
+            or set(registry_ids) != set(expected_registry_ids)
+        ):
             raise ValueError("Smoke model requires all four synthetic Strategy entries.")
         pack = payload.get("evidence_pack", {})
         metadata = pack.get("metadata", {}) if isinstance(pack, dict) else {}
@@ -206,26 +218,14 @@ class SmokeModelGateway:
                     f"{SMOKE_MARKER} Synthetic assessment of the {shift.value} "
                     "strategic shift."
                 ),
-                status=(
-                    AssessmentStatus.NOT_ASSESSABLE
-                    if registry_id.startswith("registry-SYN-")
-                    else AssessmentStatus.PARTIALLY_ALIGNED
-                ),
+                status=AssessmentStatus.NOT_ASSESSABLE,
                 confidence=AssessmentConfidence.MEDIUM,
-                gap_locus=(
-                    None
-                    if registry_id.startswith("registry-SYN-")
-                    else GapLocus.CPF_NARRATIVE
-                ),
+                gap_locus=None,
                 evidence_ids=tuple(
                     dict.fromkeys((registry_id, *cited_ids))
                 ),
             )
-            for shift, registry_id in zip(
-                FCVStrategicShift,
-                registry_ids,
-                strict=True,
-            )
+            for shift, registry_id in SMOKE_STRATEGY_ENTRY_IDS.items()
         )
 
         return ReviewDraft(

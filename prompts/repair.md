@@ -9,8 +9,7 @@ a supplied issue specifically requires repairing them.
 Return one complete ReviewDraft.
 
 The model must repair only the supplied validation issues.
-Repair only the supplied validation issues. Preserve every valid
-rra_driver_assessments row and fcv_strategy_assessments row, including each
+Preserve every valid rra_driver_assessments row and fcv_strategy_assessments row, including each
 status, confidence, gap_locus, and evidence_ids value. Preserve every valid
 revision_summary.title and priority_area_id link. The complete ReviewDraft schema
 includes both assessment collections; do not drop, merge, reorder, or invent rows

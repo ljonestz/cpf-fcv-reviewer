@@ -163,7 +163,12 @@ def test_smoke_model_gateway_returns_schema_valid_review_and_repair_from_supplie
         prompt_name="repair",
         payload={
             "draft": draft.model_dump(mode="json"),
-            "validation_issues": [],
+            "validation_issues": [
+                {
+                    "code": "incomplete_strategy_assessment",
+                    "message": "Synthetic repair preservation check.",
+                }
+            ],
             "stage_profile": {"allowed_scales": ["targeted_edit"]},
         },
         output_type=ReviewDraft,
@@ -175,6 +180,64 @@ def test_smoke_model_gateway_returns_schema_valid_review_and_repair_from_supplie
     )
     assert repaired.rra_driver_assessments == draft.rra_driver_assessments
     assert repaired.fcv_strategy_assessments == draft.fcv_strategy_assessments
+
+
+@pytest.mark.parametrize("mutation", ("production", "duplicate", "missing"))
+def test_smoke_model_gateway_rejects_invalid_strategy_registry_ids(mutation):
+    payload = _model_payload()
+    evidence = payload["evidence_pack"]["evidence"]
+    registry = [
+        item
+        for item in evidence
+        if item["evidence_id"].startswith("registry-SYN-PUB-FCV-STRAT-")
+    ]
+    if mutation == "production":
+        for item in registry:
+            item["evidence_id"] = item["evidence_id"].replace("registry-SYN-", "registry-")
+    elif mutation == "duplicate":
+        registry[-1]["evidence_id"] = registry[0]["evidence_id"]
+    else:
+        evidence.remove(registry[-1])
+
+    with pytest.raises(ValueError, match="four synthetic Strategy entries"):
+        SmokeModelGateway().generate(
+            prompt_name="review",
+            payload=payload,
+            output_type=ReviewDraft,
+        )
+
+
+def test_smoke_model_gateway_maps_shuffled_strategy_ids_by_shift():
+    payload = _model_payload()
+    evidence = payload["evidence_pack"]["evidence"]
+    registry = [
+        item
+        for item in evidence
+        if item["evidence_id"].startswith("registry-SYN-PUB-FCV-STRAT-")
+    ]
+    evidence[:] = [
+        item for item in evidence if item not in registry
+    ] + list(reversed(registry))
+
+    draft = SmokeModelGateway().generate(
+        prompt_name="review",
+        payload=payload,
+        output_type=ReviewDraft,
+    )
+
+    expected_suffixes = {
+        "anticipate_better": "001",
+        "differentiated_approach": "002",
+        "one_wbg_jobs": "003",
+        "toolkit_partnerships_staffing": "004",
+    }
+    for row in draft.fcv_strategy_assessments:
+        registry_id = next(
+            evidence_id
+            for evidence_id in row.evidence_ids
+            if evidence_id.startswith("registry-SYN-PUB-FCV-STRAT-")
+        )
+        assert registry_id.endswith(expected_suffixes[row.strategic_shift.value])
 
 
 def test_smoke_model_gateway_adds_one_rra_row_only_in_rra_alignment_mode():

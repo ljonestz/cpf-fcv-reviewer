@@ -40,9 +40,11 @@ absence.
 
 Populate rra_driver_assessments with the chain:
 driver -> CPF response -> delivery mechanism -> result/indicator -> remaining gap.
-Use a material row only when the evidence supports it. In rra_alignment mode,
-include at least one row. In limited_framing mode, leave the collection empty and
-state that RRA alignment was not assessed.
+In rra_alignment mode, include at least one row. When the supplied RRA coverage
+is sufficient, assess the material chain; when it is insufficient, include a
+not_assessable row that states the coverage limitation without inventing a gap.
+In limited_framing mode, leave the collection empty and state that RRA alignment
+was not assessed.
 
 Populate fcv_strategy_assessments with exactly one row for each 2026-2030 FCV
 Strategy strategic shift:
@@ -104,7 +106,7 @@ The content order is:
    this synthesis through the linked priority areas; do not invent evidence IDs
    in this field.
 3. What to revise: write a concise revision_summary of 3–5 ordered linked
-   measures (3-5 ordered linked measures),
+   measures,
    exactly order-matched to priority_areas, with one priority_area_id link for
    each measure.
 4. Priority areas for strengthening: write the full integrated note for each
