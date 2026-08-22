@@ -607,7 +607,7 @@ def test_repair_accepts_new_assessment_validation_issues():
     assert repaired.metadata.repair_count == 1
 
 
-def test_repair_preserves_valid_original_strategy_rows_missing_from_repair():
+def test_repair_conservatively_normalizes_missing_and_duplicate_strategy_rows():
     meta = metadata()
     rows = strategy_rows()
     malformed = draft_for(meta).model_copy(
@@ -628,9 +628,13 @@ def test_repair_preserves_valid_original_strategy_rows_missing_from_repair():
     assert tuple(
         row.strategic_shift for row in repaired.fcv_strategy_assessments
     ) == tuple(FCVStrategicShift)
-    assert repaired.fcv_strategy_assessments == rows
-
-
+    assert repaired.fcv_strategy_assessments[0] == rows[0]
+    for row in (
+        repaired.fcv_strategy_assessments[1],
+        repaired.fcv_strategy_assessments[3],
+    ):
+        assert row.status is AssessmentStatus.NOT_ASSESSABLE
+        assert row.confidence is AssessmentConfidence.LOW
 def test_repair_rejects_unsupported_metadata_stage_before_gateway_call():
     meta = metadata(stage="unsupported")
     gateway = FakeGateway(draft_for(meta))
