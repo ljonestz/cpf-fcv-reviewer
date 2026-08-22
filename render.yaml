@@ -28,8 +28,6 @@ services:
         value: "86400"
       - key: WORKER_POLL_SECONDS
         value: "1"
-      - key: WORKER_STALE_AFTER_SECONDS
-        value: "30"
       - key: REGISTRY_BUNDLE_PATH
         value: registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.1.0.json
       - key: REGISTRY_BUNDLE_SHA256

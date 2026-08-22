@@ -51,7 +51,6 @@ def create_app(
                 app,
                 session_store,
                 poll_seconds=app.config["WORKER_POLL_SECONDS"],
-                stale_after_seconds=app.config["WORKER_STALE_AFTER_SECONDS"],
             )
             worker.start()
             atexit.register(worker.stop)

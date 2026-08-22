@@ -35,12 +35,10 @@ class PersistentAssessmentWorker:
         store,
         *,
         poll_seconds: float = 1.0,
-        stale_after_seconds: int = 1,
     ) -> None:
         self._app = app
         self._store = store
         self._poll_seconds = poll_seconds
-        self._stale_after_seconds = stale_after_seconds
         self._condition = Condition()
         self._stop = Event()
         self._thread = Thread(
@@ -50,7 +48,7 @@ class PersistentAssessmentWorker:
         )
 
     def start(self) -> None:
-        self._store.requeue_stale(self._stale_after_seconds)
+        self._store.requeue_stale(0)
         self._thread.start()
 
     def enqueue(self, assessment_id: str) -> None:

@@ -34,14 +34,13 @@ def test_persistent_worker_recovers_and_runs_claimed_assessment(monkeypatch):
         "app",
         store,
         poll_seconds=0.01,
-        stale_after_seconds=30,
     )
 
     worker.start()
     assert ran.wait(timeout=1)
     worker.stop()
 
-    assert store.requeued_with == 30
+    assert store.requeued_with == 0
 
 
 def test_persistent_worker_enqueue_keeps_job_claimable_and_wakes_worker():

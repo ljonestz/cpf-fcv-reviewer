@@ -72,9 +72,6 @@ def build_config(
         ),
         "PERSISTENCE_PATH": environment("PERSISTENCE_PATH", ""),
         "WORKER_POLL_SECONDS": float(environment("WORKER_POLL_SECONDS", "1")),
-        "WORKER_STALE_AFTER_SECONDS": int(
-            environment("WORKER_STALE_AFTER_SECONDS", "30")
-        ),
         "START_BACKGROUND_RUNS": True,
         "TESTING": False,
     }
@@ -91,7 +88,6 @@ def build_config(
         "RESEARCH_MINIMUM_CLAIMS",
         "RESEARCH_MINIMUM_PUBLISHERS",
         "SESSION_TTL_SECONDS",
-        "WORKER_STALE_AFTER_SECONDS",
     ):
         if type(config[name]) is not int or config[name] <= 0:
             raise ValueError(f"{name} must be a positive integer.")
