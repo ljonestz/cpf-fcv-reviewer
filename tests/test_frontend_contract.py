@@ -458,6 +458,9 @@ def test_export_always_uses_the_full_note_endpoint():
 
     assert "`/api/reviews/${assessmentId}/export.docx`" in javascript
     assert "summary/export" not in javascript
+    assert 'document.createElement("a")' in javascript
+    assert "downloadLink.click()" in javascript
+    assert "window.location.assign" not in javascript
 
 
 def test_result_header_uses_confirmed_country_type_and_coverage_context():

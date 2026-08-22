@@ -982,7 +982,13 @@ submitCorrection.addEventListener("click", async () => {
 });
 
 document.querySelector("#export-docx").addEventListener("click", () => {
-  if (assessmentId) window.location.assign(`/api/reviews/${assessmentId}/export.docx`);
+  if (!assessmentId) return;
+  const downloadLink = document.createElement("a");
+  downloadLink.href = `/api/reviews/${assessmentId}/export.docx`;
+  downloadLink.download = "CPF-FCV-Review.docx";
+  document.body.append(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
 });
 
 async function resetReview() {
