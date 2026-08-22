@@ -419,3 +419,226 @@ def test_assessment_rows_expose_allowlisted_status_and_confidence_labels():
         assert field in javascript
     assert 'text("dt", "Status")' in javascript
     assert 'text("dt", "Confidence")' in javascript
+
+def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_states():
+    harness = textwrap.dedent(
+        """
+        const nodes = {};
+        function node() {
+          const element = {
+            hidden: false, disabled: false, value: "", files: [], children: [], focused: false,
+            handlers: {}, className: "", parentNode: null, tagName: "",
+            addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); },
+            append(...values) {
+              for (const value of values) {
+                if (value && typeof value === "object") value.parentNode = this;
+                this.children.push(value);
+              }
+            },
+            replaceChildren(...values) { this.children = []; this.append(...values); },
+            reset() { this.files = []; this.value = ""; },
+            focus() { this.focused = true; },
+            remove() {
+              if (!this.parentNode) return;
+              this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+              this.parentNode = null;
+            },
+          };
+          let text = "";
+          Object.defineProperty(element, "textContent", {
+            get() { return text; },
+            set(value) { text = String(value); this.children = []; },
+          });
+          return element;
+        }
+        for (const id of [
+          "#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress",
+          "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country",
+          "#country-detection", "#submit-review", "#submit-correction", "#correction-text",
+          "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog",
+          "#close-process-dialog",
+        ]) nodes[id] = node();
+        nodes["#country"].value = "Chad";
+        global.document = {
+          querySelector: (id) => nodes[id],
+          createElement: (tag) => Object.assign(node(), {tagName: tag}),
+          createTextNode: (value) => ({textContent: value}),
+        };
+        global.window = {
+          __CPF_FCV_REVIEWER_TEST__: true,
+          setTimeout: (fn) => fn(),
+          location: {assign(){}},
+        };
+        global.sessionStorage = {getItem(){return ""}, setItem(){}, removeItem(){}};
+        global.FormData = class {};
+        class FakeSource {
+          constructor() {
+            this.listeners = {};
+            this.closed = false;
+            FakeSource.all.push(this);
+          }
+          addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
+          close() { this.closed = true; }
+          async emit(type, data = "{}") {
+            for (const fn of this.listeners[type] || []) await fn({data});
+          }
+        }
+        FakeSource.all = [];
+        global.EventSource = FakeSource;
+
+        const populated = {
+          metadata: {diagnostic_mode: "rra_alignment"},
+          overall_read: "Overall synthesis for the review.",
+          alignment_readout: "Alignment synthesis for the review.",
+          revision_summary: [],
+          priority_areas: [],
+          rra_driver_assessments: [{
+            driver: "Unequal access to services",
+            cpf_response: "CPF prioritizes lagging regions.",
+            delivery_mechanism: "Area-based delivery is proposed.",
+            result_or_indicator: "Service access indicator.",
+            remaining_gap: "Adaptation triggers are not defined.",
+            status: "partially_aligned",
+            confidence: "high",
+            gap_locus: "monitoring_adaptation",
+            evidence_ids: ["rra-evidence"],
+          }],
+          fcv_strategy_assessments: [
+            {
+              strategic_shift: "anticipate_better",
+              assessment: "The CPF uses forward-looking risk analysis.",
+              status: "aligned",
+              confidence: "medium",
+              gap_locus: null,
+              evidence_ids: ["strategy-evidence"],
+            },
+            {
+              strategic_shift: "one_wbg_jobs",
+              assessment: "Jobs roles are not yet explicit.",
+              status: "not_evidenced",
+              confidence: "low",
+              gap_locus: "cpf_narrative",
+              evidence_ids: ["missing-evidence"],
+            },
+          ],
+          limitations: [],
+          document_coverage: {
+            primary_document: "CPF.docx",
+            package_documents: [],
+            context_documents: [],
+            coverage_note: "Synthetic coverage.",
+          },
+          evidence_by_id: {
+            "rra-evidence": {
+              locator: {
+                document_title: "RRA.docx",
+                page: 3,
+                heading: "Drivers",
+                excerpt: "RRA excerpt for access.",
+              },
+            },
+            "strategy-evidence": {
+              locator: {
+                document_title: "FCV Strategy.pdf",
+                page: 21,
+                heading: "Anticipate better",
+                excerpt: "Strategy excerpt for preparedness.",
+              },
+            },
+          },
+        };
+        const limited = {
+          ...populated,
+          metadata: {diagnostic_mode: "limited_framing"},
+          rra_driver_assessments: [],
+          fcv_strategy_assessments: [],
+        };
+        const unexpectedEmpty = {
+          ...populated,
+          metadata: {diagnostic_mode: "rra_alignment"},
+          rra_driver_assessments: [],
+          fcv_strategy_assessments: [],
+        };
+        const responses = [populated, limited, unexpectedEmpty];
+        global.fetch = async () => ({
+          status: 200,
+          ok: true,
+          json: async () => responses.shift(),
+        });
+
+        const collectText = (root) => [
+          root && typeof root.textContent === "string" ? root.textContent : "",
+          ...(root?.children || []).flatMap(collectText),
+        ].join(" ");
+        const countTag = (root, tagName) => [
+          ...(root && root.tagName === tagName ? [root] : []),
+          ...(root?.children || []).flatMap((child) => countTag(child, tagName)),
+        ].length;
+
+        (async () => {
+          require(process.argv[1]);
+          const hooks = window.__cpfFcvReviewerTestHooks;
+          hooks.watchEvents("populated", "populated-result");
+          await FakeSource.all[0].emit("run_complete");
+          const renderedText = collectText(nodes["#results"]);
+          for (const visibleText of [
+            "RRA driver-to-response assessment",
+            "Unequal access to services",
+            "CPF prioritizes lagging regions.",
+            "Area-based delivery is proposed.",
+            "Service access indicator.",
+            "Adaptation triggers are not defined.",
+            "Partially aligned",
+            "High",
+            "Monitoring and adaptation",
+            "2026-2030 FCV Strategy alignment",
+            "Anticipate better",
+            "The CPF uses forward-looking risk analysis.",
+            "Aligned",
+            "Medium",
+            "One WBG approach to jobs",
+            "Jobs roles are not yet explicit.",
+            "Not evidenced",
+            "Low",
+            "CPF narrative",
+            "RRA.docx | page 3 | Drivers",
+            "RRA excerpt for access.",
+            "FCV Strategy.pdf | page 21 | Anticipate better",
+            "Strategy excerpt for preparedness.",
+            "No supporting evidence was recorded for this assessment.",
+          ]) {
+            if (!renderedText.includes(visibleText)) throw Error("result omitted " + visibleText);
+          }
+          for (const rawId of ["rra-evidence", "strategy-evidence", "missing-evidence"]) {
+            if (renderedText.includes(rawId)) throw Error("raw evidence ID was rendered: " + rawId);
+          }
+          if (countTag(nodes["#results"], "section") < 2) throw Error("assessment sections were not rendered");
+          if (countTag(nodes["#results"], "dl") < 2) throw Error("assessment definition lists were not rendered");
+          if (countTag(nodes["#results"], "details") !== 2) throw Error("empty evidence disclosure was rendered");
+
+          hooks.watchEvents("limited", "limited-result");
+          await FakeSource.all[1].emit("run_complete");
+          const limitedText = collectText(nodes["#results"]);
+          const limitedMessage = "No current RRA was supplied; RRA alignment was not assessed.";
+          if (!limitedText.includes(limitedMessage)) throw Error("limited-mode RRA message was missing");
+          if (limitedText.includes("No RRA driver assessments were returned for this review.")) {
+            throw Error("limited mode used the unexpected-empty message");
+          }
+
+          hooks.watchEvents("unexpected-empty", "unexpected-empty-result");
+          await FakeSource.all[2].emit("run_complete");
+          const unexpectedText = collectText(nodes["#results"]);
+          const unexpectedMessage = "No RRA driver assessments were returned for this review.";
+          if (!unexpectedText.includes(unexpectedMessage)) throw Error("unexpected empty RRA message was missing");
+          if (unexpectedText.includes(limitedMessage)) throw Error("unexpected empty RRA used limited-mode wording");
+        })().catch((error) => { console.error(error); process.exit(1); });
+        """
+    )
+    completed = subprocess.run(
+        ["node", "-e", harness, str(JS.resolve())],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr

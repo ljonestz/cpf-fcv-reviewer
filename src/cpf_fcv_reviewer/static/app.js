@@ -475,12 +475,16 @@ function evidenceSourceLabel(item) {
 }
 
 function renderEvidenceGroup(result, evidenceIds) {
+  const resolvedItems = (evidenceIds || [])
+    .map((evidenceId) => result.evidence_by_id?.[evidenceId])
+    .filter(Boolean);
+  if (!resolvedItems.length) {
+    return text("p", "No supporting evidence was recorded for this assessment.", "empty-state");
+  }
   const details = document.createElement("details");
   details.className = "evidence-group";
   details.append(text("summary", "Evidence and document locations"));
-  for (const evidenceId of evidenceIds) {
-    const item = result.evidence_by_id?.[evidenceId];
-    if (!item) continue;
+  for (const item of resolvedItems) {
     const excerpt = item.locator && item.locator.excerpt || item.text;
     details.append(
       text("p", evidenceSourceLabel(item), "evidence-locator"),
@@ -537,9 +541,16 @@ function renderRraAssessments(result) {
   section.className = "assessment-section";
   section.append(text("h3", "RRA driver-to-response assessment"));
   const assessments = result.rra_driver_assessments || [];
+  const limitedFraming = result.metadata?.diagnostic_mode === "limited_framing";
   if (!assessments.length) {
     section.append(
-      text("p", "No current RRA was supplied; RRA alignment was not assessed.", "empty-state"),
+      text(
+        "p",
+        limitedFraming
+          ? "No current RRA was supplied; RRA alignment was not assessed."
+          : "No RRA driver assessments were returned for this review.",
+        "empty-state",
+      ),
     );
     return section;
   }
