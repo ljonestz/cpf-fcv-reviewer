@@ -13,9 +13,9 @@ from cpf_fcv_reviewer.registry import (
 )
 
 FIXTURE = Path("tests/fixtures/registry_bundle.synthetic.json")
-PUBLIC_BUNDLE = Path("registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.0.0.json")
+PUBLIC_BUNDLE = Path("registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.1.0.json")
 PUBLIC_BUNDLE_HASH = Path(
-    "registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.0.0.sha256"
+    "registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.1.0.sha256"
 )
 
 
@@ -198,11 +198,15 @@ def test_checked_in_public_guardrail_bundle_is_valid_and_hash_pinned():
     )
 
     assert bundle.bundle_id == "cpf-fcv-reviewer-public-guardrails"
-    assert bundle.version == "1.0.0"
+    assert bundle.version == "1.1.0"
     assert bundle.synthetic is False
     assert tuple(entry.entry_id for entry in bundle.entries) == (
         "PUB-GUARD-001",
         "PUB-GUARD-002",
         "PUB-GUARD-003",
         "PUB-GUARD-004",
+        "PUB-FCV-STRAT-001",
+        "PUB-FCV-STRAT-002",
+        "PUB-FCV-STRAT-003",
+        "PUB-FCV-STRAT-004",
     )

@@ -10,6 +10,26 @@
       "entry_id": "SYN-REF-001",
       "approved_text": "Consult the designated policy owner.",
       "prohibited_terms": ["eligible", "compliant", "triggered"]
+    },
+    {
+      "entry_id": "SYN-PUB-FCV-STRAT-001",
+      "approved_text": "Use forward-looking FCV risk analysis to inform preparedness, proactive strategic and operational decisions, real-time program adjustment, and adaptive management. (Strategy, pp. 21-25 and 53-54.)",
+      "prohibited_terms": []
+    },
+    {
+      "entry_id": "SYN-PUB-FCV-STRAT-002",
+      "approved_text": "CPF outcomes should address FCV drivers and trajectory-shifting actions. Program choices should reflect government commitment or sustainable delivery pathways in acute crisis settings. Country strategies should use scenarios and adjust or calibrate support as conditions evolve. (Strategy, pp. 26-36 and 58-60.)",
+      "prohibited_terms": []
+    },
+    {
+      "entry_id": "SYN-PUB-FCV-STRAT-003",
+      "approved_text": "FCV CPFs should systematically articulate jobs objectives and defined roles across WBG institutions and instruments. Programs should adapt foundations, business-enabling reforms, financing and capabilities, MSME focus, and the gender lens to context. (Strategy, pp. 34-40.)",
+      "prohibited_terms": []
+    },
+    {
+      "entry_id": "SYN-PUB-FCV-STRAT-004",
+      "approved_text": "Use FCV knowledge and operational tools to ensure RRAs identify trajectory-shifting actions and private-sector risks and opportunities and inform country strategies and projects. Relevant programs should address FCV drivers or strengthen resilience without exacerbating FCV risks, using fit-for-context operational flexibilities, delivery modalities, and partnerships. Corporate staffing commitments are not automatic CPF drafting gaps. (Strategy, pp. 38-45 and 58-60.)",
+      "prohibited_terms": []
     }
   ]
 }
