@@ -11,12 +11,17 @@ from docx import Document
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     DiagnosticEntry,
     DiagnosticMode,
     DocumentCoverage,
     EvidenceItem,
     EvidenceLocator,
     EvidencePack,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
     ReviewResult,
@@ -67,6 +72,20 @@ def _locator(excerpt: str = "The supplied CPF evidence.") -> EvidenceLocator:
     )
 
 
+def _strategy_assessments() -> tuple[FCVStrategyAssessment, ...]:
+    return tuple(
+        FCVStrategyAssessment(
+            assessment_id=f"strategy-{shift.value}",
+            strategic_shift=shift,
+            assessment="The supplied evidence does not support assessment of this shift.",
+            status=AssessmentStatus.NOT_ASSESSABLE,
+            confidence=AssessmentConfidence.LOW,
+            evidence_ids=(),
+        )
+        for shift in FCVStrategicShift
+    )
+
+
 def _result(
     *,
     priority_areas: tuple[PriorityArea, ...] = (),
@@ -79,6 +98,7 @@ def _result(
         alignment_readout="The supplied evidence supports a cautious FCV alignment readout.",
         revision_summary=revision_summary,
         priority_areas=priority_areas,
+        fcv_strategy_assessments=_strategy_assessments(),
         limitations=limitations,
         document_coverage=DocumentCoverage(
             primary_document="CPF.docx",
@@ -93,6 +113,7 @@ def _area(
     *,
     sensitivity: SensitivityCategory = SensitivityCategory.CAUTIOUS,
     action: str = "Clarify the delivery logic.",
+    gap_locus: GapLocus = GapLocus.CPF_NARRATIVE,
 ) -> PriorityArea:
     return PriorityArea(
         priority_area_id=area_id,
@@ -104,6 +125,7 @@ def _area(
         recommendation_scale=RecommendationScale.FINE_TUNING,
         evidence_ids=(evidence_id,),
         sensitivity=sensitivity,
+        gap_locus=gap_locus,
     )
 
 
@@ -160,7 +182,7 @@ def test_no_rra_uses_limited_mode_and_grouped_diagnostics_without_alignment_rati
     )
     limited_result = _result(
         revision_summary=(
-            RevisionSummaryItem(priority_area_id="pa-1", action="Address exclusion."),
+            RevisionSummaryItem(priority_area_id="pa-1", title="Address exclusion."),
         ),
         priority_areas=(_area("pa-1", "driver"),),
     )
@@ -182,7 +204,12 @@ def test_no_rra_uses_limited_mode_and_grouped_diagnostics_without_alignment_rati
 def test_contrasting_narrative_and_results_framework_gaps_remain_distinct_and_traceable():
     areas = (
         _area("narrative-gap", "narrative", action="Strengthen the narrative case."),
-        _area("results-gap", "results", action="Strengthen the results framework."),
+        _area(
+            "results-gap",
+            "results",
+            action="Strengthen the results framework.",
+            gap_locus=GapLocus.RESULTS_FRAMEWORK,
+        ),
     )
 
     issues = validate_review(
@@ -191,11 +218,11 @@ def test_contrasting_narrative_and_results_framework_gaps_remain_distinct_and_tr
             revision_summary=(
                 RevisionSummaryItem(
                     priority_area_id="narrative-gap",
-                    action="Strengthen the narrative case.",
+                    title="Strengthen the narrative case.",
                 ),
                 RevisionSummaryItem(
                     priority_area_id="results-gap",
-                    action="Strengthen the results framework.",
+                    title="Strengthen the results framework.",
                 ),
             ),
         ),
@@ -220,7 +247,7 @@ def test_uncertain_cross_border_relevance_is_retained_as_cautious_confirmation_w
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="cross-border",
-                action="Confirm regional relevance.",
+                title="Confirm regional relevance.",
             ),
         ),
         limitations=("Confirm whether regional spillovers are material before drafting action.",),
@@ -358,7 +385,7 @@ def test_sensitivity_categories_are_explicit_and_withheld_recommendations_are_no
             revision_summary=tuple(
                 RevisionSummaryItem(
                     priority_area_id=area.priority_area_id,
-                    action=area.recommended_action,
+                    title=area.recommended_action,
                 )
                 for area in areas
             ),
@@ -490,7 +517,7 @@ def test_hostile_user_steering_cannot_bypass_policy_or_stage_validators():
             revision_summary=(
                 RevisionSummaryItem(
                     priority_area_id="f-1",
-                    action=priority_area.recommended_action,
+                    title=priority_area.recommended_action,
                 ),
             ),
         ),

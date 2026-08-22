@@ -11,6 +11,7 @@ from cpf_fcv_reviewer.contracts import (
     AssessmentConfidence,
     AssessmentStatus,
     DetailLevel,
+    DiagnosticEntry,
     DiagnosticMode,
     DocumentRole,
     EvidenceItem,
@@ -20,6 +21,7 @@ from cpf_fcv_reviewer.contracts import (
     FCVStrategyAssessment,
     GapLocus,
     PriorityArea,
+    RRADriverAssessment,
     RecommendationScale,
     ReviewDraft,
     ReviewResult,
@@ -45,6 +47,11 @@ class FakeGateway:
     def generate(self, *, prompt_name, payload, output_type):
         self.calls.append((prompt_name, payload, output_type))
         return self.result
+
+
+STRATEGY_REGISTRY_EVIDENCE_IDS = tuple(
+    f"registry-SYN-PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
+)
 
 
 def metadata(
@@ -93,39 +100,100 @@ def evidence_item(
 
 
 def evidence_pack(meta: RunMetadata) -> EvidencePack:
+    evidence = [
+        evidence_item("ev-primary-1", "Primary.docx", DocumentRole.PRIMARY),
+        evidence_item("ev-package-a-1", "Package-A.docx", DocumentRole.PACKAGE),
+        evidence_item("ev-context-a-1", "Context-A.docx", DocumentRole.CONTEXT),
+        evidence_item("ev-package-b-1", "Package-B.docx", DocumentRole.PACKAGE),
+        evidence_item("ev-context-b-1", "Context-B.docx", DocumentRole.CONTEXT),
+        evidence_item("ev-package-a-2", "Package-A.docx", DocumentRole.PACKAGE),
+        evidence_item("ev-context-a-2", "Context-A.docx", DocumentRole.CONTEXT),
+        EvidenceItem(
+            evidence_id="ev-package-no-locator",
+            evidence_type="analytical_inference",
+            text="An inference without a document locator.",
+            confidence="medium",
+            document_role=DocumentRole.PACKAGE,
+        ),
+    ]
+    diagnostic_entries = ()
+    if meta.diagnostic_mode is DiagnosticMode.RRA_ALIGNMENT:
+        evidence.append(
+            EvidenceItem(
+                evidence_id="ev-rra-1",
+                evidence_type="document_fact",
+                text="The RRA identifies a delivery constraint.",
+                confidence="high",
+                locator=locator("RRA.docx"),
+            )
+        )
+        diagnostic_entries = (
+            DiagnosticEntry(
+                entry_id="rra-driver-1",
+                short_name="Delivery constraint",
+                group="delivery_risk",
+                materiality="high",
+                source_evidence_ids=("ev-rra-1",),
+                grouping_rationale="The RRA constraint affects implementation.",
+            ),
+        )
+    evidence.extend(
+        EvidenceItem(
+            evidence_id=evidence_id,
+            evidence_type="registry_language",
+            text=f"Synthetic FCV Strategy registry support {index}.",
+            confidence="high",
+        )
+        for index, evidence_id in enumerate(STRATEGY_REGISTRY_EVIDENCE_IDS, start=1)
+    )
     return EvidencePack(
         metadata=meta,
-        evidence=(
-            evidence_item("ev-primary-1", "Primary.docx", DocumentRole.PRIMARY),
-            evidence_item("ev-package-a-1", "Package-A.docx", DocumentRole.PACKAGE),
-            evidence_item("ev-context-a-1", "Context-A.docx", DocumentRole.CONTEXT),
-            evidence_item("ev-package-b-1", "Package-B.docx", DocumentRole.PACKAGE),
-            evidence_item("ev-context-b-1", "Context-B.docx", DocumentRole.CONTEXT),
-            evidence_item("ev-package-a-2", "Package-A.docx", DocumentRole.PACKAGE),
-            evidence_item("ev-context-a-2", "Context-A.docx", DocumentRole.CONTEXT),
-            EvidenceItem(
-                evidence_id="ev-package-no-locator",
-                evidence_type="analytical_inference",
-                text="An inference without a document locator.",
-                confidence="medium",
-                document_role=DocumentRole.PACKAGE,
-            ),
-        ),
-        diagnostic_entries=(),
+        evidence=tuple(evidence),
+        diagnostic_entries=diagnostic_entries,
     )
 
 
 def strategy_rows() -> tuple[FCVStrategyAssessment, ...]:
+    gap_loci = (
+        GapLocus.CPF_NARRATIVE,
+        GapLocus.RESULTS_FRAMEWORK,
+        GapLocus.DELIVERY_ARRANGEMENTS,
+        GapLocus.MONITORING_ADAPTATION,
+    )
     return tuple(
         FCVStrategyAssessment(
             assessment_id=f"strategy-{shift.value}",
             strategic_shift=shift,
-            assessment="The supplied evidence does not support assessment of this shift.",
-            status=AssessmentStatus.NOT_ASSESSABLE,
-            confidence=AssessmentConfidence.LOW,
-            evidence_ids=(),
+            assessment="The supplied evidence supports partial alignment with this shift.",
+            status=AssessmentStatus.PARTIALLY_ALIGNED,
+            confidence=AssessmentConfidence.MEDIUM,
+            gap_locus=gap_locus,
+            evidence_ids=(registry_evidence_id,),
         )
-        for shift in FCVStrategicShift
+        for shift, gap_locus, registry_evidence_id in zip(
+            FCVStrategicShift,
+            gap_loci,
+            STRATEGY_REGISTRY_EVIDENCE_IDS,
+        )
+    )
+
+
+def rra_rows(meta: RunMetadata) -> tuple[RRADriverAssessment, ...]:
+    if meta.diagnostic_mode is not DiagnosticMode.RRA_ALIGNMENT:
+        return ()
+    return (
+        RRADriverAssessment(
+            assessment_id="rra-driver-1",
+            driver="The RRA identifies a delivery constraint.",
+            cpf_response="The CPF includes a response to the identified constraint.",
+            delivery_mechanism="Implementation arrangements and adaptive management.",
+            result_or_indicator="Delivery indicators track whether the response is working.",
+            remaining_gap="The response needs clearer ownership and adaptation triggers.",
+            status=AssessmentStatus.PARTIALLY_ALIGNED,
+            confidence=AssessmentConfidence.MEDIUM,
+            gap_locus=GapLocus.DELIVERY_ARRANGEMENTS,
+            evidence_ids=("ev-rra-1",),
+        ),
     )
 
 
@@ -165,6 +233,7 @@ def draft_for(
                 gap_locus=GapLocus.DELIVERY_ARRANGEMENTS,
             ),
         ),
+        rra_driver_assessments=rra_rows(meta),
         fcv_strategy_assessments=strategy_rows(),
         institutional_referral_ids=(),
         limitations=(),
@@ -191,6 +260,7 @@ def result_for(
             ),
         ),
         priority_areas=(),
+        rra_driver_assessments=rra_rows(meta),
         fcv_strategy_assessments=strategy_rows(),
         limitations=(),
         document_coverage={
@@ -602,7 +672,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 2.0.0")
+    assert call["system"].startswith("Version: 3.0.0")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 

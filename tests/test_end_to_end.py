@@ -9,11 +9,16 @@ from docx import Document
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     DiagnosticEntry,
     DiagnosticMode,
     DocumentCoverage,
     EvidenceItem,
     EvidenceLocator,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
     ReviewResult,
@@ -34,6 +39,36 @@ SYNTHETIC_INPUTS = (
     "synthetic_fr.txt",
     "synthetic_mixed.txt",
 )
+
+
+STRATEGY_REGISTRY_EVIDENCE_IDS = tuple(
+    f"registry-SYN-PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
+)
+
+
+def strategy_assessments() -> tuple[FCVStrategyAssessment, ...]:
+    gap_loci = (
+        GapLocus.CPF_NARRATIVE,
+        GapLocus.RESULTS_FRAMEWORK,
+        GapLocus.DELIVERY_ARRANGEMENTS,
+        GapLocus.MONITORING_ADAPTATION,
+    )
+    return tuple(
+        FCVStrategyAssessment(
+            assessment_id=f"strategy-{shift.value}",
+            strategic_shift=shift,
+            assessment="The synthetic CPF partly reflects this FCV Strategy shift.",
+            status=AssessmentStatus.PARTIALLY_ALIGNED,
+            confidence=AssessmentConfidence.MEDIUM,
+            gap_locus=gap_locus,
+            evidence_ids=(registry_evidence_id,),
+        )
+        for shift, gap_locus, registry_evidence_id in zip(
+            FCVStrategicShift,
+            gap_loci,
+            STRATEGY_REGISTRY_EVIDENCE_IDS,
+        )
+    )
 
 
 class FakeSharePointAdapter:
@@ -83,7 +118,7 @@ class FakeModelAdapter:
             revision_summary=(
                 RevisionSummaryItem(
                     priority_area_id="pa-1",
-                    action="Clarify the delivery-risk response before finalization.",
+                    title="Clarify the delivery-risk response",
                 ),
             ),
             priority_areas=(
@@ -97,8 +132,10 @@ class FakeModelAdapter:
                     recommendation_scale=RecommendationScale.TARGETED_EDIT,
                     evidence_ids=("primary-001",),
                     sensitivity=SensitivityCategory.CAUTIOUS,
+                    gap_locus=GapLocus.DELIVERY_ARRANGEMENTS,
                 ),
             ),
+            fcv_strategy_assessments=strategy_assessments(),
             document_coverage=DocumentCoverage(
                 primary_document=locator.document_title,
                 coverage_note="The review covers the uploaded CPF.",
@@ -127,6 +164,7 @@ def synthetic_services():
     model = FakeModelAdapter()
     stable_service_calls: list[str] = []
     registry_bytes = REGISTRY_PATH.read_bytes()
+    registry_bundle = load_registry_bundle(REGISTRY_PATH, allow_synthetic=True)
 
     def extract(context):
         primary = context["payload"]["cpf"]
@@ -169,6 +207,16 @@ def synthetic_services():
             source_evidence_ids=(evidence.evidence_id,),
             grouping_rationale="The constraint affects implementation.",
         )
+        registry_evidence = tuple(
+            EvidenceItem(
+                evidence_id=f"registry-{entry.entry_id}",
+                evidence_type="registry_language",
+                text=entry.approved_text,
+                confidence="high",
+            )
+            for entry in registry_bundle.entries
+            if entry.entry_id.startswith("SYN-PUB-FCV-STRAT-")
+        )
         corrections = correction_models(payload)
         context["evidence_pack"] = build_reproducible_evidence_pack(
             run_id=context["assessment_id"],
@@ -182,7 +230,7 @@ def synthetic_services():
             model_id="synthetic-model-adapter",
             source_scan_at=datetime(2026, 8, 11, tzinfo=UTC),
             output_language="en",
-            evidence=(evidence,),
+            evidence=(evidence, *registry_evidence),
             diagnostic_entries=(diagnostic,),
             material_diagnostic_ids=(evidence.evidence_id,),
             corrections=corrections,
@@ -219,9 +267,8 @@ def synthetic_services():
         ),
         repair=lambda context, issues: context,
     )
-    bundle = load_registry_bundle(REGISTRY_PATH, allow_synthetic=True)
     return (
-        {"review_orchestrator": orchestrator, "registry_bundle": bundle},
+        {"review_orchestrator": orchestrator, "registry_bundle": registry_bundle},
         sharepoint,
         public_search,
         model,

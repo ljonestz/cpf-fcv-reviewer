@@ -10,12 +10,19 @@ from docx import Document
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     CurrentEvidenceTier,
+    DiagnosticMode,
     DocumentRole,
     EvidenceLocator,
     EvidencePack,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
+    RRADriverAssessment,
     RevisionSummaryItem,
     SensitivityCategory,
 )
@@ -30,6 +37,99 @@ from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchResult
 from cpf_fcv_reviewer.runtime import _truncate_at_word_boundary, build_runtime_services
 from cpf_fcv_reviewer.sources import SourceCandidate
+
+
+def _assessment_mode(payload):
+    mode = payload.get("diagnostic_mode")
+    if mode is None:
+        pack = payload.get("evidence_pack", {})
+        metadata = pack.get("metadata", {}) if isinstance(pack, dict) else {}
+        mode = metadata.get("diagnostic_mode")
+    return getattr(mode, "value", mode)
+
+
+def _assessment_evidence(payload):
+    pack = payload.get("evidence_pack")
+    if isinstance(pack, dict):
+        evidence = pack.get("evidence", ())
+        registry_ids = tuple(
+            item["evidence_id"]
+            for item in evidence
+            if item.get("evidence_type") == "registry_language"
+        )
+        document_ids = tuple(
+            item["evidence_id"]
+            for item in evidence
+            if item.get("evidence_type") == "document_fact"
+        )
+    else:
+        draft = payload.get("draft", {})
+        strategy_rows = draft.get("fcv_strategy_assessments", ())
+        registry_ids = tuple(
+            evidence_id
+            for row in strategy_rows
+            for evidence_id in row.get("evidence_ids", ())
+        )
+        document_ids = tuple(
+            evidence_id
+            for row in draft.get("rra_driver_assessments", ())
+            for evidence_id in row.get("evidence_ids", ())
+        )
+    return (
+        tuple(dict.fromkeys(registry_ids)),
+        tuple(dict.fromkeys(document_ids or registry_ids)),
+    )
+
+
+def _test_strategy_assessments(payload):
+    registry_ids, _ = _assessment_evidence(payload)
+    return tuple(
+        FCVStrategyAssessment(
+            assessment_id=f"test-strategy-{shift.value}",
+            strategic_shift=shift,
+            assessment=(
+                f"The runtime fixture cannot assess the {shift.value} strategic shift."
+            ),
+            status=AssessmentStatus.NOT_ASSESSABLE,
+            confidence=AssessmentConfidence.LOW,
+            gap_locus=None,
+            evidence_ids=(registry_ids[index],) if index < len(registry_ids) else (),
+        )
+        for index, shift in enumerate(FCVStrategicShift)
+    )
+
+
+def _test_rra_assessments(payload):
+    if _assessment_mode(payload) != DiagnosticMode.RRA_ALIGNMENT.value:
+        return ()
+    _, document_ids = _assessment_evidence(payload)
+    return (
+        RRADriverAssessment(
+            assessment_id="test-rra-driver-1",
+            driver="The runtime fixture represents a territorial delivery constraint.",
+            cpf_response="The CPF fixture includes a bounded response to the constraint.",
+            delivery_mechanism="The response uses targeted delivery arrangements.",
+            result_or_indicator="The fixture includes a service-access indicator.",
+            remaining_gap="Adaptation triggers remain to be specified.",
+            status=AssessmentStatus.PARTIALLY_ALIGNED,
+            confidence=AssessmentConfidence.MEDIUM,
+            gap_locus=GapLocus.MONITORING_ADAPTATION,
+            evidence_ids=document_ids[:1],
+        ),
+    )
+
+
+def _valid_review_draft(output_type, payload, **values):
+    if not values.get("fcv_strategy_assessments"):
+        values["fcv_strategy_assessments"] = _test_strategy_assessments(payload)
+    if _assessment_mode(payload) == DiagnosticMode.RRA_ALIGNMENT.value:
+        if not values.get("rra_driver_assessments"):
+            values["rra_driver_assessments"] = _test_rra_assessments(payload)
+    else:
+        values["rra_driver_assessments"] = ()
+    return output_type(**values)
+
+
 
 FIXTURE = Path("tests/fixtures/registry_bundle.synthetic.json")
 OPTIONAL_UPLOAD_WARNING = (
@@ -598,13 +698,13 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                 for item in pack.evidence
                 if item.evidence_type == "current_context"
             )
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The draft identifies a material delivery constraint.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(
                     RevisionSummaryItem(
                         priority_area_id="area-1",
-                        action="Clarify the delivery constraint.",
+                        title="Clarify the delivery constraint.",
                     ),
                 ),
                 priority_areas=(
@@ -622,6 +722,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                         recommendation_scale=RecommendationScale.FINE_TUNING,
                         evidence_ids=(evidence_id,),
                         sensitivity=SensitivityCategory.CAUTIOUS,
+                        gap_locus=GapLocus.CPF_NARRATIVE,
                     ),
                 ),
                 institutional_referral_ids=(),
@@ -881,7 +982,7 @@ def test_runtime_malformed_optional_bytes_are_private_and_valid_context_continue
             pass
 
         def generate(self, *, prompt_name, payload, output_type):
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The uploaded draft can be reviewed with caution.",
                 alignment_readout="The draft provides bounded contextual evidence.",
                 revision_summary=(),
@@ -1068,7 +1169,7 @@ def test_runtime_preserves_primary_evidence_with_supporting_document(monkeypatch
         def generate(self, *, prompt_name, payload, output_type):
             pack = EvidencePack.model_validate(payload["evidence_pack"])
             captured["pack"] = pack
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The draft identifies a material delivery constraint.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
@@ -1194,7 +1295,7 @@ def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch)
         def generate(self, *, prompt_name, payload, output_type):
             captured["payload"] = payload
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The draft needs a clearer delivery approach.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
@@ -1272,7 +1373,7 @@ def test_runtime_package_deep_section_sampling_covers_later_high_value_sections(
 
         def generate(self, *, prompt_name, payload, output_type):
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The draft needs a clearer delivery approach.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
@@ -1391,7 +1492,7 @@ def test_runtime_package_phase_two_uses_only_additional_markers(monkeypatch):
 
         def generate(self, *, prompt_name, payload, output_type):
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The draft needs a clearer delivery approach.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
@@ -1520,7 +1621,7 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
 
         def generate(self, *, prompt_name, payload, output_type):
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The draft needs a clearer delivery approach.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
@@ -1671,7 +1772,7 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
         def generate(self, *, prompt_name, payload, output_type):
             pack = EvidencePack.model_validate(payload["evidence_pack"])
             captured["pack"] = pack
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The draft requires cautious review.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
@@ -1739,7 +1840,7 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
                 overall_read = "The draft requires cautious review."
             else:
                 overall_read = "This package is eligible for special treatment."
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read=overall_read,
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(),
@@ -1794,7 +1895,7 @@ def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
 
         def generate(self, *, prompt_name, payload, output_type):
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The review identifies a delivery constraint.",
                 alignment_readout="The draft partly reflects current context.",
                 revision_summary=(), priority_areas=(), institutional_referral_ids=(),
@@ -1975,7 +2076,7 @@ def test_runtime_does_not_turn_uploaded_rra_into_current_context(monkeypatch):
 
         def generate(self, *, prompt_name, payload, output_type):
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read="The uploaded draft can be reviewed with caution.",
                 alignment_readout="Independent current context was unavailable.",
                 revision_summary=(),
@@ -2052,7 +2153,7 @@ def test_runtime_preserves_research_limitation_once_through_repair(monkeypatch):
                     "Independent current-country  research was unavailable.",
                     unrelated_limitation,
                 )
-            return output_type(
+            return _valid_review_draft(output_type, payload,
                 overall_read=overall_read,
                 alignment_readout="Independent current context was unavailable.",
                 revision_summary=(),
