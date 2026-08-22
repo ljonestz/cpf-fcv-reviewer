@@ -54,7 +54,7 @@ class PersistentAssessmentWorker:
         self._thread.start()
 
     def enqueue(self, assessment_id: str) -> None:
-        self._store.update(assessment_id, status="created")
+        self._store.update(assessment_id, status="queued")
         with self._condition:
             self._condition.notify()
 

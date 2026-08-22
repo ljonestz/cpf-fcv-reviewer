@@ -39,6 +39,7 @@ def test_sqlite_claim_is_transactional_and_restart_visible(tmp_path):
     first = SQLiteSessionStore(path, ttl_seconds=60)
     assessment_id = first.create({"status": "created"})
     second = SQLiteSessionStore(path, ttl_seconds=60)
+    first.update(assessment_id, status="queued")
 
     assert first.claim_next() == assessment_id
     assert second.claim_next() is None

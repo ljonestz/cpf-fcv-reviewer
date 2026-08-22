@@ -336,12 +336,12 @@ class SQLiteSessionStore:
             ).fetchall()
             for session_id, in rows:
                 connection.execute(
-                    "UPDATE sessions SET status = 'created', updated_at = ? WHERE session_id = ?",
+                    "UPDATE sessions SET status = 'queued', updated_at = ? WHERE session_id = ?",
                     (now, session_id),
                 )
                 connection.execute(
                     "UPDATE session_values SET value = ? WHERE session_id = ? AND name = 'status'",
-                    (_encode("created"), session_id),
+                    (_encode("queued"), session_id),
                 )
             return len(rows)
 
@@ -353,7 +353,7 @@ class SQLiteSessionStore:
             row = connection.execute(
                 """
                 SELECT session_id FROM sessions
-                WHERE status = 'created' ORDER BY updated_at, session_id LIMIT 1
+                WHERE status = 'queued' ORDER BY updated_at, session_id LIMIT 1
                 """
             ).fetchone()
             if row is None:

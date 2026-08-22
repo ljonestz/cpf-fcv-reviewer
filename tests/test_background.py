@@ -50,4 +50,4 @@ def test_persistent_worker_enqueue_keeps_job_claimable_and_wakes_worker():
 
     worker.enqueue("assessment-2")
 
-    assert store.updated == [("assessment-2", {"status": "created"})]
+    assert store.updated == [("assessment-2", {"status": "queued"})]
