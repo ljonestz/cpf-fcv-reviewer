@@ -30,8 +30,10 @@ LIMITED_MODE_ALIGNMENT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 LIMITED_MODE_ABSTENTION_PATTERN = re.compile(
-    rf"{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}\s+(?:was|is)\s+not\s+"
-    r"(?:assessed|evaluated|rated)\b",
+    rf"(?:{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}\s+"
+    r"(?:(?:was|is)\s+not|cannot|could\s+not)\s+(?:be\s+)?"
+    r"(?:assessed|evaluated|rated)\b|(?:does|did)\s+not\s+"
+    rf"(?:assess|evaluate|rate)\s+{LIMITED_MODE_ALIGNMENT_PATTERN.pattern})",
     re.IGNORECASE,
 )
 FINALIZATION_OVERREACH_TERMS = (

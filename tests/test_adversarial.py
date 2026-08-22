@@ -33,14 +33,17 @@ def test_missing_rra_forces_limited_mode_to_abstain_from_alignment(make_valid_re
 
 
 def test_limited_mode_accepts_explicit_rra_alignment_abstention(make_valid_result):
-    result, _ = make_valid_result
-    result = result.model_copy(
-        update={
-            "overall_read": "No current RRA was supplied; RRA alignment was not assessed."
-        }
-    )
-    issues = validate_review(result, evidence_ids=set(), prohibited_terms=set())
-    assert "limited_mode_overclaim" not in {issue.code for issue in issues}
+    base_result, _ = make_valid_result
+    for abstention in (
+        "No current RRA was supplied; RRA alignment was not assessed.",
+        "RRA alignment cannot be assessed without a supplied RRA.",
+        "This review does not assess alignment with the RRA.",
+    ):
+        result = base_result.model_copy(update={"overall_read": abstention})
+        issues = validate_review(result, evidence_ids=set(), prohibited_terms=set())
+        assert "limited_mode_overclaim" not in {
+            issue.code for issue in issues
+        }, abstention
 
 
 def test_direct_original_wins_and_ambiguous_originals_abstain():

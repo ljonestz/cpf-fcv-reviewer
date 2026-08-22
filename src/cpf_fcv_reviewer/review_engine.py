@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from .contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     DocumentCoverage,
     DocumentRole,
     EvidencePack,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
     ReviewDraft,
     ReviewResult,
 )
@@ -55,6 +59,32 @@ def _serialize_detail_profile(profile) -> dict[str, object]:
         "target_pages": profile.target_pages,
         "priority_area_range": list(profile.priority_area_range),
     }
+
+
+def _normalize_strategy_assessments(draft: ReviewDraft) -> ReviewDraft:
+    rows_by_shift = {}
+    for row in draft.fcv_strategy_assessments:
+        rows_by_shift.setdefault(row.strategic_shift, row)
+
+    normalized = tuple(
+        rows_by_shift.get(shift)
+        or FCVStrategyAssessment(
+            assessment_id=f"repair-strategy-{shift.value}",
+            strategic_shift=shift,
+            assessment=(
+                "This strategic shift was not assessable after validation repair "
+                "because a complete model-authored row was unavailable."
+            ),
+            status=AssessmentStatus.NOT_ASSESSABLE,
+            confidence=AssessmentConfidence.LOW,
+            gap_locus=None,
+            evidence_ids=(),
+        )
+        for shift in FCVStrategicShift
+    )
+    return draft.model_copy(update={"fcv_strategy_assessments": normalized})
+
+
 
 
 def _document_names(evidence_pack: EvidencePack) -> dict[DocumentRole, tuple[str, ...]]:
@@ -145,6 +175,7 @@ class ReviewEngine:
         coverage = result.document_coverage.model_copy(
             update={"coverage_note": draft.coverage_note}
         )
+        draft = _normalize_strategy_assessments(draft)
         content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})
         return ReviewResult(
