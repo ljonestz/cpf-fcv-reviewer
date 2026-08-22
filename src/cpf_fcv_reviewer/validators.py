@@ -29,6 +29,11 @@ LIMITED_MODE_ALIGNMENT_PATTERN = re.compile(
     r"alignment\s+with\s+(?:the\s+)?rra)\b",
     re.IGNORECASE,
 )
+LIMITED_MODE_ABSTENTION_PATTERN = re.compile(
+    rf"{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}\s+(?:was|is)\s+not\s+"
+    r"(?:assessed|evaluated|rated)\b",
+    re.IGNORECASE,
+)
 FINALIZATION_OVERREACH_TERMS = (
     "replace all",
     "rebuild the entire",
@@ -164,7 +169,8 @@ def validate_review(
     text = result_text(result)
 
     if result.metadata.diagnostic_mode == DiagnosticMode.LIMITED_FRAMING:
-        if LIMITED_MODE_ALIGNMENT_PATTERN.search(text):
+        text_without_abstentions = LIMITED_MODE_ABSTENTION_PATTERN.sub("", text)
+        if LIMITED_MODE_ALIGNMENT_PATTERN.search(text_without_abstentions):
             issues.append(
                 ValidationIssue(
                     "limited_mode_overclaim",

@@ -32,6 +32,17 @@ def test_missing_rra_forces_limited_mode_to_abstain_from_alignment(make_valid_re
     assert "limited_mode_overclaim" in {issue.code for issue in issues}
 
 
+def test_limited_mode_accepts_explicit_rra_alignment_abstention(make_valid_result):
+    result, _ = make_valid_result
+    result = result.model_copy(
+        update={
+            "overall_read": "No current RRA was supplied; RRA alignment was not assessed."
+        }
+    )
+    issues = validate_review(result, evidence_ids=set(), prohibited_terms=set())
+    assert "limited_mode_overclaim" not in {issue.code for issue in issues}
+
+
 def test_direct_original_wins_and_ambiguous_originals_abstain():
     original = SourceCandidate("sp-1", "RRA.docx", "3", "sharepoint_original", True)
     derived = SourceCandidate("md-1", "RRA.md", "3", "derived_copy", True)
