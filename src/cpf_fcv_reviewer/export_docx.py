@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from io import BytesIO
 
@@ -66,6 +67,13 @@ STRATEGIC_SHIFT_LABELS = {
 }
 
 
+RRA_ALIGNMENT_QUESTION = "How well does the CPF package align with the RRA and current FCV dynamics?"
+STRATEGY_ALIGNMENT_QUESTION = (
+    "How does the CPF package contribute to the FCV Strategy's core priorities?"
+)
+EVIDENCE_APPENDIX_HEADING = "Evidence and reproducibility"
+EVIDENCE_LOCATIONS_HEADING = "Evidence and document locations"
+REPRODUCIBILITY_HEADING = "Reproducibility information"
 class EvidenceCompletenessError(ValueError):
     """Raised when a narrative priority area cites unavailable evidence."""
 
@@ -361,10 +369,86 @@ def validate_evidence_completeness(
         )
 
 
+def _sentence_parts(text: str) -> tuple[str, ...]:
+    normalized = " ".join(str(text).split())
+    if not normalized:
+        return ()
+
+    parts: list[str] = []
+    start = 0
+    for match in re.finditer(r"[.!?](?=[\"')\]]?(?:\s|$))", normalized):
+        end = match.end()
+        sentence = normalized[start:end].strip()
+        if sentence:
+            parts.append(sentence)
+        start = end
+    trailing = normalized[start:].strip()
+    if trailing:
+        parts.append(trailing)
+    return tuple(parts)
+
+
+def _readable_chunks(text: str, *, max_sentences: int = 4) -> tuple[str, ...]:
+    sentences = _sentence_parts(text)
+    return tuple(
+        " ".join(sentences[index : index + max_sentences])
+        for index in range(0, len(sentences), max_sentences)
+    )
+
+
+def _append_bold_lead_sentence(paragraph, text: str) -> None:
+    sentences = _sentence_parts(text)
+    if not sentences:
+        return
+    lead = paragraph.add_run(sentences[0])
+    lead.bold = True
+    if len(sentences) > 1:
+        paragraph.add_run(" " + " ".join(sentences[1:]))
+
+
+def _add_readable_paragraph(
+    document: Document,
+    text: str,
+    *,
+    style_name: str | None = None,
+    num_id: int | None = None,
+) -> tuple:
+    chunks = _readable_chunks(text) or ("",)
+    paragraphs = []
+    for chunk in chunks:
+        paragraph = (
+            document.add_paragraph(style=style_name)
+            if style_name is not None
+            else document.add_paragraph()
+        )
+        if num_id is not None:
+            _apply_num_id(paragraph, num_id)
+        _append_bold_lead_sentence(paragraph, chunk)
+        paragraphs.append(paragraph)
+    return tuple(paragraphs)
+
+
 def _add_labelled_paragraph(document: Document, label: str, value: str) -> None:
-    paragraph = document.add_paragraph()
-    paragraph.add_run(f"{label}: ").bold = True
-    paragraph.add_run(value)
+    chunks = _readable_chunks(value) or ("",)
+    for index, chunk in enumerate(chunks):
+        paragraph = document.add_paragraph()
+        if index == 0:
+            paragraph.add_run(f"{label}: ").bold = True
+        _append_bold_lead_sentence(paragraph, chunk)
+
+
+def _add_readable_list_paragraph(
+    document: Document,
+    text: str,
+    *,
+    style_name: str,
+    num_id: int,
+) -> None:
+    for chunk in _readable_chunks(text) or ("",):
+        paragraph = document.add_paragraph(style=style_name)
+        _apply_num_id(paragraph, num_id)
+        _append_bold_lead_sentence(paragraph, chunk)
+
 
 
 def _add_assessment_evidence(
@@ -372,15 +456,12 @@ def _add_assessment_evidence(
     evidence_ids: tuple[str, ...],
     evidence: dict[str, EvidenceItem],
 ) -> None:
+    del evidence
     if not evidence_ids:
         document.add_paragraph(
             "No supporting evidence was recorded for this assessment."
         )
-        return
-    for evidence_id in evidence_ids:
-        item = evidence[evidence_id]
-        document.add_paragraph(f"Source: {locator_text(item)}")
-        document.add_paragraph(f"Excerpt: {evidence_excerpt(item)}")
+    return
 
 
 def _add_rra_assessments(
@@ -443,16 +524,50 @@ def _add_strategy_assessments(
         _add_assessment_evidence(document, assessment.evidence_ids, evidence)
 
 
+def _add_evidence_register(
+    document: Document,
+    result: ReviewResult,
+    evidence: dict[str, EvidenceItem],
+) -> None:
+    references: dict[str, list[str]] = {}
+
+    def register(evidence_ids: tuple[str, ...], used_for: str) -> None:
+        for evidence_id in evidence_ids:
+            references.setdefault(evidence_id, []).append(used_for)
+
+    for index, assessment in enumerate(result.rra_driver_assessments, start=1):
+        register(assessment.evidence_ids, f"RRA driver {index}: {assessment.driver}")
+    for assessment in result.fcv_strategy_assessments:
+        shift = STRATEGIC_SHIFT_LABELS[assessment.strategic_shift]
+        register(assessment.evidence_ids, f"FCV Strategy: {shift}")
+    for area in result.priority_areas:
+        register(area.evidence_ids, f"Priority area: {area.heading}")
+
+    if not references:
+        document.add_paragraph("No evidence citations were recorded for the visible findings.")
+        return
+
+    for number, (evidence_id, used_for) in enumerate(references.items(), start=1):
+        item = evidence[evidence_id]
+        _add_labelled_paragraph(document, "Evidence reference", str(number))
+        _add_labelled_paragraph(document, "Used for", "; ".join(dict.fromkeys(used_for)))
+        _add_labelled_paragraph(document, "Source", locator_text(item))
+        _add_labelled_paragraph(document, "Excerpt", evidence_excerpt(item))
+
 def _add_coverage(document: Document, result: ReviewResult) -> None:
     coverage = result.document_coverage
-    document.add_paragraph(f"Primary document: {coverage.primary_document}")
-    document.add_paragraph(
-        "Package documents: " + ", ".join(coverage.package_documents or ("None supplied",))
+    _add_labelled_paragraph(document, "Primary document", coverage.primary_document)
+    _add_labelled_paragraph(
+        document,
+        "Package documents",
+        ", ".join(coverage.package_documents or ("None supplied",)),
     )
-    document.add_paragraph(
-        "Context documents: " + ", ".join(coverage.context_documents or ("None supplied",))
+    _add_labelled_paragraph(
+        document,
+        "Context documents",
+        ", ".join(coverage.context_documents or ("None supplied",)),
     )
-    document.add_paragraph(f"Coverage note: {coverage.coverage_note}")
+    _add_labelled_paragraph(document, "Coverage note", coverage.coverage_note)
 
 
 def _add_reproducibility_metadata(document: Document, result: ReviewResult) -> None:
@@ -484,20 +599,20 @@ def _add_reproducibility_metadata(document: Document, result: ReviewResult) -> N
         ("Registry bundle hash", metadata.registry_bundle_hash),
         ("Guidance hash", metadata.guidance_hash),
     ):
-        document.add_paragraph(f"{label}: {value}")
+        _add_labelled_paragraph(document, label, value)
 
     if metadata.parent_run_id is not None:
-        document.add_paragraph(f"Parent run: {metadata.parent_run_id}")
+        _add_labelled_paragraph(document, "Parent run", metadata.parent_run_id)
     for registry_name, version in sorted(metadata.registry_versions.items()):
-        document.add_paragraph(f"Registry {registry_name}: {version}")
+        _add_labelled_paragraph(document, f"Registry {registry_name}", version)
     for document_name, fingerprint in sorted(metadata.document_fingerprints.items()):
-        document.add_paragraph(f"Document {document_name}: {fingerprint}")
+        _add_labelled_paragraph(document, f"Document {document_name}", fingerprint)
     for prompt_name, prompt_digest in sorted(metadata.prompt_hashes.items()):
-        document.add_paragraph(f"Prompt {prompt_name}: {prompt_digest}")
+        _add_labelled_paragraph(document, f"Prompt {prompt_name}", prompt_digest)
     for outcome in metadata.validation_outcomes:
-        document.add_paragraph(f"Validation: {outcome}")
+        _add_labelled_paragraph(document, "Validation", outcome)
     for correction_id in metadata.correction_ids:
-        document.add_paragraph(f"Correction: {correction_id}")
+        _add_labelled_paragraph(document, "Correction", correction_id)
 
 
 def build_docx(
@@ -525,14 +640,17 @@ def build_docx(
     advisory_run.font.color.rgb = DARK_BLUE
 
     document.add_heading("Overall assessment", level=1)
-    document.add_paragraph(result.overall_read)
-
-    document.add_heading(
-        "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy",
-        level=1,
-    )
-    document.add_paragraph(result.alignment_readout)
-
+    _add_readable_paragraph(document, result.overall_read)
+    document.add_heading(RRA_ALIGNMENT_QUESTION, level=2)
+    _add_readable_paragraph(document, result.alignment_readout)
+    document.add_heading(STRATEGY_ALIGNMENT_QUESTION, level=2)
+    if result.fcv_strategy_assessments:
+        for assessment in result.fcv_strategy_assessments:
+            _add_readable_paragraph(document, assessment.assessment)
+    else:
+        document.add_paragraph(
+            "No FCV Strategy alignment assessment was returned for this review."
+        )
     _add_rra_assessments(document, result, evidence)
     _add_strategy_assessments(document, result, evidence)
 
@@ -552,20 +670,13 @@ def build_docx(
     if result.priority_areas:
         for area in result.priority_areas:
             document.add_heading(area.heading, level=2)
-            document.add_paragraph(area.assessment)
-            document.add_paragraph(area.why_it_matters)
-            action = document.add_paragraph()
-            action.add_run("Recommended action. ").bold = True
-            action.add_run(area.recommended_action)
-            document.add_paragraph(f"Target: {target_text(area.target_locator)}")
+            _add_readable_paragraph(document, area.assessment)
+            _add_readable_paragraph(document, area.why_it_matters)
+            _add_labelled_paragraph(document, "Recommended action", area.recommended_action)
+            _add_labelled_paragraph(document, "Target", target_text(area.target_locator))
             if area.comment_reference:
-                document.add_paragraph(f"Comment addressed: {area.comment_reference}")
-            for evidence_id in area.evidence_ids:
-                item = evidence.get(evidence_id)
-                if item is None:
-                    continue
-                document.add_paragraph(f"Source: {locator_text(item)}")
-                document.add_paragraph(f"Excerpt: {evidence_excerpt(item)}")
+                _add_labelled_paragraph(document, "Comment addressed", area.comment_reference)
+            _add_assessment_evidence(document, area.evidence_ids, evidence)
     else:
         document.add_paragraph("No priority areas were returned for this review.")
 
@@ -573,7 +684,7 @@ def build_docx(
     document.add_heading("Limitations and document coverage", level=1)
     if result.limitations:
         for limitation in result.limitations:
-            _add_list_paragraph(
+            _add_readable_list_paragraph(
                 document,
                 limitation,
                 style_name="CPF Bullet List",
@@ -583,14 +694,22 @@ def build_docx(
         document.add_paragraph("No additional limitations were recorded.")
     _add_coverage(document, result)
 
-    if hydrated_referrals:
-        document.add_heading("Technical appendix", level=1)
-        document.add_heading("Institutional referrals", level=2)
-        for referral in hydrated_referrals:
-            document.add_paragraph(referral["approved_text"])
-            document.add_paragraph(f"Registry: {referral['entry_id']} | {referral['version']}")
+    document.add_heading(EVIDENCE_APPENDIX_HEADING, level=1)
+    document.add_heading(EVIDENCE_LOCATIONS_HEADING, level=2)
+    _add_evidence_register(document, result, evidence)
 
-    document.add_heading("Reproducibility metadata", level=1)
+    if hydrated_referrals:
+        document.add_heading("Technical appendix", level=2)
+        document.add_heading("Institutional referrals", level=3)
+        for referral in hydrated_referrals:
+            _add_readable_paragraph(document, referral["approved_text"])
+            _add_labelled_paragraph(
+                document,
+                "Registry",
+                f"{referral['entry_id']} | {referral['version']}",
+            )
+
+    document.add_heading(REPRODUCIBILITY_HEADING, level=2)
     _add_reproducibility_metadata(document, result)
 
     stream = BytesIO()

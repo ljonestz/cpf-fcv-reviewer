@@ -325,7 +325,8 @@ def test_complete_synthetic_local_workflow(fixture_name):
     ]
     authoritative_docx_headings = [
         "Overall assessment",
-        "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy",
+        "How well does the CPF package align with the RRA and current FCV dynamics?",
+        "How does the CPF package contribute to the FCV Strategy's core priorities?",
         "Priority measures to strengthen the CPF/CEN",
         "Priority areas for strengthening",
         "Limitations and document coverage",

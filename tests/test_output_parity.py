@@ -139,3 +139,20 @@ def test_browser_json_and_docx_share_document_led_evidence_status(make_valid_res
     assert payload["metadata"]["current_evidence_limitation"] == limitation
     assert "Review based primarily on submitted documents" in docx_text
     assert limitation in docx_text
+
+
+def test_detailed_docx_keeps_main_readout_free_of_repeated_evidence_details(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+
+    appendix_index = paragraphs.index("Evidence and document locations")
+    main_text = "\n".join(paragraphs[:appendix_index])
+    appendix_text = "\n".join(paragraphs[appendix_index:])
+
+    assert "Source: CPF.docx | Results framework | paragraph 12" not in main_text
+    assert "Excerpt: The program will support access." not in main_text
+    assert "Source: CPF.docx | Results framework | paragraph 12" in appendix_text
+    assert "Excerpt: The program will support access." in appendix_text

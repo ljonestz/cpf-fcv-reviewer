@@ -14,7 +14,11 @@ from cpf_fcv_reviewer.contracts import (
     CurrentEvidenceTier,
     DiagnosticMode,
 )
-from cpf_fcv_reviewer.export_docx import build_docx
+from cpf_fcv_reviewer.export_docx import (
+    RRA_ALIGNMENT_QUESTION,
+    STRATEGY_ALIGNMENT_QUESTION,
+    build_docx,
+)
 from cpf_fcv_reviewer.registry import load_registry_bundle
 
 
@@ -37,7 +41,8 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert result.overall_read in text
     assert "Overall assessment" in text
     assert result.overall_read in text
-    assert "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy" in text
+    assert RRA_ALIGNMENT_QUESTION in text
+    assert STRATEGY_ALIGNMENT_QUESTION in text
     assert result.alignment_readout in text
     assert "Priority measures to strengthen the CPF/CEN" in text
     assert "Priority areas for strengthening" in text
@@ -61,6 +66,87 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert "Findings" not in text
     assert "Recommendations" not in text
     assert "Practical options" not in text
+
+
+def test_docx_uses_question_led_overall_read_and_restrained_appendix(make_valid_result):
+    result, evidence = make_valid_result
+    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    headings = [
+        paragraph.text
+        for paragraph in document.paragraphs
+        if paragraph.style.name.startswith(("Title", "Heading"))
+    ]
+
+    rra_question = "How well does the CPF package align with the RRA and current FCV dynamics?"
+    strategy_question = "How does the CPF package contribute to the FCV Strategy's core priorities?"
+    assert rra_question in headings
+    assert strategy_question in headings
+    assert headings.index("Overall assessment") < headings.index(rra_question)
+    assert headings.index(rra_question) < headings.index(strategy_question)
+    assert headings.index(strategy_question) < headings.index("RRA driver-to-response assessment")
+    overall_index = paragraphs.index("Overall assessment")
+    rra_index = paragraphs.index(rra_question)
+    strategy_index = paragraphs.index(strategy_question)
+    assert result.overall_read in paragraphs[overall_index + 1 : rra_index]
+    assert result.alignment_readout in paragraphs[rra_index + 1 : strategy_index]
+    assert result.fcv_strategy_assessments[0].assessment in paragraphs[strategy_index + 1 :]
+
+    evidence_heading = "Evidence and document locations"
+    reproducibility_heading = "Reproducibility information"
+    assert evidence_heading in headings
+    assert reproducibility_heading in headings
+    assert headings.index("Limitations and document coverage") < headings.index(evidence_heading)
+    assert headings.index(evidence_heading) < headings.index(reproducibility_heading)
+
+    evidence_index = paragraphs.index(evidence_heading)
+    source_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.startswith("Source: ")
+    )
+    assert source_index > evidence_index
+
+
+def test_docx_splits_long_readout_and_bolds_each_active_lead_sentence(make_valid_result):
+    result, evidence = make_valid_result
+    long_read = (
+        "The first sentence states the main finding. "
+        "The second sentence explains the evidence. "
+        "The third sentence identifies the consequence. "
+        "The fourth sentence describes the implication. "
+        "The fifth sentence gives the practical conclusion."
+    )
+    result = result.model_copy(update={"overall_read": long_read})
+
+    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    paragraphs = document.paragraphs
+    overall_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text == "Overall assessment"
+    )
+    rra_question_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text == "How well does the CPF package align with the RRA and current FCV dynamics?"
+    )
+    strategy_question_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text == "How does the CPF package contribute to the FCV Strategy's core priorities?"
+    )
+    readout_paragraphs = paragraphs[overall_index + 1 : rra_question_index]
+
+    assert [paragraph.text for paragraph in readout_paragraphs] == [
+        "The first sentence states the main finding. The second sentence explains the evidence. "
+        "The third sentence identifies the consequence. The fourth sentence describes the implication.",
+        "The fifth sentence gives the practical conclusion.",
+    ]
+    assert readout_paragraphs[0].runs[0].text == "The first sentence states the main finding."
+    assert readout_paragraphs[0].runs[0].bold is True
+    assert readout_paragraphs[0].runs[1].bold is not True
+    assert readout_paragraphs[1].runs[0].bold is True
 
 
 def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
@@ -208,13 +294,14 @@ def test_docx_rejects_missing_assessment_evidence_with_row_details(make_valid_re
         build_docx(result, evidence=evidence, hydrated_referrals=())
 
 
-def test_docx_uses_note_first_sections_and_omits_question_section(make_valid_result):
+def test_docx_uses_question_led_note_sections(make_valid_result):
     result, evidence = make_valid_result
     data = build_docx(result, evidence=evidence, hydrated_referrals=())
     text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
 
-    assert text.index("Overall assessment") < text.index("How the draft responds")
-    assert text.index("How the draft responds") < text.index(
+    assert text.index("Overall assessment") < text.index(RRA_ALIGNMENT_QUESTION)
+    assert text.index(RRA_ALIGNMENT_QUESTION) < text.index(STRATEGY_ALIGNMENT_QUESTION)
+    assert text.index(STRATEGY_ALIGNMENT_QUESTION) < text.index(
         "Priority measures to strengthen the CPF/CEN"
     )
     assert text.index("Priority measures to strengthen the CPF/CEN") < text.index(
