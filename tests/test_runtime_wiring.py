@@ -35,7 +35,11 @@ from cpf_fcv_reviewer.extraction import (
 from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.registry import load_registry_bundle
 from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchResult
-from cpf_fcv_reviewer.runtime import _truncate_at_word_boundary, build_runtime_services
+from cpf_fcv_reviewer.runtime import (
+    _select_role_segments,
+    _truncate_at_word_boundary,
+    build_runtime_services,
+)
 from cpf_fcv_reviewer.sources import SourceCandidate
 
 
@@ -46,6 +50,29 @@ def _assessment_mode(payload):
         metadata = pack.get("metadata", {}) if isinstance(pack, dict) else {}
         mode = metadata.get("diagnostic_mode")
     return getattr(mode, "value", mode)
+
+
+def test_primary_segment_selection_samples_across_long_documents():
+    document = ExtractedDocument(
+        name="long-cpf.docx",
+        segments=tuple(
+            ExtractedSegment(
+                text=f"Primary segment {index}",
+                page=None,
+                heading=None,
+                element=f"paragraph {index + 1}",
+            )
+            for index in range(101)
+        ),
+        warnings=(),
+    )
+
+    selected = _select_role_segments(DocumentRole.PRIMARY, (document,), 12)
+    selected_text = [segment.text for _, segment, _ in selected]
+
+    assert selected_text[0] == "Primary segment 0"
+    assert "Primary segment 55" in selected_text
+    assert selected_text[-1] == "Primary segment 100"
 
 
 def _assessment_evidence(payload):

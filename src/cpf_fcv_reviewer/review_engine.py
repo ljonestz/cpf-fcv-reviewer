@@ -61,9 +61,12 @@ def _serialize_detail_profile(profile) -> dict[str, object]:
     }
 
 
-def _normalize_strategy_assessments(draft: ReviewDraft) -> ReviewDraft:
+def _normalize_strategy_assessments(
+    draft: ReviewDraft,
+    fallback_rows: tuple[FCVStrategyAssessment, ...] = (),
+) -> ReviewDraft:
     rows_by_shift = {}
-    for row in draft.fcv_strategy_assessments:
+    for row in (*draft.fcv_strategy_assessments, *fallback_rows):
         rows_by_shift.setdefault(row.strategic_shift, row)
 
     normalized = tuple(
@@ -175,7 +178,10 @@ class ReviewEngine:
         coverage = result.document_coverage.model_copy(
             update={"coverage_note": draft.coverage_note}
         )
-        draft = _normalize_strategy_assessments(draft)
+        draft = _normalize_strategy_assessments(
+            draft,
+            result.fcv_strategy_assessments,
+        )
         content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})
         return ReviewResult(

@@ -199,6 +199,23 @@ def _select_role_segments(
     if not documents or budget <= 0:
         return []
 
+    if document_role is DocumentRole.PRIMARY and len(documents) == 1:
+        document = documents[0]
+        segment_count = len(document.segments)
+        if segment_count <= budget:
+            indices = range(segment_count)
+        elif budget == 1:
+            indices = (0,)
+        else:
+            indices = tuple(
+                round(index * (segment_count - 1) / (budget - 1))
+                for index in range(budget)
+            )
+        return [
+            (document, document.segments[index], document_role)
+            for index in indices
+        ]
+
     selected: list[tuple[object, object, DocumentRole]] = []
     offsets = [0] * len(documents)
     while len(selected) < budget:
