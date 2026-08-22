@@ -9,7 +9,11 @@ import pytest
 from docx import Document
 
 from cpf_fcv_reviewer.app import create_app
-from cpf_fcv_reviewer.contracts import CurrentEvidenceTier
+from cpf_fcv_reviewer.contracts import (
+    AssessmentStatus,
+    CurrentEvidenceTier,
+    DiagnosticMode,
+)
 from cpf_fcv_reviewer.export_docx import build_docx
 from cpf_fcv_reviewer.registry import load_registry_bundle
 
@@ -38,7 +42,7 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert "Priority measures to strengthen the CPF/CEN" in text
     assert "Priority areas for strengthening" in text
     assert "Limitations and document coverage" in text
-    assert result.revision_summary[0].action in text
+    assert result.revision_summary[0].title in text
     assert result.priority_areas[0].heading in text
     assert result.priority_areas[0].assessment in text
     assert result.priority_areas[0].why_it_matters in text
@@ -57,6 +61,151 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert "Findings" not in text
     assert "Recommendations" not in text
     assert "Practical options" not in text
+
+
+def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    text = "\n".join(paragraphs)
+    assert "RRA driver-to-response assessment" in text
+    assert "2026-2030 FCV Strategy alignment" in text
+    assert paragraphs.index("RRA driver-to-response assessment") > paragraphs.index(
+        result.alignment_readout
+    )
+    assert paragraphs.index("2026-2030 FCV Strategy alignment") > paragraphs.index(
+        "RRA driver-to-response assessment"
+    )
+    assert paragraphs.index("2026-2030 FCV Strategy alignment") < paragraphs.index(
+        "Priority measures to strengthen the CPF/CEN"
+    )
+    for label, value in (
+        ("Driver", "Unequal territorial access"),
+        ("CPF response", "The CPF prioritizes lagging regions."),
+        ("Delivery mechanism", "Area-based delivery is proposed."),
+        ("Result / indicator", "A service-access indicator is included."),
+        ("Remaining gap", "Adaptation triggers are not defined."),
+        ("Status", "Partially aligned"),
+        ("Confidence", "High"),
+        ("Gap locus", "Monitoring and adaptation"),
+    ):
+        assert label in text
+        assert value in text
+    for shift in (
+        "Anticipate better",
+        "Differentiated approach",
+        "One WBG approach to jobs",
+        "Toolkit, partnerships, and staffing",
+    ):
+        assert shift in text
+    assert "Strategic shift" in text
+    assert "Assessment" in text
+    assert "The CPF reflects this strategic shift in the response." in text
+    assert "Source: CPF.docx | Results framework | paragraph 12" in text
+    assert "Excerpt: The program will support access." in text
+    for raw_value in (
+        "anticipate_better",
+        "differentiated_approach",
+        "one_wbg_jobs",
+        "toolkit_partnerships_staffing",
+        "partially_aligned",
+        "monitoring_adaptation",
+        "high",
+        "rra-1",
+        "strategy-anticipate-better",
+        "ev-1",
+    ):
+        assert raw_value not in text
+
+
+def test_docx_uses_distinct_empty_rra_messages(make_valid_result):
+    result, evidence = make_valid_result
+    result = result.model_copy(update={"rra_driver_assessments": ()})
+    limited_document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+    limited_text = "\n".join(paragraph.text for paragraph in limited_document.paragraphs)
+    assert "No current RRA was supplied; RRA alignment was not assessed." in limited_text
+    unexpected_result = result.model_copy(
+        update={
+            "metadata": result.metadata.model_copy(
+                update={"diagnostic_mode": DiagnosticMode.RRA_ALIGNMENT}
+            )
+        }
+    )
+    unexpected_document = Document(
+        BytesIO(build_docx(unexpected_result, evidence=evidence, hydrated_referrals=()))
+    )
+    unexpected_text = "\n".join(
+        paragraph.text for paragraph in unexpected_document.paragraphs
+    )
+    assert "No RRA alignment assessments were returned for this review." in unexpected_text
+    assert "No current RRA was supplied; RRA alignment was not assessed." not in unexpected_text
+
+
+def test_docx_handles_not_assessable_rows_without_evidence(make_valid_result):
+    result, evidence = make_valid_result
+    rra = result.rra_driver_assessments[0].model_copy(
+        update={
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "gap_locus": None,
+            "evidence_ids": (),
+        }
+    )
+    strategy = result.fcv_strategy_assessments[0].model_copy(
+        update={
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "gap_locus": None,
+            "evidence_ids": (),
+        }
+    )
+    result = result.model_copy(
+        update={
+            "rra_driver_assessments": (rra,),
+            "fcv_strategy_assessments": (
+                strategy,
+                *result.fcv_strategy_assessments[1:],
+            ),
+        }
+    )
+
+    document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+    assert text.count("No supporting evidence was recorded for this assessment.") == 2
+    assert text.count("Not assessable") >= 2
+
+
+def test_docx_rejects_missing_assessment_evidence_with_row_details(make_valid_result):
+    result, evidence = make_valid_result
+    rra = result.rra_driver_assessments[0].model_copy(
+        update={"evidence_ids": ("missing-rra",)}
+    )
+    strategy = result.fcv_strategy_assessments[0].model_copy(
+        update={"evidence_ids": ("missing-strategy",)}
+    )
+    result = result.model_copy(
+        update={
+            "rra_driver_assessments": (rra,),
+            "fcv_strategy_assessments": (
+                strategy,
+                *result.fcv_strategy_assessments[1:],
+            ),
+        }
+    )
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Missing evidence for assessment citations: "
+            "RRA rra-1: missing-rra; Strategy strategy-anticipate-better: "
+            "missing-strategy"
+        ),
+    ):
+        build_docx(result, evidence=evidence, hydrated_referrals=())
 
 
 def test_docx_uses_note_first_sections_and_omits_question_section(make_valid_result):
@@ -102,7 +251,11 @@ def test_docx_renders_context_evidence_with_human_source_label(make_valid_result
     area = result.priority_areas[0].model_copy(update={"evidence_ids": ("ctx-1",)})
     result = result.model_copy(update={"priority_areas": (area,)})
 
-    data = build_docx(result, evidence={"ctx-1": context_item}, hydrated_referrals=())
+    data = build_docx(
+        result,
+        evidence={"ctx-1": context_item, "ev-1": evidence["ev-1"]},
+        hydrated_referrals=(),
+    )
     text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
 
     assert (

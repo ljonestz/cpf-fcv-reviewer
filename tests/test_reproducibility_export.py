@@ -74,6 +74,22 @@ def test_docx_lists_reproducibility_hashes_labels_and_lineage(make_valid_result)
         assert expected in text
 
 
+def test_docx_assessment_content_is_deterministic_and_evidence_resolved(make_valid_result):
+    result, evidence = make_valid_result
+    first = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    second = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    first_text = [paragraph.text for paragraph in first.paragraphs]
+    second_text = [paragraph.text for paragraph in second.paragraphs]
+    assert first_text == second_text
+    text = "\n".join(first_text)
+    assert "RRA driver-to-response assessment" in text
+    assert "2026-2030 FCV Strategy alignment" in text
+    assert "Source: CPF.docx | Results framework | paragraph 12" in text
+    assert "Excerpt: The program will support access." in text
+    assert "Anticipate better" in text
+    assert "Aligned" in text
+
+
 def test_docx_keeps_referrals_in_a_restrained_technical_appendix(make_valid_result):
     result, evidence = make_valid_result
     data = build_docx(

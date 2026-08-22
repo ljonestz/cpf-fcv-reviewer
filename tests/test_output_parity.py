@@ -18,7 +18,7 @@ def test_browser_fields_are_present_in_docx(make_valid_result):
     assert result.overall_read in text
     assert result.alignment_readout in text
     for item in result.revision_summary:
-        assert item.action in text
+        assert item.title in text
         assert item.priority_area_id not in text
     for area in result.priority_areas:
         for field in (
@@ -33,6 +33,33 @@ def test_browser_fields_are_present_in_docx(make_valid_result):
         assert area.target_locator.element in text
     assert result.limitations[0] in text
     assert result.document_coverage.coverage_note in text
+
+
+def test_canonical_assessments_are_represented_in_docx_with_resolved_evidence(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    canonical = result.model_dump(mode="json")
+    docx_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    )
+    assert canonical["rra_driver_assessments"][0]["driver"] in docx_text
+    assert canonical["rra_driver_assessments"][0]["cpf_response"] in docx_text
+    assert canonical["rra_driver_assessments"][0]["delivery_mechanism"] in docx_text
+    assert canonical["rra_driver_assessments"][0]["result_or_indicator"] in docx_text
+    assert canonical["rra_driver_assessments"][0]["remaining_gap"] in docx_text
+    assert canonical["fcv_strategy_assessments"][0]["assessment"] in docx_text
+    assert "Anticipate better" in docx_text
+    assert "Aligned" in docx_text
+    assert "High" in docx_text
+    assert "CPF.docx | Results framework | paragraph 12" in docx_text
+    assert "The program will support access." in docx_text
+    assert "rra-1" not in docx_text
+    assert "strategy-anticipate-better" not in docx_text
+    assert "ev-1" not in docx_text
 
 
 def test_docx_and_web_note_share_empty_state_language(make_valid_result):

@@ -11,7 +11,17 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-from .contracts import CurrentEvidenceTier, EvidenceItem, EvidenceLocator, ReviewResult
+from .contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
+    CurrentEvidenceTier,
+    DiagnosticMode,
+    EvidenceItem,
+    EvidenceLocator,
+    FCVStrategicShift,
+    GapLocus,
+    ReviewResult,
+)
 
 BLUE = RGBColor(0x2E, 0x74, 0xB5)
 DARK_BLUE = RGBColor(0x1F, 0x4D, 0x78)
@@ -26,6 +36,33 @@ EVIDENCE_STATUS_LABELS = {
     CurrentEvidenceTier.FULL: "Current evidence established",
     CurrentEvidenceTier.REDUCED: "Current evidence partially established",
     CurrentEvidenceTier.DOCUMENT_LED: "Review based primarily on submitted documents",
+}
+
+ASSESSMENT_STATUS_LABELS = {
+    AssessmentStatus.ALIGNED: "Aligned",
+    AssessmentStatus.PARTIALLY_ALIGNED: "Partially aligned",
+    AssessmentStatus.NOT_EVIDENCED: "Not evidenced",
+    AssessmentStatus.NOT_ASSESSABLE: "Not assessable",
+}
+ASSESSMENT_CONFIDENCE_LABELS = {
+    AssessmentConfidence.HIGH: "High",
+    AssessmentConfidence.MEDIUM: "Medium",
+    AssessmentConfidence.LOW: "Low",
+}
+GAP_LOCUS_LABELS = {
+    GapLocus.CPF_NARRATIVE: "CPF narrative",
+    GapLocus.RESULTS_FRAMEWORK: "Results framework",
+    GapLocus.DELIVERY_ARRANGEMENTS: "Delivery arrangements",
+    GapLocus.MONITORING_ADAPTATION: "Monitoring and adaptation",
+    GapLocus.DOWNSTREAM_OPERATIONALIZATION: "Downstream operationalization",
+}
+STRATEGIC_SHIFT_LABELS = {
+    FCVStrategicShift.ANTICIPATE_BETTER: "Anticipate better",
+    FCVStrategicShift.DIFFERENTIATED_APPROACH: "Differentiated approach",
+    FCVStrategicShift.ONE_WBG_JOBS: "One WBG approach to jobs",
+    FCVStrategicShift.TOOLKIT_PARTNERSHIPS_STAFFING: (
+        "Toolkit, partnerships, and staffing"
+    ),
 }
 
 
@@ -302,6 +339,109 @@ def validate_evidence_completeness(
             f"Missing evidence for priority area citations: {details}."
         )
 
+    missing_assessments = [
+        ("RRA", assessment.assessment_id, evidence_id)
+        for assessment in result.rra_driver_assessments
+        for evidence_id in assessment.evidence_ids
+        if evidence_id not in evidence
+    ]
+    missing_assessments.extend(
+        ("Strategy", assessment.assessment_id, evidence_id)
+        for assessment in result.fcv_strategy_assessments
+        for evidence_id in assessment.evidence_ids
+        if evidence_id not in evidence
+    )
+    if missing_assessments:
+        details = "; ".join(
+            f"{kind} {assessment_id}: {evidence_id}"
+            for kind, assessment_id, evidence_id in missing_assessments
+        )
+        raise EvidenceCompletenessError(
+            f"Missing evidence for assessment citations: {details}"
+        )
+
+
+def _add_labelled_paragraph(document: Document, label: str, value: str) -> None:
+    paragraph = document.add_paragraph()
+    paragraph.add_run(f"{label}: ").bold = True
+    paragraph.add_run(value)
+
+
+def _add_assessment_evidence(
+    document: Document,
+    evidence_ids: tuple[str, ...],
+    evidence: dict[str, EvidenceItem],
+) -> None:
+    if not evidence_ids:
+        document.add_paragraph(
+            "No supporting evidence was recorded for this assessment."
+        )
+        return
+    for evidence_id in evidence_ids:
+        item = evidence[evidence_id]
+        document.add_paragraph(f"Source: {locator_text(item)}")
+        document.add_paragraph(f"Excerpt: {evidence_excerpt(item)}")
+
+
+def _add_rra_assessments(
+    document: Document,
+    result: ReviewResult,
+    evidence: dict[str, EvidenceItem],
+) -> None:
+    document.add_heading("RRA driver-to-response assessment", level=2)
+    if not result.rra_driver_assessments:
+        message = (
+            "No current RRA was supplied; RRA alignment was not assessed."
+            if result.metadata.diagnostic_mode is DiagnosticMode.LIMITED_FRAMING
+            else "No RRA alignment assessments were returned for this review."
+        )
+        document.add_paragraph(message)
+        return
+    for index, assessment in enumerate(result.rra_driver_assessments, start=1):
+        document.add_heading(f"RRA driver {index}", level=3)
+        for label, value in (
+            ("Driver", assessment.driver),
+            ("CPF response", assessment.cpf_response),
+            ("Delivery mechanism", assessment.delivery_mechanism),
+            ("Result / indicator", assessment.result_or_indicator),
+            ("Remaining gap", assessment.remaining_gap),
+            ("Status", ASSESSMENT_STATUS_LABELS[assessment.status]),
+            ("Confidence", ASSESSMENT_CONFIDENCE_LABELS[assessment.confidence]),
+            (
+                "Gap locus",
+                GAP_LOCUS_LABELS[assessment.gap_locus]
+                if assessment.gap_locus is not None
+                else "Not applicable",
+            ),
+        ):
+            _add_labelled_paragraph(document, label, value)
+        _add_assessment_evidence(document, assessment.evidence_ids, evidence)
+
+
+def _add_strategy_assessments(
+    document: Document,
+    result: ReviewResult,
+    evidence: dict[str, EvidenceItem],
+) -> None:
+    document.add_heading("2026-2030 FCV Strategy alignment", level=2)
+    for assessment in result.fcv_strategy_assessments:
+        shift = STRATEGIC_SHIFT_LABELS[assessment.strategic_shift]
+        document.add_heading(shift, level=3)
+        for label, value in (
+            ("Strategic shift", shift),
+            ("Assessment", assessment.assessment),
+            ("Status", ASSESSMENT_STATUS_LABELS[assessment.status]),
+            ("Confidence", ASSESSMENT_CONFIDENCE_LABELS[assessment.confidence]),
+            (
+                "Gap locus",
+                GAP_LOCUS_LABELS[assessment.gap_locus]
+                if assessment.gap_locus is not None
+                else "Not applicable",
+            ),
+        ):
+            _add_labelled_paragraph(document, label, value)
+        _add_assessment_evidence(document, assessment.evidence_ids, evidence)
+
 
 def _add_coverage(document: Document, result: ReviewResult) -> None:
     coverage = result.document_coverage
@@ -392,6 +532,9 @@ def build_docx(
         level=1,
     )
     document.add_paragraph(result.alignment_readout)
+
+    _add_rra_assessments(document, result, evidence)
+    _add_strategy_assessments(document, result, evidence)
 
     document.add_heading("Priority measures to strengthen the CPF/CEN", level=1)
     if result.revision_summary:
