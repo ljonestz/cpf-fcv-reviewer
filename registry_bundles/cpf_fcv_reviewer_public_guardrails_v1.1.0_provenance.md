@@ -19,4 +19,4 @@
   - PUB-FCV-STRAT-004: Strategy pp. 38-45 and 58-60
 - The four FCV Strategy entries are concise public-source summaries for advisory prototype grounding.
 - No private or internal material is included.
-- SHA-256 validation result: 674dae757ec5fd500ffd432a91f39693ff56b11fa361e5540989655cbaa6595e
+- SHA-256 validation result: 44ff56e7f0610a09f88d65ec9a726bdba5fcce1e3045822b9294066fd1a332f2
