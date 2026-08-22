@@ -304,8 +304,6 @@ class ResearchController:
                 emit=emit,
                 event_data={"missing_coverage": last_missing},
             )
-        if budget_exhausted:
-            raise ResearchTimeout("Research total budget was exhausted.")
         if allow_document_led and not accepted:
             return self._finish(
                 started=started,
@@ -321,6 +319,8 @@ class ResearchController:
                 emit=emit,
                 event_data={"reason": "independent_evidence_unavailable"},
             )
+        if budget_exhausted:
+            raise ResearchTimeout("Research total budget was exhausted.")
         if last_failure is not None:
             raise last_failure
         if not accepted and rejected:
