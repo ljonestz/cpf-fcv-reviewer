@@ -3,10 +3,12 @@
 - Final filename: cpf_fcv_reviewer_public_guardrails_v1.1.0.json
 - Bundle ID: cpf-fcv-reviewer-public-guardrails
 - Version: 1.1.0
-- Approval reference: CPF-FCV-PROTOTYPE-LJ-20260811-01
+- Approval reference: CPF-FCV-PROTOTYPE-LJ-20260822-01
+- Approval addendum: 20260822_render-public-guardrails_v1.1.0_approval-addendum.md
+- Historical approval record: 20260811_render-public-guardrails_approval-record.md remains the v1.0.0 historical record and is unchanged.
 - Approver and capacity: Lindsey Jones, CPF FCV Reviewer prototype owner, limited to this experimental prototype
-- Approval timestamp: 2026-08-11T19:01:13.120000+02:00
-- Expiry timestamp: 2027-08-11T23:59:59+02:00
+- Approval timestamp: 2026-08-22T11:23:35.787+02:00
+- Expiry timestamp: 2027-08-22T23:59:59+02:00
 - Approved entry IDs: PUB-GUARD-001, PUB-GUARD-002, PUB-GUARD-003, PUB-GUARD-004, PUB-FCV-STRAT-001, PUB-FCV-STRAT-002, PUB-FCV-STRAT-003, PUB-FCV-STRAT-004
 - Source title: A World Bank Group Strategy for Engaging in Fragility, Conflict and Violence Affected Settings (2026-2030)
 - Report number: 211078
@@ -19,4 +21,4 @@
   - PUB-FCV-STRAT-004: Strategy pp. 38-45 and 58-60
 - The four FCV Strategy entries are concise public-source summaries for advisory prototype grounding.
 - No private or internal material is included.
-- SHA-256 validation result: 44ff56e7f0610a09f88d65ec9a726bdba5fcce1e3045822b9294066fd1a332f2
+- SHA-256 validation result: d7b93abe7ffd54e0079fc0e8a203f0b5274de6f51dc4a4b36c51872986c02eb9

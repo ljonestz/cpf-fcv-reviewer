@@ -13,6 +13,7 @@ from cpf_fcv_reviewer.registry import (
 )
 
 FIXTURE = Path("tests/fixtures/registry_bundle.synthetic.json")
+V1_0_BUNDLE = Path("registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.0.0.json")
 PUBLIC_BUNDLE = Path("registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.1.0.json")
 PUBLIC_BUNDLE_HASH = Path(
     "registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.1.0.sha256"
@@ -49,6 +50,38 @@ def test_referral_language_is_hydrated_exactly_from_registry():
         },
     )
 
+
+def test_synthetic_fcv_strategy_entries_hydrate_and_match_public_entries():
+    synthetic_bundle = load_registry_bundle(FIXTURE, allow_synthetic=True)
+    public_entries = {
+        entry["entry_id"]: entry
+        for entry in json.loads(PUBLIC_BUNDLE.read_text(encoding="utf-8"))["entries"]
+    }
+    synthetic_entries = tuple(
+        entry
+        for entry in synthetic_bundle.entries
+        if entry.entry_id.startswith("SYN-PUB-FCV-STRAT-")
+    )
+    expected_ids = (
+        "SYN-PUB-FCV-STRAT-001",
+        "SYN-PUB-FCV-STRAT-002",
+        "SYN-PUB-FCV-STRAT-003",
+        "SYN-PUB-FCV-STRAT-004",
+    )
+    assert tuple(entry.entry_id for entry in synthetic_entries) == expected_ids
+
+    hydrated = hydrate_referrals(
+        tuple(entry.entry_id for entry in synthetic_entries),
+        synthetic_bundle,
+    )
+    assert tuple(referral["entry_id"] for referral in hydrated) == expected_ids
+
+    for entry, referral in zip(synthetic_entries, hydrated):
+        public_id = entry.entry_id.removeprefix("SYN-")
+        public_entry = public_entries[public_id]
+        assert entry.approved_text == public_entry["approved_text"]
+        assert list(entry.prohibited_terms) == public_entry["prohibited_terms"]
+        assert referral["approved_text"] == public_entry["approved_text"]
 
 def test_unknown_registry_id_fails_closed():
     bundle = load_registry_bundle(FIXTURE, allow_synthetic=True)
@@ -187,13 +220,14 @@ def test_registry_normalizes_existence_check_error(monkeypatch):
 
 
 def test_checked_in_public_guardrail_bundle_is_valid_and_hash_pinned():
-    expected_hash = PUBLIC_BUNDLE_HASH.read_text(encoding="utf-8").strip()
-    assert sha256(PUBLIC_BUNDLE.read_bytes()).hexdigest() == expected_hash
+    public_bytes = PUBLIC_BUNDLE.read_bytes()
+    expected_hash = sha256(public_bytes).hexdigest()
+    assert PUBLIC_BUNDLE_HASH.read_bytes() == expected_hash.encode("ascii") + b"\n"
 
     bundle = load_registry_bundle(
         PUBLIC_BUNDLE,
         allow_synthetic=False,
-        now=datetime(2026, 8, 12, tzinfo=UTC),
+        now=datetime(2026, 8, 23, tzinfo=UTC),
         expected_hash=expected_hash,
     )
 

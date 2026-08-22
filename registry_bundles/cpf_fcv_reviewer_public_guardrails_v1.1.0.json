@@ -2,8 +2,9 @@
   "bundle_id": "cpf-fcv-reviewer-public-guardrails",
   "version": "1.1.0",
   "owner": "Lindsey Jones - CPF FCV Reviewer prototype owner",
-  "approved_at": "2026-08-11T19:01:13.120000+02:00",
-  "expires_at": "2027-08-11T23:59:59+02:00",
+  "approval_reference": "CPF-FCV-PROTOTYPE-LJ-20260822-01",
+  "approved_at": "2026-08-22T11:23:35.787+02:00",
+  "expires_at": "2027-08-22T23:59:59+02:00",
   "synthetic": false,
   "entries": [
     {
