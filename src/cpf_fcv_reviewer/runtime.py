@@ -120,6 +120,7 @@ def _select_package_segments(
     for document in documents:
         indexed_segments = tuple(enumerate(document.segments))
         ordered_indices = []
+        matching_indices = set()
         seen_indices = set()
 
         def add_index(index: int) -> None:
@@ -134,28 +135,54 @@ def _select_package_segments(
                 marker in segment.text.casefold()
                 for marker in PACKAGE_SECTION_MARKERS
             ):
+                matching_indices.add(index)
                 add_index(index)
         for index, _ in indexed_segments:
             add_index(index)
         candidates.append(
             tuple(
-                indexed_segments[index]
-                for index in ordered_indices[:PACKAGE_MIN_SEGMENTS_PER_DOCUMENT]
+                (
+                    index,
+                    indexed_segments[index][1],
+                    index in matching_indices,
+                )
+                for index in ordered_indices
             )
         )
 
     selected = []
     offsets = [0] * len(documents)
+    phase_one_counts = [0] * len(documents)
+
     while len(selected) < PACKAGE_MAX_SEGMENTS:
         added_this_round = False
         for index, document in enumerate(documents):
-            offset = offsets[index]
-            if offset >= len(candidates[index]):
+            if phase_one_counts[index] >= min(
+                PACKAGE_MIN_SEGMENTS_PER_DOCUMENT,
+                len(candidates[index]),
+            ):
                 continue
-            _, segment = candidates[index][offset]
-            selected.append((document, segment, DocumentRole.PACKAGE))
+            _, segment, _ = candidates[index][offsets[index]]
             offsets[index] += 1
+            phase_one_counts[index] += 1
+            selected.append((document, segment, DocumentRole.PACKAGE))
             added_this_round = True
+            if len(selected) >= PACKAGE_MAX_SEGMENTS:
+                break
+        if not added_this_round:
+            break
+
+    while len(selected) < PACKAGE_MAX_SEGMENTS:
+        added_this_round = False
+        for index, document in enumerate(documents):
+            while offsets[index] < len(candidates[index]):
+                _, segment, is_marker = candidates[index][offsets[index]]
+                offsets[index] += 1
+                if not is_marker:
+                    continue
+                selected.append((document, segment, DocumentRole.PACKAGE))
+                added_this_round = True
+                break
             if len(selected) >= PACKAGE_MAX_SEGMENTS:
                 break
         if not added_this_round:
