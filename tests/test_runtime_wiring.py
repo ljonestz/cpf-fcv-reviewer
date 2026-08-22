@@ -1200,6 +1200,7 @@ def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch)
                 revision_summary=(),
                 priority_areas=(),
                 institutional_referral_ids=(),
+                fcv_strategy_assessments=(),
                 limitations=(),
                 coverage_note="The review covers the CPF, package, and context documents.",
             )
@@ -1262,6 +1263,125 @@ def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch)
     assert captured["payload"]["review_focus"] == "Focus on delivery arrangements."
 
 
+def test_runtime_package_deep_section_sampling_covers_later_high_value_sections(monkeypatch):
+    captured = {}
+
+    class FakeGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
+            return output_type(
+                overall_read="The draft needs a clearer delivery approach.",
+                alignment_readout="The draft partly reflects current context.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                fcv_strategy_assessments=(),
+                limitations=(),
+                coverage_note="The review covers the uploaded CPF and package documents.",
+            )
+
+    package_sections = {
+        "results.txt": (
+            "Results introduction",
+            "Results context",
+            "Results framework details",
+            "Results appendix",
+        ),
+        "implementation.txt": (
+            "Implementation introduction",
+            "Implementation context",
+            "Implementation arrangements details",
+            "Implementation appendix",
+        ),
+        "monitoring.txt": (
+            "Monitoring introduction",
+            "Monitoring context",
+            "Adaptive management details",
+            "Monitoring appendix",
+        ),
+        "partnerships.txt": (
+            "Partnerships introduction",
+            "Partnerships context",
+            "Partnerships details",
+            "Partnerships appendix",
+        ),
+    }
+
+    def extracted(name, texts):
+        return ExtractedDocument(
+            name=name,
+            segments=tuple(
+                ExtractedSegment(
+                    text=text,
+                    page=None,
+                    heading=None,
+                    element=f"{name} {index}",
+                )
+                for index, text in enumerate(texts)
+            ),
+            warnings=(),
+        )
+
+    def fake_extract(data, name, *, max_pdf_pages=None):
+        if name == "benin-cpf.txt":
+            return extracted(
+                name,
+                tuple(f"Primary segment {index}" for index in range(20)),
+            )
+        if name in package_sections:
+            return extracted(name, package_sections[name])
+        return extracted(name, tuple(f"Context segment {index}" for index in range(10)))
+
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.extract_document", fake_extract)
+    monkeypatch.setattr("cpf_fcv_reviewer.runtime.AnthropicModelGateway", FakeGateway)
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FakeGateway,
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        research_controller=_InjectedResearchController(),
+    )
+
+    services["review_orchestrator"].run(
+        {
+            "assessment_id": "run-with-deep-package-sections",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "concept_review",
+                "detail_level": "in_depth",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                "package_documents": [
+                    {"name": name, "bytes": b"package"}
+                    for name in package_sections
+                ],
+                "context_documents": [],
+                "review_focus": "",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    package_items = [
+        item
+        for item in captured["pack"].evidence
+        if item.document_role is DocumentRole.PACKAGE
+    ]
+    assert {item.locator.document_title for item in package_items} == set(package_sections)
+    for title, sections in package_sections.items():
+        selected_text = " ".join(
+            item.text.casefold()
+            for item in package_items
+            if item.locator.document_title == title
+        )
+        assert sections[0].casefold() in selected_text
+        assert sections[2].casefold() in selected_text
+
+
 def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monkeypatch):
     captured = {}
 
@@ -1277,6 +1397,7 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
                 revision_summary=(),
                 priority_areas=(),
                 institutional_referral_ids=(),
+                fcv_strategy_assessments=(),
                 limitations=(),
                 coverage_note="The review covers the uploaded CPF and corroborating documents.",
             )
@@ -1342,9 +1463,9 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
         for role in DocumentRole
     }
     assert len(by_role[DocumentRole.PRIMARY]) == 12
-    assert len(by_role[DocumentRole.PACKAGE]) == 8
+    assert len(by_role[DocumentRole.PACKAGE]) == 9
     assert len(by_role[DocumentRole.CONTEXT]) == 4
-    assert sum(len(items) for items in by_role.values()) == 24
+    assert sum(len(items) for items in by_role.values()) == 25
     assert len(
         [item for item in captured["pack"].evidence if item.evidence_type == "current_context"]
     ) == 2

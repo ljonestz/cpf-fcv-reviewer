@@ -92,6 +92,77 @@ OFFICE_DOCUMENT_RELATIONSHIP_TYPES = frozenset(
 HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 
+PACKAGE_SECTION_MARKERS = (
+    "results framework",
+    "results matrix",
+    "intervention logic",
+    "implementation arrangement",
+    "delivery arrangement",
+    "adaptive management",
+    "risk monitoring",
+    "partnership",
+    "fragility",
+    "conflict",
+    "rra",
+)
+PACKAGE_MIN_SEGMENTS_PER_DOCUMENT = 3
+PACKAGE_MAX_SEGMENTS = 16
+
+
+def _select_package_segments(
+    documents: tuple,
+) -> list[tuple[object, object, DocumentRole]]:
+    """Select bounded, material package coverage in deterministic round-robin order."""
+    if not documents:
+        return []
+
+    candidates = []
+    for document in documents:
+        indexed_segments = tuple(enumerate(document.segments))
+        ordered_indices = []
+        seen_indices = set()
+
+        def add_index(index: int) -> None:
+            if index not in seen_indices:
+                seen_indices.add(index)
+                ordered_indices.append(index)
+
+        if indexed_segments:
+            add_index(0)
+        for index, segment in indexed_segments:
+            if any(
+                marker in segment.text.casefold()
+                for marker in PACKAGE_SECTION_MARKERS
+            ):
+                add_index(index)
+        for index, _ in indexed_segments:
+            add_index(index)
+        candidates.append(
+            tuple(
+                indexed_segments[index]
+                for index in ordered_indices[:PACKAGE_MIN_SEGMENTS_PER_DOCUMENT]
+            )
+        )
+
+    selected = []
+    offsets = [0] * len(documents)
+    while len(selected) < PACKAGE_MAX_SEGMENTS:
+        added_this_round = False
+        for index, document in enumerate(documents):
+            offset = offsets[index]
+            if offset >= len(candidates[index]):
+                continue
+            _, segment = candidates[index][offset]
+            selected.append((document, segment, DocumentRole.PACKAGE))
+            offsets[index] += 1
+            added_this_round = True
+            if len(selected) >= PACKAGE_MAX_SEGMENTS:
+                break
+        if not added_this_round:
+            break
+    return selected
+
+
 def _select_role_segments(
     document_role: DocumentRole,
     documents: tuple,
@@ -497,14 +568,21 @@ def build_runtime_services(
 
         document_groups = (
             (DocumentRole.PRIMARY, (primary_document,), 12),
-            (DocumentRole.PACKAGE, tuple(context.get("package_documents", ())), 8),
+            (
+                DocumentRole.PACKAGE,
+                tuple(context.get("package_documents", ())),
+                PACKAGE_MAX_SEGMENTS,
+            ),
             (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 4),
         )
         selected_segments = []
         for document_role, documents, per_document_limit in document_groups:
-            selected_segments.extend(
-                _select_role_segments(document_role, documents, per_document_limit)
-            )
+            if document_role is DocumentRole.PACKAGE:
+                selected_segments.extend(_select_package_segments(documents))
+            else:
+                selected_segments.extend(
+                    _select_role_segments(document_role, documents, per_document_limit)
+                )
 
         role_counts = {role: 0 for role, _, _ in document_groups}
         evidence = []
