@@ -342,6 +342,32 @@ def test_revision_summary_rejects_blank_required_fields(field, value):
         RevisionSummaryItem(**values)
 
 
+
+
+def test_revision_summary_accepts_a_100_character_title():
+    title = "x" * 100
+
+    item = RevisionSummaryItem(priority_area_id="pa-1", title=title)
+
+    assert item.title == title
+
+
+def test_revision_summary_rejects_a_101_character_title():
+    with pytest.raises(ValidationError, match="at most 100 characters"):
+        RevisionSummaryItem(priority_area_id="pa-1", title="x" * 101)
+
+
+def test_revision_summary_rejects_legacy_action_as_extra_forbidden():
+    with pytest.raises(ValidationError) as exc_info:
+        RevisionSummaryItem(
+            priority_area_id="pa-1",
+            action="Clarify the causal link.",
+        )
+
+    assert any(
+        error["type"] == "extra_forbidden" and error["loc"] == ("action",)
+        for error in exc_info.value.errors()
+    )
 @pytest.mark.parametrize("field", ["primary_document", "coverage_note"])
 @pytest.mark.parametrize("value", ["", "   "])
 def test_document_coverage_rejects_blank_required_fields(field, value):
@@ -423,6 +449,25 @@ def test_review_draft_preserves_nonblank_alignment_readout(make_valid_result):
     assert draft.alignment_readout == alignment_readout
 
 
+
+
+def test_review_draft_allows_empty_rra_and_partial_strategy_collections(make_valid_result):
+    result, _ = make_valid_result
+
+    draft = ReviewDraft(
+        overall_read=result.overall_read,
+        alignment_readout="The draft is partly aligned with the diagnostic.",
+        revision_summary=result.revision_summary,
+        priority_areas=result.priority_areas,
+        rra_driver_assessments=(),
+        fcv_strategy_assessments=result.fcv_strategy_assessments[:1],
+        institutional_referral_ids=(),
+        limitations=(),
+        coverage_note="The primary draft was reviewed.",
+    )
+
+    assert draft.rra_driver_assessments == ()
+    assert len(draft.fcv_strategy_assessments) == 1
 @pytest.mark.parametrize("value", ["", "   "])
 def test_review_draft_rejects_blank_alignment_readout(make_valid_result, value):
     result, _ = make_valid_result
