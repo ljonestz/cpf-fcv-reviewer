@@ -94,6 +94,15 @@ class VolatileSessionStore:
             state = self._get_state(session_id, self._clock())
             return deepcopy(state.events.popleft()) if state.events else None
 
+    def read_events(self, session_id: str, after: int = 0) -> tuple[tuple[int, dict], ...]:
+        with self._lock:
+            state = self._get_state(session_id, self._clock())
+            return tuple(
+                (index, deepcopy(event))
+                for index, event in enumerate(state.events, start=1)
+                if index > max(0, after)
+            )
+
     def reset_failed_research(self, session_id: str, retryable_codes: set[str]) -> bool:
         with self._lock:
             now = self._clock()

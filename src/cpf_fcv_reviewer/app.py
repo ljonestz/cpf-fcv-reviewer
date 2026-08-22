@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import atexit
 from hashlib import sha256
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template
 
+from .background import InProcessAssessmentQueue, PersistentAssessmentWorker
 from .config import build_config
+from .persistent_store import SQLiteSessionStore
 from .routes import bp as review_blueprint
 from .runtime import build_runtime_services
 from .session_store import VolatileSessionStore
@@ -27,9 +30,37 @@ def create_app(
     if services is None:
         services = {} if app.testing else build_runtime_services(app.config)
     app.extensions.update(services)
-    app.extensions["session_store"] = VolatileSessionStore(
-        ttl_seconds=app.config["SESSION_TTL_SECONDS"]
-    )
+    if "session_store" not in app.extensions:
+        persistence_path = str(app.config.get("PERSISTENCE_PATH", "")).strip()
+        if persistence_path:
+            app.extensions["session_store"] = SQLiteSessionStore(
+                persistence_path,
+                ttl_seconds=app.config["SESSION_TTL_SECONDS"],
+            )
+        else:
+            app.extensions["session_store"] = VolatileSessionStore(
+                ttl_seconds=app.config["SESSION_TTL_SECONDS"]
+            )
+    if "assessment_queue" not in app.extensions:
+        session_store = app.extensions["session_store"]
+        if (
+            isinstance(session_store, SQLiteSessionStore)
+            and app.config["START_BACKGROUND_RUNS"]
+        ):
+            worker = PersistentAssessmentWorker(
+                app,
+                session_store,
+                poll_seconds=app.config["WORKER_POLL_SECONDS"],
+                stale_after_seconds=app.config["WORKER_STALE_AFTER_SECONDS"],
+            )
+            worker.start()
+            atexit.register(worker.stop)
+            app.extensions["assessment_queue"] = worker
+        else:
+            app.extensions["assessment_queue"] = InProcessAssessmentQueue(
+                app,
+                enabled=app.config["START_BACKGROUND_RUNS"],
+            )
     app.register_blueprint(review_blueprint)
 
     @app.get("/")
@@ -41,7 +72,12 @@ def create_app(
         return jsonify(
             status="ok",
             release=app.config["APP_RELEASE"],
-            storage="volatile",
+            storage=getattr(
+                app.extensions["session_store"], "storage_mode", "volatile"
+            ),
+            queue=getattr(
+                app.extensions["assessment_queue"], "mode", "configured"
+            ),
         )
 
     return app

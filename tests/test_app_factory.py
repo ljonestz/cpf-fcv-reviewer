@@ -21,8 +21,24 @@ def test_health_reports_release_without_secrets():
         "status": "ok",
         "release": "test-release",
         "storage": "volatile",
+        "queue": "in_process",
     }
     assert api_key not in response.get_data(as_text=True)
+
+
+def test_health_prefers_render_git_commit(monkeypatch):
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abcdef1234567890")
+    app = create_app({"TESTING": True})
+
+    assert app.test_client().get("/health").get_json()["release"] == (
+        "abcdef1234567890"
+    )
+
+
+def test_production_defaults_to_24_hour_retention():
+    app = create_app({"TESTING": True}, use_environment=False)
+
+    assert app.config["SESSION_TTL_SECONDS"] == 86_400
 
 
 def test_production_requires_api_key(monkeypatch):

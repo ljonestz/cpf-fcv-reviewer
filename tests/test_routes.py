@@ -191,29 +191,22 @@ def test_retry_research_duplicate_request_is_rejected():
     assert response.get_json() == {"error": "Research retry is unavailable."}
 
 
-def test_retry_research_starts_daemon_with_same_assessment_when_enabled(monkeypatch):
-    app = create_app({"TESTING": True, "START_BACKGROUND_RUNS": True})
+def test_retry_research_enqueues_same_assessment():
+    app = create_app({"TESTING": True, "START_BACKGROUND_RUNS": False})
     assessment_id = failed_assessment(app)
-    started = []
+    enqueued = []
 
-    class RecordingThread:
-        def __init__(self, *, target, args, daemon):
-            started.append((target, args, daemon))
+    class RecordingQueue:
+        def enqueue(self, candidate_id):
+            enqueued.append(candidate_id)
 
-        def start(self):
-            started.append("started")
-
-    monkeypatch.setattr("cpf_fcv_reviewer.routes.Thread", RecordingThread)
-
+    app.extensions["assessment_queue"] = RecordingQueue()
     response = app.test_client().post(
         f"/api/reviews/{assessment_id}/retry-research"
     )
 
     assert response.status_code == 202
-    assert started[0][0] is run_assessment
-    assert started[0][1] == (app, assessment_id)
-    assert started[0][2] is True
-    assert started[1] == "started"
+    assert enqueued == [assessment_id]
 
 
 @pytest.mark.parametrize(

@@ -24,11 +24,11 @@ The existing country-detection endpoint remains a bounded convenience for the gu
 
 ### Durable state and queue
 
-Production uses one private Render Key Value instance through `REDIS_URL`. Assessment payloads, event history, status, results, and traceable evidence share the existing retention TTL. Queue records use a reliable Redis-backed Python worker library so a deploy or worker restart does not silently lose an accepted job. Redis uses `noeviction` and has no public IP allowlist.
+Production uses SQLite on a paid Render persistent disk. Assessment payload fields, event history, status, results, and traceable evidence share the existing retention TTL; large PDF bytes are stored once as compressed binary values rather than copied on each progress update. Transactional job claims prevent duplicate execution.
 
 Local tests and smoke mode retain the in-memory store. The store and queue are selected by configuration, preserving the current unit-test seam.
 
-The web service only enqueues. A separate Render background worker builds the same runtime services and executes the idempotent assessment handler. Retry requests and correction children use the same queue path.
+A managed worker inside the existing single-instance web service claims accepted jobs from SQLite. On restart it requeues interrupted work before accepting the next job. Retry requests and correction children use the same queue path. This deliberately keeps the current low-volume service simple; the attached disk means the service remains single-instance and deploys have a brief restart window.
 
 ### Event delivery
 
@@ -48,7 +48,7 @@ Revision-summary titles are short thematic labels. Detailed actions and location
 
 ### Release and operations
 
-A checked-in `render.yaml` defines the web service, worker, and private Key Value resource with identical analytical configuration. The worker receives a shutdown window and stops taking new jobs on termination. The health endpoint reports the deployed git commit when Render supplies it, plus persistent/volatile storage and queue mode.
+A checked-in `render.yaml` defines one paid single-instance web service with a persistent disk, current branch, current registry bundle, threaded Gunicorn command, and a bounded shutdown window. The health endpoint reports the deployed git commit when Render supplies it, plus persistent/volatile storage and queue mode.
 
 ## Retention and deletion
 

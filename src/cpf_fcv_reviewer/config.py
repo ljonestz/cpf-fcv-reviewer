@@ -31,7 +31,8 @@ def build_config(
         return os.getenv(name, default) if use_environment else default
 
     config = {
-        "APP_RELEASE": environment("APP_RELEASE", "dev"),
+        "APP_RELEASE": environment("RENDER_GIT_COMMIT", "")
+        or environment("APP_RELEASE", "dev"),
         "APP_ENV": environment("APP_ENV", "production"),
         "SMOKE_MODE": _environment_bool(
             "SMOKE_MODE",
@@ -67,7 +68,12 @@ def build_config(
         "SESSION_TTL_SECONDS": (
             overrides["SESSION_TTL_SECONDS"]
             if "SESSION_TTL_SECONDS" in overrides
-            else int(environment("SESSION_TTL_SECONDS", "3600"))
+            else int(environment("SESSION_TTL_SECONDS", "86400"))
+        ),
+        "PERSISTENCE_PATH": environment("PERSISTENCE_PATH", ""),
+        "WORKER_POLL_SECONDS": float(environment("WORKER_POLL_SECONDS", "1")),
+        "WORKER_STALE_AFTER_SECONDS": int(
+            environment("WORKER_STALE_AFTER_SECONDS", "30")
         ),
         "START_BACKGROUND_RUNS": True,
         "TESTING": False,
@@ -84,6 +90,8 @@ def build_config(
         "RESEARCH_MAX_ATTEMPTS",
         "RESEARCH_MINIMUM_CLAIMS",
         "RESEARCH_MINIMUM_PUBLISHERS",
+        "SESSION_TTL_SECONDS",
+        "WORKER_STALE_AFTER_SECONDS",
     ):
         if type(config[name]) is not int or config[name] <= 0:
             raise ValueError(f"{name} must be a positive integer.")
@@ -92,6 +100,7 @@ def build_config(
         ("RESEARCH_TOTAL_BUDGET_SECONDS", True),
         ("RESEARCH_RETRY_BACKOFF_SECONDS", False),
         ("RESEARCH_RECOVERY_TIMEOUT_SECONDS", True),
+        ("WORKER_POLL_SECONDS", True),
     ):
         value = config[name]
         if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):

@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: cpf-fcv-review-prototype
+    runtime: python
+    region: oregon
+    plan: starter
+    branch: fix/research-resilience-guided-journey
+    autoDeployTrigger: off
+    numInstances: 1
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --config gunicorn.conf.py --worker-class gthread --workers 1 --threads 4 --bind 0.0.0.0:$PORT wsgi:app
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 300
+    disk:
+      name: cpf-fcv-review-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL_ID
+        value: claude-sonnet-4-5
+      - key: PERSISTENCE_PATH
+        value: /var/data/reviews.sqlite3
+      - key: SESSION_TTL_SECONDS
+        value: "86400"
+      - key: WORKER_POLL_SECONDS
+        value: "1"
+      - key: WORKER_STALE_AFTER_SECONDS
+        value: "30"
+      - key: REGISTRY_BUNDLE_PATH
+        value: registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.1.0.json
+      - key: REGISTRY_BUNDLE_SHA256
+        value: a849607cafa341ab98da05016d503665eb95a3da2ad039e0f06ae5fdb5dd7782
+      - key: RELIEFWEB_APP_NAME
+        sync: false

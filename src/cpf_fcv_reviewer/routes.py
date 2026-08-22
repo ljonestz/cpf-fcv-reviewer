@@ -4,7 +4,6 @@ import json
 import unicodedata
 from datetime import UTC, datetime
 from io import BytesIO
-from threading import Thread
 from time import sleep
 from uuid import uuid4
 
@@ -68,9 +67,7 @@ def retry_research(assessment_id):
     if not reset:
         return jsonify(error="Research retry is unavailable."), 409
 
-    if current_app.config["START_BACKGROUND_RUNS"]:
-        app = current_app._get_current_object()
-        Thread(target=run_assessment, args=(app, assessment_id), daemon=True).start()
+    current_app.extensions["assessment_queue"].enqueue(assessment_id)
 
     base = f"/api/reviews/{assessment_id}"
     return (
@@ -154,13 +151,7 @@ def create_review():
     assessment_id = store().create(payload)
     base = f"/api/reviews/{assessment_id}"
 
-    if current_app.config["START_BACKGROUND_RUNS"]:
-        app = current_app._get_current_object()
-        Thread(
-            target=run_assessment,
-            args=(app, assessment_id),
-            daemon=True,
-        ).start()
+    current_app.extensions["assessment_queue"].enqueue(assessment_id)
 
     return (
         jsonify(
@@ -174,20 +165,32 @@ def create_review():
 
 @bp.get("/api/reviews/<assessment_id>/events")
 def review_events(assessment_id):
+    raw_cursor = request.headers.get("Last-Event-ID") or request.args.get("after", "0")
+    try:
+        initial_cursor = max(0, int(raw_cursor))
+    except (TypeError, ValueError):
+        initial_cursor = 0
+
     def generate():
+        cursor = initial_cursor
         while True:
             try:
-                event = store().next_event(assessment_id)
+                events = store().read_events(assessment_id, after=cursor)
             except SessionExpired:
                 yield "event: expired\ndata: {}\n\n"
                 return
-            if event:
-                yield (f"event: {event['type']}\ndata: {json.dumps(event['data'])}\n\n")
-                if event["type"] in {"run_complete", "run_failed"}:
-                    return
+            if events:
+                for sequence, event in events:
+                    cursor = sequence
+                    yield (
+                        f"id: {sequence}\nevent: {event['type']}\n"
+                        f"data: {json.dumps(event['data'])}\n\n"
+                    )
+                    if event["type"] in {"run_complete", "run_failed"}:
+                        return
             else:
                 yield "event: keepalive\ndata: {}\n\n"
-                sleep(15)
+                sleep(5)
 
     return Response(
         stream_with_context(generate()),
@@ -347,9 +350,7 @@ def add_correction(assessment_id):
     child_payload.pop("evidence_by_id", None)
 
     child_id = store().create(child_payload)
-    if current_app.config["START_BACKGROUND_RUNS"]:
-        app = current_app._get_current_object()
-        Thread(target=run_assessment, args=(app, child_id), daemon=True).start()
+    current_app.extensions["assessment_queue"].enqueue(child_id)
     base = f"/api/reviews/{child_id}"
     return (
         jsonify(
@@ -372,6 +373,7 @@ def run_assessment(app, assessment_id):
     with app.app_context():
         try:
             state = store().get(assessment_id)
+            store().update(assessment_id, status="running")
             orchestrator = current_app.extensions["review_orchestrator"]
             result_context = orchestrator.run(
                 {"assessment_id": assessment_id, "payload": state.payload},

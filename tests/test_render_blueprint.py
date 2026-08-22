@@ -1,0 +1,27 @@
+from pathlib import Path
+
+
+def test_render_blueprint_uses_paid_single_instance_persistent_disk():
+    blueprint = Path("render.yaml").read_text(encoding="utf-8")
+
+    assert "plan: starter" in blueprint
+    assert "numInstances: 1" in blueprint
+    assert "mountPath: /var/data" in blueprint
+    assert "PERSISTENCE_PATH" in blueprint
+    assert "/var/data/reviews.sqlite3" in blueprint
+
+
+def test_render_blueprint_runs_current_branch_and_threaded_gunicorn():
+    blueprint = Path("render.yaml").read_text(encoding="utf-8")
+
+    assert "branch: fix/research-resilience-guided-journey" in blueprint
+    assert "--worker-class gthread" in blueprint
+    assert "healthCheckPath: /health" in blueprint
+    assert "maxShutdownDelaySeconds: 300" in blueprint
+
+
+def test_render_blueprint_pins_current_strategy_registry_bundle():
+    blueprint = Path("render.yaml").read_text(encoding="utf-8")
+
+    assert "cpf_fcv_reviewer_public_guardrails_v1.1.0.json" in blueprint
+    assert "a849607cafa341ab98da05016d503665eb95a3da2ad039e0f06ae5fdb5dd7782" in blueprint
