@@ -128,3 +128,33 @@ def test_guided_journey_focus_styles_are_visible():
 
     assert ":focus-visible" in css
     assert ".progress-steps li:focus-visible" in css
+
+
+def test_assessment_renderers_use_semantic_sections_and_definition_lists():
+    javascript = JS.read_text(encoding="utf-8")
+
+    for fragment in (
+        "function renderRraAssessments(result)",
+        "function renderStrategyAssessments(result)",
+        'text("h3", "RRA driver-to-response assessment")',
+        'text("h3", "2026-2030 FCV Strategy alignment")',
+        'document.createElement("section")',
+        'document.createElement("dl")',
+        'document.createElement("dt")',
+        'document.createElement("dd")',
+        "assessment.driver",
+        "assessment.cpf_response",
+        "assessment.delivery_mechanism",
+        "assessment.result_or_indicator",
+        "assessment.remaining_gap",
+        "assessment.strategic_shift",
+        "assessment.assessment",
+        "assessment.status",
+        "assessment.confidence",
+        "assessment.gap_locus",
+        "renderEvidenceGroup(result, assessment.evidence_ids)",
+        "No current RRA was supplied; RRA alignment was not assessed.",
+    ):
+        assert fragment in javascript
+
+    assert "innerHTML" not in javascript

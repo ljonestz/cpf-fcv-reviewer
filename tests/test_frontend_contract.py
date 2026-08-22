@@ -502,3 +502,31 @@ for (const [name, expected] of cases) {{
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_task6_summary_links_use_revision_titles_and_renderers_remain_dom_only():
+    javascript = JS.read_text(encoding="utf-8")
+    summary_renderer = javascript.split("function renderRevisionSummary", 1)[1].split(
+        "\n}\n", 1
+    )[0]
+
+    assert "item.title" in summary_renderer
+    assert "item.action" not in summary_renderer
+    assert "function renderRraAssessments(result)" in javascript
+    assert "function renderStrategyAssessments(result)" in javascript
+    assert "innerHTML" not in javascript
+
+
+def test_task6_assessment_cards_have_responsive_definition_grid_styles():
+    css = CSS.read_text(encoding="utf-8")
+
+    for class_name in (
+        ".assessment-list",
+        ".assessment-card",
+        ".assessment-definitions",
+        ".assessment-status",
+    ):
+        assert class_name in css
+    mobile = css.split("@media (max-width: 760px)", 1)[1]
+    assert ".assessment-definitions" in mobile
+    assert "grid-template-columns: 1fr" in mobile

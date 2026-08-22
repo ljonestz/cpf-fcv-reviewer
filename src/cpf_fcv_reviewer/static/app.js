@@ -105,6 +105,28 @@ const evidenceStatusLabels = {
   document_led: "Review based primarily on submitted documents",
 };
 
+const assessmentStatusLabels = {
+  aligned: "Aligned",
+  partially_aligned: "Partially aligned",
+  not_evidenced: "Not evidenced",
+  not_assessable: "Not assessable",
+};
+
+const strategyShiftLabels = {
+  anticipate_better: "Anticipate better",
+  differentiated_approach: "Differentiated approach",
+  one_wbg_jobs: "One WBG approach to jobs",
+  toolkit_partnerships_staffing: "Toolkit, partnerships, and staffing",
+};
+
+const gapLocusLabels = {
+  cpf_narrative: "CPF narrative",
+  results_framework: "Results framework",
+  delivery_arrangements: "Delivery arrangements",
+  monitoring_adaptation: "Monitoring and adaptation",
+  downstream_operationalization: "Downstream operationalization",
+};
+
 let journeyStartedAt;
 let journeyStageStartedAt;
 let journeyCurrentStage = "documents";
@@ -468,6 +490,111 @@ function renderEvidenceGroup(result, evidenceIds) {
   return details;
 }
 
+function assessmentValueLabel(value) {
+  if (!value) return "Not specified";
+  return String(value)
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function appendAssessmentField(definitions, label, value, className = "") {
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const description = document.createElement("dd");
+  description.className = className;
+  description.textContent = value || "Not specified";
+  definitions.append(term, description);
+}
+
+function appendAssessmentStatus(definitions, status) {
+  const badge = text("span", assessmentStatusLabel(status), "assessment-status status-badge");
+  const description = document.createElement("dd");
+  description.append(badge);
+  definitions.append(text("dt", "Status"), description);
+}
+
+function appendAssessmentConfidence(definitions, confidence) {
+  const description = document.createElement("dd");
+  description.className = "assessment-confidence";
+  description.textContent = assessmentValueLabel(confidence);
+  definitions.append(text("dt", "Confidence"), description);
+}
+
+function assessmentStatusLabel(status) {
+  return assessmentStatusLabels[status] || assessmentValueLabel(status);
+}
+
+function assessmentLocusLabel(locus) {
+  return gapLocusLabels[locus] || assessmentValueLabel(locus);
+}
+
+function strategyShiftLabel(shift) {
+  return strategyShiftLabels[shift] || assessmentValueLabel(shift);
+}
+
+function renderRraAssessments(result) {
+  const section = document.createElement("section");
+  section.className = "assessment-section";
+  section.append(text("h3", "RRA driver-to-response assessment"));
+  const assessments = result.rra_driver_assessments || [];
+  if (!assessments.length) {
+    section.append(
+      text("p", "No current RRA was supplied; RRA alignment was not assessed.", "empty-state"),
+    );
+    return section;
+  }
+  const list = document.createElement("ul");
+  list.className = "assessment-list";
+  for (const assessment of assessments) {
+    const card = document.createElement("li");
+    card.className = "assessment-card";
+    const definitions = document.createElement("dl");
+    definitions.className = "assessment-definitions";
+    appendAssessmentField(definitions, "Driver", assessment.driver);
+    appendAssessmentField(definitions, "CPF response", assessment.cpf_response);
+    appendAssessmentField(definitions, "Delivery mechanism", assessment.delivery_mechanism);
+    appendAssessmentField(definitions, "Result / indicator", assessment.result_or_indicator);
+    appendAssessmentField(definitions, "Remaining gap", assessment.remaining_gap);
+    appendAssessmentStatus(definitions, assessment.status);
+    appendAssessmentConfidence(definitions, assessment.confidence);
+    appendAssessmentField(definitions, "Gap locus", assessmentLocusLabel(assessment.gap_locus));
+    card.append(definitions, renderEvidenceGroup(result, assessment.evidence_ids));
+    list.append(card);
+  }
+  section.append(list);
+  return section;
+}
+
+function renderStrategyAssessments(result) {
+  const section = document.createElement("section");
+  section.className = "assessment-section";
+  section.append(text("h3", "2026-2030 FCV Strategy alignment"));
+  const assessments = result.fcv_strategy_assessments || [];
+  if (!assessments.length) {
+    section.append(
+      text("p", "No FCV Strategy alignment assessments were returned for this review.", "empty-state"),
+    );
+    return section;
+  }
+  const list = document.createElement("ul");
+  list.className = "assessment-list";
+  for (const assessment of assessments) {
+    const card = document.createElement("li");
+    card.className = "assessment-card";
+    const definitions = document.createElement("dl");
+    definitions.className = "assessment-definitions";
+    appendAssessmentField(definitions, "Strategic shift", strategyShiftLabel(assessment.strategic_shift));
+    appendAssessmentField(definitions, "Assessment", assessment.assessment);
+    appendAssessmentStatus(definitions, assessment.status);
+    appendAssessmentConfidence(definitions, assessment.confidence);
+    appendAssessmentField(definitions, "Gap locus", assessmentLocusLabel(assessment.gap_locus));
+    card.append(definitions, renderEvidenceGroup(result, assessment.evidence_ids));
+    list.append(card);
+  }
+  section.append(list);
+  return section;
+}
+
 function priorityAreaAnchorIds(result) {
   return new Map(
     result.priority_areas.map((_, index) => [`${index}`, `cpf-priority-area-${index + 1}`]),
@@ -486,7 +613,7 @@ function renderRevisionSummary(result, anchorIds) {
     );
     const anchorId = anchorIds.get(`${priorityAreaIndex}`);
     link.href = anchorId ? `#${anchorId}` : "#";
-    link.textContent = item.action;
+    link.textContent = item.title;
     if (anchorId) {
       link.addEventListener("click", (event) => {
         event?.preventDefault();
@@ -570,6 +697,10 @@ function renderDetailedAnalysis(result) {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
   fragment.append(text("h2", "Overall assessment"));
   fragment.append(text("p", result.overall_read, "overall-read"));
+  fragment.append(text("h2", "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy"));
+  fragment.append(text("p", result.alignment_readout, "alignment-readout"));
+  fragment.append(renderRraAssessments(result));
+  fragment.append(renderStrategyAssessments(result));
   fragment.append(renderPriorityAreas(result, anchorIds));
   fragment.append(renderCoverage(result));
   return fragment;

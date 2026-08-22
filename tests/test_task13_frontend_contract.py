@@ -113,7 +113,7 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         FakeSource.all = []; global.EventSource = FakeSource;
         const complete = {
           overall_read: "The draft has a sound foundation.",
-          revision_summary: [{priority_area_id: "results / delivery#1", action: "Clarify the delivery pathway."}],
+  revision_summary: [{priority_area_id: "results / delivery#1", title: "Clarify the delivery pathway."}],
           priority_areas: [{
             priority_area_id: "results / delivery#1", heading: "Delivery pathway",
             assessment: "The pathway is not yet explicit.",
@@ -402,3 +402,20 @@ def test_country_preflight_behavior_runs_real_app_handlers():
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_assessment_rows_expose_allowlisted_status_and_confidence_labels():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert "const assessmentStatusLabels = {" in javascript
+    for label in (
+        'aligned: "Aligned"',
+        'partially_aligned: "Partially aligned"',
+        'not_evidenced: "Not evidenced"',
+        'not_assessable: "Not assessable"',
+    ):
+        assert label in javascript
+    for field in ("assessment.status", "assessment.confidence", "assessment.gap_locus"):
+        assert field in javascript
+    assert 'text("dt", "Status")' in javascript
+    assert 'text("dt", "Confidence")' in javascript
