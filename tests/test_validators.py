@@ -2,14 +2,21 @@ from datetime import UTC, datetime
 from typing import get_args
 
 import pytest
+from pydantic import ValidationError
 
 from cpf_fcv_reviewer import validators
 from cpf_fcv_reviewer.contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     DiagnosticMode,
     DocumentCoverage,
     EvidenceLocator,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
+    RRADriverAssessment,
     ReviewResult,
     RevisionSummaryItem,
     RunMetadata,
@@ -69,7 +76,51 @@ def area(
         recommendation_scale=scale,
         evidence_ids=evidence_ids,
         sensitivity=sensitivity,
+        gap_locus=GapLocus.CPF_NARRATIVE,
         comment_reference=comment_reference,
+    )
+
+
+def strategy_rows(
+    *,
+    status: AssessmentStatus = AssessmentStatus.NOT_ASSESSABLE,
+    evidence_ids: tuple[str, ...] = (),
+    assessment_prefix: str = "Strategy assessment",
+) -> tuple[FCVStrategyAssessment, ...]:
+    return tuple(
+        FCVStrategyAssessment(
+            assessment_id=f"strategy-{strategic_shift.value}",
+            strategic_shift=strategic_shift,
+            assessment=f"{assessment_prefix} {strategic_shift.value}.",
+            status=status,
+            confidence=AssessmentConfidence.MEDIUM,
+            gap_locus=(
+                GapLocus.CPF_NARRATIVE
+                if status
+                in {AssessmentStatus.PARTIALLY_ALIGNED, AssessmentStatus.NOT_EVIDENCED}
+                else None
+            ),
+            evidence_ids=evidence_ids,
+        )
+        for strategic_shift in FCVStrategicShift
+    )
+
+
+def rra_row(
+    *,
+    evidence_ids: tuple[str, ...] = ("ev-1",),
+    assessment_prefix: str = "RRA assessment",
+) -> RRADriverAssessment:
+    return RRADriverAssessment(
+        assessment_id="rra-1",
+        driver=f"{assessment_prefix} driver",
+        cpf_response=f"{assessment_prefix} CPF response",
+        delivery_mechanism=f"{assessment_prefix} delivery mechanism",
+        result_or_indicator=f"{assessment_prefix} result or indicator",
+        remaining_gap=f"{assessment_prefix} remaining gap",
+        status=AssessmentStatus.ALIGNED,
+        confidence=AssessmentConfidence.MEDIUM,
+        evidence_ids=evidence_ids,
     )
 
 
@@ -78,9 +129,11 @@ def result(
     stage: str = "finalization",
     mode: DiagnosticMode = DiagnosticMode.LIMITED_FRAMING,
     summaries: tuple[RevisionSummaryItem, ...] = (
-        RevisionSummaryItem(priority_area_id="pa-1", action="Clarify the causal link."),
+        RevisionSummaryItem(priority_area_id="pa-1", title="Clarify the causal link."),
     ),
     areas: tuple[PriorityArea, ...] = (area(),),
+    rra_assessments: tuple[RRADriverAssessment, ...] = (),
+    strategy_assessments_override: tuple[FCVStrategyAssessment, ...] | None = None,
     limitations: tuple[str, ...] = ("No current RRA was available.",),
     overall_read: str = "The CPF has a useful foundation but needs a clearer delivery narrative.",
 ) -> ReviewResult:
@@ -90,6 +143,12 @@ def result(
         alignment_readout="The CPF shows partial alignment with relevant FCV priorities.",
         revision_summary=summaries,
         priority_areas=areas,
+        rra_driver_assessments=rra_assessments,
+        fcv_strategy_assessments=(
+            strategy_rows()
+            if strategy_assessments_override is None
+            else strategy_assessments_override
+        ),
         limitations=limitations,
         document_coverage=DocumentCoverage(
             primary_document="CPF",
@@ -100,7 +159,11 @@ def result(
 
 def test_result_text_covers_model_authored_narrative_without_metadata_or_raw_evidence():
     reviewed = result(
-        summaries=(RevisionSummaryItem(priority_area_id="pa-1", action="SUMMARY ACTION"),),
+        summaries=(RevisionSummaryItem(priority_area_id="pa-1", title="SUMMARY TITLE"),),
+        rra_assessments=(rra_row(assessment_prefix="RRA NARRATIVE"),),
+        strategy_assessments_override=strategy_rows(
+            assessment_prefix="STRATEGY NARRATIVE"
+        ),
         areas=(
             area(
                 comment_reference="COMMENT REF",
@@ -121,7 +184,10 @@ def test_result_text_covers_model_authored_narrative_without_metadata_or_raw_evi
 
     for expected in (
         "OVERALL READ",
-        "SUMMARY ACTION",
+        "SUMMARY TITLE",
+        "RRA NARRATIVE driver",
+        "RRA NARRATIVE remaining gap",
+        "STRATEGY NARRATIVE anticipate_better.",
         "HEADING",
         "ASSESSMENT",
         "WHY IT MATTERS",
@@ -152,7 +218,7 @@ def test_alignment_readout_prohibited_policy_language_is_rejected():
 
 def test_summary_unknown_link_is_rejected():
     reviewed = result(
-        summaries=(RevisionSummaryItem(priority_area_id="missing", action="Revise it."),)
+        summaries=(RevisionSummaryItem(priority_area_id="missing", title="Revise it"),)
     )
 
     issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
@@ -163,8 +229,8 @@ def test_summary_unknown_link_is_rejected():
 def test_duplicate_priority_ids_and_summary_linkage_are_rejected_with_repairable_code():
     reviewed = result(
         summaries=(
-            RevisionSummaryItem(priority_area_id="pa-1", action="First action."),
-            RevisionSummaryItem(priority_area_id="pa-1", action="Second action."),
+            RevisionSummaryItem(priority_area_id="pa-1", title="First issue"),
+            RevisionSummaryItem(priority_area_id="pa-1", title="Second issue"),
         ),
         areas=(area(), area()),
     )
@@ -188,6 +254,86 @@ def test_priority_area_unknown_evidence_is_rejected():
     assert [issue.message for issue in issues if issue.code == "unknown_evidence"] == [
         "pa-1 cites unknown evidence: ['ev-2']"
     ]
+
+
+def test_assessment_collections_reject_unknown_evidence():
+    reviewed = result(
+        rra_assessments=(rra_row(evidence_ids=("missing-rra",)),),
+        strategy_assessments_override=strategy_rows(
+            status=AssessmentStatus.ALIGNED,
+            evidence_ids=("registry-PUB-FCV-STRAT-missing",),
+        ),
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        prohibited_terms=set(),
+    )
+
+    messages = [
+        issue.message
+        for issue in issues
+        if issue.code == "unknown_assessment_evidence"
+    ]
+    assert any("rra-1" in message and "missing-rra" in message for message in messages)
+    assert len([message for message in messages if "strategy-" in message]) == 4
+
+
+def test_rra_alignment_requires_driver_assessment():
+    reviewed = result(mode=DiagnosticMode.RRA_ALIGNMENT, rra_assessments=())
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "missing_rra_driver_assessment" in {issue.code for issue in issues}
+
+
+def test_strategy_assessment_requires_each_shift_exactly_once():
+    rows = strategy_rows()
+    reviewed = result(
+        strategy_assessments_override=(rows[0], rows[0], rows[1], rows[2]),
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "incomplete_strategy_assessment" in {issue.code for issue in issues}
+
+
+def test_assessable_strategy_rows_require_strategy_registry_evidence():
+    reviewed = result(
+        strategy_assessments_override=strategy_rows(
+            status=AssessmentStatus.ALIGNED,
+            evidence_ids=("ev-1",),
+        )
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "incomplete_strategy_assessment" in {issue.code for issue in issues}
+
+
+def test_not_assessable_rows_do_not_create_priorities_or_validation_gaps():
+    reviewed = result(areas=(), summaries=())
+
+    issues = validate_review(reviewed, evidence_ids=set(), prohibited_terms=set())
+
+    assert issues == ()
+    assert reviewed.priority_areas == ()
+
+
+def test_summary_titles_are_short_and_link_once_to_priority_areas():
+    with pytest.raises(ValidationError):
+        RevisionSummaryItem(priority_area_id="pa-1", title="x" * 101)
+
+    reviewed = result(
+        summaries=(
+            RevisionSummaryItem(priority_area_id="pa-1", title="First issue"),
+            RevisionSummaryItem(priority_area_id="pa-1", title="Second issue"),
+        )
+    )
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert "unknown_priority_area" in {issue.code for issue in issues}
 
 
 def test_actionable_priority_requires_current_context_when_available():
@@ -299,7 +445,13 @@ def test_generic_strategy_language_does_not_require_registry_evidence():
 def test_integrated_support_issue_codes_are_declared_in_validation_code_type():
     declared_codes = set(get_args(ValidationIssueCode))
 
-    assert {"missing_current_context_support", "missing_registry_support"} <= declared_codes
+    assert {
+        "missing_current_context_support",
+        "missing_registry_support",
+        "missing_rra_driver_assessment",
+        "incomplete_strategy_assessment",
+        "unknown_assessment_evidence",
+    } <= declared_codes
 
 
 def test_finalization_requires_fine_tuning_scale():

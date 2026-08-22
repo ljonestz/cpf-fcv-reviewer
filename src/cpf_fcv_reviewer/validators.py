@@ -5,7 +5,14 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Literal
 
-from .contracts import DiagnosticMode, RecommendationScale, ReviewResult, RunMetadata
+from .contracts import (
+    AssessmentStatus,
+    DiagnosticMode,
+    FCVStrategicShift,
+    RecommendationScale,
+    ReviewResult,
+    RunMetadata,
+)
 from .review_profiles import STAGE_PROFILES
 
 DETERMINATION_PATTERNS = (
@@ -40,6 +47,9 @@ ValidationIssueCode = Literal[
     "limited_mode_overclaim",
     "unknown_priority_area",
     "unknown_evidence",
+    "unknown_assessment_evidence",
+    "missing_rra_driver_assessment",
+    "incomplete_strategy_assessment",
     "stage_overreach",
     "stage_length_overreach",
     "withheld_drafting",
@@ -89,7 +99,18 @@ def validate_reproducibility_metadata(
 def result_text(result: ReviewResult) -> str:
     """Return every user-facing review field that can carry a policy claim."""
     parts = [result.overall_read, result.alignment_readout]
-    parts.extend(summary.action for summary in result.revision_summary)
+    parts.extend(summary.title for summary in result.revision_summary)
+    for assessment in result.rra_driver_assessments:
+        parts.extend(
+            (
+                assessment.driver,
+                assessment.cpf_response,
+                assessment.delivery_mechanism,
+                assessment.result_or_indicator,
+                assessment.remaining_gap,
+            )
+        )
+    parts.extend(assessment.assessment for assessment in result.fcv_strategy_assessments)
     for priority_area in result.priority_areas:
         parts.extend(
             (
@@ -151,6 +172,67 @@ def validate_review(
                 )
             )
 
+    if (
+        result.metadata.diagnostic_mode == DiagnosticMode.RRA_ALIGNMENT
+        and not result.rra_driver_assessments
+    ):
+        issues.append(
+            ValidationIssue(
+                "missing_rra_driver_assessment",
+                "RRA alignment mode requires at least one RRA driver assessment.",
+            )
+        )
+
+    shift_counts = Counter(
+        assessment.strategic_shift
+        for assessment in result.fcv_strategy_assessments
+    )
+    missing_shifts = [
+        shift.value for shift in FCVStrategicShift if shift_counts[shift] == 0
+    ]
+    duplicate_shifts = [
+        shift.value for shift in FCVStrategicShift if shift_counts[shift] > 1
+    ]
+    if missing_shifts or duplicate_shifts:
+        issues.append(
+            ValidationIssue(
+                "incomplete_strategy_assessment",
+                "FCV Strategy assessment requires each strategic shift exactly once; "
+                f"missing={missing_shifts}, duplicate={duplicate_shifts}.",
+            )
+        )
+
+    for assessment in result.rra_driver_assessments:
+        _append_unknown_evidence_issue(
+            issues,
+            assessment.assessment_id,
+            assessment.evidence_ids,
+            evidence_ids,
+            issue_code="unknown_assessment_evidence",
+        )
+
+    for assessment in result.fcv_strategy_assessments:
+        _append_unknown_evidence_issue(
+            issues,
+            assessment.assessment_id,
+            assessment.evidence_ids,
+            evidence_ids,
+            issue_code="unknown_assessment_evidence",
+        )
+        if (
+            assessment.status is not AssessmentStatus.NOT_ASSESSABLE
+            and not any(
+                evidence_id.startswith("registry-PUB-FCV-STRAT-")
+                for evidence_id in assessment.evidence_ids
+            )
+        ):
+            issues.append(
+                ValidationIssue(
+                    "incomplete_strategy_assessment",
+                    f"{assessment.assessment_id} requires FCV Strategy registry evidence.",
+                )
+            )
+
     priority_area_counts = Counter(
         priority_area.priority_area_id for priority_area in result.priority_areas
     )
@@ -184,7 +266,7 @@ def validate_review(
             issues.append(
                 ValidationIssue(
                     "unknown_priority_area",
-                    f"Revision summary action cites priority area that does not resolve uniquely: "
+                    f"Revision summary title cites priority area that does not resolve uniquely: "
                     f"{summary.priority_area_id}",
                 )
             )
@@ -246,12 +328,14 @@ def _append_unknown_evidence_issue(
     item_id: str,
     cited_ids: tuple[str, ...],
     evidence_ids: set[str],
+    *,
+    issue_code: ValidationIssueCode = "unknown_evidence",
 ) -> None:
     unknown = sorted(set(cited_ids) - evidence_ids)
     if unknown:
         issues.append(
             ValidationIssue(
-                "unknown_evidence",
+                issue_code,
                 f"{item_id} cites unknown evidence: {unknown}",
             )
         )

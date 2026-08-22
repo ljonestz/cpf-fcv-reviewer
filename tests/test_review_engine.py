@@ -8,12 +8,17 @@ import pytest
 
 from cpf_fcv_reviewer import model_gateway
 from cpf_fcv_reviewer.contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     DetailLevel,
     DiagnosticMode,
     DocumentRole,
     EvidenceItem,
     EvidenceLocator,
     EvidencePack,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
     ReviewDraft,
@@ -110,6 +115,20 @@ def evidence_pack(meta: RunMetadata) -> EvidencePack:
     )
 
 
+def strategy_rows() -> tuple[FCVStrategyAssessment, ...]:
+    return tuple(
+        FCVStrategyAssessment(
+            assessment_id=f"strategy-{shift.value}",
+            strategic_shift=shift,
+            assessment="The supplied evidence does not support assessment of this shift.",
+            status=AssessmentStatus.NOT_ASSESSABLE,
+            confidence=AssessmentConfidence.LOW,
+            evidence_ids=(),
+        )
+        for shift in FCVStrategicShift
+    )
+
+
 def draft_for(
     meta: RunMetadata,
     *,
@@ -125,7 +144,7 @@ def draft_for(
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",
-                action="Clarify the delivery logic.",
+                title="Clarify the delivery logic",
             ),
         ),
         priority_areas=(
@@ -143,8 +162,10 @@ def draft_for(
                 ),
                 evidence_ids=("ev-primary-1",),
                 sensitivity=SensitivityCategory.CAUTIOUS,
+                gap_locus=GapLocus.DELIVERY_ARRANGEMENTS,
             ),
         ),
+        fcv_strategy_assessments=strategy_rows(),
         institutional_referral_ids=(),
         limitations=(),
         coverage_note=coverage_note,
@@ -166,10 +187,11 @@ def result_for(
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",
-                action="Clarify the delivery logic.",
+                title="Clarify the delivery logic",
             ),
         ),
         priority_areas=(),
+        fcv_strategy_assessments=strategy_rows(),
         limitations=(),
         document_coverage={
             "primary_document": "Primary.docx",
@@ -461,6 +483,8 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         "alignment_readout",
         "revision_summary",
         "priority_areas",
+        "rra_driver_assessments",
+        "fcv_strategy_assessments",
         "institutional_referral_ids",
         "limitations",
         "coverage_note",
@@ -486,6 +510,23 @@ def test_repair_accepts_evidence_support_issues_and_passes_them_to_gateway():
             "code": "missing_registry_support",
             "message": "Registry evidence is not linked.",
         },
+    ]
+
+    ReviewEngine(gateway).repair(result_for(meta), issues)
+
+    assert gateway.calls[0][1]["validation_issues"] == issues
+
+
+def test_repair_accepts_new_assessment_validation_issues():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+    issues = [
+        {"code": code, "message": f"Repair {code}."}
+        for code in (
+            "missing_rra_driver_assessment",
+            "incomplete_strategy_assessment",
+            "unknown_assessment_evidence",
+        )
     ]
 
     ReviewEngine(gateway).repair(result_for(meta), issues)

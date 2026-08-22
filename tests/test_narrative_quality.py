@@ -5,10 +5,15 @@ from pathlib import Path
 import pytest
 
 from cpf_fcv_reviewer.contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     DetailLevel,
     DiagnosticMode,
     DocumentCoverage,
     EvidenceLocator,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
     ReviewResult,
@@ -36,6 +41,10 @@ def assert_narrative_quality(result: ReviewResult, case: dict) -> None:
     assert all(item.priority_area_id in area_ids for item in result.revision_summary), (
         "Every summary item must link to a priority area."
     )
+    assert len({item.priority_area_id for item in result.revision_summary}) == len(
+        result.revision_summary
+    )
+    assert all(len(item.title) <= 100 for item in result.revision_summary)
     allowed_scales = set(case["allowed_scales"])
     coordinate = case["required_target_coordinates"]
     expected_evidence_ids = set(case["evidence_ids"])
@@ -56,6 +65,20 @@ def assert_narrative_quality(result: ReviewResult, case: dict) -> None:
         assert set(area.evidence_ids) <= expected_evidence_ids
         heading = area.heading.casefold()
         assert all(term.casefold() not in heading for term in case["forbidden_headings"])
+
+
+def strategy_rows() -> tuple[FCVStrategyAssessment, ...]:
+    return tuple(
+        FCVStrategyAssessment(
+            assessment_id=f"strategy-{shift.value}",
+            strategic_shift=shift,
+            assessment="The supplied synthetic case does not support assessment of this shift.",
+            status=AssessmentStatus.NOT_ASSESSABLE,
+            confidence=AssessmentConfidence.LOW,
+            evidence_ids=(),
+        )
+        for shift in FCVStrategicShift
+    )
 
 
 def build_result(case: dict) -> ReviewResult:
@@ -108,7 +131,12 @@ def build_result(case: dict) -> ReviewResult:
             "translated into an explicit results pathway."
         ),
         alignment_readout="The draft shows partial alignment with the FCV framing.",
-        revision_summary=(RevisionSummaryItem(priority_area_id=area_id, action=action),),
+        revision_summary=(
+            RevisionSummaryItem(
+                priority_area_id=area_id,
+                title="Make the conflict-sensitive results pathway explicit",
+            ),
+        ),
         priority_areas=(
             PriorityArea(
                 priority_area_id=area_id,
@@ -123,8 +151,10 @@ def build_result(case: dict) -> ReviewResult:
                 recommendation_scale=scale_by_stage[stage],
                 evidence_ids=tuple(case["evidence_ids"]),
                 sensitivity=SensitivityCategory.CAUTIOUS,
+                gap_locus=GapLocus.RESULTS_FRAMEWORK,
             ),
         ),
+        fcv_strategy_assessments=strategy_rows(),
         limitations=("Synthetic case; no external context documents were supplied.",),
         document_coverage=DocumentCoverage(
             primary_document=coordinate["document_title"],
