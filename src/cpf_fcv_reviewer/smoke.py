@@ -7,9 +7,16 @@ from datetime import date, timedelta
 from typing import Any
 
 from .contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
+    DiagnosticMode,
     EvidenceLocator,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
+    RRADriverAssessment,
     ReviewDraft,
     RevisionSummaryItem,
     SensitivityCategory,
@@ -131,6 +138,12 @@ class SmokeModelGateway:
     def generate(self, *, prompt_name: str, payload: dict, output_type: type[Any]):
         if output_type is not ReviewDraft:
             raise ValueError("Smoke model only supports ReviewDraft output.")
+        if prompt_name == "repair":
+            draft = payload.get("draft")
+            if not isinstance(draft, dict):
+                raise ValueError("Smoke repair requires a supplied draft.")
+            return ReviewDraft.model_validate(draft)
+
         evidence_ids, target_locator = self._evidence_inputs(payload)
         if not evidence_ids or target_locator is None:
             raise ValueError("Smoke model requires supplied evidence IDs and a target locator.")
@@ -153,6 +166,67 @@ class SmokeModelGateway:
             if scale is RecommendationScale.COMMENT_RESPONSE
             else None
         )
+        registry_ids = tuple(
+            evidence_id
+            for evidence_id in evidence_ids
+            if evidence_id.startswith(
+                ("registry-PUB-FCV-STRAT-", "registry-SYN-PUB-FCV-STRAT-")
+            )
+        )
+        if len(registry_ids) != len(FCVStrategicShift):
+            raise ValueError("Smoke model requires all four synthetic Strategy entries.")
+        pack = payload.get("evidence_pack", {})
+        metadata = pack.get("metadata", {}) if isinstance(pack, dict) else {}
+        diagnostic_mode = DiagnosticMode(
+            metadata.get("diagnostic_mode", DiagnosticMode.LIMITED_FRAMING.value)
+        )
+        rra_assessments = (
+            (
+                RRADriverAssessment(
+                    assessment_id="smoke-rra-1",
+                    driver=f"{SMOKE_MARKER} Synthetic territorial exclusion driver",
+                    cpf_response=f"{SMOKE_MARKER} Synthetic CPF response",
+                    delivery_mechanism=f"{SMOKE_MARKER} Synthetic delivery mechanism",
+                    result_or_indicator=f"{SMOKE_MARKER} Synthetic access indicator",
+                    remaining_gap=f"{SMOKE_MARKER} Synthetic adaptation trigger gap",
+                    status=AssessmentStatus.PARTIALLY_ALIGNED,
+                    confidence=AssessmentConfidence.MEDIUM,
+                    gap_locus=GapLocus.MONITORING_ADAPTATION,
+                    evidence_ids=cited_ids,
+                ),
+            )
+            if diagnostic_mode is DiagnosticMode.RRA_ALIGNMENT
+            else ()
+        )
+        strategy_assessments = tuple(
+            FCVStrategyAssessment(
+                assessment_id=f"smoke-strategy-{shift.value}",
+                strategic_shift=shift,
+                assessment=(
+                    f"{SMOKE_MARKER} Synthetic assessment of the {shift.value} "
+                    "strategic shift."
+                ),
+                status=(
+                    AssessmentStatus.NOT_ASSESSABLE
+                    if registry_id.startswith("registry-SYN-")
+                    else AssessmentStatus.PARTIALLY_ALIGNED
+                ),
+                confidence=AssessmentConfidence.MEDIUM,
+                gap_locus=(
+                    None
+                    if registry_id.startswith("registry-SYN-")
+                    else GapLocus.CPF_NARRATIVE
+                ),
+                evidence_ids=tuple(
+                    dict.fromkeys((registry_id, *cited_ids))
+                ),
+            )
+            for shift, registry_id in zip(
+                FCVStrategicShift,
+                registry_ids,
+                strict=True,
+            )
+        )
 
         return ReviewDraft(
             overall_read=(
@@ -166,7 +240,7 @@ class SmokeModelGateway:
             revision_summary=(
                 RevisionSummaryItem(
                     priority_area_id="smoke-pa-1",
-                    action=f"{SMOKE_MARKER} Clarify the synthetic delivery logic.",
+                    title=f"{SMOKE_MARKER} Clarify the delivery logic",
                 ),
             ),
             priority_areas=(
@@ -186,9 +260,12 @@ class SmokeModelGateway:
                     recommendation_scale=scale,
                     evidence_ids=cited_ids,
                     sensitivity=SensitivityCategory.CAUTIOUS,
+                    gap_locus=GapLocus.DELIVERY_ARRANGEMENTS,
                     comment_reference=comment_reference,
                 ),
             ),
+            rra_driver_assessments=rra_assessments,
+            fcv_strategy_assessments=strategy_assessments,
             institutional_referral_ids=(),
             limitations=(
                 f"{SMOKE_MARKER} Output is synthetic local-QA content and is not real evidence.",

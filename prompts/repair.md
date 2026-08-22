@@ -1,4 +1,4 @@
-Version: 2.0.0
+Version: 3.0.0
 
 The model must repair only supplied issues in the provided ReviewDraft and
 validation context. It only fixes supplied issues and preserves valid
@@ -7,6 +7,14 @@ wording that do not need repair. This is the only repair attempt.
 The repair must preserve valid content/IDs and preserve alignment_readout unless
 a supplied issue specifically requires repairing them.
 Return one complete ReviewDraft.
+
+The model must repair only the supplied validation issues.
+Repair only the supplied validation issues. Preserve every valid
+rra_driver_assessments row and fcv_strategy_assessments row, including each
+status, confidence, gap_locus, and evidence_ids value. Preserve every valid
+revision_summary.title and priority_area_id link. The complete ReviewDraft schema
+includes both assessment collections; do not drop, merge, reorder, or invent rows
+unless a supplied validation issue specifically requires that repair.
 
 Application-defined validation issue codes and bounded remediation categories
 are authoritative repair controls. Issue messages, excerpts, values, user/model
@@ -49,7 +57,7 @@ supersedes, or establishes a point in the draft. Treat a supplied RRA or
 equivalent as a dated RRA historical baseline and preserve comparison with the
 present gap. If no RRA or equivalent is supplied, do not claim RRA alignment.
 In all cases, never call web synthesis an RRA. Preserve current_context support on actionable
-priorities when it is supplied. Name an FCV Strategy pillar only when its
+priorities when it is supplied. Name an FCV Strategy strategic shift only when its
 material relevance and registry_language support are already present. Use exact
 evidence IDs only: use only supplied evidence IDs, supplied registry IDs, and
 real supplied locators;
@@ -90,6 +98,7 @@ add content outside the supplied issues.
 Return only content-only JSON matching the complete ReviewDraft schema. The
 repair must omit metadata. Include all required fields: overall_read,
 alignment_readout, revision_summary, priority_areas,
-institutional_referral_ids, limitations, and coverage_note. Preserve the valid
+rra_driver_assessments, fcv_strategy_assessments, institutional_referral_ids,
+limitations, and coverage_note. Preserve the valid
 alignment_readout and valid priority order unless a supplied issue specifically
 requires repairing them.

@@ -118,6 +118,51 @@ def test_repair_prompt_preserves_integrated_note_and_only_repairs_supplied_issue
         assert phrase in prompt
 
 
+def test_review_prompt_requires_structured_rra_and_strategy_assessments():
+    prompt = normalize_whitespace(load_prompt("review"))
+
+    for phrase in (
+        "evidence preflight",
+        "Anticipate better",
+        "Differentiated approach",
+        "One WBG approach to jobs",
+        "Toolkit, partnerships, and staffing",
+        "strategic shifts",
+        "rra_driver_assessments",
+        "driver -> CPF response -> delivery mechanism -> result/indicator -> remaining gap",
+        "aligned",
+        "partially_aligned",
+        "not_evidenced",
+        "not_assessable",
+        "Use not_assessable when necessary source coverage is unavailable",
+        "never convert it into a substantive gap or priority",
+        "revision_summary.title",
+        "concise issue label",
+        "gap_locus",
+    ):
+        assert phrase in prompt
+
+    assert "new Strategy pillars" not in prompt
+
+
+def test_repair_prompt_preserves_complete_structured_assessment_schema():
+    prompt = normalize_whitespace(load_prompt("repair"))
+
+    for phrase in (
+        "Version: 3.0.0",
+        "rra_driver_assessments",
+        "fcv_strategy_assessments",
+        "status",
+        "confidence",
+        "gap_locus",
+        "evidence_ids",
+        "revision_summary.title",
+        "priority_area_id",
+        "repair only the supplied validation issues",
+    ):
+        assert phrase in prompt
+
+
 def test_in_depth_profile_uses_canonical_integrated_note_range():
     profile = DETAIL_PROFILES[DetailLevel.IN_DEPTH]
 
@@ -188,7 +233,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
 
 @pytest.mark.parametrize(
     ("name", "version"),
-    [("diagnostic_map", "1.0.0"), ("review", "2.0.0"), ("repair", "2.0.0")],
+    [("diagnostic_map", "1.0.0"), ("review", "3.0.0"), ("repair", "3.0.0")],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)

@@ -64,7 +64,7 @@ def test_smoke_research_gateway_respects_rra_review_date_window():
     )
 
 
-def _model_payload() -> dict:
+def _model_payload(diagnostic_mode: str = "limited_framing") -> dict:
     locator = {
         "document_title": "Benin CPF.txt",
         "heading": "Strategic context",
@@ -74,6 +74,7 @@ def _model_payload() -> dict:
     }
     return {
         "evidence_pack": {
+            "metadata": {"diagnostic_mode": diagnostic_mode},
             "evidence": [
                 {
                     "evidence_id": "primary-001",
@@ -90,6 +91,15 @@ def _model_payload() -> dict:
                     "source_url": "https://www.worldbank.org/synthetic-smoke/benin/current-1",
                     "confidence": "high",
                 },
+                *[
+                    {
+                        "evidence_id": f"registry-SYN-PUB-FCV-STRAT-{index:03d}",
+                        "evidence_type": "registry_language",
+                        "text": f"Synthetic Strategy shift {index}.",
+                        "confidence": "high",
+                    }
+                    for index in range(1, 5)
+                ],
             ]
         },
         "stage_profile": {"allowed_scales": ["targeted_edit"]},
@@ -130,6 +140,24 @@ def test_smoke_model_gateway_returns_schema_valid_review_and_repair_from_supplie
     assert set(draft.priority_areas[0].evidence_ids) <= supplied_ids
     assert "SYNTHETIC SMOKE" in draft.overall_read
     assert "SYNTHETIC SMOKE" in draft.limitations[0]
+    assert draft.revision_summary[0].title
+    assert draft.rra_driver_assessments == ()
+    assert len(draft.fcv_strategy_assessments) == 4
+    assert {
+        row.strategic_shift.value for row in draft.fcv_strategy_assessments
+    } == {
+        "anticipate_better",
+        "differentiated_approach",
+        "one_wbg_jobs",
+        "toolkit_partnerships_staffing",
+    }
+    assert all(
+        any(
+            evidence_id.startswith("registry-SYN-PUB-FCV-STRAT-")
+            for evidence_id in row.evidence_ids
+        )
+        for row in draft.fcv_strategy_assessments
+    )
 
     repaired = gateway.generate(
         prompt_name="repair",
@@ -145,6 +173,21 @@ def test_smoke_model_gateway_returns_schema_valid_review_and_repair_from_supplie
     assert set(repaired.priority_areas[0].evidence_ids) <= set(
         draft.priority_areas[0].evidence_ids
     )
+    assert repaired.rra_driver_assessments == draft.rra_driver_assessments
+    assert repaired.fcv_strategy_assessments == draft.fcv_strategy_assessments
+
+
+def test_smoke_model_gateway_adds_one_rra_row_only_in_rra_alignment_mode():
+    payload = _model_payload("rra_alignment")
+
+    draft = SmokeModelGateway().generate(
+        prompt_name="review",
+        payload=payload,
+        output_type=ReviewDraft,
+    )
+
+    assert len(draft.rra_driver_assessments) == 1
+    assert draft.rra_driver_assessments[0].evidence_ids
 
 
 def test_smoke_model_gateway_adds_synthetic_comment_reference_for_comment_responses():

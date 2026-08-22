@@ -398,7 +398,7 @@ def build_docx(
         for item in result.revision_summary:
             _add_list_paragraph(
                 document,
-                item.action,
+                item.title,
                 style_name="CPF Decimal List",
                 num_id=revision_num_id,
             )
