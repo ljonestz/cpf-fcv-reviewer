@@ -223,7 +223,7 @@ def validate_review(
             assessment.status is not AssessmentStatus.NOT_ASSESSABLE
             and not any(
                 evidence_id.startswith("registry-PUB-FCV-STRAT-")
-                for evidence_id in assessment.evidence_ids
+                for evidence_id in set(assessment.evidence_ids) & evidence_ids
             )
         ):
             issues.append(

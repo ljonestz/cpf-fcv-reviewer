@@ -278,6 +278,7 @@ def test_assessment_collections_reject_unknown_evidence():
     ]
     assert any("rra-1" in message and "missing-rra" in message for message in messages)
     assert len([message for message in messages if "strategy-" in message]) == 4
+    assert "incomplete_strategy_assessment" in {issue.code for issue in issues}
 
 
 def test_rra_alignment_requires_driver_assessment():
@@ -312,13 +313,14 @@ def test_assessable_strategy_rows_require_strategy_registry_evidence():
     assert "incomplete_strategy_assessment" in {issue.code for issue in issues}
 
 
-def test_not_assessable_rows_do_not_create_priorities_or_validation_gaps():
-    reviewed = result(areas=(), summaries=())
+def test_not_assessable_rows_cannot_support_a_priority_by_themselves():
+    reviewed = result(
+        areas=(area(evidence_ids=("strategy-anticipate_better",)),),
+    )
 
     issues = validate_review(reviewed, evidence_ids=set(), prohibited_terms=set())
 
-    assert issues == ()
-    assert reviewed.priority_areas == ()
+    assert "unknown_evidence" in {issue.code for issue in issues}
 
 
 def test_summary_titles_are_short_and_link_once_to_priority_areas():

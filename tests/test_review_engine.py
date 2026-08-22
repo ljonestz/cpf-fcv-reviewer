@@ -529,9 +529,12 @@ def test_repair_accepts_new_assessment_validation_issues():
         )
     ]
 
-    ReviewEngine(gateway).repair(result_for(meta), issues)
+    repaired = ReviewEngine(gateway).repair(result_for(meta), issues)
 
     assert gateway.calls[0][1]["validation_issues"] == issues
+    assert repaired.fcv_strategy_assessments == strategy_rows()
+    assert repaired.rra_driver_assessments == ()
+    assert repaired.metadata.repair_count == 1
 
 
 def test_repair_rejects_unsupported_metadata_stage_before_gateway_call():
