@@ -4,6 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from cpf_fcv_reviewer.contracts import (
+    AssessmentConfidence,
+    AssessmentStatus,
     CurrentEvidenceTier,
     DetailLevel,
     DiagnosticMode,
@@ -11,8 +13,12 @@ from cpf_fcv_reviewer.contracts import (
     DocumentRole,
     EvidenceItem,
     EvidenceLocator,
+    FCVStrategicShift,
+    FCVStrategyAssessment,
+    GapLocus,
     PriorityArea,
     RecommendationScale,
+    RRADriverAssessment,
     ReviewDraft,
     ReviewResult,
     RevisionSummaryItem,
@@ -94,6 +100,173 @@ def test_run_metadata_current_evidence_status_is_immutable_and_serializable(tier
         RunMetadata.model_validate(invalid)
 
 
+def rra_assessment_values(**overrides) -> dict[str, object]:
+    values = {
+        "assessment_id": "rra-1",
+        "driver": "Unequal territorial access",
+        "cpf_response": "The CPF prioritizes lagging regions.",
+        "delivery_mechanism": "Area-based delivery is proposed.",
+        "result_or_indicator": "A service-access indicator is included.",
+        "remaining_gap": "Adaptation triggers are not defined.",
+        "status": AssessmentStatus.ALIGNED,
+        "confidence": AssessmentConfidence.HIGH,
+        "gap_locus": None,
+        "evidence_ids": ("ev-1",),
+    }
+    values.update(overrides)
+    return values
+
+
+def strategy_assessment_values(**overrides) -> dict[str, object]:
+    values = {
+        "assessment_id": "strategy-1",
+        "strategic_shift": FCVStrategicShift.ANTICIPATE_BETTER,
+        "assessment": "The CPF reflects this strategic shift in the response.",
+        "status": AssessmentStatus.ALIGNED,
+        "confidence": AssessmentConfidence.HIGH,
+        "gap_locus": None,
+        "evidence_ids": ("ev-1",),
+    }
+    values.update(overrides)
+    return values
+
+
+def test_assessment_enums_expose_canonical_values():
+    assert {member.value for member in AssessmentStatus} == {
+        "aligned",
+        "partially_aligned",
+        "not_evidenced",
+        "not_assessable",
+    }
+    assert {member.value for member in AssessmentConfidence} == {"high", "medium", "low"}
+    assert {member.value for member in GapLocus} == {
+        "cpf_narrative",
+        "results_framework",
+        "delivery_arrangements",
+        "monitoring_adaptation",
+        "downstream_operationalization",
+    }
+    assert {member.value for member in FCVStrategicShift} == {
+        "anticipate_better",
+        "differentiated_approach",
+        "one_wbg_jobs",
+        "toolkit_partnerships_staffing",
+    }
+
+
+def test_structured_assessments_construct_one_driver_and_all_strategy_rows():
+    rra = RRADriverAssessment(**rra_assessment_values())
+    strategy_rows = tuple(
+        FCVStrategyAssessment(
+            **strategy_assessment_values(
+                assessment_id=f"strategy-{index}",
+                strategic_shift=strategic_shift,
+            )
+        )
+        for index, strategic_shift in enumerate(FCVStrategicShift, start=1)
+    )
+
+    assert rra.driver == "Unequal territorial access"
+    assert {row.strategic_shift for row in strategy_rows} == set(FCVStrategicShift)
+
+
+@pytest.mark.parametrize(
+    ("model", "factory", "field"),
+    (
+        (RRADriverAssessment, rra_assessment_values, "assessment_id"),
+        (RRADriverAssessment, rra_assessment_values, "driver"),
+        (RRADriverAssessment, rra_assessment_values, "cpf_response"),
+        (RRADriverAssessment, rra_assessment_values, "delivery_mechanism"),
+        (RRADriverAssessment, rra_assessment_values, "result_or_indicator"),
+        (RRADriverAssessment, rra_assessment_values, "remaining_gap"),
+        (FCVStrategyAssessment, strategy_assessment_values, "assessment_id"),
+        (FCVStrategyAssessment, strategy_assessment_values, "assessment"),
+    ),
+)
+@pytest.mark.parametrize("value", ["", "   "])
+def test_assessments_reject_blank_narrative_fields(model, factory, field, value):
+    values = factory()
+    values[field] = value
+
+    with pytest.raises(ValidationError):
+        model(**values)
+
+
+@pytest.mark.parametrize(
+    ("model", "factory"),
+    (
+        (RRADriverAssessment, rra_assessment_values),
+        (FCVStrategyAssessment, strategy_assessment_values),
+    ),
+)
+@pytest.mark.parametrize(
+    "status",
+    [AssessmentStatus.PARTIALLY_ALIGNED, AssessmentStatus.NOT_EVIDENCED],
+)
+def test_partial_or_not_evidenced_assessments_require_gap_locus(model, factory, status):
+    values = factory(status=status)
+
+    with pytest.raises(ValidationError, match="gap_locus"):
+        model(**values)
+
+
+@pytest.mark.parametrize(
+    ("model", "factory"),
+    (
+        (RRADriverAssessment, rra_assessment_values),
+        (FCVStrategyAssessment, strategy_assessment_values),
+    ),
+)
+@pytest.mark.parametrize(
+    "status",
+    [
+        AssessmentStatus.ALIGNED,
+        AssessmentStatus.PARTIALLY_ALIGNED,
+        AssessmentStatus.NOT_EVIDENCED,
+    ],
+)
+def test_non_assessable_statuses_require_evidence(model, factory, status):
+    values = factory(status=status, evidence_ids=())
+    if status in {
+        AssessmentStatus.PARTIALLY_ALIGNED,
+        AssessmentStatus.NOT_EVIDENCED,
+    }:
+        values["gap_locus"] = GapLocus.CPF_NARRATIVE
+
+    with pytest.raises(ValidationError, match="evidence"):
+        model(**values)
+
+
+@pytest.mark.parametrize(
+    ("model", "factory"),
+    (
+        (RRADriverAssessment, rra_assessment_values),
+        (FCVStrategyAssessment, strategy_assessment_values),
+    ),
+)
+def test_not_assessable_allows_an_empty_evidence_list(model, factory):
+    assessment = model(
+        **factory(
+            status=AssessmentStatus.NOT_ASSESSABLE,
+            evidence_ids=(),
+        )
+    )
+
+    assert assessment.evidence_ids == ()
+
+
+def test_review_result_accepts_incomplete_assessment_collections(make_valid_result):
+    result, _ = make_valid_result
+    payload = result.model_dump()
+    payload["rra_driver_assessments"] = ()
+    payload["fcv_strategy_assessments"] = payload["fcv_strategy_assessments"][:1]
+
+    parsed = ReviewResult.model_validate(payload)
+
+    assert parsed.rra_driver_assessments == ()
+    assert len(parsed.fcv_strategy_assessments) == 1
+
+
 def locator() -> EvidenceLocator:
     return EvidenceLocator(
         document_title="CPF.docx",
@@ -114,6 +287,7 @@ def priority_area_values() -> dict[str, object]:
         "recommendation_scale": RecommendationScale.TARGETED_EDIT,
         "evidence_ids": ("ev-1",),
         "sensitivity": SensitivityCategory.CAUTIOUS,
+        "gap_locus": GapLocus.CPF_NARRATIVE,
     }
 
 
@@ -158,10 +332,10 @@ def test_priority_area_rejects_blank_comment_reference(comment_reference):
         PriorityArea(**values)
 
 
-@pytest.mark.parametrize("field", ["priority_area_id", "action"])
+@pytest.mark.parametrize("field", ["priority_area_id", "title"])
 @pytest.mark.parametrize("value", ["", "   "])
 def test_revision_summary_rejects_blank_required_fields(field, value):
-    values = {"priority_area_id": "pa-1", "action": "Clarify the causal link."}
+    values = {"priority_area_id": "pa-1", "title": "Clarify the causal link."}
     values[field] = value
 
     with pytest.raises(ValidationError):
@@ -240,6 +414,7 @@ def test_review_draft_preserves_nonblank_alignment_readout(make_valid_result):
         alignment_readout=alignment_readout,
         revision_summary=result.revision_summary,
         priority_areas=result.priority_areas,
+        fcv_strategy_assessments=result.fcv_strategy_assessments,
         institutional_referral_ids=(),
         limitations=(),
         coverage_note="The primary draft was reviewed.",

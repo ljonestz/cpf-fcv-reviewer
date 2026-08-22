@@ -46,6 +46,34 @@ class DiagnosticMode(StrEnum):
     LIMITED_FRAMING = "limited_framing"
 
 
+class AssessmentStatus(StrEnum):
+    ALIGNED = "aligned"
+    PARTIALLY_ALIGNED = "partially_aligned"
+    NOT_EVIDENCED = "not_evidenced"
+    NOT_ASSESSABLE = "not_assessable"
+
+
+class AssessmentConfidence(StrEnum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class GapLocus(StrEnum):
+    CPF_NARRATIVE = "cpf_narrative"
+    RESULTS_FRAMEWORK = "results_framework"
+    DELIVERY_ARRANGEMENTS = "delivery_arrangements"
+    MONITORING_ADAPTATION = "monitoring_adaptation"
+    DOWNSTREAM_OPERATIONALIZATION = "downstream_operationalization"
+
+
+class FCVStrategicShift(StrEnum):
+    ANTICIPATE_BETTER = "anticipate_better"
+    DIFFERENTIATED_APPROACH = "differentiated_approach"
+    ONE_WBG_JOBS = "one_wbg_jobs"
+    TOOLKIT_PARTNERSHIPS_STAFFING = "toolkit_partnerships_staffing"
+
+
 class CurrentEvidenceTier(StrEnum):
     FULL = "full"
     REDUCED = "reduced"
@@ -150,6 +178,88 @@ class DiagnosticEntry(FrozenModel):
     grouping_rationale: str
 
 
+class RRADriverAssessment(FrozenModel):
+    assessment_id: str
+    driver: str
+    cpf_response: str
+    delivery_mechanism: str
+    result_or_indicator: str
+    remaining_gap: str
+    status: AssessmentStatus
+    confidence: AssessmentConfidence
+    gap_locus: GapLocus | None = None
+    evidence_ids: tuple[str, ...]
+
+    @field_validator(
+        "assessment_id",
+        "driver",
+        "cpf_response",
+        "delivery_mechanism",
+        "result_or_indicator",
+        "remaining_gap",
+    )
+    @classmethod
+    def requires_nonblank_narrative(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Assessment narrative fields")
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def requires_nonblank_evidence_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _requires_nonblank_items(value, "Assessment evidence identifiers")
+
+    @model_validator(mode="after")
+    def validates_assessment_requirements(self) -> RRADriverAssessment:
+        if self.status in {
+            AssessmentStatus.PARTIALLY_ALIGNED,
+            AssessmentStatus.NOT_EVIDENCED,
+        } and self.gap_locus is None:
+            raise ValueError(
+                "gap_locus is required for partially_aligned and not_evidenced assessments."
+            )
+        if self.status is not AssessmentStatus.NOT_ASSESSABLE and not self.evidence_ids:
+            raise ValueError(
+                "evidence_ids must contain at least one identifier unless status is "
+                "not_assessable."
+            )
+        return self
+
+
+class FCVStrategyAssessment(FrozenModel):
+    assessment_id: str
+    strategic_shift: FCVStrategicShift
+    assessment: str
+    status: AssessmentStatus
+    confidence: AssessmentConfidence
+    gap_locus: GapLocus | None = None
+    evidence_ids: tuple[str, ...]
+
+    @field_validator("assessment_id", "assessment")
+    @classmethod
+    def requires_nonblank_narrative(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Assessment narrative fields")
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def requires_nonblank_evidence_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _requires_nonblank_items(value, "Assessment evidence identifiers")
+
+    @model_validator(mode="after")
+    def validates_assessment_requirements(self) -> FCVStrategyAssessment:
+        if self.status in {
+            AssessmentStatus.PARTIALLY_ALIGNED,
+            AssessmentStatus.NOT_EVIDENCED,
+        } and self.gap_locus is None:
+            raise ValueError(
+                "gap_locus is required for partially_aligned and not_evidenced assessments."
+            )
+        if self.status is not AssessmentStatus.NOT_ASSESSABLE and not self.evidence_ids:
+            raise ValueError(
+                "evidence_ids must contain at least one identifier unless status is "
+                "not_assessable."
+            )
+        return self
+
+
 class RecommendationScale(StrEnum):
     PREPARATION_PRIORITY = "preparation_priority"
     SUBSTANTIVE_REVISION = "substantive_revision"
@@ -160,9 +270,9 @@ class RecommendationScale(StrEnum):
 
 class RevisionSummaryItem(FrozenModel):
     priority_area_id: str
-    action: str
+    title: str = Field(max_length=100)
 
-    @field_validator("priority_area_id", "action")
+    @field_validator("priority_area_id", "title")
     @classmethod
     def requires_nonblank_summary_text(cls, value: str) -> str:
         return _requires_nonblank_text(value, "Revision summary fields")
@@ -178,6 +288,7 @@ class PriorityArea(FrozenModel):
     recommendation_scale: RecommendationScale
     evidence_ids: tuple[str, ...] = Field(min_length=1)
     sensitivity: SensitivityCategory
+    gap_locus: GapLocus
     comment_reference: str | None = None
 
     @field_validator(
@@ -286,6 +397,8 @@ class ReviewResult(FrozenModel):
     alignment_readout: str
     revision_summary: tuple[RevisionSummaryItem, ...]
     priority_areas: tuple[PriorityArea, ...]
+    rra_driver_assessments: tuple[RRADriverAssessment, ...] = ()
+    fcv_strategy_assessments: tuple[FCVStrategyAssessment, ...]
     institutional_referral_ids: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     document_coverage: DocumentCoverage
@@ -308,6 +421,8 @@ class ReviewDraft(FrozenModel):
     alignment_readout: str
     revision_summary: tuple[RevisionSummaryItem, ...]
     priority_areas: tuple[PriorityArea, ...]
+    rra_driver_assessments: tuple[RRADriverAssessment, ...] = ()
+    fcv_strategy_assessments: tuple[FCVStrategyAssessment, ...]
     institutional_referral_ids: tuple[str, ...]
     limitations: tuple[str, ...]
     coverage_note: str
