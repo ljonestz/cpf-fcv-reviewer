@@ -1,12 +1,12 @@
 # Project status
 
-Updated 2026-08-23. The advisory CPF FCV Reviewer is on `fix/research-resilience-guided-journey`; latest verified implementation commits: `4b8c09b` and `abaa615`. Semantic application version is `0.1.0`.
+Updated 2026-08-23. The advisory CPF FCV Reviewer is on `fix/research-resilience-guided-journey`; the current branch is verified by the suite reported below. Semantic application version is `0.1.0`.
 
-The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. It currently reports release `ef7b9ea`, health `ok`, and `volatile` storage. The branch now fails closed in production without SQLite persistence, so the next deployment requires the configured paid Render disk.
+The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. It currently reports release `ef7b9ea`, health `ok`, and `volatile` storage. Operational production still fails closed without SQLite persistence; the public test site can run without a disk only through the explicit `ALLOW_VOLATILE_PROTOTYPE=true` exception.
 
 The note-first redesign organizes the detailed assessment around an overall read, explicit questions on RRA/current-dynamics alignment and FCV Strategy priorities, structured driver and strategy assessments, priority areas, and limitations. Narrative paragraphs are short and readable; traceability, evidence status, and coverage are collapsible in HTML. The DOCX follows the detailed HTML scope and omits internal reproducibility/referral clutter.
 
-Latest verified suite on 2026-08-23: 1,001 passed in 24.56s. JavaScript syntax and `git diff --check` passed; Ruff remains blocked by Windows Application Control (`WinError 4551`). The stable FCV Project Screener is untouched and prohibited.
+Latest verified suite on 2026-08-23: 1,003 passed in 53.29s. JavaScript syntax and `git diff --check` passed; Ruff remains blocked by Windows Application Control (`WinError 4551`). The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
 
@@ -21,12 +21,11 @@ Latest verified suite on 2026-08-23: 1,001 passed in 24.56s. JavaScript syntax a
 
 ## Remaining considerations
 
-1. Upgrade the existing Render service to a paid single-instance plan, attach the configured persistent disk, and deploy only after `PERSISTENCE_PATH=/var/data/reviews.sqlite3` is available.
-2. Verify `/health` reports the exact deployed commit, `storage: persistent`, and `queue: persistent_worker`; then verify restart recovery.
-3. Repeat the real Haiti quality run after deployment and confirm that findings draw from the full CPF, not only its opening pages. Save the detailed HTML, DOCX, and 1280px/390px summary screenshots.
-4. Complete visual inspection of every DOCX page when Word desktop access is available.
-5. Keep the approved public registry current, versioned, checksummed, and non-confidential, and keep internal OPCS/ITS sources on a separately governed track.
-6. Production use still requires separately approved identity, authorization, audit/monitoring, authoritative source access, and information-security controls.
+1. Deploy the corrected branch to the free Render test service with `ALLOW_VOLATILE_PROTOTYPE=true`, and keep a separate tab active during the bounded assessment.
+2. Repeat the real Haiti quality run and confirm that findings draw from the full CPF, not only its opening pages. Save the detailed HTML, DOCX, and 1280px/390px summary screenshots.
+3. Complete visual inspection of every DOCX page when Word desktop access is available.
+4. Keep the approved public registry current, versioned, checksummed, and non-confidential, and keep internal OPCS/ITS sources on a separately governed track.
+5. ITS production use still requires separately approved identity, durable storage, authorization, audit/monitoring, authoritative source access, and information-security controls.
 
 ## Future-session checklist
 

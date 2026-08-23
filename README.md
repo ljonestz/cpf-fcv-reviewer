@@ -8,8 +8,8 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified implementation commits: `4b8c09b`, `abaa615`
-- Current deployment: release `ef7b9ea`; health `ok`; storage remains `volatile` until the configured Render persistent disk is enabled.
+- Latest verified implementation: `fix/research-resilience-guided-journey` (1,003 tests)
+- Current deployment: release `ef7b9ea`; health `ok`; volatile storage is acceptable for bounded reference-prototype testing.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
@@ -21,12 +21,12 @@ Completed results open with a default **Five-minute readout** and an authoritati
 
 ## Safety boundary
 
-- Production configuration requires SQLite persistence and fails closed without it. Review state expires after the configured retention period; **Start a new review** deletes the active review lineage.
+- Operational production configuration requires SQLite persistence and fails closed without it. The public reference prototype can use volatile storage only when `ALLOW_VOLATILE_PROTOTYPE=true` is set explicitly.
 - A direct current RRA original takes precedence over derived copies; upload is the public-prototype fallback. Operational SharePoint and ITS access are out of scope. A future internal ITS implementation would use the existing source-adapter boundary with separately governed, permission-aware SharePoint access.
 - Public current-context research is public-web only. Do not use licensed sources, including ACLED.
 - The public prototype uses approved non-confidential guardrails and fails closed when its required registry bundle is invalid or unavailable. Detailed internal policy content belongs on a separately governed internal track.
 - Output is English. French input support is limited.
-- The public prototype is non-production and has no production-use approval. Its current Render instance is still on volatile storage; the persistence-required branch must not be deployed until the paid persistent disk is attached.
+- The public prototype is non-production and has no production-use approval. Keeping it awake can support a bounded test run, but a restart still discards that run; ITS should use governed durable storage in its operational implementation.
 
 If a policy-boundary, registry, non-sensitive-input, or unexpected-output concern arises, stop the local server. Do not retry, export, or share the review; record only a safe error category through the applicable internal process.
 
@@ -39,6 +39,7 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 - `REGISTRY_BUNDLE_PATH` and `REGISTRY_BUNDLE_SHA256` (approved bundle and integrity check)
 - `APP_RELEASE` (deployment label)
 - `PERSISTENCE_PATH` (required in production; use the mounted disk path)
+- `ALLOW_VOLATILE_PROTOTYPE` (set to `true` only for the non-production Render test site)
 - `SESSION_TTL_SECONDS` (optional; production default is 24 hours)
 
 ```powershell

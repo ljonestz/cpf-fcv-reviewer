@@ -114,3 +114,17 @@ def test_research_settings_reject_wrong_types_or_nonfinite_values(name, value):
 def test_recovery_settings_reject_invalid_values(name, value):
     with pytest.raises(ValueError):
         build_config({"TESTING": True, name: value})
+
+
+def test_volatile_prototype_mode_is_explicit_and_boolean(monkeypatch):
+    monkeypatch.setenv("ALLOW_VOLATILE_PROTOTYPE", "true")
+
+    config = build_config(
+        {"TESTING": True},
+        use_environment=True,
+    )
+
+    assert config["ALLOW_VOLATILE_PROTOTYPE"] is True
+
+    with pytest.raises(ValueError, match="ALLOW_VOLATILE_PROTOTYPE"):
+        build_config({"TESTING": True, "ALLOW_VOLATILE_PROTOTYPE": "yes"})

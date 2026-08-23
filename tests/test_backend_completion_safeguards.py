@@ -56,6 +56,22 @@ def test_production_requires_persistence_without_an_injected_store():
     else:
         raise AssertionError("production app must fail without durable session storage")
 
+def test_production_allows_explicit_volatile_prototype_mode():
+    app = create_app(
+        {
+            "APP_ENV": "production",
+            "TESTING": False,
+            "ANTHROPIC_API_KEY": "test-key",
+            "PERSISTENCE_PATH": "",
+            "ALLOW_VOLATILE_PROTOTYPE": True,
+            "START_BACKGROUND_RUNS": False,
+        },
+        services={},
+    )
+
+    assert isinstance(app.extensions["session_store"], VolatileSessionStore)
+    assert app.extensions["assessment_queue"].mode == "in_process"
+
 
 def test_production_accepts_an_explicitly_injected_test_store_without_a_path():
     injected_store = VolatileSessionStore(ttl_seconds=60)

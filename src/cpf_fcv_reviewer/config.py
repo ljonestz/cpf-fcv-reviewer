@@ -38,6 +38,10 @@ def build_config(
             "SMOKE_MODE",
             use_environment=use_environment,
         ),
+        "ALLOW_VOLATILE_PROTOTYPE": _environment_bool(
+            "ALLOW_VOLATILE_PROTOTYPE",
+            use_environment=use_environment,
+        ),
         "ANTHROPIC_API_KEY": environment("ANTHROPIC_API_KEY", ""),
         "ANTHROPIC_MODEL_ID": environment("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
         "REGISTRY_BUNDLE_PATH": environment("REGISTRY_BUNDLE_PATH", ""),
@@ -79,8 +83,9 @@ def build_config(
     if not isinstance(config["APP_ENV"], str) or not config["APP_ENV"].strip():
         raise ValueError("APP_ENV must be a nonblank string.")
     config["APP_ENV"] = config["APP_ENV"].strip().casefold()
-    if type(config["SMOKE_MODE"]) is not bool:
-        raise ValueError("SMOKE_MODE must be a boolean.")
+    for name in ("SMOKE_MODE", "ALLOW_VOLATILE_PROTOTYPE"):
+        if type(config[name]) is not bool:
+            raise ValueError(f"{name} must be a boolean.")
     if config["SMOKE_MODE"] and config["APP_ENV"] != "development":
         raise RuntimeError("SMOKE_MODE is development only.")
     for name in (

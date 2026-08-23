@@ -38,6 +38,7 @@ def create_app(
         and not app.testing
         and not persistence_path
         and not injected_session_store
+        and not app.config["ALLOW_VOLATILE_PROTOTYPE"]
     ):
         raise RuntimeError(
             "Production requires PERSISTENCE_PATH or an explicitly injected session_store."
