@@ -8,25 +8,25 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest local functional commit: `0e596a9`
-- Deployment health response: `ok`; storage: `volatile`; the Render release label `9736ed6` identifies the deployed commit for the guided-journey validation release.
+- Latest verified implementation commits: `4b8c09b`, `abaa615`
+- Current deployment: release `ef7b9ea`; health `ok`; storage remains `volatile` until the configured Render persistent disk is enabled.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
 The review starts with three document buckets: the draft CPF/CEN, accompanying package documents, and an optional public RRA or supporting analytics. Country inference uses the recognized title when available and requires manual country confirmation when it is not. Review stage is selected explicitly: Early drafting / PCN, Concept review, Decision review, ROC / OC, Finalization, or Response to comments.
 
-Every review performs bounded current-country public-web research. An uploaded public RRA changes the research window but never suppresses that current research. Retryable research failures can be retried in the browser using the retained volatile uploads; retry never exposes partial output.
+Every review performs bounded current-country public-web research. An uploaded public RRA changes the research window but never suppresses that current research. Retryable research failures can be retried using the retained review package; retry never exposes partial output.
 
-Completed results open in a separate experience with a default **Five-minute readout** and an authoritative **Detailed analysis** view. Both derive from the same canonical result, and the full detailed note can be downloaded as DOCX. Evidence details are collapsed by default. Correction reruns refer to the review itself, not to individual findings. There is no questions-for-confirmation section.
+Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The detailed narrative uses question-led RRA/current-dynamics and FCV Strategy sections, short WBG-style paragraphs, and collapsible traceability, evidence-status, and coverage material. The DOCX follows the detailed HTML scope, and download failures stay on the results page with an inline message.
 
 ## Safety boundary
 
-- Review state is in-memory and temporary: restart, expiry, or **Start a new review** destroys it.
+- Production configuration requires SQLite persistence and fails closed without it. Review state expires after the configured retention period; **Start a new review** deletes the active review lineage.
 - A direct current RRA original takes precedence over derived copies; upload is the public-prototype fallback. Operational SharePoint and ITS access are out of scope. A future internal ITS implementation would use the existing source-adapter boundary with separately governed, permission-aware SharePoint access.
 - Public current-context research is public-web only. Do not use licensed sources, including ACLED.
 - The public prototype uses approved non-confidential guardrails and fails closed when its required registry bundle is invalid or unavailable. Detailed internal policy content belongs on a separately governed internal track.
 - Output is English. French input support is limited.
-- The public prototype is non-production, uses volatile state and public-web-only current context, and has no production-use approval. The guided-journey validation release is deployed on Render at commit `9736ed6`; future releases must continue to use an intentional deployment and release-label update.
+- The public prototype is non-production and has no production-use approval. Its current Render instance is still on volatile storage; the persistence-required branch must not be deployed until the paid persistent disk is attached.
 
 If a policy-boundary, registry, non-sensitive-input, or unexpected-output concern arises, stop the local server. Do not retry, export, or share the review; record only a safe error category through the applicable internal process.
 
@@ -38,7 +38,8 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 - `ANTHROPIC_MODEL_ID` (optional model override)
 - `REGISTRY_BUNDLE_PATH` and `REGISTRY_BUNDLE_SHA256` (approved bundle and integrity check)
 - `APP_RELEASE` (deployment label)
-- `SESSION_TTL_SECONDS` (optional; defaults to one hour)
+- `PERSISTENCE_PATH` (required in production; use the mounted disk path)
+- `SESSION_TTL_SECONDS` (optional; production default is 24 hours)
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
@@ -46,7 +47,7 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Download full detailed note** only while the volatile review remains active.
+Use **Download full detailed note** before the retained review expires or is reset.
 
 ## Documentation
 
