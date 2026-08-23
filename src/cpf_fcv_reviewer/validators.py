@@ -46,6 +46,10 @@ SUMMARY_TITLE_LOCATOR_PATTERN = re.compile(
     r"(?:no\.?\s*)?\d+(?:\.\d+)*(?:\s*[-–]\s*\d+(?:\.\d+)*)?\b",
     re.IGNORECASE,
 )
+SUMMARY_TITLE_DRAFTING_INSTRUCTION_PATTERN = re.compile(
+    r"\b\d+\s+(?:short\s+)?sentences?\b|\b(?:in|under)\s+the\s+[\w -]{1,60}\s+section\b",
+    re.IGNORECASE,
+)
 STRATEGY_REGISTRY_EVIDENCE_IDS = {
     shift: f"registry-PUB-FCV-STRAT-{index:03d}"
     for index, shift in enumerate(FCVStrategicShift, start=1)
@@ -384,6 +388,11 @@ def _append_invalid_summary_title_issue(
         message = (
             f"{summary.priority_area_id} revision summary title must not include "
             "page, section, or paragraph locators."
+        )
+    elif SUMMARY_TITLE_DRAFTING_INSTRUCTION_PATTERN.search(summary.title):
+        message = (
+            f"{summary.priority_area_id} revision summary title must be thematic, "
+            "not a sentence-count or section-placement instruction."
         )
     else:
         return

@@ -29,6 +29,7 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
         "missing_comment_reference",
         "prohibited_policy_language",
         "withheld_drafting",
+        "invalid_revision_summary_title",
     }
 )
 
@@ -103,21 +104,10 @@ def _merge_rra_assessments(
     repaired_rows,
     evidence_ids: set[str],
 ):
-    safe_repaired = {
-        row.assessment_id: row
-        for row in repaired_rows
-        if _is_evidence_safe(row, evidence_ids)
-    }
-    merged = []
-    used_ids = set()
-    for original_row in original_rows:
-        repaired_row = safe_repaired.get(original_row.assessment_id)
-        if repaired_row is not None:
-            merged.append(repaired_row)
-            used_ids.add(repaired_row.assessment_id)
-        elif _is_evidence_safe(original_row, evidence_ids):
-            merged.append(original_row)
-            used_ids.add(original_row.assessment_id)
+    merged = [
+        row for row in original_rows if _is_evidence_safe(row, evidence_ids)
+    ]
+    used_ids = {row.assessment_id for row in merged}
     for repaired_row in repaired_rows:
         if (
             repaired_row.assessment_id not in used_ids

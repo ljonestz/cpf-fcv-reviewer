@@ -607,6 +607,67 @@ def test_repair_accepts_new_assessment_validation_issues():
     assert repaired.metadata.repair_count == 1
 
 
+def test_repair_accepts_invalid_revision_summary_title_issue():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+    issues = [
+        {
+            "code": "invalid_revision_summary_title",
+            "message": "The revision summary title is too specific.",
+        }
+    ]
+
+    repaired = ReviewEngine(gateway).repair(result_for(meta), issues)
+
+    assert gateway.calls[0][1]["validation_issues"] == issues
+    assert repaired.metadata.repair_count == 1
+
+
+def test_repair_preserves_evidence_safe_original_rra_row_over_same_id_repair():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    initial = result_for(meta)
+    original_row = initial.rra_driver_assessments[0]
+    repaired_row = original_row.model_copy(
+        update={
+            "cpf_response": "A repaired row replaced the original response.",
+        }
+    )
+    repaired_draft = draft_for(meta).model_copy(
+        update={"rra_driver_assessments": (repaired_row,)}
+    )
+    gateway = FakeGateway(repaired_draft)
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [{"code": "missing_rra_driver_assessment", "message": "Repair the row."}],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (original_row,)
+
+
+def test_repair_replaces_unsafe_original_rra_row_with_safe_same_id_repair():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    initial = result_for(meta)
+    original_row = initial.rra_driver_assessments[0].model_copy(
+        update={"evidence_ids": ("missing-evidence",)}
+    )
+    initial = initial.model_copy(update={"rra_driver_assessments": (original_row,)})
+    repaired_row = original_row.model_copy(update={"evidence_ids": ("ev-rra-1",)})
+    repaired_draft = draft_for(meta).model_copy(
+        update={"rra_driver_assessments": (repaired_row,)}
+    )
+    gateway = FakeGateway(repaired_draft)
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [{"code": "missing_rra_driver_assessment", "message": "Repair the row."}],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (repaired_row,)
+
+
 def test_repair_conservatively_normalizes_missing_and_duplicate_strategy_rows():
     meta = metadata()
     rows = strategy_rows()

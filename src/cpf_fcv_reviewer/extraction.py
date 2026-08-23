@@ -173,6 +173,30 @@ def require_readable_primary(document: ExtractedDocument) -> None:
         raise DocumentUnreadable("Primary CPF/CEN is unreadable or contains too little text.")
 
 
+TEXT_SEGMENT_CHARACTERS = 4000
+
+
+def _chunk_text(text: str) -> tuple[str, ...]:
+    chunks: list[str] = []
+    remaining = text.strip()
+    while remaining:
+        if len(remaining) <= TEXT_SEGMENT_CHARACTERS:
+            chunks.append(remaining)
+            break
+        window = remaining[: TEXT_SEGMENT_CHARACTERS + 1]
+        minimum_boundary = TEXT_SEGMENT_CHARACTERS // 2
+        boundary = max(
+            window.rfind("\n\n", minimum_boundary),
+            window.rfind("\n", minimum_boundary),
+            window.rfind(" ", minimum_boundary),
+        )
+        if boundary < minimum_boundary:
+            boundary = TEXT_SEGMENT_CHARACTERS
+        chunks.append(remaining[:boundary].strip())
+        remaining = remaining[boundary:].strip()
+    return tuple(chunk for chunk in chunks if chunk)
+
+
 def extract_text_bytes(
     data: bytes,
     name: str,
@@ -181,12 +205,16 @@ def extract_text_bytes(
     max_characters: int | None = None,
 ) -> ExtractedDocument:
     text = data.decode("utf-8-sig").strip()
-    if max_segments is not None and text and max_segments < 1:
-        raise ExtractionLimitExceeded("Text segment budget exceeded.")
     if max_characters is not None and len(text) > max_characters:
         raise ExtractionLimitExceeded("Text character budget exceeded.")
-    segment = ExtractedSegment(text, None, None, "full text")
-    return ExtractedDocument(name, (segment,) if text else (), ())
+    chunks = _chunk_text(text)
+    if max_segments is not None and len(chunks) > max_segments:
+        raise ExtractionLimitExceeded("Text segment budget exceeded.")
+    segments = tuple(
+        ExtractedSegment(chunk, None, None, f"text chunk {index}")
+        for index, chunk in enumerate(chunks, start=1)
+    )
+    return ExtractedDocument(name, segments, ())
 
 
 def extract_document(

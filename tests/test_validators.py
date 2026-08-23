@@ -366,6 +366,8 @@ def test_summary_titles_are_short_and_link_once_to_priority_areas():
         "Revise the delivery logic on page 4",
         "Clarify the section 2.1 narrative",
         "Tighten paragraph 12",
+        "Add 2 sentences on adaptive delivery",
+        "Clarify jobs in the objectives section",
     ),
 )
 def test_summary_titles_reject_raw_evidence_ids_and_locator_instructions(title):

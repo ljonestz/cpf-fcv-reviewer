@@ -11,6 +11,7 @@ from cpf_fcv_reviewer.extraction import (
     ExtractionLimitExceeded,
     extract_docx_bytes,
     extract_pdf_bytes,
+    extract_text_bytes,
     require_readable_primary,
     segments_from_pdf_pages,
 )
@@ -132,6 +133,34 @@ def test_pdf_extraction_can_bound_pages_before_extracting_text(monkeypatch):
 
     assert calls == [1, 2]
     assert [segment.page for segment in extracted.segments] == [1, 2]
+
+
+
+def test_extracted_text_is_chunked_across_the_full_document():
+    text = (
+        "COVER PAGE " + "intro " * 900
+        + "\n\nIMPLEMENTATION ARRANGEMENTS " + "delivery " * 900
+        + "\n\nRESULTS FRAMEWORK " + "indicator " * 900
+    )
+
+    extracted = extract_text_bytes(text.encode(), "CPF.txt")
+
+    assert len(extracted.segments) > 1
+    assert extracted.segments[0].element == "text chunk 1"
+    assert "COVER PAGE" in extracted.segments[0].text
+    assert any(
+        "RESULTS FRAMEWORK" in segment.text for segment in extracted.segments[1:]
+    )
+    assert "".join(
+        "".join(segment.text for segment in extracted.segments).split()
+    ) == "".join(text.split())
+
+
+def test_extracted_text_chunking_respects_segment_budget():
+    text = ("section text " * 1000).encode()
+
+    with pytest.raises(ExtractionLimitExceeded, match="Text segment"):
+        extract_text_bytes(text, "CPF.txt", max_segments=1)
 
 
 def test_empty_primary_is_rejected():
