@@ -51,7 +51,7 @@ def test_complete_reproducibility_metadata_passes_and_defaults_fail(make_valid_r
     assert {issue.code for issue in incomplete} == {"incomplete_reproducibility_metadata"}
 
 
-def test_docx_lists_reproducibility_hashes_labels_and_lineage(make_valid_result):
+def test_docx_omits_internal_reproducibility_metadata(make_valid_result):
     result, evidence = make_valid_result
     result = result.model_copy(update={"metadata": complete_metadata(result.metadata)})
 
@@ -71,7 +71,7 @@ def test_docx_lists_reproducibility_hashes_labels_and_lineage(make_valid_result)
         "Parent run: run-0",
         "Output language: en",
     ):
-        assert expected in text
+        assert expected not in text
 
 
 def test_docx_assessment_content_is_deterministic_and_evidence_resolved(make_valid_result):
@@ -90,7 +90,7 @@ def test_docx_assessment_content_is_deterministic_and_evidence_resolved(make_val
     assert "Aligned" in text
 
 
-def test_docx_keeps_referrals_in_a_restrained_technical_appendix(make_valid_result):
+def test_docx_omits_internal_referrals_and_technical_appendix(make_valid_result):
     result, evidence = make_valid_result
     data = build_docx(
         result,
@@ -106,10 +106,10 @@ def test_docx_keeps_referrals_in_a_restrained_technical_appendix(make_valid_resu
     document = Document(BytesIO(data))
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
-    assert "Technical appendix" in text
-    assert "Consult the designated policy owner." in text
+    assert "Technical appendix" not in text
+    assert "Consult the designated policy owner." not in text
     assert "Matters for confirmation" not in text
-    assert "Registry: SYN-REF-001 | 1.0.0-test" in text
+    assert "Registry: SYN-REF-001 | 1.0.0-test" not in text
 
 
 def test_export_route_rejects_incomplete_reproducibility_metadata(make_valid_result):

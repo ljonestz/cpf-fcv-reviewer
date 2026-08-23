@@ -279,7 +279,7 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     footer.paragraph_format.space_before = Pt(0)
-    label = footer.add_run("Volatile-session export | Page ")
+    label = footer.add_run("CPF FCV review | Page ")
     label.font.name = "Calibri"
     label.font.size = Pt(8.5)
     label.font.color.rgb = MUTED
@@ -623,7 +623,8 @@ def build_docx(
 ) -> bytes:
     validate_evidence_completeness(result, evidence)
     document = Document()
-    revision_num_id, limitation_num_id = _configure_document(
+    del hydrated_referrals
+    _, limitation_num_id = _configure_document(
         document,
         created_at=result.metadata.created_at,
     )
@@ -653,18 +654,6 @@ def build_docx(
         )
     _add_rra_assessments(document, result, evidence)
     _add_strategy_assessments(document, result, evidence)
-
-    document.add_heading("Priority measures to strengthen the CPF/CEN", level=1)
-    if result.revision_summary:
-        for item in result.revision_summary:
-            _add_list_paragraph(
-                document,
-                item.title,
-                style_name="CPF Decimal List",
-                num_id=revision_num_id,
-            )
-    else:
-        document.add_paragraph("No revision summary was returned for this review.")
 
     document.add_heading("Priority areas for strengthening", level=1)
     if result.priority_areas:
@@ -697,20 +686,6 @@ def build_docx(
     document.add_heading(EVIDENCE_APPENDIX_HEADING, level=1)
     document.add_heading(EVIDENCE_LOCATIONS_HEADING, level=2)
     _add_evidence_register(document, result, evidence)
-
-    if hydrated_referrals:
-        document.add_heading("Technical appendix", level=2)
-        document.add_heading("Institutional referrals", level=3)
-        for referral in hydrated_referrals:
-            _add_readable_paragraph(document, referral["approved_text"])
-            _add_labelled_paragraph(
-                document,
-                "Registry",
-                f"{referral['entry_id']} | {referral['version']}",
-            )
-
-    document.add_heading(REPRODUCIBILITY_HEADING, level=2)
-    _add_reproducibility_metadata(document, result)
 
     stream = BytesIO()
     document.save(stream)

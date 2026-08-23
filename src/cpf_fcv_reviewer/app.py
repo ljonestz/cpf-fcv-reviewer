@@ -27,11 +27,23 @@ def create_app(
     ):
         raise RuntimeError("SMOKE_MODE must be created through create_smoke_app.")
     app.config.update(app_config)
+    persistence_path = str(app.config.get("PERSISTENCE_PATH", "")).strip()
     if services is None:
         services = {} if app.testing else build_runtime_services(app.config)
+    injected_session_store = (
+        services is not None and services.get("session_store") is not None
+    )
+    if (
+        app.config["APP_ENV"] == "production"
+        and not app.testing
+        and not persistence_path
+        and not injected_session_store
+    ):
+        raise RuntimeError(
+            "Production requires PERSISTENCE_PATH or an explicitly injected session_store."
+        )
     app.extensions.update(services)
     if "session_store" not in app.extensions:
-        persistence_path = str(app.config.get("PERSISTENCE_PATH", "")).strip()
         if persistence_path:
             app.extensions["session_store"] = SQLiteSessionStore(
                 persistence_path,

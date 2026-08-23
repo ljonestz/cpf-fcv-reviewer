@@ -44,10 +44,8 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert RRA_ALIGNMENT_QUESTION in text
     assert STRATEGY_ALIGNMENT_QUESTION in text
     assert result.alignment_readout in text
-    assert "Priority measures to strengthen the CPF/CEN" in text
     assert "Priority areas for strengthening" in text
     assert "Limitations and document coverage" in text
-    assert result.revision_summary[0].title in text
     assert result.priority_areas[0].heading in text
     assert result.priority_areas[0].assessment in text
     assert result.priority_areas[0].why_it_matters in text
@@ -55,10 +53,10 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert "CPF.docx | Results framework | paragraph 12" in text
     assert "Target: CPF.docx | Results framework | paragraph 12" in text
     assert "The review covers the primary CPF draft." in text
-    assert "Consult the designated policy owner." in text
+    assert "Consult the designated policy owner." not in text
     assert "Public version." in text
     assert "public or non-sensitive material" in text
-    assert "fake-model" in text
+    assert "fake-model" not in text
     assert "No RRA was available." in text
     assert "ev-1" not in text
     assert "Questions for confirmation" not in text
@@ -66,6 +64,34 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert "Findings" not in text
     assert "Recommendations" not in text
     assert "Practical options" not in text
+
+
+
+def test_docx_matches_detailed_html_scope_without_summary_or_technical_metadata(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    data = build_docx(
+        result,
+        evidence=evidence,
+        hydrated_referrals=(
+            {
+                "entry_id": "SYN-REF-001",
+                "approved_text": "Consult the designated policy owner.",
+                "version": "1.0.0-test",
+            },
+        ),
+    )
+    document = Document(BytesIO(data))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+    assert "Priority measures to strengthen the CPF/CEN" not in text
+    assert result.revision_summary[0].title not in text
+    assert "Reproducibility information" not in text
+    assert "Technical appendix" not in text
+    assert "Consult the designated policy owner." not in text
+    assert "fake-model" not in text
+    assert "Evidence and document locations" in text
 
 
 def test_docx_uses_question_led_overall_read_and_restrained_appendix(make_valid_result):
@@ -93,11 +119,9 @@ def test_docx_uses_question_led_overall_read_and_restrained_appendix(make_valid_
     assert result.fcv_strategy_assessments[0].assessment in paragraphs[strategy_index + 1 :]
 
     evidence_heading = "Evidence and document locations"
-    reproducibility_heading = "Reproducibility information"
     assert evidence_heading in headings
-    assert reproducibility_heading in headings
+    assert "Reproducibility information" not in headings
     assert headings.index("Limitations and document coverage") < headings.index(evidence_heading)
-    assert headings.index(evidence_heading) < headings.index(reproducibility_heading)
 
     evidence_index = paragraphs.index(evidence_heading)
     source_index = next(
@@ -165,7 +189,7 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
         "RRA driver-to-response assessment"
     )
     assert paragraphs.index("2026-2030 FCV Strategy alignment") < paragraphs.index(
-        "Priority measures to strengthen the CPF/CEN"
+        "Priority areas for strengthening"
     )
     for label, value in (
         ("Driver", "Unequal territorial access"),
@@ -302,9 +326,6 @@ def test_docx_uses_question_led_note_sections(make_valid_result):
     assert text.index("Overall assessment") < text.index(RRA_ALIGNMENT_QUESTION)
     assert text.index(RRA_ALIGNMENT_QUESTION) < text.index(STRATEGY_ALIGNMENT_QUESTION)
     assert text.index(STRATEGY_ALIGNMENT_QUESTION) < text.index(
-        "Priority measures to strengthen the CPF/CEN"
-    )
-    assert text.index("Priority measures to strengthen the CPF/CEN") < text.index(
         "Priority areas for strengthening"
     )
     assert text.index("Priority areas for strengthening") < text.index(
@@ -464,7 +485,8 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
             in {"C0F00001", "C0F00002"}
         }
     }
-    assert set(list_num_ids) == custom_num_ids
+    assert list_num_ids
+    assert set(list_num_ids).issubset(custom_num_ids)
     assert len(custom_num_ids) == 2
 
 
@@ -491,7 +513,8 @@ def test_docx_footer_contains_muted_page_field(make_valid_result):
     with ZipFile(BytesIO(data)) as archive:
         footer_xml = ET.fromstring(archive.read("word/footer1.xml"))
 
-    assert "Volatile-session export" in "".join(footer_xml.itertext())
+    assert "CPF FCV review" in "".join(footer_xml.itertext())
+    assert "Volatile-session export" not in "".join(footer_xml.itertext())
     assert footer_xml.find(".//w:fldChar[@w:fldCharType='begin']", ns) is not None
     instruction = footer_xml.find(".//w:instrText", ns)
     assert instruction is not None
@@ -506,7 +529,7 @@ def test_docx_empty_narrative_collections_have_explicit_empty_states(make_valid_
     data = build_docx(result, evidence=evidence, hydrated_referrals=())
     text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
 
-    assert "No revision summary was returned for this review." in text
+    assert "No revision summary was returned for this review." not in text
     assert "No priority areas were returned for this review." in text
 
 
@@ -552,7 +575,7 @@ def test_docx_places_exact_evidence_status_before_limitations(
         assert paragraphs.count(limitation) == 1
 
 
-def test_docx_reproducibility_metadata_includes_evidence_status(make_valid_result):
+def test_docx_visible_evidence_status_matches_html(make_valid_result):
     result, evidence = make_valid_result
     limitation = "Independent current-country research was unavailable."
     result = result.model_copy(
@@ -574,8 +597,8 @@ def test_docx_reproducibility_metadata_includes_evidence_status(make_valid_resul
         ).paragraphs
     )
 
-    assert "Current evidence tier: document_led" in text
-    assert f"Current evidence limitation: {limitation}" in text
+    assert "Review based primarily on submitted documents" in text
+    assert limitation in text
 
 
 def test_export_route_requires_a_completed_traceable_result(make_valid_result):

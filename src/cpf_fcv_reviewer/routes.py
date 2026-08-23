@@ -370,6 +370,14 @@ def reset_review(assessment_id):
 
 
 def run_assessment(app, assessment_id):
+    terminal_events = []
+
+    def emit(kind, data):
+        if kind in {"run_complete", "run_failed"}:
+            terminal_events.append((kind, data))
+            return
+        store().emit(assessment_id, kind, data)
+
     with app.app_context():
         try:
             state = store().get(assessment_id)
@@ -377,7 +385,7 @@ def run_assessment(app, assessment_id):
             orchestrator = current_app.extensions["review_orchestrator"]
             result_context = orchestrator.run(
                 {"assessment_id": assessment_id, "payload": state.payload},
-                lambda kind, data: store().emit(assessment_id, kind, data),
+                emit,
             )
             evidence_by_id = result_context.get("evidence_by_id")
             if evidence_by_id is None:
@@ -395,9 +403,13 @@ def run_assessment(app, assessment_id):
                 evidence_by_id=evidence_by_id,
                 status="complete",
             )
+            for kind, data in terminal_events:
+                if kind == "run_complete":
+                    store().emit(assessment_id, kind, data)
         except SessionExpired:
             return
         except Exception as exc:
+            terminal_events.clear()
             failure_code = safe_failure_code(exc)
             status_code = getattr(exc, "status_code", None)
             cause_types = []
@@ -425,6 +437,11 @@ def run_assessment(app, assessment_id):
                     assessment_id,
                     status="failed",
                     failure_code=failure_code,
+                )
+                store().emit(
+                    assessment_id,
+                    "run_failed",
+                    {"error": failure_code},
                 )
             except SessionExpired:
                 return

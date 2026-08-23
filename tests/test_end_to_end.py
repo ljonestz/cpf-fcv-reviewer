@@ -327,7 +327,6 @@ def test_complete_synthetic_local_workflow(fixture_name):
         "Overall assessment",
         "How well does the CPF package align with the RRA and current FCV dynamics?",
         "How does the CPF package contribute to the FCV Strategy's core priorities?",
-        "Priority measures to strengthen the CPF/CEN",
         "Priority areas for strengthening",
         "Limitations and document coverage",
     ]

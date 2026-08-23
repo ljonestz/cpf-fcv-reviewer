@@ -42,6 +42,7 @@ let resetPending = false;
 let detectionPending = false;
 let countryRequiresConfirmation = false;
 let countryCorrection;
+let downloadError;
 let detectionEpoch = 0;
 const RESULT_RETRY_LIMIT = 3;
 const RESULT_RETRY_DELAY_MS = 250;
@@ -791,7 +792,15 @@ function renderCoverageView(result, collapsible = true) {
 function renderStrategyReadout(result) {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
   const assessments = result.fcv_strategy_assessments || [];
-  for (const assessment of assessments) fragment.append(renderNarrative(assessment.assessment, "strategy-readout"));
+  for (const assessment of assessments) {
+    const item = document.createElement("div");
+    item.className = "strategy-summary-item";
+    item.append(
+      text("h3", strategyShiftLabel(assessment.strategic_shift), "strategy-summary-label"),
+      renderNarrative(assessment.assessment, "strategy-readout"),
+    );
+    fragment.append(item);
+  }
   if (!assessments.length) fragment.append(text("p", "No FCV Strategy alignment assessment was returned for this review.", "empty-state"));
   return fragment;
 }
@@ -1113,15 +1122,64 @@ submitCorrection.addEventListener("click", async () => {
   }
 });
 
-document.querySelector("#export-docx").addEventListener("click", () => {
+function clearDownloadError() {
+  if (!downloadError) return;
+  downloadError.textContent = "";
+  downloadError.hidden = true;
+}
+
+function showDownloadError(message) {
+  if (!downloadError) {
+    downloadError = document.createElement("p");
+    downloadError.className = "download-error";
+    downloadError.setAttribute("role", "status");
+    downloadError.setAttribute("aria-live", "polite");
+    actions.append(downloadError);
+  }
+  downloadError.textContent = message;
+  downloadError.hidden = false;
+}
+
+function downloadErrorMessage(status) {
+  if (status === 409) {
+    return "The detailed note is not ready for download yet. The results page remains available; try again in a moment.";
+  }
+  if (status === 410) {
+    return "This review session has expired, so the detailed note cannot be downloaded. The results page remains available; start a new review to try again.";
+  }
+  if (status === 500) {
+    return "The detailed note could not be generated for download. The results page remains available; try again.";
+  }
+  return "The detailed note could not be downloaded. The results page remains available; try again.";
+}
+
+async function downloadDocx() {
   if (!assessmentId) return;
-  const downloadLink = document.createElement("a");
-  downloadLink.href = `/api/reviews/${assessmentId}/export.docx`;
-  downloadLink.download = "CPF-FCV-Review.docx";
-  document.body.append(downloadLink);
-  downloadLink.click();
-  downloadLink.remove();
-});
+  clearDownloadError();
+  try {
+    const response = await fetch(`/api/reviews/${assessmentId}/export.docx`);
+    if (!response.ok) {
+      showDownloadError(downloadErrorMessage(response.status));
+      return;
+    }
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    downloadLink.href = objectUrl;
+    downloadLink.download = "CPF-FCV-Review.docx";
+    document.body.append(downloadLink);
+    try {
+      downloadLink.click();
+    } finally {
+      downloadLink.remove();
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch (_error) {
+    showDownloadError(downloadErrorMessage(0));
+  }
+}
+
+document.querySelector("#export-docx").addEventListener("click", downloadDocx);
 
 async function resetReview() {
   if (resetPending) return;
