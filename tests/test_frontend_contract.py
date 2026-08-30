@@ -533,3 +533,43 @@ def test_task6_assessment_cards_have_responsive_definition_grid_styles():
     mobile = css.split("@media (max-width: 760px)", 1)[1]
     assert ".assessment-definitions" in mobile
     assert "grid-template-columns: 1fr" in mobile
+
+
+def test_task3_progress_is_a_dedicated_holding_screen_with_ticker_and_keep_open_note():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    for fragment in (
+        'class="progress-shell"',
+        'id="progress-track"',
+        'id="progress-fill"',
+        'class="progress-timing"',
+        'id="guidance-card"',
+        'class="progress-keep-open"',
+    ):
+        assert fragment in html
+    assert "const progressPercent = {documents: 18, research: 58, note: 88};" in javascript
+    assert "progressFill.style.width" in javascript
+    assert 'progressFill.style.width = "100%"' in javascript
+    assert 'progressFill.style.width = "0%"' in javascript
+    assert "setProgressStages(stageOrder.length, true)" in javascript
+
+
+def test_task3_result_disclosures_and_statuses_use_focused_visual_contracts():
+    javascript = JS.read_text(encoding="utf-8")
+    css = CSS.read_text(encoding="utf-8")
+
+    for class_name in (
+        ".output-card",
+        ".traceability-panel",
+        ".coverage-panel",
+        ".evidence-status-panel",
+        ".evidence-group",
+        ".status-aligned",
+        ".status-partially-aligned",
+        ".status-not-evidenced",
+        ".status-not-assessable",
+    ):
+        assert class_name in css
+    assert "status-${status.replaceAll(\"_\", \"-\")}" in javascript
+    assert "#results.output-card" in css

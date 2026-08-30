@@ -3,6 +3,8 @@ const landingView = document.querySelector("#landing-view");
 const landingNotice = document.querySelector("#landing-notice");
 const reviewWorkspace = document.querySelector("#review-workspace");
 const progress = document.querySelector("#progress");
+const progressTitle = document.querySelector("#progress-title") || document.createElement("h2");
+const progressFill = document.querySelector("#progress-fill") || document.createElement("span");
 const progressMessage = document.querySelector("#progress-message") || progress;
 const progressSteps = Array.from(document.querySelectorAll?.("[data-progress-step]") || []);
 const progressStatusSlots = Array.from(document.querySelectorAll?.("[data-progress-status]") || []);
@@ -55,6 +57,7 @@ const retryableResearchCodes = new Set([
 ]);
 
 const stageOrder = ["documents", "research", "note"];
+const progressPercent = {documents: 18, research: 58, note: 88};
 const stageEstimates = {
   documents: [45, 120],
   research: [90, 300],
@@ -204,6 +207,19 @@ function stopJourneyClock() {
   journeyStageStartedAt = undefined;
 }
 
+function setProgressStages(activeIndex, complete = false) {
+  for (const [index, item] of progressSteps.entries()) {
+    const isComplete = complete || index < activeIndex;
+    const isActive = !complete && index === activeIndex;
+    item.classList.toggle("is-complete", isComplete);
+    item.classList.toggle("is-active", isActive);
+    if (isActive) item.setAttribute("aria-current", "step");
+    else item.removeAttribute("aria-current");
+    const status = progressStatusSlots[index];
+    if (status) status.textContent = isComplete ? "Complete" : isActive ? "In progress" : "Waiting";
+  }
+}
+
 function updateProgress(stage) {
   const group = sseStageMap[stage];
   if (!group) return;
@@ -212,16 +228,8 @@ function updateProgress(stage) {
     journeyStageStartedAt = performance.now();
   }
   const activeIndex = stageOrder.indexOf(group);
-  for (const [index, item] of progressSteps.entries()) {
-    const isComplete = index < activeIndex;
-    const isActive = index === activeIndex;
-    item.classList.toggle("is-complete", isComplete);
-    item.classList.toggle("is-active", isActive);
-    if (isActive) item.setAttribute("aria-current", "step");
-    else item.removeAttribute("aria-current");
-    const status = progressStatusSlots[index];
-    if (status) status.textContent = isComplete ? "Complete" : isActive ? "In progress" : "Waiting";
-  }
+  setProgressStages(activeIndex);
+  if (progressFill.style) progressFill.style.width = `${progressPercent[group] || 0}%`;
   progressMessage.textContent = progressLabels[stage] || "Building the review";
   updateJourneyClock();
 }
@@ -229,12 +237,8 @@ function updateProgress(stage) {
 function resetProgress() {
   stopJourneyClock();
   progressMessage.textContent = "";
-  for (const [index, item] of progressSteps.entries()) {
-    item.classList.remove("is-active", "is-complete");
-    item.removeAttribute("aria-current");
-    const status = progressStatusSlots[index];
-    if (status) status.textContent = "Waiting";
-  }
+  if (progressFill.style) progressFill.style.width = "0%";
+  setProgressStages(-1);
   elapsedTime.textContent = "0:00 elapsed";
   remainingTime.textContent = "About 4-11 minutes remaining";
 }
@@ -263,6 +267,7 @@ function showProgress() {
   landingNotice.hidden = true;
   reviewWorkspace.hidden = false;
   progress.hidden = false;
+  progressTitle.focus({preventScroll: true});
   results.hidden = true;
   corrections.hidden = true;
   actions.hidden = true;
@@ -591,7 +596,11 @@ function appendAssessmentField(definitions, label, value, className = "") {
 }
 
 function appendAssessmentStatus(definitions, status) {
-  const badge = text("span", assessmentStatusLabel(status), "assessment-status status-badge");
+  const badge = text(
+    "span",
+    assessmentStatusLabel(status),
+    `assessment-status status-badge status-${status.replaceAll("_", "-")}`,
+  );
   const description = document.createElement("dd");
   description.append(badge);
   definitions.append(text("dt", "Status"), description);
@@ -993,6 +1002,9 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
   }
   source.addEventListener("run_complete", async () => {
     if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
+    stopJourneyClock();
+    setProgressStages(stageOrder.length, true);
+    if (progressFill.style) progressFill.style.width = "100%";
     progressMessage.textContent = "Review complete";
     try {
       const result = await loadResult(resultUrl, operation);
@@ -1242,7 +1254,11 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
   window.__cpfFcvReviewerTestHooks = {
     getActiveSource: () => activeEventSource,
     setAssessmentId: (value) => { assessmentId = value; },
+    showProgress,
     watchEvents,
+    updateProgress,
+    resetProgress,
+    appendAssessmentStatus,
     renderDetailedAnalysis,
     splitNarrativeIntoChunks,
   };

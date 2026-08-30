@@ -44,7 +44,7 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
           const element = {
             tagName: tagName.toLowerCase(), children: [], parentNode: null,
             handlers: {}, hidden: false, disabled: false, value: "", files: [],
-            className: "", attributes: {}, open: false, focused: false, tabIndex: 0,
+            className: "", attributes: {}, style: {width: ""}, open: false, focused: false, tabIndex: 0,
             addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); },
             append(...values) {
               for (const value of values) {
@@ -55,11 +55,29 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
             replaceChildren(...values) { this.children = []; this.append(...values); },
             setAttribute(name, value) { this.attributes[name] = String(value); },
             getAttribute(name) { return this.attributes[name]; },
+            removeAttribute(name) { delete this.attributes[name]; },
             focus() { this.focused = true; },
             remove() {
               if (!this.parentNode) return;
               this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
               this.parentNode = null;
+            },
+          };
+          element.classList = {
+            toggle(name, force) {
+              const classes = new Set(element.className.split(/\s+/).filter(Boolean));
+              const shouldHave = force === undefined ? !classes.has(name) : force;
+              if (shouldHave) classes.add(name); else classes.delete(name);
+              element.className = [...classes].join(" ");
+              return shouldHave;
+            },
+            remove(...names) {
+              const classes = new Set(element.className.split(/\s+/).filter(Boolean));
+              names.forEach((name) => classes.delete(name));
+              element.className = [...classes].join(" ");
+            },
+            contains(name) {
+              return element.className.split(/\s+/).includes(name);
             },
           };
           let ownText = "";
@@ -81,24 +99,46 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
           "#guidance-card", "#research-recovery", "#research-recovery-heading",
           "#research-recovery-message", "#retry-research", "#evidence-status",
           "#evidence-status-label", "#evidence-status-limitation", "#result-title", "#result-context",
+          "#progress-title", "#progress-fill",
         ]) nodes[id] = node();
+        const progressStages = [node("li"), node("li"), node("li")];
+        const progressStatuses = [node("span"), node("span"), node("span")];
         global.document = {
           querySelector: (id) => nodes[id],
-          querySelectorAll: () => [],
+          querySelectorAll: (selector) => {
+            if (selector === "[data-progress-step]") return progressStages;
+            if (selector === "[data-progress-status]") return progressStatuses;
+            return [];
+          },
           getElementById: () => null,
           createElement: (tagName) => node(tagName),
           createDocumentFragment: () => node("fragment"),
           createTextNode: (value) => { const text = node("text"); text.textContent = value; return text; },
         };
+        const lifecycleMarks = [];
+        let intervalId = 0;
         global.window = {
           __CPF_FCV_REVIEWER_TEST__: true,
           setTimeout: (fn) => fn(),
           clearTimeout() {},
+          setInterval: () => ++intervalId,
+          clearInterval: () => lifecycleMarks.push("clock-stopped"),
           matchMedia: () => ({matches: false}),
         };
         global.sessionStorage = {getItem(){return ""}, setItem(){}, removeItem(){}};
         global.FormData = class {};
-        global.EventSource = class {};
+        global.performance = {now: () => 0};
+        class FakeSource {
+          constructor() { this.listeners = {}; this.closed = false; FakeSource.all.push(this); }
+          addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
+          close() { this.closed = true; }
+          async emit(type, data = "{}") {
+            for (const fn of this.listeners[type] || []) await fn({data});
+          }
+        }
+        FakeSource.all = [];
+        global.EventSource = FakeSource;
+        global.fetch = () => { lifecycleMarks.push("result-load"); return new Promise(() => {}); };
 
         const sentence = (number) => `Sentence ${number} explains the evidenced point.`;
         const longNarrative = Array.from({length: 9}, (_, index) => sentence(index + 1)).join(" ");
@@ -130,6 +170,54 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         if (!hooks?.renderDetailedAnalysis || !hooks?.splitNarrativeIntoChunks) {
           throw Error("readability render hooks are missing");
         }
+        if (!hooks?.showProgress || !hooks?.updateProgress || !hooks?.resetProgress || !hooks?.appendAssessmentStatus) {
+          throw Error("progress lifecycle hooks are missing");
+        }
+        hooks.showProgress();
+        if (!nodes["#progress-title"].focused) {
+          throw Error("showProgress did not focus the holding-screen title");
+        }
+        hooks.updateProgress("extract");
+        if (nodes["#progress-fill"].style.width !== "18%") {
+          throw Error("document stage did not set the holding-screen fill");
+        }
+        hooks.updateProgress("research");
+        if (nodes["#progress-fill"].style.width !== "58%") {
+          throw Error("research stage did not set the holding-screen fill");
+        }
+        hooks.resetProgress();
+        if (nodes["#progress-fill"].style.width !== "0%") {
+          throw Error("reset did not clear the holding-screen fill");
+        }
+        const definitions = node("dl");
+        hooks.appendAssessmentStatus(definitions, "partially_aligned");
+        const badge = definitions.children[1]?.children?.find((item) => item?.className?.includes("status-badge"));
+        if (!badge?.className?.includes("status-partially-aligned")) {
+          throw Error("assessment status did not render its semantic class");
+        }
+        hooks.showProgress();
+        lifecycleMarks.length = 0;
+        hooks.watchEvents("events", "result");
+        const completion = FakeSource.all[0].emit("run_complete");
+        const clockStopIndex = lifecycleMarks.indexOf("clock-stopped");
+        const resultLoadIndex = lifecycleMarks.indexOf("result-load");
+        if (clockStopIndex < 0 || resultLoadIndex < 0 || clockStopIndex > resultLoadIndex) {
+          throw Error("completion loaded the result before stopping the journey clock");
+        }
+        if (nodes["#progress-fill"].style.width !== "100%") {
+          throw Error("completion did not fill the holding-screen track");
+        }
+        for (const stage of progressStages) {
+          if (!stage.classList.contains("is-complete")
+              || stage.classList.contains("is-active")
+              || stage.attributes["aria-current"]) {
+            throw Error("completion did not finalize progress stage state");
+          }
+        }
+        if (progressStatuses.some((status) => status.textContent !== "Complete")) {
+          throw Error("completion did not label every stage complete");
+        }
+        void completion;
         const chunks = hooks.splitNarrativeIntoChunks(longNarrative);
         if (chunks.length !== 3 || chunks.some((chunk) => chunk.length > 4)) {
           throw Error(`narrative was not chunked into at most four sentences: ${JSON.stringify(chunks)}`);
@@ -163,3 +251,25 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_task3_holding_and_result_surfaces_use_compact_readable_treatment():
+    css = CSS.read_text(encoding="utf-8")
+
+    for fragment in (
+        ".progress-shell",
+        ".progress-track",
+        ".progress-fill",
+        ".progress-timing",
+        ".progress-keep-open",
+        ".output-card",
+        ".evidence-group",
+        ".traceability-panel",
+        ".coverage-panel",
+        ".evidence-status-panel",
+    ):
+        assert fragment in css
+    assert "text-align: center" in css
+    assert "border-radius" in css
+    assert "background" in css
+    assert "@media (prefers-reduced-motion: reduce)" in css
