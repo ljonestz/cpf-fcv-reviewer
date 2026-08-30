@@ -8,8 +8,8 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified implementation: `fix/research-resilience-guided-journey` (1,003 tests)
-- Current deployment: release `ef7b9ea`; health `ok`; volatile storage is acceptable for bounded reference-prototype testing.
+- Latest verified implementation: `fix/research-resilience-guided-journey` through `d9b991f` (1,046 tests)
+- Last verified deployment: release `ef7b9ea` on 2026-08-23. The reliability/UX branch is not deployed, and live health could not be reverified on 2026-08-30.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
@@ -17,7 +17,9 @@ The review starts with three document buckets: the draft CPF/CEN, accompanying p
 
 Every review performs bounded current-country public-web research. An uploaded public RRA changes the research window but never suppresses that current research. Retryable research failures can be retried using the retained review package; retry never exposes partial output.
 
-Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The detailed narrative uses question-led RRA/current-dynamics and FCV Strategy sections, short WBG-style paragraphs, and collapsible traceability, evidence-status, and coverage material. The DOCX follows the detailed HTML scope, and download failures stay on the results page with an inline message.
+Optional PDFs use deterministic, bounded sampling across the full page range. Package evidence is balanced across uploaded files, and incomplete coverage is disclosed rather than treated as proof that content is absent.
+
+Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The detailed narrative uses question-led RRA/current-dynamics and FCV Strategy sections, short WBG-style paragraphs, and collapsible traceability, evidence-status, and coverage material. The DOCX follows the detailed HTML scope, and download failures stay on the results page with an inline message.
 
 ## Safety boundary
 
@@ -53,6 +55,7 @@ Use **Download full detailed note** before the retained review expires or is res
 ## Documentation
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
+- [2026-08-30 pilot reliability validation](docs/validation/2026-08-30-cpf-pilot-reliability-validation.md): automated, Guinea structural, and browser evidence plus provider limitations.
 - [Development instructions](CLAUDE.md): commands, repository map, safety constraints, and future-session checklist.
 - `docs/validation/`: dated validation evidence.
 - `docs/superpowers/`: historical designs and implementation plans.
