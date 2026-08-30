@@ -603,6 +603,11 @@ def test_docx_visible_evidence_status_matches_html(make_valid_result):
 
 def test_export_route_requires_a_completed_traceable_result(make_valid_result):
     result, evidence = make_valid_result
+    result = result.model_copy(
+        update={
+            "institutional_referral_ids": ("registry-PUB-GUARD-003",),
+        }
+    )
     registry = load_registry_bundle(
         Path("tests/fixtures/registry_bundle.synthetic.json"),
         allow_synthetic=True,
@@ -630,6 +635,8 @@ def test_export_route_requires_a_completed_traceable_result(make_valid_result):
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     assert "filename=CPF-FCV-Review.docx" in response.headers["Content-Disposition"]
+    with ZipFile(BytesIO(response.data)) as archive:
+        assert "word/document.xml" in archive.namelist()
 
 
 def test_background_run_persists_traceable_evidence(make_valid_result):

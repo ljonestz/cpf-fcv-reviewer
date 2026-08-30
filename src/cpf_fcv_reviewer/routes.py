@@ -26,7 +26,6 @@ from .export_docx import (
 )
 from .extraction import extract_document, require_readable_primary
 from .orchestrator import safe_failure_code
-from .registry import hydrate_referrals
 from .session_store import SessionExpired
 from .validators import validate_reproducibility_metadata
 
@@ -269,19 +268,16 @@ def export_review(assessment_id):
         validate_evidence_completeness(result, evidence)
     except ValueError:
         return jsonify(error="Traceable evidence is invalid."), 409
-    bundle = current_app.extensions["registry_bundle"]
     try:
         data = build_docx(
             result,
             evidence=evidence,
-            hydrated_referrals=hydrate_referrals(
-                result.institutional_referral_ids,
-                bundle,
-            ),
+            hydrated_referrals=(),
         )
     except EvidenceCompletenessError:
         return jsonify(error="Traceable evidence is invalid."), 409
     except Exception:
+        current_app.logger.exception("docx_export_failed assessment_id=%s", assessment_id)
         return jsonify(error="DOCX export failed."), 500
     return send_file(
         BytesIO(data),
