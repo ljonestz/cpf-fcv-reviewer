@@ -72,16 +72,20 @@ No new schema field is introduced initially. Prompt and behavioral tests come fi
 
 ## Visual and UX alignment
 
-Retain the current Open Sans and navy/blue/cyan tokens, dark hero, upload flow, progress journey, five-minute/detailed tabs, thematic titles, and native collapsible evidence.
+Retain the current Open Sans and navy/blue/cyan tokens, dark hero, upload flow, existing three processing stages, five-minute/detailed tabs, thematic titles, and native collapsible evidence.
 
 Make only these focused changes:
 
-1. Refine the results container into a clearer output card using a subtle top accent, lighter header separation, and consistent inner spacing.
-2. Apply one consistent bordered, rounded, lightly shaded summary treatment to evidence, traceability, coverage, and evidence-status disclosures.
-3. Add restrained semantic status classes: aligned green, partially aligned amber, not evidenced muted red, and not assessable grey. Text labels remain primary; color is supplementary and must meet contrast requirements.
-4. Add targeted `min-width: 0` and wrapping rules for long titles, filenames, locators, and result actions at 390px. Do not hide overflow globally.
+1. After assessment submission, replace the intake view with a dedicated, centered holding screen matching the established Project Screener pattern. Reuse the Reviewer's existing stage events, elapsed time, estimates, and rotating guidance copy rather than changing the processing flow.
+2. Present the three stages as a compact connected stepper with a slim animated progress ticker, a small active-stage motion cue, and clear active/completed states. Move elapsed time and the estimate into compact secondary text below the ticker instead of a large right-aligned timer.
+3. Show one centered guidance card with the existing rotating explanatory phrases and a short keep-open note. Phrase changes and stage updates must not create noisy screen-reader announcements. Under `prefers-reduced-motion`, remove motion and retain a stable phrase and visible progress states.
+4. Keep the holding screen usable at 390px through compact spacing and wrapping; do not add a second progress implementation or new backend events.
+5. Refine the results container into a clearer output card using a subtle top accent, lighter header separation, and consistent inner spacing.
+6. Apply one consistent bordered, rounded, lightly shaded summary treatment to evidence, traceability, coverage, and evidence-status disclosures.
+7. Add restrained semantic status classes: aligned green, partially aligned amber, not evidenced muted red, and not assessable grey. Text labels remain primary; color is supplementary and must meet contrast requirements.
+8. Add targeted `min-width: 0` and wrapping rules for long titles, filenames, locators, and result actions at 390px. Do not hide overflow globally.
 
-Do not copy or import the stable Screener stylesheet, add its branded top bar, redesign uploads, add decorative animation, or introduce any numeric/segmented FCV score.
+Do not copy or import the stable Screener stylesheet, add its branded top bar, redesign uploads, add unrelated decorative animation, or introduce any numeric/segmented FCV score.
 
 ## Expected files
 
@@ -91,6 +95,7 @@ Do not copy or import the stable Screener stylesheet, add its branded top bar, r
 - `src/cpf_fcv_reviewer/review_engine.py`
 - `prompts/review.md`
 - `prompts/repair.md`
+- `src/cpf_fcv_reviewer/templates/index.html`
 - `src/cpf_fcv_reviewer/static/app.js`
 - `src/cpf_fcv_reviewer/static/styles.css`
 - focused tests in the existing extraction, runtime, validator, prompt, narrative, frontend, and accessibility test files
@@ -108,7 +113,8 @@ Do not copy or import the stable Screener stylesheet, add its branded top bar, r
 5. Scattered jobs/IFC/MIGA evidence is described as existing but insufficiently integrated, and the recommended direction is consolidation rather than addition.
 6. Context-supported social-risk evidence can surface a proportionate priority; unsupported lenses do not generate boilerplate priorities.
 7. Strategy wording preserves the advisory boundary and permits `not determinable at CPF level`.
-8. Status classes, disclosure panels, tab behavior, focus states, and mobile wrapping pass frontend/accessibility contracts.
+8. Submission opens the dedicated holding screen; existing stage events drive its connected stepper and ticker; the compact timer, rotating guidance, reduced-motion fallback, focus states, and 390px layout pass frontend/accessibility contracts.
+9. Status classes, disclosure panels, tab behavior, focus states, and mobile wrapping pass frontend/accessibility contracts.
 
 ### Reference runs
 
