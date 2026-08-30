@@ -62,6 +62,7 @@ OPTIONAL_UPLOAD_EXCLUDED_WARNING = (
     "An optional uploaded document could not be read and was excluded."
 )
 SUPPORTED_UPLOAD_SUFFIXES = frozenset({".pdf", ".docx", ".txt", ".md"})
+OPTIONAL_PDF_SAMPLE_PAGES = 12
 EXPECTED_OPTIONAL_EXTRACTION_ERRORS = (
     BadZipFile,
     ExtractionLimitExceeded,
@@ -109,8 +110,19 @@ PACKAGE_SECTION_MARKERS = (
     "conflict",
     "rra",
 )
+PACKAGE_BASE_SEGMENTS = 16
 PACKAGE_MIN_SEGMENTS_PER_DOCUMENT = 3
-PACKAGE_MAX_SEGMENTS = 16
+PACKAGE_MAX_SEGMENTS = 32
+
+
+def _package_segment_budget(documents: tuple) -> int:
+    return min(
+        PACKAGE_MAX_SEGMENTS,
+        max(
+            PACKAGE_BASE_SEGMENTS,
+            len(documents) * PACKAGE_MIN_SEGMENTS_PER_DOCUMENT,
+        ),
+    )
 
 
 def _select_package_segments(
@@ -120,6 +132,7 @@ def _select_package_segments(
     if not documents:
         return []
 
+    package_budget = _package_segment_budget(documents)
     candidates = []
     for document in documents:
         indexed_segments = tuple(enumerate(document.segments))
@@ -158,7 +171,7 @@ def _select_package_segments(
     offsets = [0] * len(documents)
     phase_one_counts = [0] * len(documents)
 
-    while len(selected) < PACKAGE_MAX_SEGMENTS:
+    while len(selected) < package_budget:
         added_this_round = False
         for index, document in enumerate(documents):
             if phase_one_counts[index] >= min(
@@ -171,12 +184,12 @@ def _select_package_segments(
             phase_one_counts[index] += 1
             selected.append((document, segment, DocumentRole.PACKAGE))
             added_this_round = True
-            if len(selected) >= PACKAGE_MAX_SEGMENTS:
+            if len(selected) >= package_budget:
                 break
         if not added_this_round:
             break
 
-    while len(selected) < PACKAGE_MAX_SEGMENTS:
+    while len(selected) < package_budget:
         added_this_round = False
         for index, document in enumerate(documents):
             while offsets[index] < len(candidates[index]):
@@ -187,7 +200,7 @@ def _select_package_segments(
                 selected.append((document, segment, DocumentRole.PACKAGE))
                 added_this_round = True
                 break
-            if len(selected) >= PACKAGE_MAX_SEGMENTS:
+            if len(selected) >= package_budget:
                 break
         if not added_this_round:
             break
@@ -474,7 +487,15 @@ def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         try:
-            document = extract_document(data, name, max_pdf_pages=2)
+            if suffix == ".pdf":
+                document = extract_document(
+                    data,
+                    name,
+                    max_pdf_pages=OPTIONAL_PDF_SAMPLE_PAGES,
+                    sample_pdf_across_document=True,
+                )
+            else:
+                document = extract_document(data, name)
         except EXPECTED_OPTIONAL_EXTRACTION_ERRORS:
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
@@ -625,12 +646,13 @@ def build_runtime_services(
             review_focus = ""
         review_focus = review_focus.strip()[:4000]
 
+        package_documents = tuple(context.get("package_documents", ()))
         document_groups = (
             (DocumentRole.PRIMARY, (primary_document,), 12),
             (
                 DocumentRole.PACKAGE,
-                tuple(context.get("package_documents", ())),
-                PACKAGE_MAX_SEGMENTS,
+                package_documents,
+                _package_segment_budget(package_documents),
             ),
             (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 4),
         )

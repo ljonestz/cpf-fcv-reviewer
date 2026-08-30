@@ -1,9 +1,17 @@
 from datetime import date
+from io import BytesIO
+
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from cpf_fcv_reviewer.diagnostic_sources import (
     identify_uploaded_diagnostic,
 )
-from cpf_fcv_reviewer.extraction import ExtractedDocument, ExtractedSegment
+from cpf_fcv_reviewer.extraction import (
+    ExtractedDocument,
+    ExtractedSegment,
+    extract_pdf_bytes,
+)
 
 
 def document(name: str, *segments: str) -> ExtractedDocument:
@@ -17,6 +25,32 @@ def document(name: str, *segments: str) -> ExtractedDocument:
     )
 
 
+def make_pdf(texts: list[str]) -> bytes:
+    writer = PdfWriter()
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    for text in texts:
+        page = writer.add_blank_page(width=300, height=300)
+        stream = DecodedStreamObject()
+        stream.set_data(f"BT /F1 12 Tf 20 200 Td ({text}) Tj ET".encode())
+        page[NameObject("/Contents")] = writer._add_object(stream)
+        page[NameObject("/Resources")] = DictionaryObject(
+            {
+                NameObject("/Font"): DictionaryObject(
+                    {NameObject("/F1"): font}
+                )
+            }
+        )
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
 def test_identifies_dated_benin_rra():
     result = identify_uploaded_diagnostic(
         (document("Benin Risk and Resilience Assessment.docx", "Publication: March 2024"),),
@@ -25,6 +59,31 @@ def test_identifies_dated_benin_rra():
 
     assert result is not None
     assert result.name == "Benin Risk and Resilience Assessment.docx"
+    assert result.kind == "rra"
+    assert result.publication_date == date(2024, 3, 1)
+
+
+def test_identifies_rra_metadata_on_fourth_sampled_page():
+    extracted = extract_pdf_bytes(
+        make_pdf(
+            [
+                "Page 1",
+                "Page 2",
+                "Page 3",
+                "Benin Risk and Resilience Assessment. Publication: March 2024.",
+                *[f"Page {index}" for index in range(5, 41)],
+            ]
+        ),
+        "long-rra.pdf",
+        max_pages=12,
+        sample_across_document=True,
+    )
+
+    assert [segment.page for segment in extracted.segments[:4]] == [1, 2, 3, 4]
+    result = identify_uploaded_diagnostic((extracted,), country="Benin")
+
+    assert result is not None
+    assert result.name == "long-rra.pdf"
     assert result.kind == "rra"
     assert result.publication_date == date(2024, 3, 1)
 

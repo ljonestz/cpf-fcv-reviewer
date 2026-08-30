@@ -40,7 +40,7 @@ class UploadedDiagnostic:
 
 
 def _candidate_text(document: ExtractedDocument) -> str:
-    segment_text = " ".join(segment.text for segment in document.segments[:3])
+    segment_text = " ".join(segment.text for segment in document.segments[:4])
     return f"{document.name} {segment_text}"[:6000]
 
 

@@ -9,6 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pytest
 from docx import Document
 
+import cpf_fcv_reviewer.runtime as runtime
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
     AssessmentConfidence,
@@ -74,6 +75,90 @@ def test_primary_segment_selection_samples_across_long_documents():
     assert selected_text[0] == "Primary segment 0"
     assert "Primary segment 55" in selected_text
     assert selected_text[-1] == "Primary segment 100"
+
+
+def test_runtime_optional_pdf_sampling_kwargs_are_pdf_only(monkeypatch):
+    calls = []
+
+    def fake_extract(data, name, **kwargs):
+        calls.append((name, kwargs))
+        return ExtractedDocument(
+            name=name,
+            segments=(
+                ExtractedSegment(
+                    text="Usable optional evidence.",
+                    page=None,
+                    heading=None,
+                    element="Paragraph 1",
+                ),
+            ),
+            warnings=(),
+        )
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+
+    documents, retained_uploads, warnings = runtime._extract_optional_uploads(
+        (
+            {"name": "long-support.pdf", "bytes": b"%PDF-1.7"},
+            {"name": "supporting.txt", "bytes": b"plain text"},
+        )
+    )
+
+    assert [document.name for document in documents] == [
+        "long-support.pdf",
+        "supporting.txt",
+    ]
+    assert retained_uploads == (
+        (1, {"name": "long-support.pdf", "bytes": b"%PDF-1.7"}),
+        (2, {"name": "supporting.txt", "bytes": b"plain text"}),
+    )
+    assert warnings == ()
+    assert calls == [
+        (
+            "long-support.pdf",
+            {"max_pdf_pages": 12, "sample_pdf_across_document": True},
+        ),
+        ("supporting.txt", {}),
+    ]
+
+
+def test_package_segment_budget_is_bounded_and_scales_by_document_count():
+    assert runtime._package_segment_budget(()) == 16
+    assert runtime._package_segment_budget(tuple(object() for _ in range(3))) == 16
+    assert runtime._package_segment_budget(tuple(object() for _ in range(6))) == 18
+    assert runtime._package_segment_budget(tuple(object() for _ in range(9))) == 27
+    assert runtime._package_segment_budget(tuple(object() for _ in range(20))) == 32
+
+
+def test_package_selection_gives_nine_documents_three_segments_each():
+    documents = tuple(
+        ExtractedDocument(
+            name=f"package-{index}.txt",
+            segments=tuple(
+                ExtractedSegment(
+                    text=(
+                        f"Package {index} segment {segment}"
+                        if segment != 1
+                        else f"Package {index} results framework"
+                    ),
+                    page=None,
+                    heading=None,
+                    element=f"Paragraph {segment + 1}",
+                )
+                for segment in range(3)
+            ),
+            warnings=(),
+        )
+        for index in range(9)
+    )
+
+    selected = runtime._select_package_segments(documents)
+    counts = {document.name: 0 for document in documents}
+    for document, _, _ in selected:
+        counts[document.name] += 1
+
+    assert len(selected) == 27
+    assert counts == {document.name: 3 for document in documents}
 
 
 def _assessment_evidence(payload):

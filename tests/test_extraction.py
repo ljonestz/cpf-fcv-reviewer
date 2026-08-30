@@ -149,7 +149,7 @@ def test_pdf_sampling_covers_full_page_range_and_warns_about_absence():
     )
 
     expected_pages = (
-        1, 5, 8, 12, 15, 19, 22, 26, 29, 33, 36, 40
+        1, 2, 3, 4, 5, 11, 16, 22, 28, 33, 39, 40
     )
     assert [segment.page for segment in extracted.segments] == list(expected_pages)
     assert [
@@ -231,7 +231,7 @@ def test_pdf_sampling_retains_empty_sampled_page_warning(monkeypatch):
             self.page_number = page_number
 
         def extract_text(self):
-            if self.page_number == 15:
+            if self.page_number == 16:
                 return ""
             return f"Page {self.page_number}"
 
@@ -249,13 +249,13 @@ def test_pdf_sampling_retains_empty_sampled_page_warning(monkeypatch):
     )
 
     expected_pages = (
-        1, 5, 8, 12, 19, 22, 26, 29, 33, 36, 40
+        1, 2, 3, 4, 5, 11, 22, 28, 33, 39, 40
     )
     assert [segment.page for segment in extracted.segments] == list(expected_pages)
     assert [
         segment.element for segment in extracted.segments
     ] == [f"page {page}" for page in expected_pages]
-    assert "page 15 extracted no text" in extracted.warnings
+    assert "page 16 extracted no text" in extracted.warnings
     assert extracted.warnings[-1] == (
         "long-rra.pdf: sampled 12 of 40 PDF pages; "
         "conclusions about absence are limited."

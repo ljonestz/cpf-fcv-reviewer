@@ -46,6 +46,9 @@ def segments_from_pdf_pages(name: str, pages: list[str]) -> ExtractedDocument:
     return ExtractedDocument(name, tuple(segments), tuple(warnings))
 
 
+PDF_SAMPLE_PREFIX_PAGES = 4
+
+
 def _distributed_page_indices(
     page_count: int, limit: int | None
 ) -> tuple[int, ...]:
@@ -55,12 +58,26 @@ def _distributed_page_indices(
         return tuple(range(page_count))
     if limit <= 1:
         return (0,)
-    return tuple(
-        dict.fromkeys(
-            round(position * (page_count - 1) / (limit - 1))
-            for position in range(limit)
+    prefix_count = min(PDF_SAMPLE_PREFIX_PAGES, limit - 1)
+    prefix_indices = tuple(range(prefix_count))
+    last_index = page_count - 1
+    interior_slots = limit - prefix_count - 1
+    if interior_slots <= 0:
+        return prefix_indices + (last_index,)
+    interior_count = last_index - prefix_count
+    if interior_slots == 1:
+        interior_indices = (prefix_count,)
+    else:
+        interior_indices = tuple(
+            dict.fromkeys(
+                prefix_count
+                + round(
+                    position * (interior_count - 1) / (interior_slots - 1)
+                )
+                for position in range(interior_slots)
+            )
         )
-    )
+    return prefix_indices + interior_indices + (last_index,)
 
 
 def extract_pdf_bytes(
