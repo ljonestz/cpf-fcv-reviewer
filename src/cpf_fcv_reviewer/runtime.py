@@ -638,6 +638,7 @@ def build_runtime_services(
     review_engine = ReviewEngine(model_gateway)
 
     prohibited_terms = {term for entry in bundle.entries for term in entry.prohibited_terms}
+    registry_entry_ids = {entry.entry_id for entry in bundle.entries}
 
     def extract_uploaded_documents(context):
         payload = context.get("payload")
@@ -850,6 +851,7 @@ def build_runtime_services(
                 evidence_ids=evidence_ids,
                 prohibited_terms=prohibited_terms,
                 incomplete_document_roles=_incomplete_document_roles(context),
+                registry_entry_ids=registry_entry_ids,
             )
         )
         issues.extend(validate_reproducibility_metadata(context["result"].metadata))

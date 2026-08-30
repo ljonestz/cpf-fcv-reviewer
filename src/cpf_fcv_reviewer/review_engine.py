@@ -20,6 +20,8 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
         "missing_current_context_support",
         "unknown_priority_area",
         "unknown_evidence",
+        "raw_evidence_id_in_narrative",
+        "unknown_institutional_referral",
         "unknown_assessment_evidence",
         "missing_rra_driver_assessment",
         "incomplete_strategy_assessment",

@@ -24,6 +24,9 @@ DETERMINATION_PATTERNS = (
     r"\bcriteria are met\b",
     r"\bhas cleared\b",
     r"\bconstitutes clearance\b",
+    r"\bis(?:\s+not|n't)?(?:\s+listed)?\s+on\s+(?:the\s+)?"
+    r"(?:world\s+bank(?:\s+group)?\s+)?(?:fcv\s+list|list\s+of\s+"
+    r"fcv(?:-affected)?\s+countries)\b",
 )
 LIMITED_MODE_ALIGNMENT_PATTERN = re.compile(
     r"\b(?:rra(?:[-\s]+[a-z0-9]+){0,3}[-\s]+alignment|"
@@ -79,6 +82,8 @@ ValidationIssueCode = Literal[
     "missing_comment_reference",
     "missing_current_context_support",
     "missing_registry_support",
+    "raw_evidence_id_in_narrative",
+    "unknown_institutional_referral",
     "incomplete_coverage_absence_claim",
     "prohibited_policy_language",
 ]
@@ -184,9 +189,17 @@ def validate_review(
     evidence_ids: set[str],
     prohibited_terms: set[str],
     incomplete_document_roles: set[DocumentRole] | frozenset[DocumentRole] = frozenset(),
+    registry_entry_ids: set[str] | None = None,
 ) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
     text = result_text(result)
+    _append_raw_evidence_id_issue(issues, text, evidence_ids)
+    if registry_entry_ids is not None:
+        _append_unknown_institutional_referral_issue(
+            issues,
+            result.institutional_referral_ids,
+            registry_entry_ids,
+        )
     incomplete_optional_roles = frozenset(incomplete_document_roles) & {
         DocumentRole.PACKAGE,
         DocumentRole.CONTEXT,
@@ -363,6 +376,47 @@ def validate_review(
         issues.append(ValidationIssue("prohibited_policy_language", str(exc)))
 
     return tuple(issues)
+
+
+def _append_raw_evidence_id_issue(
+    issues: list[ValidationIssue], text: str, evidence_ids: set[str]
+) -> None:
+    raw_ids = sorted(
+        evidence_id
+        for evidence_id in evidence_ids
+        if evidence_id
+        and (
+            re.search(r"[-_]\d", evidence_id)
+            or evidence_id.casefold().startswith("correction-")
+        )
+        and re.search(
+            rf"(?<![A-Za-z0-9_-]){re.escape(evidence_id)}(?![A-Za-z0-9_-])",
+            text,
+            re.IGNORECASE,
+        )
+    )
+    if raw_ids:
+        issues.append(
+            ValidationIssue(
+                "raw_evidence_id_in_narrative",
+                f"User-facing narrative must not include raw evidence IDs: {raw_ids}.",
+            )
+        )
+
+
+def _append_unknown_institutional_referral_issue(
+    issues: list[ValidationIssue],
+    cited_ids: tuple[str, ...],
+    registry_entry_ids: set[str],
+) -> None:
+    unknown = sorted(set(cited_ids) - registry_entry_ids)
+    if unknown:
+        issues.append(
+            ValidationIssue(
+                "unknown_institutional_referral",
+                f"institutional_referral_ids cite unknown registry entries: {unknown}",
+            )
+        )
 
 
 def _append_incomplete_coverage_absence_issue(

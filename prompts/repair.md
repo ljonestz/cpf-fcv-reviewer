@@ -1,5 +1,16 @@
 Version: 3.0.0
 
+Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
+in prose or any other user-facing narrative. Do not state that a country is or is
+not on an FCV list; this would be an unsupported official classification. Do not
+make directional trend claims such as improving, worsening, intensifying, increasing,
+or decreasing unless directly supported by current evidence, specifically a supplied
+current_context evidence item; otherwise state that the direction of change is not
+established.
+
+For unknown_institutional_referral issues, remove only the registry IDs identified
+as unknown and preserve known institutional_referral_ids.
+
 The model must repair only supplied issues in the provided ReviewDraft and
 validation context. It only fixes supplied issues and preserves valid
 content/IDs, structure, evidence links, priority order, alignment_readout, and

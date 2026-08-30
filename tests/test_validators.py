@@ -217,6 +217,64 @@ def test_alignment_readout_prohibited_policy_language_is_rejected():
     assert [issue.code for issue in issues] == ["prohibited_policy_language"]
 
 
+def test_supplied_evidence_ids_are_structured_not_user_facing_narrative():
+    baseline = validate_review(result(), evidence_ids={"ev-1"}, prohibited_terms=set())
+    assert "raw_evidence_id_in_narrative" not in {issue.code for issue in baseline}
+
+    reviewed = result(overall_read="The review cites ev-1.")
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert [
+        issue.message
+        for issue in issues
+        if issue.code == "raw_evidence_id_in_narrative"
+    ] == ["User-facing narrative must not include raw evidence IDs: ['ev-1']."]
+
+
+def test_correction_evidence_id_is_rejected_from_narrative():
+    reviewed = result(overall_read="The review cites correction-C1.")
+    issues = validate_review(
+        reviewed, evidence_ids={"correction-C1"}, prohibited_terms=set()
+    )
+    assert [
+        issue.code for issue in issues if issue.code == "raw_evidence_id_in_narrative"
+    ] == ["raw_evidence_id_in_narrative"]
+
+
+@pytest.mark.parametrize(
+    "statement",
+    (
+        "Guinea is on the FCV list.",
+        "Guinea is not on the FCV list.",
+        "Guinea is on the World Bank FCV list.",
+        "Guinea is listed on the FCV list.",
+        "Côte d’Ivoire is on the World Bank Group FCV list.",
+        "Guinea is on the list of FCV-affected countries.",
+    ),
+)
+def test_country_fcv_list_classification_is_rejected(statement):
+    reviewed = result(overall_read=statement)
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert [issue.code for issue in issues] == ["prohibited_policy_language"]
+
+
+def test_unknown_institutional_referral_is_rejected():
+    reviewed = result().model_copy(update={"institutional_referral_ids": ("missing",)})
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        prohibited_terms=set(),
+        registry_entry_ids={"known"},
+    )
+    assert [
+        issue.message
+        for issue in issues
+        if issue.code == "unknown_institutional_referral"
+    ] == ["institutional_referral_ids cite unknown registry entries: ['missing']"]
+
+
 def test_summary_unknown_link_is_rejected():
     reviewed = result(
         summaries=(RevisionSummaryItem(priority_area_id="missing", title="Revise it"),)
@@ -545,6 +603,8 @@ def test_integrated_support_issue_codes_are_declared_in_validation_code_type():
         "missing_rra_driver_assessment",
         "incomplete_strategy_assessment",
         "unknown_assessment_evidence",
+        "raw_evidence_id_in_narrative",
+        "unknown_institutional_referral",
     } <= declared_codes
 
 

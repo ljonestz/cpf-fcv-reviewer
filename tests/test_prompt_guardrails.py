@@ -190,6 +190,27 @@ def test_prompts_scope_not_determinable_to_differentiated_assessment(name):
     ) not in prompt
 
 
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_review_prompts_keep_ids_and_unsupported_classifications_out_of_prose(name):
+    prompt = normalize_whitespace(load_prompt(name))
+
+    for phrase in (
+        "Keep evidence IDs in structured evidence_ids fields only",
+        "never put raw evidence IDs in prose",
+        "user-facing narrative",
+        "Do not state that a country is or is not on an FCV list",
+        "unsupported official classification",
+        "Do not make directional trend claims",
+        "unless directly supported by current evidence",
+        "supplied current_context evidence item",
+        "direction of change is not established",
+    ):
+        assert phrase in prompt
+
+    if name == "repair":
+        assert "remove only the registry IDs identified as unknown" in prompt
+
+
 def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 

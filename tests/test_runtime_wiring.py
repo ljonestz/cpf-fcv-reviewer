@@ -803,8 +803,10 @@ def test_runtime_validation_passes_incomplete_optional_roles(monkeypatch, make_v
         evidence_ids,
         prohibited_terms,
         incomplete_document_roles=frozenset(),
+        registry_entry_ids=None,
     ):
         captured["roles"] = incomplete_document_roles
+        captured["registry_entry_ids"] = registry_entry_ids
         return ()
 
     monkeypatch.setattr(runtime, "validate_review", fake_validate_review)
@@ -833,6 +835,13 @@ def test_runtime_validation_passes_incomplete_optional_roles(monkeypatch, make_v
     validate(context)
 
     assert captured["roles"] == frozenset({DocumentRole.PACKAGE})
+    assert captured["registry_entry_ids"] == {
+        "SYN-REF-001",
+        "SYN-PUB-FCV-STRAT-001",
+        "SYN-PUB-FCV-STRAT-002",
+        "SYN-PUB-FCV-STRAT-003",
+        "SYN-PUB-FCV-STRAT-004",
+    }
 
 
 def test_runtime_uses_shared_pdf_sampling_warning_suffix(monkeypatch):
@@ -908,7 +917,8 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
             gateway_calls.append(prompt_name)
             if prompt_name == "repair":
                 assert {issue["code"] for issue in payload["validation_issues"]} == {
-                    "missing_current_context_support"
+                    "missing_current_context_support",
+                    "unknown_institutional_referral",
                 }
                 repaired_draft = dict(payload["draft"])
                 repaired_priority = dict(repaired_draft["priority_areas"][0])
@@ -917,6 +927,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                     current_context_evidence_id,
                 )
                 repaired_draft["priority_areas"] = (repaired_priority,)
+                repaired_draft["institutional_referral_ids"] = ()
                 return output_type.model_validate(repaired_draft)
 
             assert prompt_name == "review"
@@ -958,7 +969,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                         gap_locus=GapLocus.CPF_NARRATIVE,
                     ),
                 ),
-                institutional_referral_ids=(),
+                institutional_referral_ids=("SYN-REF-999",),
                 limitations=("No current RRA was supplied.",),
                 coverage_note="The review covers the uploaded CPF.",
             )
@@ -998,6 +1009,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
         context["evidence_pack"].evidence[0].evidence_id,
         current_context_evidence_id,
     )
+    assert context["result"].institutional_referral_ids == ()
     assert gateway_calls == ["review", "repair"]
     assert events[-1][0] == "run_complete"
 

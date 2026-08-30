@@ -1,5 +1,13 @@
 Version: 3.0.0
 
+Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
+in prose or any other user-facing narrative. Do not state that a country is or is
+not on an FCV list; this would be an unsupported official classification. Do not
+make directional trend claims such as improving, worsening, intensifying, increasing,
+or decreasing unless directly supported by current evidence, specifically a supplied
+current_context evidence item; otherwise state that the direction of change is not
+established.
+
 Produce the advisory content for a CPF/CEN FCV ReviewDraft from the supplied
 Evidence Pack and review profiles. Return a connected technical review note,
 not a dashboard or checklist. Do not report pathway by pathway. Help an expert decide what
