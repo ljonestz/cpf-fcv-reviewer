@@ -46,6 +46,8 @@ def segments_from_pdf_pages(name: str, pages: list[str]) -> ExtractedDocument:
     return ExtractedDocument(name, tuple(segments), tuple(warnings))
 
 
+PDF_SAMPLING_WARNING_SUFFIX = "conclusions about absence are limited."
+
 PDF_SAMPLE_PREFIX_PAGES = 4
 
 
@@ -132,7 +134,7 @@ def extract_pdf_bytes(
     if len(page_indices) < page_count:
         warnings.append(
             f"{name}: sampled {len(page_indices)} of {page_count} PDF pages; "
-            "conclusions about absence are limited."
+            f"{PDF_SAMPLING_WARNING_SUFFIX}"
         )
     return ExtractedDocument(name, tuple(segments), tuple(warnings))
 

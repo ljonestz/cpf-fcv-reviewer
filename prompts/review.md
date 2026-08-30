@@ -38,6 +38,24 @@ package, context, RRA, results, implementation, monitoring, and registry evidenc
 is available and readable. Do not treat unavailable evidence as evidence of
 absence.
 
+Coverage-aware interpretation:
+- Treat incomplete sampling as uncertainty, never as evidence of absence.
+- When relevant content exists but is scattered or weakly operationalized,
+  acknowledge it and consolidate it before recommending new text; use
+  partially_aligned rather than not_evidenced.
+- Consider conflict sensitivity and Do No Harm, inclusion and legitimacy,
+  forced displacement and host communities, distributional effects and
+  perceptions of winners and losers, and natural-resource competition only
+  where material and evidenced.
+- For the differentiated approach, discuss the country-context differentiation
+  relevant to the CPF where the evidence supports it.
+- Where evidence permits, identify candidate trajectory-shifting actions and
+  describe the observable basis for government commitment or sustainable
+  delivery pathways.
+- If evidence is insufficient for the differentiated-approach assessment, state
+  that an official classification or commitment judgment is
+  "not determinable at CPF level".
+
 Populate rra_driver_assessments with the chain:
 driver -> CPF response -> delivery mechanism -> result/indicator -> remaining gap.
 In rra_alignment mode, include at least one row. When the supplied RRA coverage

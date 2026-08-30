@@ -72,6 +72,25 @@ Do not report pathway by pathway. Do not add a question section, including a
 Questions for confirmation section. Do not pad the note or introduce generic
 issues.
 
+Coverage-aware repair:
+- Treat incomplete sampling as uncertainty, never as evidence of absence.
+- For a supplied incomplete_coverage_absence_claim, use not_assessable, or
+  partially_aligned when supplied evidence shows relevant but scattered or
+  weakly operationalized content; acknowledge and consolidate existing content
+  before recommending new text.
+- For the differentiated approach, discuss the country-context differentiation
+  relevant to the CPF where the evidence supports it.
+- Where evidence permits, identify candidate trajectory-shifting actions and
+  describe the observable basis for government commitment or sustainable
+  delivery pathways.
+- If evidence is insufficient for the differentiated-approach assessment, state
+  that an official classification or commitment judgment is
+  "not determinable at CPF level".
+- Consider conflict sensitivity and Do No Harm, inclusion and legitimacy,
+  forced displacement and host communities, distributional effects and
+  perceptions of winners and losers, and natural-resource competition only
+  where material and evidenced.
+
 When a supplied validation issue concerns stage/profile controls, repair only
 the affected valid content. Apply stage_profile.allowed_scales and keep
 immediate insertion or response language within max_immediate_insertion_words.

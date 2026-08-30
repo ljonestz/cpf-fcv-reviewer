@@ -9,6 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pytest
 from docx import Document
 
+import cpf_fcv_reviewer.extraction as extraction
 import cpf_fcv_reviewer.runtime as runtime
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.contracts import (
@@ -791,6 +792,107 @@ def test_runtime_validation_does_not_require_confirmed_priority_response(
     assert "missing_priority_response" not in {
         issue["code"] for issue in validated["validation_issues"]
     }
+
+
+def test_runtime_validation_passes_incomplete_optional_roles(monkeypatch, make_valid_result):
+    captured = {}
+
+    def fake_validate_review(
+        result,
+        *,
+        evidence_ids,
+        prohibited_terms,
+        incomplete_document_roles=frozenset(),
+    ):
+        captured["roles"] = incomplete_document_roles
+        return ()
+
+    monkeypatch.setattr(runtime, "validate_review", fake_validate_review)
+    reviewed, evidence = make_valid_result
+    services = _runtime_services(monkeypatch)
+    validate = dict(services["review_orchestrator"].steps)["validate"]
+    sampling_warning = (
+        "package.pdf: sampled 3 of 9 PDF pages; "
+        "conclusions about absence are limited."
+    )
+    context = {
+        "result": reviewed,
+        "evidence_pack": EvidencePack(
+            metadata=reviewed.metadata,
+            evidence=tuple(evidence.values()),
+            diagnostic_entries=(),
+        ),
+        "package_documents": (
+            ExtractedDocument("package.pdf", (), (sampling_warning,)),
+        ),
+        "context_documents": (
+            ExtractedDocument("context.txt", (), ("unrelated warning",)),
+        ),
+    }
+
+    validate(context)
+
+    assert captured["roles"] == frozenset({DocumentRole.PACKAGE})
+
+
+def test_runtime_uses_shared_pdf_sampling_warning_suffix(monkeypatch):
+    expected_suffix = "conclusions about absence are limited."
+    suffix = getattr(extraction, "PDF_SAMPLING_WARNING_SUFFIX", None)
+    assert suffix == expected_suffix
+    assert getattr(runtime, "PDF_SAMPLING_WARNING_SUFFIX", None) == suffix
+
+    patched_suffix = "sampling warning changed"
+    monkeypatch.setattr(
+        runtime, "PDF_SAMPLING_WARNING_SUFFIX", patched_suffix, raising=False
+    )
+    warning = f"package.pdf: sampled 3 of 9 PDF pages; {patched_suffix}"
+
+    assert runtime._is_incomplete_coverage_warning("package.pdf", warning)
+
+
+def test_runtime_ignores_lookalike_sampling_warning():
+    lookalike_warning = "A package note; conclusions about absence are limited."
+    context = {
+        "package_documents": (
+            ExtractedDocument("package.pdf", (), (lookalike_warning,)),
+        ),
+        "context_documents": (),
+    }
+
+    assert runtime._incomplete_document_roles(context) == frozenset()
+
+
+def test_runtime_accepts_sampling_warning_for_colon_named_document():
+    document_name = "supporting:FY26/report.pdf"
+    sampling_warning = (
+        f"{document_name}: sampled 3 of 9 PDF pages; "
+        "conclusions about absence are limited."
+    )
+    context = {
+        "package_documents": (
+            ExtractedDocument(document_name, (), (sampling_warning,)),
+        ),
+        "context_documents": (),
+    }
+
+    assert runtime._incomplete_document_roles(context) == frozenset(
+        {DocumentRole.PACKAGE}
+    )
+
+
+def test_runtime_rejects_sampling_warning_for_different_document_name():
+    sampling_warning = (
+        "other.pdf: sampled 3 of 9 PDF pages; "
+        "conclusions about absence are limited."
+    )
+    context = {
+        "package_documents": (
+            ExtractedDocument("package.pdf", (), (sampling_warning,)),
+        ),
+        "context_documents": (),
+    }
+
+    assert runtime._incomplete_document_roles(context) == frozenset()
 
 
 def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):

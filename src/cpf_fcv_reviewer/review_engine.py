@@ -30,6 +30,7 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
         "prohibited_policy_language",
         "withheld_drafting",
         "invalid_revision_summary_title",
+        "incomplete_coverage_absence_claim",
     }
 )
 
@@ -68,6 +69,14 @@ STRATEGY_REGISTRY_EVIDENCE_IDS = {
 }
 
 
+_COVERAGE_REPAIR_STATUSES = frozenset(
+    {
+        AssessmentStatus.NOT_ASSESSABLE,
+        AssessmentStatus.PARTIALLY_ALIGNED,
+    }
+)
+
+
 def _is_evidence_safe(row, evidence_ids: set[str]) -> bool:
     return set(row.evidence_ids).issubset(evidence_ids)
 
@@ -82,6 +91,44 @@ def _is_evidence_safe_strategy_row(
         return True
     required_registry_id = STRATEGY_REGISTRY_EVIDENCE_IDS[row.strategic_shift]
     return required_registry_id in row.evidence_ids and required_registry_id in evidence_ids
+
+
+def _is_coverage_status_repair(
+    original_row,
+    repaired_row,
+    *,
+    allow_coverage_status_repair: bool,
+) -> bool:
+    return (
+        allow_coverage_status_repair
+        and original_row.status is AssessmentStatus.NOT_EVIDENCED
+        and repaired_row.status in _COVERAGE_REPAIR_STATUSES
+    )
+
+
+def _normalize_missing_coverage_repair_row(repaired_row):
+    if repaired_row.status is AssessmentStatus.NOT_ASSESSABLE:
+        return repaired_row.model_copy(update={"evidence_ids": ()})
+    return repaired_row
+
+
+def _normalize_coverage_repair_row(
+    original_row,
+    repaired_row,
+    *,
+    original_is_evidence_safe: bool,
+):
+    if (
+        repaired_row.status is AssessmentStatus.PARTIALLY_ALIGNED
+        and not original_is_evidence_safe
+    ):
+        return None
+    evidence_ids = (
+        ()
+        if repaired_row.status is AssessmentStatus.NOT_ASSESSABLE
+        else original_row.evidence_ids
+    )
+    return repaired_row.model_copy(update={"evidence_ids": evidence_ids})
 
 
 def _fallback_strategy_assessment(shift: FCVStrategicShift) -> FCVStrategyAssessment:
@@ -103,18 +150,70 @@ def _merge_rra_assessments(
     original_rows,
     repaired_rows,
     evidence_ids: set[str],
+    *,
+    allow_coverage_status_repair: bool = False,
+    allow_new_rra_rows: bool = False,
 ):
-    merged = [
-        row for row in original_rows if _is_evidence_safe(row, evidence_ids)
-    ]
-    used_ids = {row.assessment_id for row in merged}
+    merged = []
+    used_ids = set()
+    original_ids = {row.assessment_id for row in original_rows}
+    for original_row in original_rows:
+        original_is_evidence_safe = _is_evidence_safe(original_row, evidence_ids)
+        if (
+            allow_coverage_status_repair
+            and original_row.status is AssessmentStatus.NOT_EVIDENCED
+        ):
+            repaired_row = next(
+                (
+                    row
+                    for row in repaired_rows
+                    if row.assessment_id == original_row.assessment_id
+                    and _is_evidence_safe(row, evidence_ids)
+                    and _is_coverage_status_repair(
+                        original_row,
+                        row,
+                        allow_coverage_status_repair=allow_coverage_status_repair,
+                    )
+                ),
+                None,
+            )
+            normalized_repair = (
+                _normalize_coverage_repair_row(
+                    original_row,
+                    repaired_row,
+                    original_is_evidence_safe=original_is_evidence_safe,
+                )
+                if repaired_row is not None
+                else None
+            )
+            if normalized_repair is not None:
+                merged.append(normalized_repair)
+                used_ids.add(normalized_repair.assessment_id)
+                continue
+            if not original_is_evidence_safe:
+                used_ids.add(original_row.assessment_id)
+        if original_is_evidence_safe:
+            merged.append(original_row)
+            used_ids.add(original_row.assessment_id)
     for repaired_row in repaired_rows:
+        is_new_rra_row = repaired_row.assessment_id not in original_ids
+        if (
+            allow_coverage_status_repair
+            and is_new_rra_row
+            and not allow_new_rra_rows
+        ):
+            continue
         if (
             repaired_row.assessment_id not in used_ids
             and _is_evidence_safe(repaired_row, evidence_ids)
         ):
-            merged.append(repaired_row)
-            used_ids.add(repaired_row.assessment_id)
+            normalized_repair = (
+                _normalize_missing_coverage_repair_row(repaired_row)
+                if allow_new_rra_rows and is_new_rra_row
+                else repaired_row
+            )
+            merged.append(normalized_repair)
+            used_ids.add(normalized_repair.assessment_id)
     return tuple(merged)
 
 
@@ -122,6 +221,10 @@ def _normalize_repaired_assessments(
     original: ReviewResult,
     draft: ReviewDraft,
     evidence_ids: set[str] | None,
+    *,
+    allow_coverage_status_repair: bool = False,
+    allow_new_rra_rows: bool = False,
+    allow_missing_strategy_rows: bool = False,
 ) -> ReviewDraft:
     allowed_evidence_ids = (
         set(evidence_ids)
@@ -139,6 +242,14 @@ def _normalize_repaired_assessments(
     )
     normalized_strategy = []
     for shift in FCVStrategicShift:
+        raw_original_row = next(
+            (
+                row
+                for row in original.fcv_strategy_assessments
+                if row.strategic_shift is shift
+            ),
+            None,
+        )
         original_row = next(
             (
                 row
@@ -157,13 +268,68 @@ def _normalize_repaired_assessments(
             ),
             None,
         )
-        normalized_strategy.append(original_row or repaired_row or _fallback_strategy_assessment(shift))
+        coverage_identity_mismatch = (
+            allow_coverage_status_repair
+            and (
+                (
+                    raw_original_row is None
+                    and not allow_missing_strategy_rows
+                )
+                or (
+                    repaired_row is not None
+                    and raw_original_row is not None
+                    and raw_original_row.assessment_id != repaired_row.assessment_id
+                )
+            )
+        )
+        if coverage_identity_mismatch:
+            normalized_strategy.append(original_row or _fallback_strategy_assessment(shift))
+        elif (
+            allow_missing_strategy_rows
+            and raw_original_row is None
+            and repaired_row is not None
+        ):
+            normalized_strategy.append(
+                _normalize_missing_coverage_repair_row(repaired_row)
+            )
+        elif (
+            allow_coverage_status_repair
+            and raw_original_row is not None
+            and raw_original_row.status is AssessmentStatus.NOT_EVIDENCED
+        ):
+            normalized_repair = (
+                _normalize_coverage_repair_row(
+                    raw_original_row,
+                    repaired_row,
+                    original_is_evidence_safe=original_row is not None,
+                )
+                if (
+                    repaired_row is not None
+                    and _is_coverage_status_repair(
+                        raw_original_row,
+                        repaired_row,
+                        allow_coverage_status_repair=allow_coverage_status_repair,
+                    )
+                )
+                else None
+            )
+            normalized_strategy.append(
+                normalized_repair
+                or original_row
+                or _fallback_strategy_assessment(shift)
+            )
+        else:
+            normalized_strategy.append(
+                original_row or repaired_row or _fallback_strategy_assessment(shift)
+            )
     return draft.model_copy(
         update={
             "rra_driver_assessments": _merge_rra_assessments(
                 original.rra_driver_assessments,
                 draft.rra_driver_assessments,
                 allowed_evidence_ids,
+                allow_coverage_status_repair=allow_coverage_status_repair,
+                allow_new_rra_rows=allow_new_rra_rows,
             ),
             "fcv_strategy_assessments": tuple(normalized_strategy),
         }
@@ -261,7 +427,26 @@ class ReviewEngine:
         coverage = result.document_coverage.model_copy(
             update={"coverage_note": draft.coverage_note}
         )
-        draft = _normalize_repaired_assessments(result, draft, evidence_ids)
+        allow_coverage_status_repair = any(
+            issue["code"] == "incomplete_coverage_absence_claim"
+            for issue in issues
+        )
+        allow_new_rra_rows = allow_coverage_status_repair and any(
+            issue["code"] == "missing_rra_driver_assessment"
+            for issue in issues
+        )
+        allow_missing_strategy_rows = allow_coverage_status_repair and any(
+            issue["code"] == "incomplete_strategy_assessment"
+            for issue in issues
+        )
+        draft = _normalize_repaired_assessments(
+            result,
+            draft,
+            evidence_ids,
+            allow_coverage_status_repair=allow_coverage_status_repair,
+            allow_new_rra_rows=allow_new_rra_rows,
+            allow_missing_strategy_rows=allow_missing_strategy_rows,
+        )
         content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})
         return ReviewResult(

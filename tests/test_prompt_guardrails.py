@@ -145,6 +145,51 @@ def test_review_prompt_requires_structured_rra_and_strategy_assessments():
     assert "new Strategy pillars" not in prompt
 
 
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_prompts_require_conditioned_differentiated_approach_guidance(name):
+    prompt = normalize_whitespace(load_prompt(name))
+
+    for phrase in (
+        "For the differentiated approach, discuss the country-context differentiation relevant to the CPF",
+        "Where evidence permits, identify candidate trajectory-shifting actions",
+        "describe the observable basis for government commitment or sustainable delivery pathways",
+        'If evidence is insufficient for the differentiated-approach assessment, state that an official classification or commitment judgment is "not determinable at CPF level"',
+    ):
+        assert phrase in prompt
+
+
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_review_prompts_qualify_incomplete_coverage_and_fcvs_lenses(name):
+    prompt = normalize_whitespace(load_prompt(name))
+
+    for phrase in (
+        "scattered",
+        "not_assessable",
+        "Do No Harm",
+        "forced displacement",
+        "winners and losers",
+        "natural-resource competition",
+        "not determinable at CPF level",
+    ):
+        assert phrase in prompt
+
+
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_prompts_scope_not_determinable_to_differentiated_assessment(name):
+    prompt = normalize_whitespace(load_prompt(name))
+
+    assert (
+        'If evidence is insufficient for the differentiated-approach assessment, '
+        'state that an official classification or commitment judgment is '
+        '"not determinable at CPF level".'
+    ) in prompt
+    assert prompt.count('"not determinable at CPF level"') == 1
+    assert (
+        'Do not make an official classification or commitment determination; use '
+        '"not determinable at CPF level" when the evidence is insufficient.'
+    ) not in prompt
+
+
 def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 

@@ -8,6 +8,7 @@ from typing import Literal
 from .contracts import (
     AssessmentStatus,
     DiagnosticMode,
+    DocumentRole,
     FCVStrategicShift,
     RecommendationScale,
     ReviewResult,
@@ -78,6 +79,7 @@ ValidationIssueCode = Literal[
     "missing_comment_reference",
     "missing_current_context_support",
     "missing_registry_support",
+    "incomplete_coverage_absence_claim",
     "prohibited_policy_language",
 ]
 
@@ -181,9 +183,14 @@ def validate_review(
     *,
     evidence_ids: set[str],
     prohibited_terms: set[str],
+    incomplete_document_roles: set[DocumentRole] | frozenset[DocumentRole] = frozenset(),
 ) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
     text = result_text(result)
+    incomplete_optional_roles = frozenset(incomplete_document_roles) & {
+        DocumentRole.PACKAGE,
+        DocumentRole.CONTEXT,
+    }
 
     if result.metadata.diagnostic_mode == DiagnosticMode.LIMITED_FRAMING:
         text_without_abstentions = LIMITED_MODE_ABSTENTION_PATTERN.sub("", text)
@@ -233,6 +240,12 @@ def validate_review(
             evidence_ids,
             issue_code="unknown_assessment_evidence",
         )
+        _append_incomplete_coverage_absence_issue(
+            issues,
+            assessment.assessment_id,
+            assessment.status,
+            incomplete_optional_roles,
+        )
 
     for assessment in result.fcv_strategy_assessments:
         _append_unknown_evidence_issue(
@@ -241,6 +254,12 @@ def validate_review(
             assessment.evidence_ids,
             evidence_ids,
             issue_code="unknown_assessment_evidence",
+        )
+        _append_incomplete_coverage_absence_issue(
+            issues,
+            assessment.assessment_id,
+            assessment.status,
+            incomplete_optional_roles,
         )
         if assessment.status is not AssessmentStatus.NOT_ASSESSABLE:
             required_registry_id = STRATEGY_REGISTRY_EVIDENCE_IDS[
@@ -344,6 +363,28 @@ def validate_review(
         issues.append(ValidationIssue("prohibited_policy_language", str(exc)))
 
     return tuple(issues)
+
+
+def _append_incomplete_coverage_absence_issue(
+    issues: list[ValidationIssue],
+    item_id: str,
+    status: AssessmentStatus,
+    incomplete_optional_roles: frozenset[DocumentRole],
+) -> None:
+    if status is not AssessmentStatus.NOT_EVIDENCED or not incomplete_optional_roles:
+        return
+    role_names = ", ".join(
+        role.value
+        for role in sorted(incomplete_optional_roles, key=lambda item: item.value)
+    )
+    issues.append(
+        ValidationIssue(
+            "incomplete_coverage_absence_claim",
+            f"{item_id} is marked not_evidenced while optional {role_names} coverage "
+            "is incomplete; use not_assessable, or partially_aligned when supplied "
+            "evidence shows relevant but scattered or weakly operationalized content.",
+        )
+    )
 
 
 def _append_unknown_evidence_issue(

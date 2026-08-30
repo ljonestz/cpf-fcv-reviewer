@@ -37,6 +37,7 @@ from cpf_fcv_reviewer.review_profiles import (
     DetailProfile,
     StageProfile,
 )
+from cpf_fcv_reviewer.validators import validate_review
 
 
 class FakeGateway:
@@ -605,6 +606,627 @@ def test_repair_accepts_new_assessment_validation_issues():
     assert repaired.fcv_strategy_assessments == strategy_rows()
     assert repaired.rra_driver_assessments == ()
     assert repaired.metadata.repair_count == 1
+
+
+def test_repair_accepts_incomplete_coverage_absence_issue_and_sends_it_to_gateway():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+    issue = {
+        "code": "incomplete_coverage_absence_claim",
+        "message": (
+            "Optional package coverage is incomplete; use not_assessable for this row."
+        ),
+    }
+
+    repaired = ReviewEngine(gateway).repair(result_for(meta), [issue])
+
+    assert gateway.calls[0][1]["validation_issues"] == [issue]
+    assert repaired.metadata.repair_count == 1
+
+
+def test_repair_replaces_not_evidenced_strategy_row_for_incomplete_coverage_issue():
+    meta = metadata()
+    rows = strategy_rows()
+    initial_rows = (
+        rows[0].model_copy(update={"status": AssessmentStatus.NOT_EVIDENCED}),
+        *tuple(
+            row.model_copy(
+                update={
+                    "status": AssessmentStatus.NOT_ASSESSABLE,
+                    "gap_locus": None,
+                    "evidence_ids": (),
+                }
+            )
+            for row in rows[1:]
+        ),
+    )
+    initial = result_for(meta).model_copy(
+        update={"fcv_strategy_assessments": initial_rows}
+    )
+    repaired_row = initial_rows[0].model_copy(
+        update={
+            "assessment": "The strategic shift cannot be assessed from available coverage.",
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "gap_locus": None,
+            "evidence_ids": (),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"fcv_strategy_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the strategy coverage determination.",
+            }
+        ],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0] == repaired_row
+    issues = validate_review(
+        repaired,
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+        prohibited_terms=set(),
+        incomplete_document_roles={DocumentRole.PACKAGE},
+    )
+    assert "incomplete_coverage_absence_claim" not in {issue.code for issue in issues}
+
+
+def test_repair_does_not_accept_aligned_strategy_row_for_unsafe_coverage_original():
+    meta = metadata()
+    rows = strategy_rows()
+    initial_rows = (
+        rows[0].model_copy(
+            update={
+                "status": AssessmentStatus.NOT_EVIDENCED,
+                "evidence_ids": ("missing-shift-registry",),
+            }
+        ),
+        *tuple(
+            row.model_copy(
+                update={
+                    "status": AssessmentStatus.NOT_ASSESSABLE,
+                    "gap_locus": None,
+                    "evidence_ids": (),
+                }
+            )
+            for row in rows[1:]
+        ),
+    )
+    initial = result_for(meta).model_copy(
+        update={"fcv_strategy_assessments": initial_rows}
+    )
+    repaired_row = initial_rows[0].model_copy(
+        update={
+            "assessment": "The strategic shift is aligned with the supplied evidence.",
+            "status": AssessmentStatus.ALIGNED,
+            "gap_locus": None,
+            "evidence_ids": (STRATEGY_REGISTRY_EVIDENCE_IDS[0],),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"fcv_strategy_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the strategy coverage determination.",
+            }
+        ],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0].status is not AssessmentStatus.ALIGNED
+
+
+def test_repair_replaces_not_evidenced_rra_row_for_incomplete_coverage_issue():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    original_row = rra_rows(meta)[0].model_copy(
+        update={"status": AssessmentStatus.NOT_EVIDENCED}
+    )
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": (original_row,)}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "cpf_response": "The RRA driver cannot be assessed from available coverage.",
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "gap_locus": None,
+            "evidence_ids": (),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            }
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (repaired_row,)
+    issues = validate_review(
+        repaired,
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+        prohibited_terms=set(),
+        incomplete_document_roles={DocumentRole.PACKAGE},
+    )
+    assert "incomplete_coverage_absence_claim" not in {issue.code for issue in issues}
+
+
+def test_repair_does_not_accept_aligned_rra_row_for_unsafe_coverage_original():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    original_row = rra_rows(meta)[0].model_copy(
+        update={
+            "status": AssessmentStatus.NOT_EVIDENCED,
+            "evidence_ids": ("missing-rra-evidence",),
+        }
+    )
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": (original_row,)}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "cpf_response": "The RRA driver is aligned with the supplied evidence.",
+            "status": AssessmentStatus.ALIGNED,
+            "gap_locus": None,
+            "evidence_ids": ("ev-rra-1",),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            }
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == ()
+    issues = validate_review(
+        repaired,
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+        prohibited_terms=set(),
+        incomplete_document_roles={DocumentRole.PACKAGE},
+    )
+    assert "incomplete_coverage_absence_claim" not in {issue.code for issue in issues}
+
+
+def test_repair_rejects_different_id_rra_rows_during_coverage_repair():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    original_row = rra_rows(meta)[0].model_copy(
+        update={"status": AssessmentStatus.NOT_EVIDENCED}
+    )
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": (original_row,)}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "assessment_id": "rra-driver-new",
+            "cpf_response": "A newly introduced RRA row.",
+            "status": AssessmentStatus.ALIGNED,
+            "gap_locus": None,
+            "evidence_ids": ("ev-rra-1",),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            }
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (original_row,)
+
+
+def test_repair_normalizes_rra_not_assessable_provenance_under_coverage():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    original_row = rra_rows(meta)[0].model_copy(
+        update={"status": AssessmentStatus.NOT_EVIDENCED}
+    )
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": (original_row,)}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "cpf_response": "The RRA driver cannot be assessed from coverage.",
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "gap_locus": None,
+            "evidence_ids": ("ev-rra-1",),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            }
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (
+        repaired_row.model_copy(update={"evidence_ids": ()}),
+    )
+
+
+def test_repair_preserves_original_rra_evidence_for_partial_coverage_repair():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    original_row = rra_rows(meta)[0].model_copy(
+        update={"status": AssessmentStatus.NOT_EVIDENCED}
+    )
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": (original_row,)}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "cpf_response": "The RRA driver is partly aligned with the evidence.",
+            "status": AssessmentStatus.PARTIALLY_ALIGNED,
+            "gap_locus": GapLocus.DELIVERY_ARRANGEMENTS,
+            "evidence_ids": (STRATEGY_REGISTRY_EVIDENCE_IDS[0],),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            }
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (
+        repaired_row.model_copy(update={"evidence_ids": original_row.evidence_ids}),
+    )
+
+
+def test_repair_rejects_new_strategy_identity_during_coverage_repair():
+    meta = metadata()
+    rows = strategy_rows()
+    initial = result_for(meta).model_copy(
+        update={"fcv_strategy_assessments": rows[1:]}
+    )
+    repaired_row = rows[0].model_copy(
+        update={
+            "assessment_id": "strategy-new",
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "gap_locus": None,
+            "evidence_ids": (STRATEGY_REGISTRY_EVIDENCE_IDS[0],),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"fcv_strategy_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the Strategy coverage determination.",
+            }
+        ],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0].assessment_id != "strategy-new"
+
+
+def test_repair_normalizes_strategy_not_assessable_provenance_under_coverage():
+    meta = metadata()
+    rows = strategy_rows()
+    original_row = rows[0].model_copy(
+        update={"status": AssessmentStatus.NOT_EVIDENCED}
+    )
+    initial = result_for(meta).model_copy(
+        update={"fcv_strategy_assessments": (original_row, *rows[1:])}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "gap_locus": None,
+            "evidence_ids": (STRATEGY_REGISTRY_EVIDENCE_IDS[0],),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"fcv_strategy_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the Strategy coverage determination.",
+            }
+        ],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0] == repaired_row.model_copy(
+        update={"evidence_ids": ()}
+    )
+
+
+def test_repair_preserves_original_strategy_evidence_for_partial_coverage_repair():
+    meta = metadata()
+    rows = strategy_rows()
+    original_row = rows[0].model_copy(
+        update={"status": AssessmentStatus.NOT_EVIDENCED}
+    )
+    initial = result_for(meta).model_copy(
+        update={"fcv_strategy_assessments": (original_row, *rows[1:])}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "status": AssessmentStatus.PARTIALLY_ALIGNED,
+            "gap_locus": GapLocus.CPF_NARRATIVE,
+            "evidence_ids": (
+                STRATEGY_REGISTRY_EVIDENCE_IDS[0],
+                STRATEGY_REGISTRY_EVIDENCE_IDS[1],
+            ),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"fcv_strategy_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the Strategy coverage determination.",
+            }
+        ],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0] == repaired_row.model_copy(
+        update={"evidence_ids": original_row.evidence_ids}
+    )
+
+
+def test_repair_rejects_partially_aligned_rra_repair_for_unsafe_coverage_original():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    original_row = rra_rows(meta)[0].model_copy(
+        update={
+            "status": AssessmentStatus.NOT_EVIDENCED,
+            "evidence_ids": ("missing-rra-evidence",),
+        }
+    )
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": (original_row,)}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "status": AssessmentStatus.PARTIALLY_ALIGNED,
+            "gap_locus": GapLocus.DELIVERY_ARRANGEMENTS,
+            "evidence_ids": ("ev-rra-1",),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            }
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == ()
+
+
+def test_repair_rejects_partially_aligned_strategy_repair_for_unsafe_coverage_original():
+    meta = metadata()
+    rows = strategy_rows()
+    original_row = rows[0].model_copy(
+        update={
+            "status": AssessmentStatus.NOT_EVIDENCED,
+            "evidence_ids": ("missing-shift-registry",),
+        }
+    )
+    initial = result_for(meta).model_copy(
+        update={"fcv_strategy_assessments": (original_row, *rows[1:])}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "status": AssessmentStatus.PARTIALLY_ALIGNED,
+            "gap_locus": GapLocus.CPF_NARRATIVE,
+            "evidence_ids": (STRATEGY_REGISTRY_EVIDENCE_IDS[0],),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"fcv_strategy_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the Strategy coverage determination.",
+            }
+        ],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0].status is AssessmentStatus.NOT_ASSESSABLE
+    assert repaired.fcv_strategy_assessments[0].evidence_ids == ()
+
+
+def test_repair_allows_new_rra_row_when_missing_and_coverage_issues_are_present():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": ()}
+    )
+    repaired_row = rra_rows(meta)[0]
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "missing_rra_driver_assessment",
+                "message": "Add the missing RRA row.",
+            },
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            },
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (repaired_row,)
+
+
+def test_repair_allows_missing_strategy_shift_when_missing_and_coverage_issues_present():
+    meta = metadata()
+    rows = strategy_rows()
+    initial = result_for(meta).model_copy(
+        update={"fcv_strategy_assessments": rows[1:]}
+    )
+    repaired_row = rows[0]
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"fcv_strategy_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_strategy_assessment",
+                "message": "Add the missing Strategy shift.",
+            },
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the Strategy coverage determination.",
+            },
+        ],
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments == (repaired_row, *rows[1:])
+
+
+def test_repair_rejects_partially_aligned_rra_repair_for_unsafe_coverage_original_and_revalidates():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    original_row = rra_rows(meta)[0].model_copy(
+        update={
+            "status": AssessmentStatus.NOT_EVIDENCED,
+            "evidence_ids": ("missing-rra-evidence",),
+        }
+    )
+    initial = result_for(meta).model_copy(
+        update={"rra_driver_assessments": (original_row,)}
+    )
+    repaired_row = original_row.model_copy(
+        update={
+            "status": AssessmentStatus.PARTIALLY_ALIGNED,
+            "gap_locus": GapLocus.DELIVERY_ARRANGEMENTS,
+            "evidence_ids": ("ev-rra-1",),
+        }
+    )
+    gateway = FakeGateway(
+        draft_for(meta).model_copy(
+            update={"rra_driver_assessments": (repaired_row,)}
+        )
+    )
+
+    repaired = ReviewEngine(gateway).repair(
+        initial,
+        [
+            {
+                "code": "incomplete_coverage_absence_claim",
+                "message": "Repair the RRA coverage determination.",
+            }
+        ],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == ()
+    issues = validate_review(
+        repaired,
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+        prohibited_terms=set(),
+        incomplete_document_roles={DocumentRole.PACKAGE},
+    )
+    assert "incomplete_coverage_absence_claim" not in {issue.code for issue in issues}
 
 
 def test_repair_accepts_invalid_revision_summary_title_issue():

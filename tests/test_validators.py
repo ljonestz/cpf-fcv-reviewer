@@ -10,6 +10,7 @@ from cpf_fcv_reviewer.contracts import (
     AssessmentStatus,
     DiagnosticMode,
     DocumentCoverage,
+    DocumentRole,
     EvidenceLocator,
     FCVStrategicShift,
     FCVStrategyAssessment,
@@ -332,6 +333,40 @@ def test_assessable_strategy_rows_require_shift_specific_registry_evidence():
         and "strategy-anticipate_better" in issue.message
         for issue in issues
     )
+
+
+def test_incomplete_optional_coverage_rejects_not_evidenced_assessments():
+    reviewed = result(
+        strategy_assessments_override=strategy_rows(
+            status=AssessmentStatus.NOT_EVIDENCED,
+            evidence_ids=("ev-1",),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        prohibited_terms=set(),
+        incomplete_document_roles={DocumentRole.PACKAGE},
+    )
+
+    absence_issues = [
+        issue for issue in issues if issue.code == "incomplete_coverage_absence_claim"
+    ]
+    assert len(absence_issues) == len(FCVStrategicShift)
+    assert all("not_assessable" in issue.message for issue in absence_issues)
+    assert all("partially_aligned" in issue.message for issue in absence_issues)
+
+    complete_issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        prohibited_terms=set(),
+        incomplete_document_roles=set(),
+    )
+
+    assert "incomplete_coverage_absence_claim" not in {
+        issue.code for issue in complete_issues
+    }
 
 
 def test_not_assessable_rows_cannot_support_a_priority_by_themselves():

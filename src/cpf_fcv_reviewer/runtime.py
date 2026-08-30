@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from io import BytesIO
@@ -25,6 +26,7 @@ from .diagnostic_sources import identify_uploaded_diagnostic
 from .evidence_builder import build_reproducible_evidence_pack
 from .extraction import (
     ExtractionLimitExceeded,
+    PDF_SAMPLING_WARNING_SUFFIX,
     extract_document,
     require_readable_primary,
 )
@@ -282,6 +284,32 @@ def _has_usable_uploaded_document(document) -> bool:
         isinstance(segment.text, str) and segment.text.strip()
         for segment in document.segments
     )
+
+
+def _is_incomplete_coverage_warning(document_name: str, warning: object) -> bool:
+    if not isinstance(warning, str):
+        return False
+    pattern = (
+        rf"{re.escape(document_name)}: sampled \d+ of \d+ PDF pages; "
+        rf"{re.escape(PDF_SAMPLING_WARNING_SUFFIX)}"
+    )
+    return re.fullmatch(pattern, warning) is not None
+
+
+def _incomplete_document_roles(context: dict) -> frozenset[DocumentRole]:
+    """Return optional roles whose retained documents were sampled incompletely."""
+    incomplete_roles: set[DocumentRole] = set()
+    for role, context_key in (
+        (DocumentRole.PACKAGE, "package_documents"),
+        (DocumentRole.CONTEXT, "context_documents"),
+    ):
+        if any(
+            _is_incomplete_coverage_warning(document.name, warning)
+            for document in context.get(context_key, ())
+            for warning in getattr(document, "warnings", ())
+        ):
+            incomplete_roles.add(role)
+    return frozenset(incomplete_roles)
 
 
 def _relationship_source_directory(relationship_part: str) -> PurePosixPath | None:
@@ -821,6 +849,7 @@ def build_runtime_services(
                 context["result"],
                 evidence_ids=evidence_ids,
                 prohibited_terms=prohibited_terms,
+                incomplete_document_roles=_incomplete_document_roles(context),
             )
         )
         issues.extend(validate_reproducibility_metadata(context["result"].metadata))

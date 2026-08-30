@@ -112,6 +112,24 @@ def test_pdf_segments_use_real_page_numbers_only():
     assert "page 2 extracted no text" in extracted.warnings
 
 
+def test_pdf_sampling_warning_uses_exported_suffix(monkeypatch):
+    expected_suffix = "conclusions about absence are limited."
+    suffix = getattr(extraction, "PDF_SAMPLING_WARNING_SUFFIX", None)
+    assert suffix == expected_suffix
+
+    patched_suffix = "sampling warning changed"
+    monkeypatch.setattr(extraction, "PDF_SAMPLING_WARNING_SUFFIX", patched_suffix)
+    extracted = extract_pdf_bytes(
+        make_pdf(["First page", "Second page"]),
+        "sample.pdf",
+        max_pages=1,
+    )
+
+    assert extracted.warnings[-1] == (
+        "sample.pdf: sampled 1 of 2 PDF pages; sampling warning changed"
+    )
+
+
 def test_pdf_extraction_can_bound_pages_before_extracting_text(monkeypatch):
     calls = []
 
