@@ -9,6 +9,7 @@ from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from cpf_fcv_reviewer import extraction
 from cpf_fcv_reviewer.extraction import (
     ExtractionLimitExceeded,
+    extract_document,
     extract_docx_bytes,
     extract_pdf_bytes,
     extract_text_bytes,
@@ -133,7 +134,31 @@ def test_pdf_extraction_can_bound_pages_before_extracting_text(monkeypatch):
 
     assert calls == [1, 2]
     assert [segment.page for segment in extracted.segments] == [1, 2]
+    assert extracted.warnings == (
+        "supporting.pdf: sampled 2 of 5 PDF pages; "
+        "conclusions about absence are limited.",
+    )
 
+
+def test_pdf_sampling_covers_full_page_range_and_warns_about_absence():
+    extracted = extract_pdf_bytes(
+        make_pdf([f"Page {index}" for index in range(1, 41)]),
+        "long-rra.pdf",
+        max_pages=12,
+        sample_across_document=True,
+    )
+
+    expected_pages = (
+        1, 5, 8, 12, 15, 19, 22, 26, 29, 33, 36, 40
+    )
+    assert [segment.page for segment in extracted.segments] == list(expected_pages)
+    assert [
+        segment.element for segment in extracted.segments
+    ] == [f"page {page}" for page in expected_pages]
+    assert extracted.warnings[-1] == (
+        "long-rra.pdf: sampled 12 of 40 PDF pages; "
+        "conclusions about absence are limited."
+    )
 
 
 def test_extracted_text_is_chunked_across_the_full_document():
@@ -166,3 +191,84 @@ def test_extracted_text_chunking_respects_segment_budget():
 def test_empty_primary_is_rejected():
     with pytest.raises(ValueError, match="Primary CPF/CEN is unreadable"):
         require_readable_primary(type("Doc", (), {"segments": (), "warnings": ()})())
+
+
+@pytest.mark.parametrize("max_pages", (0, -1))
+def test_pdf_sampling_with_nonpositive_limit_returns_empty_sample(
+    monkeypatch, max_pages
+):
+    calls = []
+
+    class FakePage:
+        def extract_text(self):
+            calls.append(True)
+            return "Page text"
+
+    pages = [FakePage() for _ in range(5)]
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda stream: SimpleNamespace(pages=pages),
+    )
+
+    extracted = extract_pdf_bytes(
+        b"pdf",
+        "supporting.pdf",
+        max_pages=max_pages,
+    )
+
+    assert calls == []
+    assert extracted.segments == ()
+    assert extracted.warnings == (
+        "supporting.pdf: sampled 0 of 5 PDF pages; "
+        "conclusions about absence are limited.",
+    )
+
+
+def test_pdf_sampling_retains_empty_sampled_page_warning(monkeypatch):
+    class FakePage:
+        def __init__(self, page_number):
+            self.page_number = page_number
+
+        def extract_text(self):
+            if self.page_number == 15:
+                return ""
+            return f"Page {self.page_number}"
+
+    pages = [FakePage(index) for index in range(1, 41)]
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda stream: SimpleNamespace(pages=pages),
+    )
+
+    extracted = extract_pdf_bytes(
+        b"pdf", "long-rra.pdf",
+        max_pages=12,
+        sample_across_document=True,
+    )
+
+    expected_pages = (
+        1, 5, 8, 12, 19, 22, 26, 29, 33, 36, 40
+    )
+    assert [segment.page for segment in extracted.segments] == list(expected_pages)
+    assert [
+        segment.element for segment in extracted.segments
+    ] == [f"page {page}" for page in expected_pages]
+    assert "page 15 extracted no text" in extracted.warnings
+    assert extracted.warnings[-1] == (
+        "long-rra.pdf: sampled 12 of 40 PDF pages; "
+        "conclusions about absence are limited."
+    )
+
+
+def test_extract_document_propagates_pdf_sampling_flag():
+    extracted = extract_document(
+        make_pdf([f"Page {index}" for index in range(1, 6)]),
+        "supporting.pdf",
+        max_pdf_pages=2,
+        sample_pdf_across_document=True,
+    )
+
+    assert [segment.page for segment in extracted.segments] == [1, 5]
+    assert [segment.element for segment in extracted.segments] == ["page 1", "page 5"]

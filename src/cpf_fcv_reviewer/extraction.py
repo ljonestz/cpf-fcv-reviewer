@@ -46,23 +46,49 @@ def segments_from_pdf_pages(name: str, pages: list[str]) -> ExtractedDocument:
     return ExtractedDocument(name, tuple(segments), tuple(warnings))
 
 
+def _distributed_page_indices(
+    page_count: int, limit: int | None
+) -> tuple[int, ...]:
+    if limit is not None and limit <= 0:
+        return ()
+    if limit is None or page_count <= limit:
+        return tuple(range(page_count))
+    if limit <= 1:
+        return (0,)
+    return tuple(
+        dict.fromkeys(
+            round(position * (page_count - 1) / (limit - 1))
+            for position in range(limit)
+        )
+    )
+
+
 def extract_pdf_bytes(
     data: bytes,
     name: str,
     *,
     max_pages: int | None = None,
+    sample_across_document: bool = False,
     max_segments: int | None = None,
     max_characters: int | None = None,
     max_uncompressed_bytes: int | None = None,
 ) -> ExtractedDocument:
     reader = PdfReader(BytesIO(data))
-    pages = reader.pages if max_pages is None else reader.pages[:max_pages]
+    page_count = len(reader.pages)
+    if sample_across_document:
+        page_indices = _distributed_page_indices(page_count, max_pages)
+    elif max_pages is None or page_count <= max_pages:
+        page_indices = tuple(range(page_count))
+    else:
+        page_indices = tuple(range(max_pages))
     segments: list[ExtractedSegment] = []
     warnings: list[str] = []
     character_count = 0
     uncompressed_bytes = 0
 
-    for index, page in enumerate(pages, start=1):
+    for page_index in page_indices:
+        page = reader.pages[page_index]
+        page_number = page_index + 1
         if max_uncompressed_bytes is not None:
             contents = page.get_contents()
             if contents is not None:
@@ -72,16 +98,25 @@ def extract_pdf_bytes(
 
         clean = (page.extract_text() or "").strip()
         if not clean:
-            warnings.append(f"page {index} extracted no text")
+            warnings.append(f"page {page_number} extracted no text")
             continue
         if max_segments is not None and len(segments) >= max_segments:
             raise ExtractionLimitExceeded("PDF segment budget exceeded.")
         next_character_count = character_count + len(clean)
         if max_characters is not None and next_character_count > max_characters:
             raise ExtractionLimitExceeded("PDF character budget exceeded.")
-        segments.append(ExtractedSegment(clean, index, None, f"page {index}"))
+        segments.append(
+            ExtractedSegment(
+                clean, page_number, None, f"page {page_number}"
+            )
+        )
         character_count = next_character_count
 
+    if len(page_indices) < page_count:
+        warnings.append(
+            f"{name}: sampled {len(page_indices)} of {page_count} PDF pages; "
+            "conclusions about absence are limited."
+        )
     return ExtractedDocument(name, tuple(segments), tuple(warnings))
 
 
@@ -222,6 +257,7 @@ def extract_document(
     name: str,
     *,
     max_pdf_pages: int | None = None,
+    sample_pdf_across_document: bool = False,
     max_segments: int | None = None,
     max_characters: int | None = None,
     max_uncompressed_bytes: int | None = None,
@@ -233,6 +269,7 @@ def extract_document(
             data,
             name,
             max_pages=max_pdf_pages,
+            sample_across_document=sample_pdf_across_document,
             max_segments=max_segments,
             max_characters=max_characters,
             max_uncompressed_bytes=max_uncompressed_bytes,
