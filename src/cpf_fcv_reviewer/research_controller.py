@@ -417,6 +417,7 @@ class ResearchController:
         recent_count = self._recent_claim_count(claims, request)
         source_word = "source" if recent_count == 1 else "sources"
         count_word = "one" if recent_count == 1 else str(recent_count)
+        verb = "was" if recent_count == 1 else "were"
         labels = {
             "claims": "the minimum number of claims",
             "publishers": "publisher diversity",
@@ -426,7 +427,7 @@ class ResearchController:
         }
         gaps = ", ".join(labels.get(item, item) for item in missing)
         return (
-            f"Only {count_word} public {source_word} was established recently; "
+            f"Only {count_word} public {source_word} {verb} established recently; "
             f"current-country coverage remains incomplete for {gaps}."
         )
 

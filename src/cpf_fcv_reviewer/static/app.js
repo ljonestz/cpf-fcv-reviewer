@@ -149,6 +149,13 @@ function approximateMinutes(seconds) {
   return Math.max(1, Math.ceil(seconds / 60));
 }
 
+function formatRemainingTime(minimumMinutes, maximumMinutes) {
+  if (minimumMinutes === 1 && maximumMinutes === 1) {
+    return "About 1 minute remaining";
+  }
+  return `About ${minimumMinutes}-${maximumMinutes} minutes remaining`;
+}
+
 function updateJourneyClock() {
   if (!journeyStartedAt) return;
   const currentTime = performance.now();
@@ -171,7 +178,7 @@ function updateJourneyClock() {
   const minimumMinutes = approximateMinutes(remaining[0]);
   const maximumMinutes = Math.max(minimumMinutes, approximateMinutes(remaining[1]));
   elapsedTime.textContent = `${formatElapsed(elapsedSeconds)} elapsed`;
-  remainingTime.textContent = `About ${minimumMinutes}-${maximumMinutes} minutes remaining`;
+  remainingTime.textContent = formatRemainingTime(minimumMinutes, maximumMinutes);
 }
 
 function rotateGuidanceCard() {

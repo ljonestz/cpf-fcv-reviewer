@@ -318,6 +318,36 @@ def test_guided_journey_has_stage_timing_and_rotating_guidance():
         assert fragment in javascript
 
 
+def test_timer_formats_singular_and_range_copy():
+    javascript = JS.read_text(encoding="utf-8")
+    start = javascript.index("function formatRemainingTime(minimumMinutes, maximumMinutes)")
+    end = javascript.index("\n}\n", start) + 3
+    function_source = javascript[start:end]
+    script = f"""
+{function_source}
+const cases = [
+  [1, 1, "About 1 minute remaining"],
+  [1, 2, "About 1-2 minutes remaining"],
+  [2, 3, "About 2-3 minutes remaining"],
+];
+for (const [minimum, maximum, expected] of cases) {{
+  const actual = formatRemainingTime(minimum, maximum);
+  if (actual !== expected) {{
+    throw new Error(`${{minimum}}-${{maximum}}: ${{actual}} !== ${{expected}}`);
+  }}
+}}
+"""
+
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_progress_events_never_render_backend_payload_text():
     javascript = JS.read_text(encoding="utf-8")
 

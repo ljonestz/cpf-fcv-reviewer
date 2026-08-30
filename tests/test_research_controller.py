@@ -180,10 +180,25 @@ def test_thin_recent_public_evidence_returns_reduced_tier_with_limitation():
     ).run(holistic_request(), lambda *event: events.append(event))
 
     assert result.tier is CurrentEvidenceTier.REDUCED
-    assert "one public source" in result.limitation
+    assert "Only one public source was established recently;" in result.limitation
     reduced = [data for kind, data in events if kind == "research_reduced"]
     assert len(reduced) == 1
     assert set(reduced[0]) == {"missing_coverage"}
+
+
+def test_multiple_recent_public_sources_use_plural_limitation_grammar():
+    result = controller(
+        ScriptedGateway(
+            ((
+                claim("one"),
+                claim("two", publisher="United Nations"),
+                claim("three"),
+            ),)
+        ),
+        max_attempts=1,
+    ).run(holistic_request(), lambda *_: None)
+
+    assert "Only 3 public sources were established recently;" in result.limitation
 
 
 def test_primary_and_recovery_claims_merge_and_deduplicate():
