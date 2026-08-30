@@ -64,7 +64,7 @@ OPTIONAL_UPLOAD_EXCLUDED_WARNING = (
     "An optional uploaded document could not be read and was excluded."
 )
 SUPPORTED_UPLOAD_SUFFIXES = frozenset({".pdf", ".docx", ".txt", ".md"})
-OPTIONAL_PDF_SAMPLE_PAGES = 12
+OPTIONAL_PDF_SAMPLE_PAGES = 16
 EXPECTED_OPTIONAL_EXTRACTION_ERRORS = (
     BadZipFile,
     ExtractionLimitExceeded,
@@ -682,7 +682,7 @@ def build_runtime_services(
                 package_documents,
                 _package_segment_budget(package_documents),
             ),
-            (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 4),
+            (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 16),
         )
         selected_segments = []
         for document_role, documents, per_document_limit in document_groups:

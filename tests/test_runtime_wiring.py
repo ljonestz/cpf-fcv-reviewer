@@ -117,7 +117,7 @@ def test_runtime_optional_pdf_sampling_kwargs_are_pdf_only(monkeypatch):
     assert calls == [
         (
             "long-support.pdf",
-            {"max_pdf_pages": 12, "sample_pdf_across_document": True},
+            {"max_pdf_pages": 16, "sample_pdf_across_document": True},
         ),
         ("supporting.txt", {}),
     ]
@@ -1927,8 +1927,8 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
     }
     assert len(by_role[DocumentRole.PRIMARY]) == 12
     assert len(by_role[DocumentRole.PACKAGE]) == 9
-    assert len(by_role[DocumentRole.CONTEXT]) == 4
-    assert sum(len(items) for items in by_role.values()) == 25
+    assert len(by_role[DocumentRole.CONTEXT]) == 16
+    assert sum(len(items) for items in by_role.values()) == 37
     assert len(
         [item for item in captured["pack"].evidence if item.evidence_type == "current_context"]
     ) == 2
