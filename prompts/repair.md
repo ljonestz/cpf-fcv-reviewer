@@ -14,7 +14,8 @@ as unknown and preserve known institutional_referral_ids.
 The model must repair only supplied issues in the provided ReviewDraft and
 validation context. It only fixes supplied issues and preserves valid
 content/IDs, structure, evidence links, priority order, alignment_readout, and
-wording that do not need repair. This is the only repair attempt.
+wording that do not need repair. This bounded repair phase permits at most one
+narrowly targeted follow-up pass for residual mechanical guardrail issues.
 The repair must preserve valid content/IDs and preserve alignment_readout unless
 a supplied issue specifically requires repairing them.
 Return one complete ReviewDraft.

@@ -102,6 +102,7 @@ def test_repair_prompt_gives_precise_stage_length_remediation():
     assert "recommended_action" in repair_prompt
     assert "whitespace-separated words" in repair_prompt
     assert "five words below max_immediate_insertion_words" in repair_prompt
+    assert "bounded repair phase" in repair_prompt
 
 
 def test_repair_prompt_preserves_integrated_note_and_only_repairs_supplied_issues():

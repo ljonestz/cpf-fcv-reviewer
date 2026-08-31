@@ -55,6 +55,19 @@ def _assessment_mode(payload):
     return getattr(mode, "value", mode)
 
 
+def test_mechanical_repair_retry_gate_accepts_duplicates_and_rejects_other_issues():
+    assert runtime._can_retry_mechanical_repair(
+        [
+            {"code": "stage_length_overreach"},
+            {"code": "stage_length_overreach"},
+        ]
+    )
+    assert not runtime._can_retry_mechanical_repair(
+        [{"code": "missing_current_context_support"}]
+    )
+    assert not runtime._can_retry_mechanical_repair([])
+
+
 def test_primary_segment_selection_samples_across_long_documents():
     document = ExtractedDocument(
         name="long-cpf.docx",
@@ -2083,7 +2096,7 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
     assert len(pack.metadata.correction_ids) == 25
 
 
-def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypatch):
+def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
     repair_payloads = []
 
     class FakeGateway:
@@ -2093,7 +2106,11 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
         def generate(self, *, prompt_name, payload, output_type):
             if prompt_name == "repair":
                 repair_payloads.append(payload)
-                overall_read = "The draft requires cautious review."
+                overall_read = (
+                    "This package is eligible for special treatment."
+                    if len(repair_payloads) == 1
+                    else "The draft requires cautious review."
+                )
             else:
                 overall_read = "This package is eligible for special treatment."
             return _valid_review_draft(output_type, payload,
@@ -2136,9 +2153,13 @@ def test_runtime_passes_only_model_authored_forbidden_phrases_to_repair(monkeypa
         lambda kind, data: None,
     )
 
-    assert repair_payloads[0]["forbidden_phrases"] == ("eligible for", "eligible")
-    assert "metadata" not in repair_payloads[0]["draft"]
-    assert "SOURCE_SENTINEL" not in str(repair_payloads[0])
+    assert len(repair_payloads) == 2
+    assert all(
+        payload["forbidden_phrases"] == ("eligible for", "eligible")
+        for payload in repair_payloads
+    )
+    assert all("metadata" not in payload["draft"] for payload in repair_payloads)
+    assert all("SOURCE_SENTINEL" not in str(payload) for payload in repair_payloads)
     assert context["result"].metadata.repair_count == 1
 
 

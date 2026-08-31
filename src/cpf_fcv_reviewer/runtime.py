@@ -59,6 +59,13 @@ STEP_NAMES = (
 REQUIRED_PRODUCTION_STRATEGY_REGISTRY_ENTRY_IDS = frozenset(
     f"PUB-FCV-STRAT-{index:03d}" for index in range(1, 5)
 )
+MECHANICAL_REPAIR_RETRY_CODES = frozenset(
+    {
+        "raw_evidence_id_in_narrative",
+        "stage_length_overreach",
+        "prohibited_policy_language",
+    }
+)
 
 OPTIONAL_UPLOAD_EXCLUDED_WARNING = (
     "An optional uploaded document could not be read and was excluded."
@@ -84,6 +91,16 @@ MAIN_DOCUMENT_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml."
     "document.main+xml"
 )
+
+
+def _can_retry_mechanical_repair(issues: list[dict]) -> bool:
+    return bool(issues) and all(
+        isinstance(issue, dict)
+        and issue.get("code") in MECHANICAL_REPAIR_RETRY_CODES
+        for issue in issues
+    )
+
+
 RELATIONSHIPS_NAMESPACE = (
     "http://schemas.openxmlformats.org/package/2006/relationships"
 )
@@ -943,21 +960,29 @@ def build_runtime_services(
     def repair(context, issues):
         if "result" not in context:
             return context
-        context["result"] = review_engine.repair(
-            context["result"],
-            issues,
-            forbidden_phrases=matched_prohibited_policy_phrases(
-                result_text(context["result"]),
-                prohibited_terms,
-            ),
-            evidence_ids=(
-                {item.evidence_id for item in context["evidence_pack"].evidence}
-                if "evidence_pack" in context
-                else None
-            ),
+        evidence_ids = (
+            {item.evidence_id for item in context["evidence_pack"].evidence}
+            if "evidence_pack" in context
+            else None
         )
-        context["result"] = _preserve_research_limitation(context)
-        context["validation_issues"] = review_validation_issues(context)
+
+        def repair_once(current_issues):
+            context["result"] = review_engine.repair(
+                context["result"],
+                current_issues,
+                forbidden_phrases=matched_prohibited_policy_phrases(
+                    result_text(context["result"]),
+                    prohibited_terms,
+                ),
+                evidence_ids=evidence_ids,
+            )
+            context["result"] = _preserve_research_limitation(context)
+            return review_validation_issues(context)
+
+        remaining_issues = repair_once(issues)
+        if _can_retry_mechanical_repair(remaining_issues):
+            remaining_issues = repair_once(remaining_issues)
+        context["validation_issues"] = remaining_issues
         return context
 
     orchestrator = ReviewOrchestrator(
