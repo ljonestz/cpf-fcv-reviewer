@@ -22,6 +22,58 @@ from cpf_fcv_reviewer.export_docx import (
 from cpf_fcv_reviewer.registry import load_registry_bundle
 
 
+def test_docx_reader_note_contains_synthesis_and_omits_technical_material(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    data = build_docx(result, evidence=evidence, hydrated_referrals=())
+
+    with ZipFile(BytesIO(data)) as archive:
+        assert "word/document.xml" in archive.namelist()
+        ET.fromstring(archive.read("word/document.xml"))
+
+    paragraphs = [paragraph.text for paragraph in Document(BytesIO(data)).paragraphs]
+    text = "\n".join(paragraphs)
+
+    assert result.alignment_readout in text
+    assert result.strategy_readout in text
+    assert text.count(result.strategy_readout) == 1
+    for area in result.priority_areas:
+        assert area.heading in text
+        assert area.assessment in text
+        assert area.why_it_matters in text
+        assert area.recommended_action in text
+
+    assert "RRA driver-to-response assessment" in text
+    assert "2026-2030 FCV Strategy alignment" in text
+    assert text.count("Status and confidence") == (
+        len(result.rra_driver_assessments) + len(result.fcv_strategy_assessments)
+    )
+    assert (
+        "Public version. Use public or non-sensitive material only. "
+        "AI-assisted advisory first pass. This is not clearance, policy advice, "
+        "a compliance finding, an eligibility determination, or an official "
+        "classification."
+    ) in text
+
+    for omitted in (
+        "Evidence and reproducibility",
+        "Evidence and document locations",
+        "Limitations and document coverage",
+        "Coverage note",
+        "Evidence reference",
+        "Used for",
+        "Reproducibility information",
+        "Current evidence tier",
+        "Gap locus",
+        "Delivery mechanism",
+        "Result / indicator",
+        "Source: CPF.docx | Results framework | paragraph 12",
+        "Excerpt: The program will support access.",
+    ):
+        assert omitted not in text
+
+
 def test_docx_contains_same_result_and_source_locator(make_valid_result):
     result, evidence = make_valid_result
     data = build_docx(
@@ -40,31 +92,23 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
 
     assert result.overall_read in text
     assert "Overall assessment" in text
-    assert result.overall_read in text
     assert RRA_ALIGNMENT_QUESTION in text
     assert STRATEGY_ALIGNMENT_QUESTION in text
     assert result.alignment_readout in text
+    assert result.strategy_readout in text
     assert "Priority areas for strengthening" in text
-    assert "Limitations and document coverage" in text
+    assert "Basis and important limitations" in text
     assert result.priority_areas[0].heading in text
     assert result.priority_areas[0].assessment in text
     assert result.priority_areas[0].why_it_matters in text
     assert result.priority_areas[0].recommended_action in text
-    assert "CPF.docx | Results framework | paragraph 12" in text
     assert "Target: CPF.docx | Results framework | paragraph 12" in text
-    assert "The review covers the primary CPF draft." in text
     assert "Consult the designated policy owner." not in text
     assert "Public version." in text
     assert "public or non-sensitive material" in text
     assert "fake-model" not in text
     assert "No RRA was available." in text
-    assert "ev-1" not in text
-    assert "Questions for confirmation" not in text
-    assert "Priority questions" not in text
-    assert "Findings" not in text
-    assert "Recommendations" not in text
-    assert "Practical options" not in text
-
+    assert "Evidence and document locations" not in text
 
 
 def test_docx_matches_detailed_html_scope_without_summary_or_technical_metadata(
@@ -87,11 +131,13 @@ def test_docx_matches_detailed_html_scope_without_summary_or_technical_metadata(
 
     assert "Priority measures to strengthen the CPF/CEN" not in text
     assert result.revision_summary[0].title not in text
+    assert result.strategy_readout in text
     assert "Reproducibility information" not in text
+    assert "Evidence and reproducibility" not in text
+    assert "Evidence and document locations" not in text
     assert "Technical appendix" not in text
     assert "Consult the designated policy owner." not in text
     assert "fake-model" not in text
-    assert "Evidence and document locations" in text
 
 
 def test_docx_uses_question_led_overall_read_and_restrained_appendix(make_valid_result):
@@ -104,32 +150,31 @@ def test_docx_uses_question_led_overall_read_and_restrained_appendix(make_valid_
         if paragraph.style.name.startswith(("Title", "Heading"))
     ]
 
-    rra_question = "How well does the CPF package align with the RRA and current FCV dynamics?"
-    strategy_question = "How does the CPF package contribute to the FCV Strategy's core priorities?"
+    rra_question = RRA_ALIGNMENT_QUESTION
+    strategy_question = STRATEGY_ALIGNMENT_QUESTION
+    rra_heading = "RRA driver-to-response assessment"
+    strategy_heading = "2026-2030 FCV Strategy alignment"
     assert rra_question in headings
     assert strategy_question in headings
     assert headings.index("Overall assessment") < headings.index(rra_question)
-    assert headings.index(rra_question) < headings.index(strategy_question)
-    assert headings.index(strategy_question) < headings.index("RRA driver-to-response assessment")
+    assert headings.index(rra_question) < headings.index(rra_heading)
+    assert headings.index(rra_heading) < headings.index(strategy_question)
+    assert headings.index(strategy_question) < headings.index(strategy_heading)
+    assert headings.index(strategy_heading) < headings.index("Priority areas for strengthening")
     overall_index = paragraphs.index("Overall assessment")
     rra_index = paragraphs.index(rra_question)
+    rra_heading_index = paragraphs.index(rra_heading)
     strategy_index = paragraphs.index(strategy_question)
+    strategy_heading_index = paragraphs.index(strategy_heading)
     assert result.overall_read in paragraphs[overall_index + 1 : rra_index]
-    assert result.alignment_readout in paragraphs[rra_index + 1 : strategy_index]
-    assert result.fcv_strategy_assessments[0].assessment in paragraphs[strategy_index + 1 :]
-
-    evidence_heading = "Evidence and document locations"
-    assert evidence_heading in headings
-    assert "Reproducibility information" not in headings
-    assert headings.index("Limitations and document coverage") < headings.index(evidence_heading)
-
-    evidence_index = paragraphs.index(evidence_heading)
-    source_index = next(
-        index
-        for index, paragraph in enumerate(paragraphs)
-        if paragraph.startswith("Source: ")
+    assert result.alignment_readout in paragraphs[rra_index + 1 : rra_heading_index]
+    assert result.strategy_readout in paragraphs[strategy_index + 1 : strategy_heading_index]
+    assert any(
+        result.fcv_strategy_assessments[0].assessment in paragraph
+        for paragraph in paragraphs[strategy_heading_index + 1 :]
     )
-    assert source_index > evidence_index
+    assert "Evidence and document locations" not in headings
+    assert "Reproducibility information" not in headings
 
 
 def test_docx_splits_long_readout_and_bolds_each_active_lead_sentence(make_valid_result):
@@ -153,12 +198,7 @@ def test_docx_splits_long_readout_and_bolds_each_active_lead_sentence(make_valid
     rra_question_index = next(
         index
         for index, paragraph in enumerate(paragraphs)
-        if paragraph.text == "How well does the CPF package align with the RRA and current FCV dynamics?"
-    )
-    strategy_question_index = next(
-        index
-        for index, paragraph in enumerate(paragraphs)
-        if paragraph.text == "How does the CPF package contribute to the FCV Strategy's core priorities?"
+        if paragraph.text == RRA_ALIGNMENT_QUESTION
     )
     readout_paragraphs = paragraphs[overall_index + 1 : rra_question_index]
 
@@ -182,24 +222,14 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
     text = "\n".join(paragraphs)
     assert "RRA driver-to-response assessment" in text
     assert "2026-2030 FCV Strategy alignment" in text
-    assert paragraphs.index("RRA driver-to-response assessment") > paragraphs.index(
-        result.alignment_readout
-    )
-    assert paragraphs.index("2026-2030 FCV Strategy alignment") > paragraphs.index(
-        "RRA driver-to-response assessment"
-    )
-    assert paragraphs.index("2026-2030 FCV Strategy alignment") < paragraphs.index(
-        "Priority areas for strengthening"
+    assert paragraphs.index("RRA driver-to-response assessment") < paragraphs.index(
+        "2026-2030 FCV Strategy alignment"
     )
     for label, value in (
         ("Driver", "Unequal territorial access"),
         ("CPF response", "The CPF prioritizes lagging regions."),
-        ("Delivery mechanism", "Area-based delivery is proposed."),
-        ("Result / indicator", "A service-access indicator is included."),
         ("Remaining gap", "Adaptation triggers are not defined."),
-        ("Status", "Partially aligned"),
-        ("Confidence", "High"),
-        ("Gap locus", "Monitoring and adaptation"),
+        ("Status and confidence", "Partially aligned - High confidence"),
     ):
         assert label in text
         assert value in text
@@ -213,22 +243,11 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
     assert "Strategic shift" in text
     assert "Assessment" in text
     assert "The CPF reflects this strategic shift in the response." in text
-    assert "Source: CPF.docx | Results framework | paragraph 12" in text
-    assert "Excerpt: The program will support access." in text
-    for raw_value in (
-        "anticipate_better",
-        "differentiated_approach",
-        "one_wbg_jobs",
-        "toolkit_partnerships_staffing",
-        "partially_aligned",
-        "monitoring_adaptation",
-        "high",
-        "rra-1",
-        "strategy-anticipate-better",
-        "ev-1",
-    ):
-        assert raw_value not in text
-
+    assert "Delivery mechanism" not in text
+    assert "Result / indicator" not in text
+    assert "Gap locus" not in text
+    assert "Source: CPF.docx | Results framework | paragraph 12" not in text
+    assert "Excerpt: The program will support access." not in text
 
 def test_docx_uses_distinct_empty_rra_messages(make_valid_result):
     result, evidence = make_valid_result
@@ -253,6 +272,20 @@ def test_docx_uses_distinct_empty_rra_messages(make_valid_result):
     )
     assert "No RRA alignment assessments were returned for this review." in unexpected_text
     assert "No current RRA was supplied; RRA alignment was not assessed." not in unexpected_text
+
+
+def test_docx_includes_strategy_empty_state_sentence(make_valid_result):
+    result, evidence = make_valid_result
+    result = result.model_copy(update={"fcv_strategy_assessments": ()})
+
+    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    strategy_heading = "2026-2030 FCV Strategy alignment"
+    empty_state = "No FCV Strategy alignment assessments were returned for this review."
+    heading_index = paragraphs.index(strategy_heading)
+
+    assert paragraphs[heading_index] == strategy_heading
+    assert paragraphs[heading_index + 1] == empty_state
 
 
 def test_docx_handles_not_assessable_rows_without_evidence(make_valid_result):
@@ -286,9 +319,8 @@ def test_docx_handles_not_assessable_rows_without_evidence(make_valid_result):
     )
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
-    assert text.count("No supporting evidence was recorded for this assessment.") == 2
-    assert text.count("Not assessable") >= 2
-
+    assert text.count("Not assessable - High confidence") == 2
+    assert "No supporting evidence was recorded for this assessment." not in text
 
 def test_docx_rejects_missing_assessment_evidence_with_row_details(make_valid_result):
     result, evidence = make_valid_result
@@ -324,17 +356,22 @@ def test_docx_uses_question_led_note_sections(make_valid_result):
     text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
 
     assert text.index("Overall assessment") < text.index(RRA_ALIGNMENT_QUESTION)
-    assert text.index(RRA_ALIGNMENT_QUESTION) < text.index(STRATEGY_ALIGNMENT_QUESTION)
+    assert text.index(RRA_ALIGNMENT_QUESTION) < text.index(
+        "RRA driver-to-response assessment"
+    )
+    assert text.index("RRA driver-to-response assessment") < text.index(
+        STRATEGY_ALIGNMENT_QUESTION
+    )
     assert text.index(STRATEGY_ALIGNMENT_QUESTION) < text.index(
+        "2026-2030 FCV Strategy alignment"
+    )
+    assert text.index("2026-2030 FCV Strategy alignment") < text.index(
         "Priority areas for strengthening"
     )
-    assert text.index("Priority areas for strengthening") < text.index(
-        "Limitations and document coverage"
-    )
+    assert "Basis and important limitations" in text
     assert "Questions for confirmation" not in text
     assert "Priority questions" not in text
     assert "ev-1" not in text
-
 
 def test_withheld_content_is_not_rendered_as_draft_language(make_valid_result):
     result, evidence = make_valid_result
@@ -369,10 +406,9 @@ def test_docx_renders_context_evidence_with_human_source_label(make_valid_result
     assert (
         "Source: Current context | CPF.docx | Results framework | paragraph 12 | "
         "https://example.test/context"
-    ) in text
-    assert "Excerpt: Context source excerpt." in text
+    ) not in text
+    assert "Excerpt: Context source excerpt." not in text
     assert "ctx-1" not in text
-
 
 def test_docx_rejects_priority_area_with_missing_evidence(make_valid_result):
     result, _ = make_valid_result
@@ -395,12 +431,11 @@ def test_docx_preserves_coverage_buckets_and_optional_comment(make_valid_result)
     data = build_docx(result, evidence=evidence, hydrated_referrals=())
     text = "\n".join(p.text for p in Document(BytesIO(data)).paragraphs)
 
-    assert "Primary document: CPF.docx" in text
-    assert "Package documents: Results Framework.xlsx" in text
-    assert "Context documents: Country Context Note.pdf" in text
-    assert "Coverage note: The review covers the primary CPF draft." in text
+    assert "Primary document: CPF.docx" not in text
+    assert "Package documents: Results Framework.xlsx" not in text
+    assert "Context documents: Country Context Note.pdf" not in text
+    assert "Coverage note: The review covers the primary CPF draft." not in text
     assert "Comment addressed: QER comment 4" in text
-
 
 def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
     result, evidence = make_valid_result
@@ -549,7 +584,7 @@ def test_docx_empty_narrative_collections_have_explicit_empty_states(make_valid_
         ),
     ),
 )
-def test_docx_places_exact_evidence_status_before_limitations(
+def test_docx_omits_evidence_status_but_keeps_reader_limitation(
     make_valid_result,
     tier,
     status,
@@ -565,15 +600,18 @@ def test_docx_places_exact_evidence_status_before_limitations(
     limitations = result.limitations if limitation is None else (*result.limitations, limitation)
     result = result.model_copy(update={"metadata": metadata, "limitations": limitations})
 
-    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
-    paragraphs = [paragraph.text for paragraph in document.paragraphs]
-    limitations_heading = paragraphs.index("Limitations and document coverage")
-
-    assert paragraphs[limitations_heading - 1] == status
-    assert paragraphs.count(status) == 1
+    paragraphs = [
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    ]
+    text = "\n".join(paragraphs)
+    assert "Basis and important limitations" in paragraphs
+    assert status not in text
+    assert "Current evidence tier" not in text
     if limitation is not None:
-        assert paragraphs.count(limitation) == 1
-
+        assert limitation in text
 
 def test_docx_visible_evidence_status_matches_html(make_valid_result):
     result, evidence = make_valid_result
@@ -597,9 +635,9 @@ def test_docx_visible_evidence_status_matches_html(make_valid_result):
         ).paragraphs
     )
 
-    assert "Review based primarily on submitted documents" in text
+    assert "Review based primarily on submitted documents" not in text
+    assert "Current evidence tier" not in text
     assert limitation in text
-
 
 def test_export_route_requires_a_completed_traceable_result(make_valid_result):
     result, evidence = make_valid_result

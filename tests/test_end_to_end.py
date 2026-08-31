@@ -328,10 +328,12 @@ def test_complete_synthetic_local_workflow(fixture_name):
     ]
     authoritative_docx_headings = [
         "Overall assessment",
-        "How well does the CPF package align with the RRA and current FCV dynamics?",
-        "How does the CPF package contribute to the FCV Strategy's core priorities?",
+        "How well does the CPF respond to the RRA and current FCV dynamics?",
+        "RRA driver-to-response assessment",
+        "How does the CPF contribute to current FCV Strategy priorities?",
+        "2026-2030 FCV Strategy alignment",
         "Priority areas for strengthening",
-        "Limitations and document coverage",
+        "Basis and important limitations",
     ]
     assert [heading for heading in docx_headings if heading in authoritative_docx_headings] == (
         authoritative_docx_headings

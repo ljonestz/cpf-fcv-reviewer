@@ -11,12 +11,12 @@ from cpf_fcv_reviewer.registry import load_registry_bundle
 
 def test_browser_fields_are_present_in_docx(make_valid_result):
     result, evidence = make_valid_result
-    data = build_docx(result, evidence=evidence, hydrated_referrals=())
-    document = Document(BytesIO(data))
+    document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
     assert result.overall_read in text
     assert result.alignment_readout in text
+    assert result.strategy_readout in text
     for item in result.revision_summary:
         assert item.title not in text
         assert item.priority_area_id not in text
@@ -32,7 +32,7 @@ def test_browser_fields_are_present_in_docx(make_valid_result):
         assert area.target_locator.heading in text
         assert area.target_locator.element in text
     assert result.limitations[0] in text
-    assert result.document_coverage.coverage_note in text
+    assert result.document_coverage.coverage_note not in text
 
 
 def test_canonical_assessments_are_represented_in_docx_with_resolved_evidence(
@@ -48,19 +48,20 @@ def test_canonical_assessments_are_represented_in_docx_with_resolved_evidence(
     )
     assert canonical["rra_driver_assessments"][0]["driver"] in docx_text
     assert canonical["rra_driver_assessments"][0]["cpf_response"] in docx_text
-    assert canonical["rra_driver_assessments"][0]["delivery_mechanism"] in docx_text
-    assert canonical["rra_driver_assessments"][0]["result_or_indicator"] in docx_text
     assert canonical["rra_driver_assessments"][0]["remaining_gap"] in docx_text
+    assert result.strategy_readout in docx_text
     assert canonical["fcv_strategy_assessments"][0]["assessment"] in docx_text
     assert "Anticipate better" in docx_text
-    assert "Aligned" in docx_text
-    assert "High" in docx_text
+    assert "Aligned - High confidence" in docx_text
+    assert "Status and confidence" in docx_text
     assert "CPF.docx | Results framework | paragraph 12" in docx_text
-    assert "The program will support access." in docx_text
+    assert "The program will support access." not in docx_text
     assert "rra-1" not in docx_text
     assert "strategy-anticipate-better" not in docx_text
     assert "ev-1" not in docx_text
-
+    assert "Delivery mechanism" not in docx_text
+    assert "Result / indicator" not in docx_text
+    assert "Gap locus" not in docx_text
 
 def test_docx_and_web_note_share_empty_state_language(make_valid_result):
     result, evidence = make_valid_result
@@ -104,7 +105,7 @@ def test_browser_json_and_docx_share_document_led_evidence_status(make_valid_res
         update={
             "metadata": result.metadata.model_copy(
                 update={
-                        "current_evidence_tier": CurrentEvidenceTier.DOCUMENT_LED,
+                    "current_evidence_tier": CurrentEvidenceTier.DOCUMENT_LED,
                     "current_evidence_limitation": limitation,
                 }
             ),
@@ -137,7 +138,8 @@ def test_browser_json_and_docx_share_document_led_evidence_status(make_valid_res
 
     assert payload["metadata"]["current_evidence_tier"] == "document_led"
     assert payload["metadata"]["current_evidence_limitation"] == limitation
-    assert "Review based primarily on submitted documents" in docx_text
+    assert "Review based primarily on submitted documents" not in docx_text
+    assert "Current evidence tier" not in docx_text
     assert limitation in docx_text
 
 
@@ -146,13 +148,10 @@ def test_detailed_docx_keeps_main_readout_free_of_repeated_evidence_details(
 ):
     result, evidence = make_valid_result
     document = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
-    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
-    appendix_index = paragraphs.index("Evidence and document locations")
-    main_text = "\n".join(paragraphs[:appendix_index])
-    appendix_text = "\n".join(paragraphs[appendix_index:])
-
-    assert "Source: CPF.docx | Results framework | paragraph 12" not in main_text
-    assert "Excerpt: The program will support access." not in main_text
-    assert "Source: CPF.docx | Results framework | paragraph 12" in appendix_text
-    assert "Excerpt: The program will support access." in appendix_text
+    assert "Evidence and document locations" not in text
+    assert "Evidence and reproducibility" not in text
+    assert "Source: CPF.docx | Results framework | paragraph 12" not in text
+    assert "Excerpt: The program will support access." not in text
+    assert "Target: CPF.docx | Results framework | paragraph 12" in text

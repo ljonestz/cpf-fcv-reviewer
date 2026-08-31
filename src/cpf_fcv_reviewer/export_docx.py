@@ -15,12 +15,10 @@ from docx.shared import Inches, Pt, RGBColor
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
-    CurrentEvidenceTier,
     DiagnosticMode,
     EvidenceItem,
     EvidenceLocator,
     FCVStrategicShift,
-    GapLocus,
     ReviewResult,
 )
 
@@ -33,12 +31,6 @@ PAGE_WIDTH_DXA = 9360
 LIST_TEXT_INDENT_DXA = 720
 LIST_HANGING_DXA = 360
 APPLICATION_AUTHOR = "CPF FCV Reviewer"
-EVIDENCE_STATUS_LABELS = {
-    CurrentEvidenceTier.FULL: "Current evidence established",
-    CurrentEvidenceTier.REDUCED: "Current evidence partially established",
-    CurrentEvidenceTier.DOCUMENT_LED: "Review based primarily on submitted documents",
-}
-
 ASSESSMENT_STATUS_LABELS = {
     AssessmentStatus.ALIGNED: "Aligned",
     AssessmentStatus.PARTIALLY_ALIGNED: "Partially aligned",
@@ -50,13 +42,6 @@ ASSESSMENT_CONFIDENCE_LABELS = {
     AssessmentConfidence.MEDIUM: "Medium",
     AssessmentConfidence.LOW: "Low",
 }
-GAP_LOCUS_LABELS = {
-    GapLocus.CPF_NARRATIVE: "CPF narrative",
-    GapLocus.RESULTS_FRAMEWORK: "Results framework",
-    GapLocus.DELIVERY_ARRANGEMENTS: "Delivery arrangements",
-    GapLocus.MONITORING_ADAPTATION: "Monitoring and adaptation",
-    GapLocus.DOWNSTREAM_OPERATIONALIZATION: "Downstream operationalization",
-}
 STRATEGIC_SHIFT_LABELS = {
     FCVStrategicShift.ANTICIPATE_BETTER: "Anticipate better",
     FCVStrategicShift.DIFFERENTIATED_APPROACH: "Differentiated approach",
@@ -67,9 +52,9 @@ STRATEGIC_SHIFT_LABELS = {
 }
 
 
-RRA_ALIGNMENT_QUESTION = "How well does the CPF package align with the RRA and current FCV dynamics?"
+RRA_ALIGNMENT_QUESTION = "How well does the CPF respond to the RRA and current FCV dynamics?"
 STRATEGY_ALIGNMENT_QUESTION = (
-    "How does the CPF package contribute to the FCV Strategy's core priorities?"
+    "How does the CPF contribute to current FCV Strategy priorities?"
 )
 EVIDENCE_APPENDIX_HEADING = "Evidence and reproducibility"
 EVIDENCE_LOCATIONS_HEADING = "Evidence and document locations"
@@ -467,7 +452,6 @@ def _add_assessment_evidence(
 def _add_rra_assessments(
     document: Document,
     result: ReviewResult,
-    evidence: dict[str, EvidenceItem],
 ) -> None:
     document.add_heading("RRA driver-to-response assessment", level=2)
     if not result.rra_driver_assessments:
@@ -480,48 +464,42 @@ def _add_rra_assessments(
         return
     for index, assessment in enumerate(result.rra_driver_assessments, start=1):
         document.add_heading(f"RRA driver {index}", level=3)
+        standing = (
+            f"{ASSESSMENT_STATUS_LABELS[assessment.status]} - "
+            f"{ASSESSMENT_CONFIDENCE_LABELS[assessment.confidence]} confidence"
+        )
         for label, value in (
             ("Driver", assessment.driver),
             ("CPF response", assessment.cpf_response),
-            ("Delivery mechanism", assessment.delivery_mechanism),
-            ("Result / indicator", assessment.result_or_indicator),
             ("Remaining gap", assessment.remaining_gap),
-            ("Status", ASSESSMENT_STATUS_LABELS[assessment.status]),
-            ("Confidence", ASSESSMENT_CONFIDENCE_LABELS[assessment.confidence]),
-            (
-                "Gap locus",
-                GAP_LOCUS_LABELS[assessment.gap_locus]
-                if assessment.gap_locus is not None
-                else "Not applicable",
-            ),
+            ("Status and confidence", standing),
         ):
             _add_labelled_paragraph(document, label, value)
-        _add_assessment_evidence(document, assessment.evidence_ids, evidence)
 
 
 def _add_strategy_assessments(
     document: Document,
     result: ReviewResult,
-    evidence: dict[str, EvidenceItem],
 ) -> None:
     document.add_heading("2026-2030 FCV Strategy alignment", level=2)
+    if not result.fcv_strategy_assessments:
+        document.add_paragraph(
+            "No FCV Strategy alignment assessments were returned for this review."
+        )
+        return
     for assessment in result.fcv_strategy_assessments:
         shift = STRATEGIC_SHIFT_LABELS[assessment.strategic_shift]
         document.add_heading(shift, level=3)
+        standing = (
+            f"{ASSESSMENT_STATUS_LABELS[assessment.status]} - "
+            f"{ASSESSMENT_CONFIDENCE_LABELS[assessment.confidence]} confidence"
+        )
         for label, value in (
             ("Strategic shift", shift),
             ("Assessment", assessment.assessment),
-            ("Status", ASSESSMENT_STATUS_LABELS[assessment.status]),
-            ("Confidence", ASSESSMENT_CONFIDENCE_LABELS[assessment.confidence]),
-            (
-                "Gap locus",
-                GAP_LOCUS_LABELS[assessment.gap_locus]
-                if assessment.gap_locus is not None
-                else "Not applicable",
-            ),
+            ("Status and confidence", standing),
         ):
             _add_labelled_paragraph(document, label, value)
-        _add_assessment_evidence(document, assessment.evidence_ids, evidence)
 
 
 def _add_evidence_register(
@@ -644,16 +622,10 @@ def build_docx(
     _add_readable_paragraph(document, result.overall_read)
     document.add_heading(RRA_ALIGNMENT_QUESTION, level=2)
     _add_readable_paragraph(document, result.alignment_readout)
+    _add_rra_assessments(document, result)
     document.add_heading(STRATEGY_ALIGNMENT_QUESTION, level=2)
-    if result.fcv_strategy_assessments:
-        for assessment in result.fcv_strategy_assessments:
-            _add_readable_paragraph(document, assessment.assessment)
-    else:
-        document.add_paragraph(
-            "No FCV Strategy alignment assessment was returned for this review."
-        )
-    _add_rra_assessments(document, result, evidence)
-    _add_strategy_assessments(document, result, evidence)
+    _add_readable_paragraph(document, result.strategy_readout)
+    _add_strategy_assessments(document, result)
 
     document.add_heading("Priority areas for strengthening", level=1)
     if result.priority_areas:
@@ -665,14 +637,16 @@ def build_docx(
             _add_labelled_paragraph(document, "Target", target_text(area.target_locator))
             if area.comment_reference:
                 _add_labelled_paragraph(document, "Comment addressed", area.comment_reference)
-            _add_assessment_evidence(document, area.evidence_ids, evidence)
     else:
         document.add_paragraph("No priority areas were returned for this review.")
 
-    document.add_paragraph(EVIDENCE_STATUS_LABELS[result.metadata.current_evidence_tier])
-    document.add_heading("Limitations and document coverage", level=1)
-    if result.limitations:
-        for limitation in result.limitations:
+    document.add_heading("Basis and important limitations", level=1)
+    limitations = list(result.limitations)
+    current_limitation = result.metadata.current_evidence_limitation
+    if current_limitation and current_limitation not in limitations:
+        limitations.append(current_limitation)
+    if limitations:
+        for limitation in limitations:
             _add_readable_list_paragraph(
                 document,
                 limitation,
@@ -680,12 +654,9 @@ def build_docx(
                 num_id=limitation_num_id,
             )
     else:
-        document.add_paragraph("No additional limitations were recorded.")
-    _add_coverage(document, result)
-
-    document.add_heading(EVIDENCE_APPENDIX_HEADING, level=1)
-    document.add_heading(EVIDENCE_LOCATIONS_HEADING, level=2)
-    _add_evidence_register(document, result, evidence)
+        document.add_paragraph(
+            "Findings are advisory and bounded by the material available for review."
+        )
 
     stream = BytesIO()
     document.save(stream)

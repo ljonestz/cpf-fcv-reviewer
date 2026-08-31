@@ -74,7 +74,7 @@ def test_docx_omits_internal_reproducibility_metadata(make_valid_result):
         assert expected not in text
 
 
-def test_docx_assessment_content_is_deterministic_and_evidence_resolved(make_valid_result):
+def test_docx_assessment_content_is_deterministic_and_reader_facing(make_valid_result):
     result, evidence = make_valid_result
     first = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
     second = Document(BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=())))
@@ -84,11 +84,12 @@ def test_docx_assessment_content_is_deterministic_and_evidence_resolved(make_val
     text = "\n".join(first_text)
     assert "RRA driver-to-response assessment" in text
     assert "2026-2030 FCV Strategy alignment" in text
-    assert "Source: CPF.docx | Results framework | paragraph 12" in text
-    assert "Excerpt: The program will support access." in text
+    assert result.alignment_readout in text
+    assert result.strategy_readout in text
+    assert "Status and confidence" in text
     assert "Anticipate better" in text
-    assert "Aligned" in text
-
+    assert "Source: CPF.docx | Results framework | paragraph 12" not in text
+    assert "Excerpt: The program will support access." not in text
 
 def test_docx_omits_internal_referrals_and_technical_appendix(make_valid_result):
     result, evidence = make_valid_result
