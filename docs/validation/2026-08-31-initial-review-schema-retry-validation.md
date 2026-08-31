@@ -65,9 +65,9 @@ and the public page returned HTTP 200 with the assessment form present.
 
 No paid or provider-backed assessment was run after deployment.
 
-## Remaining acceptance limitation
+## Subsequent acceptance
 
-One separately authorized Guinea quality run is still required to establish provider
-acceptance. It must capture full-page browser screenshots, inspect the rendered summary
-and detailed output, and download and inspect the DOCX. Until that succeeds, the
-prototype is not production-ready.
+A separately authorized Guinea production quality run subsequently completed successfully
+on deployed commit `1ba44bf`. The result and DOCX endpoints returned HTTP 200, and local
+schema, evidence, reproducibility, and application-validation checks passed with zero
+issues. See `2026-08-31-guinea-production-quality-run.md` for the acceptance record.

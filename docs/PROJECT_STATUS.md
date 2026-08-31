@@ -61,7 +61,20 @@ The stable FCV Project Screener is untouched and prohibited.
 - Commits `003acfb` and `1ba44bf` implement and harden the initial schema retry. The
   configured Render deployment branch points to `1ba44bf`, which Render reports live.
   The feature branch and `main` additionally include subsequent documentation-only
-  commits. No paid or provider-backed assessment was run after deployment.
+  commits.
+- The explicitly authorized Guinea production quality run on `1ba44bf` completed on
+  2026-08-31. The production API accepted the review, the result endpoint returned HTTP
+  200 after approximately 11 minutes, and the DOCX export returned HTTP 200 with 49,830
+  bytes. Local checks passed for the core `ReviewResult`, all 32 evidence records,
+  reproducibility metadata, and application validation with zero issues. Three priority
+  areas and five explicit limitations were produced. The result correctly disclosed a
+  `reduced` current-evidence tier because only two recent public sources were established.
+- Full browser-viewport screenshots were saved for the completed intake, initial and
+  drafting holding states, Five-minute readout, and selected Detailed analysis. The
+  screenshot exporter produced 800-pixel-wide PNGs while preserving the desktop layout. The
+  79 KB JSON response and DOCX were also saved. The DOCX is a valid Word ZIP package with
+  198 paragraphs and the expected priority and limitations sections. LibreOffice is not
+  installed in the Windows environment, so DOCX-to-PNG visual QA was not available.
 
 ## Validation cost protocol
 
@@ -74,11 +87,9 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. With separate explicit approval, run one Guinea quality assessment on deployed commit
-   `1ba44bf`. Capture full-page intake, progress, summary, detailed, and failure PNGs as
-   applicable, inspect the rendered result and DOCX, and record only safe validation
-   outcomes. Until that succeeds, Guinea provider acceptance is not established.
-2. Run Haiti and Benin provider acceptance only when needed for broader readiness:
+1. Guinea provider acceptance is established for the public advisory prototype on
+   deployed commit `1ba44bf`, subject to its disclosed `reduced` current-evidence tier.
+2. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:
    confirm Haiti's scattered jobs/IFC/MIGA treatment and Benin's multi-document coverage.
 3. Keep the approved public registry current, versioned, checksummed, and
    non-confidential, and keep internal OPCS/ITS sources on a separately governed track.

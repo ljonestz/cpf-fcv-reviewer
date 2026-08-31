@@ -11,13 +11,12 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Latest verified implementation: `main` through `1ba44bf` (1,069 tests; 34 provider-free smoke tests).
 - Last verified deployment: `1ba44bf` on 2026-08-31. Render reported the deploy live,
   `/health` returned `ok`, and the public page returned HTTP 200.
-- The authorized Guinea quality run on the earlier `9816de4` deployment completed source preparation,
-  research, evidence building, and mapping, but the initial generated review failed
-  schema validation before application validation or repair. No result or DOCX was
-  produced, so the prototype is not production-ready.
-- Deployed commit `1ba44bf` adds one bounded, fail-closed initial schema retry with
-  sanitized diagnostics. No paid Guinea run has been made on this fix, so the prototype
-  remains not production-ready.
+- The authorized Guinea production quality run on deployed commit `1ba44bf` completed
+  successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
+  result schema, 32 evidence records, reproducibility metadata, and application validation
+  passed with zero issues. Browser screenshots, the 79 KB JSON response, and the 49,830-byte
+  DOCX were saved. Current-country evidence was truthfully rated `reduced` because only two
+  recent public sources were established.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
@@ -76,6 +75,7 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 ## Documentation
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
+- [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
 - [2026-08-31 initial-review schema-retry validation](docs/validation/2026-08-31-initial-review-schema-retry-validation.md): test-first evidence, safety review, full provider-free verification, and deployment checks.
 - [2026-08-30 Guinea production-fix validation](docs/validation/2026-08-30-guinea-production-fixes-validation.md): automated checks, Render deployment evidence, paid-run outcomes, and remaining acceptance limitation.
 - [2026-08-30 pilot reliability validation](docs/validation/2026-08-30-cpf-pilot-reliability-validation.md): automated, Guinea structural, and browser evidence plus provider limitations.
