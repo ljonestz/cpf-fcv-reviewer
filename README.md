@@ -8,8 +8,9 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified implementation: `fix/research-resilience-guided-journey` through `d9b991f` (1,046 tests)
-- Last verified deployment: release `ef7b9ea` on 2026-08-23. The reliability/UX branch is not deployed, and live health could not be reverified on 2026-08-30.
+- Latest verified implementation: `main` through `9816de4` (1,063 tests; 34 provider-free smoke tests).
+- Last verified deployment: `9816de4` on 2026-08-30. Render reported the deploy live,
+  `/health` returned `ok`, and the public page returned HTTP 200.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
@@ -52,9 +53,23 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 
 Use **Download full detailed note** before the retained review expires or is reset.
 
+## Validation and API-cost control
+
+Use the validation ladder in `CLAUDE.md`: targeted local checks, provider-free smoke,
+deployed health/static checks, then one paid quality run only when real model or rendered
+output behavior must be verified. Never rerun an unchanged deployment. After a failed
+quality run, diagnose only from safe validation codes, add a local regression test, and
+repeat the no-cost ladder before seeking approval for another paid run.
+
+Paid browser quality runs must save unique full-page PNGs for intake, holding/progress,
+summary, detailed output, and failure states, plus the DOCX on success. Smoke output must
+remain clearly labelled synthetic and must not be presented as country-quality evidence.
+The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
+
 ## Documentation
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
+- [2026-08-30 Guinea production-fix validation](docs/validation/2026-08-30-guinea-production-fixes-validation.md): automated checks, Render deployment evidence, paid-run outcomes, and remaining acceptance limitation.
 - [2026-08-30 pilot reliability validation](docs/validation/2026-08-30-cpf-pilot-reliability-validation.md): automated, Guinea structural, and browser evidence plus provider limitations.
 - [Development instructions](CLAUDE.md): commands, repository map, safety constraints, and future-session checklist.
 - `docs/validation/`: dated validation evidence.
