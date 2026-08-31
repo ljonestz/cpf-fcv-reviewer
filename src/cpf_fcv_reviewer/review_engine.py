@@ -41,19 +41,45 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
 )
 
 
+def _schema_property_names(schema: object) -> frozenset[str]:
+    names = set()
+    pending = [schema]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, dict):
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                names.update(str(name) for name in properties)
+            pending.extend(node.values())
+        elif isinstance(node, list):
+            pending.extend(node)
+    return frozenset(names)
+
+
+_REVIEW_DRAFT_SCHEMA_FIELDS = _schema_property_names(ReviewDraft.model_json_schema())
+_MAX_SCHEMA_RETRY_ISSUES = 25
+_MAX_SCHEMA_LOCATION_DEPTH = 8
+
+
 def _safe_schema_issues(error: ValidationError) -> list[dict[str, object]]:
     issues = []
     for item in error.errors(
         include_url=False,
         include_context=False,
         include_input=False,
-    ):
-        location = [
-            part if isinstance(part, (str, int)) else str(part)
-            for part in item.get("loc", ())
-        ]
-        issue_type = item.get("type", "validation_error")
-        issues.append({"loc": location, "type": str(issue_type)})
+    )[:_MAX_SCHEMA_RETRY_ISSUES]:
+        location = []
+        for part in item.get("loc", ())[:_MAX_SCHEMA_LOCATION_DEPTH]:
+            if type(part) is int and 0 <= part <= 9999:
+                location.append(part)
+            elif isinstance(part, str) and part in _REVIEW_DRAFT_SCHEMA_FIELDS:
+                location.append(part)
+            else:
+                location.append("unrecognized_field")
+        issue_type = str(item.get("type", "validation_error"))
+        if not re.fullmatch(r"[a-z0-9_]{1,64}", issue_type):
+            issue_type = "validation_error"
+        issues.append({"loc": location, "type": issue_type})
     return issues
 
 
