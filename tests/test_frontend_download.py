@@ -196,7 +196,7 @@ def test_docx_download_fetches_blob_and_keeps_results_page_on_recoverable_errors
     assert completed.returncode == 0, completed.stderr
 
 
-def test_strategy_summary_names_each_shift_before_its_assessment():
+def test_strategy_summary_uses_single_strategy_readout_prose_panel():
     harness = textwrap.dedent(
         COMMON_HARNESS
         + r'''
@@ -214,6 +214,7 @@ def test_strategy_summary_names_each_shift_before_its_assessment():
           metadata: {},
           overall_read: "Overall assessment.",
           alignment_readout: "RRA alignment assessment.",
+          strategy_readout: "The CPF strategy readout explains the current FCV priorities.",
           revision_summary: [],
           priority_areas: [],
           rra_driver_assessments: [],
@@ -241,18 +242,16 @@ def test_strategy_summary_names_each_shift_before_its_assessment():
           await FakeSource.all[0].emit("run_complete");
           const summary = nodes["#summary-panel"];
           const summaryText = summary.textContent;
-          const expectedPairs = [
-            ["Anticipate better", "The CPF anticipates risks."],
-            ["Differentiated approach", "The CPF differentiates its approach."],
-            ["One WBG approach to jobs", "The CPF addresses jobs through a One WBG lens."],
-            ["Toolkit, partnerships, and staffing", "The CPF uses partnerships and staffing."],
-          ];
-          for (const [label, assessment] of expectedPairs) {
-            const labelIndex = summaryText.indexOf(label);
-            const assessmentIndex = summaryText.indexOf(assessment);
-            if (labelIndex < 0 || assessmentIndex < 0 || labelIndex > assessmentIndex) {
-              throw Error(`summary did not name ${label} before its assessment`);
-            }
+          const strategyQuestion = "How does the CPF contribute to current FCV Strategy priorities?";
+          const strategyProse = "The CPF strategy readout explains the current FCV priorities.";
+          const questionIndex = summaryText.indexOf(strategyQuestion);
+          const proseIndex = summaryText.indexOf(strategyProse);
+          if (questionIndex < 0 || proseIndex < questionIndex) {
+            throw Error("summary did not render the strategy prose panel");
+          }
+          const strategyLabels = ["Anticipate better", "Differentiated approach", "One WBG approach to jobs", "Toolkit, partnerships, and staffing"];
+          for (const label of strategyLabels) {
+            if (summaryText.includes(label)) throw Error("summary rendered a detailed Strategy card: " + label);
           }
         })().catch((error) => { console.error(error); process.exit(1); });
         '''

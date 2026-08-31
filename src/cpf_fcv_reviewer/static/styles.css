@@ -80,6 +80,12 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .read-time { color: var(--muted); font-size: .9rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .alignment-readout { max-width: 78ch; }
 .readout-question { max-width: 78ch; margin-top: 30px; font-size: 1.18rem; line-height: 1.35; }
+.readout-panel { max-width: 78ch; margin: 22px 0; padding: 18px 20px; border: 1px solid #cfe8ef; border-left: 4px solid var(--cyan); border-radius: 8px; background: #f8fafb; }
+.readout-panel h2 { margin: 0 0 10px; font-size: 1.18rem; line-height: 1.35; }
+.readout-panel-rra { border-left-color: var(--blue); }
+.readout-panel-strategy { border-left-color: var(--cyan); }
+.priority-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 18px 0 8px; }
+.readout-prose .narrative-chunk:last-child { margin-bottom: 0; }
 .narrative-chunk { max-width: 78ch; margin: 0 0 12px; }
 .narrative-chunk > strong { color: var(--navy); }
 .priority-assessment .narrative-chunk:last-child,
@@ -110,8 +116,8 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .evidence-locator { overflow-wrap: anywhere; }
 .evidence-excerpt { max-width: 78ch; }
 .coverage-primary, .coverage-package, .coverage-context, .coverage-note { max-width: 78ch; }
-.coverage-panel, .evidence-status-panel { margin: 22px 0; padding: 0 16px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; }
-.coverage-panel > summary, .evidence-status-panel > summary { padding: 15px 0; }
+.coverage-panel, .evidence-status-panel, .basis-limitations-panel { margin: 22px 0; padding: 0 16px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; }
+.coverage-panel > summary, .evidence-status-panel > summary, .basis-limitations-panel > summary { padding: 15px 0; }
 .coverage-panel h3 { margin-top: 4px; }
 .coverage-note { padding-bottom: 4px; }
 .evidence-status-panel .evidence-status-label { margin: 2px 0 8px; color: var(--navy); font-weight: 700; }
@@ -310,6 +316,7 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
   #actions { align-items: stretch; flex-direction: column; margin-top: 16px; }
   #actions button { white-space: normal; }
   .result-tabs { flex-wrap: wrap; }
+  .priority-summary-grid { grid-template-columns: 1fr; }
   .evidence-locator, .evidence-excerpt, .coverage-primary,
   .coverage-package, .coverage-context, .coverage-note { min-width: 0; overflow-wrap: anywhere; }
   .result-tabs [role="tab"] { text-align: left; }
@@ -354,7 +361,7 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .status-partially-aligned { border-color: #e2c477; background: #fff7df; color: #76520b; }
 .status-not-evidenced { border-color: #d9aaaa; background: #fbebeb; color: #7f3030; }
 .status-not-assessable { border-color: #c8d0d9; background: #eef1f4; color: #4e5c6d; }
-.evidence-group, .traceability-panel, .coverage-panel, .evidence-status-panel {
+.evidence-group, .traceability-panel, .coverage-panel, .evidence-status-panel, .basis-limitations-panel {
   margin: 18px 0;
   padding: 0 15px;
   border: 1px solid var(--rule);
@@ -363,4 +370,4 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 }
 .evidence-group { border-top: 1px solid var(--rule); }
 .evidence-group summary, .traceability-panel summary,
-.coverage-panel > summary, .evidence-status-panel > summary { padding: 14px 0; }
+.coverage-panel > summary, .evidence-status-panel > summary, .basis-limitations-panel > summary { padding: 14px 0; }

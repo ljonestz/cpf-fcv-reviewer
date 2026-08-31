@@ -113,7 +113,9 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         FakeSource.all = []; global.EventSource = FakeSource;
         const complete = {
           overall_read: "The draft has a sound foundation.",
-  revision_summary: [{priority_area_id: "results / delivery#1", title: "Clarify the delivery pathway."}],
+          alignment_readout: "RRA prose.",
+          strategy_readout: "Strategy prose.",
+          revision_summary: [{priority_area_id: "results / delivery#1", title: "Clarify the delivery pathway."}],
           priority_areas: [{
             priority_area_id: "results / delivery#1", heading: "Delivery pathway",
             assessment: "The pathway is not yet explicit.",
@@ -181,18 +183,8 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
           "CPF.docx | page 4 | Results",
           "QER comment 3",
           "The RRA was not supplied.",
-          "Primary document.",
-          "Package documents.",
-          "CPF package annex.docx",
-          "Context documents.",
-          "None supplied",
-          "The review covers the supplied CPF.",
-          "Evidence and document locations",
+          "Basis and important limitations",
           "CPF.docx | page 4 | Results",
-          "The programme will deliver results.",
-          "Current context",
-          "https://example.test/context",
-          "Context note explains the regional setting.",
         ]) {
           if (!renderedText.includes(visibleText)) throw Error(`result omitted ${visibleText}`);
         }
@@ -415,10 +407,19 @@ def test_assessment_rows_expose_allowlisted_status_and_confidence_labels():
         'not_assessable: "Not assessable"',
     ):
         assert label in javascript
-    for field in ("assessment.status", "assessment.confidence", "assessment.gap_locus"):
+    for field in ("assessment.status", "assessment.confidence"):
         assert field in javascript
-    assert 'text("dt", "Status")' in javascript
-    assert 'text("dt", "Confidence")' in javascript
+    assert "function appendAssessmentStanding(definitions, status, confidence)" in javascript
+    assert 'text("dt", "Status and confidence")' in javascript
+    rra_renderer = javascript.split("function renderRraAssessments(result)", 1)[1].split(
+        "function renderStrategyAssessments(result)", 1
+    )[0]
+    strategy_renderer = javascript.split("function renderStrategyAssessments(result)", 1)[1].split(
+        "function priorityAreaAnchorIds(result)", 1
+    )[0]
+    for renderer in (rra_renderer, strategy_renderer):
+        assert "renderEvidenceGroup" not in renderer
+        assert "assessment.gap_locus" not in renderer
 
 def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_states():
     harness = textwrap.dedent(
@@ -490,6 +491,7 @@ def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_
           metadata: {diagnostic_mode: "rra_alignment"},
           overall_read: "Overall synthesis for the review.",
           alignment_readout: "Alignment synthesis for the review.",
+          strategy_readout: "Strategy synthesis for the review.",
           revision_summary: [],
           priority_areas: [],
           rra_driver_assessments: [{
@@ -585,27 +587,14 @@ def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_
             "RRA driver-to-response assessment",
             "Unequal access to services",
             "CPF prioritizes lagging regions.",
-            "Area-based delivery is proposed.",
-            "Service access indicator.",
-            "Adaptation triggers are not defined.",
-            "Partially aligned",
-            "High",
-            "Monitoring and adaptation",
+            "Partially aligned - High confidence",
             "2026-2030 FCV Strategy alignment",
             "Anticipate better",
             "The CPF uses forward-looking risk analysis.",
-            "Aligned",
-            "Medium",
+            "Aligned - Medium confidence",
             "One WBG approach to jobs",
             "Jobs roles are not yet explicit.",
-            "Not evidenced",
-            "Low",
-            "CPF narrative",
-            "RRA.docx | page 3 | Drivers",
-            "RRA excerpt for access.",
-            "FCV Strategy.pdf | page 21 | Anticipate better",
-            "Strategy excerpt for preparedness.",
-            "No supporting evidence was recorded for this assessment.",
+            "Not evidenced - Low confidence",
           ]) {
             if (!renderedText.includes(visibleText)) throw Error("result omitted " + visibleText);
           }
@@ -614,7 +603,7 @@ def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_
           }
           if (countTag(nodes["#results"], "section") < 2) throw Error("assessment sections were not rendered");
           if (countTag(nodes["#results"], "dl") < 2) throw Error("assessment definition lists were not rendered");
-          if (countTag(nodes["#results"], "details") !== 2) throw Error("empty evidence disclosure was rendered");
+          if ((collectText(nodes["#results"]).match(/Basis and important limitations/g) || []).length !== 1) throw Error("basis disclosure count was not exactly one");
 
           hooks.watchEvents("limited", "limited-result");
           await FakeSource.all[1].emit("run_complete");

@@ -510,6 +510,17 @@ function renderDisclosure(label, className, content) {
   return details;
 }
 
+function renderReadoutPanel(title, value, className) {
+  const panel = document.createElement("section");
+  panel.className = "readout-panel " + className;
+  panel.append(text("h2", title), renderNarrative(value, "readout-prose"));
+  return panel;
+}
+
+function firstNarrativeSentence(value) {
+  return splitNarrativeIntoChunks(value)[0]?.[0] || String(value || "").trim();
+}
+
 function locatorLabel(locator) {
   if (!locator) return "";
   return [
@@ -620,6 +631,19 @@ function appendAssessmentConfidence(definitions, confidence) {
   definitions.append(text("dt", "Confidence"), description);
 }
 
+function appendAssessmentStanding(definitions, status, confidence) {
+  const normalizedStatus = status || "not_assessable";
+  const badge = text(
+    "span",
+    assessmentStatusLabel(normalizedStatus) + " - " + assessmentValueLabel(confidence) + " confidence",
+    "assessment-status status-badge status-" + normalizedStatus.replaceAll("_", "-"),
+  );
+  const description = document.createElement("dd");
+  description.className = "assessment-standing";
+  description.append(badge);
+  definitions.append(text("dt", "Status and confidence"), description);
+}
+
 function assessmentStatusLabel(status) {
   return assessmentStatusLabels[status] || assessmentValueLabel(status);
 }
@@ -659,13 +683,9 @@ function renderRraAssessments(result) {
     definitions.className = "assessment-definitions";
     appendAssessmentField(definitions, "Driver", assessment.driver);
     appendAssessmentField(definitions, "CPF response", assessment.cpf_response);
-    appendAssessmentField(definitions, "Delivery mechanism", assessment.delivery_mechanism);
-    appendAssessmentField(definitions, "Result / indicator", assessment.result_or_indicator);
     appendAssessmentField(definitions, "Remaining gap", assessment.remaining_gap);
-    appendAssessmentStatus(definitions, assessment.status);
-    appendAssessmentConfidence(definitions, assessment.confidence);
-    appendAssessmentField(definitions, "Gap locus", assessmentLocusLabel(assessment.gap_locus));
-    card.append(definitions, renderEvidenceGroup(result, assessment.evidence_ids));
+    appendAssessmentStanding(definitions, assessment.status, assessment.confidence);
+    card.append(definitions);
     list.append(card);
   }
   section.append(list);
@@ -692,10 +712,8 @@ function renderStrategyAssessments(result) {
     definitions.className = "assessment-definitions";
     appendAssessmentField(definitions, "Strategic shift", strategyShiftLabel(assessment.strategic_shift));
     appendAssessmentField(definitions, "Assessment", assessment.assessment);
-    appendAssessmentStatus(definitions, assessment.status);
-    appendAssessmentConfidence(definitions, assessment.confidence);
-    appendAssessmentField(definitions, "Gap locus", assessmentLocusLabel(assessment.gap_locus));
-    card.append(definitions, renderEvidenceGroup(result, assessment.evidence_ids));
+    appendAssessmentStanding(definitions, assessment.status, assessment.confidence);
+    card.append(definitions);
     list.append(card);
   }
   section.append(list);
@@ -709,18 +727,36 @@ function priorityAreaAnchorIds(result) {
 }
 
 function renderRevisionSummary(result, anchorIds) {
-  if (!result.revision_summary.length) {
-    return text("p", "No revision summary was returned for this review.", "empty-state");
+  const summary = document.createElement("div");
+  summary.className = "priority-summary-grid";
+  const summaryItems = result.revision_summary
+    .filter((item) => result.priority_areas.some((area) => area.priority_area_id === item.priority_area_id))
+    .slice(0, 3);
+  if (!summaryItems.length) {
+    summary.append(text("p", "No revision summary was returned for this review.", "empty-state"));
+    return summary;
   }
-  const summary = document.createElement("ol");
-  for (const item of result.revision_summary) {
-    const link = document.createElement("a");
+  for (const item of summaryItems) {
     const priorityAreaIndex = result.priority_areas.findIndex(
       (area) => area.priority_area_id === item.priority_area_id,
     );
-    const anchorId = anchorIds.get(`${priorityAreaIndex}`);
-    link.href = anchorId ? `#${anchorId}` : "#";
-    link.textContent = item.title;
+    const area = result.priority_areas[priorityAreaIndex];
+    const anchorId = anchorIds.get(String(priorityAreaIndex));
+    const card = document.createElement("section");
+    card.className = "priority-area";
+    card.append(
+      text("h3", item.title),
+      renderNarrative(firstNarrativeSentence(area?.assessment), "priority-assessment"),
+      labelledNarrative(
+        "Recommended response",
+        firstNarrativeSentence(area?.recommended_action),
+        "recommended-action",
+      ),
+    );
+    const link = document.createElement("a");
+    link.href = anchorId ? "#" + anchorId : "#";
+    link.textContent = "View detailed recommendation";
+    link.setAttribute?.("aria-label", "View detailed recommendation: " + item.title);
     if (anchorId) {
       link.addEventListener("click", (event) => {
         event?.preventDefault();
@@ -728,13 +764,11 @@ function renderRevisionSummary(result, anchorIds) {
         document.getElementById(anchorId)?.focus();
       });
     }
-    const row = document.createElement("li");
-    row.append(link);
-    summary.append(row);
+    card.append(link);
+    summary.append(card);
   }
   return summary;
 }
-
 function renderPriorityAreas(result, anchorIds) {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
   fragment.append(text("h2", "Priority areas for strengthening"));
@@ -755,7 +789,6 @@ function renderPriorityAreas(result, anchorIds) {
         labelledParagraph("Comment addressed", area.comment_reference, "comment-reference"),
       );
     }
-    section.append(renderEvidenceGroup(result, area.evidence_ids));
     fragment.append(section);
   }
   if (!result.priority_areas.length) {
@@ -805,22 +838,6 @@ function renderCoverageView(result, collapsible = true) {
   return details;
 }
 
-function renderStrategyReadout(result) {
-  const fragment = document.createDocumentFragment?.() || document.createElement("div");
-  const assessments = result.fcv_strategy_assessments || [];
-  for (const assessment of assessments) {
-    const item = document.createElement("div");
-    item.className = "strategy-summary-item";
-    item.append(
-      text("h3", strategyShiftLabel(assessment.strategic_shift), "strategy-summary-label"),
-      renderNarrative(assessment.assessment, "strategy-readout"),
-    );
-    fragment.append(item);
-  }
-  if (!assessments.length) fragment.append(text("p", "No FCV Strategy alignment assessment was returned for this review.", "empty-state"));
-  return fragment;
-}
-
 function renderFiveMinuteReadout(result) {
   const anchorIds = priorityAreaAnchorIds(result);
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
@@ -828,14 +845,33 @@ function renderFiveMinuteReadout(result) {
     text("p", "Five-minute readout", "read-time"),
     text("h2", "Overall assessment"),
     renderNarrative(result.overall_read, "overall-read"),
-    text("h2", "How well does the CPF respond to the RRA and current FCV dynamics?", "readout-question"),
-    renderNarrative(result.alignment_readout, "alignment-readout"),
-    text("h2", "How does the CPF contribute to current FCV Strategy priorities?", "readout-question"),
-    renderStrategyReadout(result),
+    renderReadoutPanel(
+      "How well does the CPF respond to the RRA and current FCV dynamics?",
+      result.alignment_readout,
+      "readout-panel-rra",
+    ),
+    renderReadoutPanel(
+      "How does the CPF contribute to current FCV Strategy priorities?",
+      result.strategy_readout,
+      "readout-panel-strategy",
+    ),
     text("h2", "Priority measures to strengthen the CPF / CEN"),
     renderRevisionSummary(result, anchorIds),
   );
   return fragment;
+}
+function renderBasisAndLimitations(result) {
+  const limitations = [...(result.limitations || [])];
+  const currentLimitation = result.metadata?.current_evidence_limitation;
+  if (currentLimitation && !limitations.includes(currentLimitation)) limitations.push(currentLimitation);
+  if (!limitations.length) limitations.push("Findings are advisory and bounded by the material available for review.");
+  const list = document.createElement("ul");
+  for (const limitation of limitations) {
+    const item = document.createElement("li");
+    item.append(renderNarrative(limitation));
+    list.append(item);
+  }
+  return renderDisclosure("Basis and important limitations", "basis-limitations-panel", list);
 }
 
 function renderDetailedAnalysis(result) {
@@ -848,32 +884,23 @@ function renderDetailedAnalysisView(result, includeDisclosurePanels = true) {
   fragment.append(
     text("h2", "Overall assessment"),
     renderNarrative(result.overall_read, "overall-read"),
-  );
-  if (includeDisclosurePanels) fragment.append(renderEvidenceStatusDisclosure(result));
-  if (includeDisclosurePanels) {
-    const hasEvidence = Object.keys(result.evidence_by_id || {}).length > 0;
-    const traceability = document.createElement("details");
-    traceability.className = "traceability-panel";
-    traceability.append(
-      text("summary", "Traceability"),
-      text("p", "Evidence and document locations", "traceability-caption"),
-      text("p", hasEvidence ? "Evidence and document locations are shown within the relevant assessments." : "No supporting evidence was recorded for this review.", hasEvidence ? "traceability-note" : "empty-state"),
-    );
-    fragment.append(traceability);
-  }
-  fragment.append(
-    text("h2", "How well does the CPF respond to the RRA and current FCV dynamics?", "readout-question"),
-    renderNarrative(result.alignment_readout, "alignment-readout"),
+    renderReadoutPanel(
+      "How well does the CPF respond to the RRA and current FCV dynamics?",
+      result.alignment_readout,
+      "readout-panel-rra",
+    ),
     renderRraAssessments(result),
-    text("h2", "How does the CPF contribute to current FCV Strategy priorities?", "readout-question"),
-    renderStrategyReadout(result),
+    renderReadoutPanel(
+      "How does the CPF contribute to current FCV Strategy priorities?",
+      result.strategy_readout,
+      "readout-panel-strategy",
+    ),
     renderStrategyAssessments(result),
+    renderPriorityAreas(result, anchorIds),
   );
-  fragment.append(renderPriorityAreas(result, anchorIds));
-  fragment.append(renderCoverageView(result, includeDisclosurePanels));
+  if (includeDisclosurePanels) fragment.append(renderBasisAndLimitations(result));
   return fragment;
 }
-
 function inferDocumentType(primaryDocumentName) {
   const name = primaryDocumentName || "";
   const hasCen = /(^|[^a-z0-9])cen([^a-z0-9]|$)/i.test(name);
@@ -935,7 +962,7 @@ function renderEvidenceStatus(result) {
 
 function renderResult(result) {
   if (summaryPanel === detailedPanel) {
-    results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysisView(result, false));
+    results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysisView(result, true));
   } else {
     summaryPanel.replaceChildren(renderFiveMinuteReadout(result));
     detailedPanel.replaceChildren(renderDetailedAnalysisView(result, true));
@@ -943,10 +970,9 @@ function renderResult(result) {
   const country = countryInput.value.trim();
   const documentType = inferDocumentType(result.document_coverage.primary_document);
   const reviewStage = result.metadata?.review_stage;
-  const stage = reviewStage ? ` · ${reviewStage.replaceAll("_", " ")}` : "";
+  const stage = reviewStage ? " - " + reviewStage.replaceAll("_", " ") : "";
   resultTitle.textContent = `${country} ${documentType} FCV review`;
   resultContext.textContent = `${result.document_coverage.primary_document}${stage}`;
-  renderEvidenceStatus(result);
   setResultView("summary");
   showResults();
   resultTitle.focus({preventScroll: true});
@@ -1266,6 +1292,8 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     updateProgress,
     resetProgress,
     appendAssessmentStatus,
+    appendAssessmentStanding,
+    renderFiveMinuteReadout,
     renderDetailedAnalysis,
     splitNarrativeIntoChunks,
   };

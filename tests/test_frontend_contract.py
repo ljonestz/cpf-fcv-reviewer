@@ -372,19 +372,14 @@ def test_progress_events_never_render_backend_payload_text():
         assert fragment in javascript
 
 
-def test_result_has_static_evidence_status_region():
+def test_result_removes_obsolete_evidence_status_region():
     html = HTML.read_text(encoding="utf-8")
     javascript = JS.read_text(encoding="utf-8")
 
-    assert 'id="evidence-status"' in html
-    assert 'id="evidence-status-label"' in html
-    assert 'id="evidence-status-limitation"' in html
-    for label in (
-        "Current evidence established",
-        "Current evidence partially established",
-        "Review based primarily on submitted documents",
-    ):
-        assert label in javascript
+    assert "id=\"evidence-status\"" not in html
+    assert "id=\"evidence-status-label\"" not in html
+    assert "id=\"evidence-status-limitation\"" not in html
+    assert "document.querySelector(\"#evidence-status\") || document.createElement(\"aside\")" in javascript
 
 
 def test_task9_progress_mapping_uses_safe_labels_and_omits_backend_content():
@@ -462,7 +457,7 @@ def test_summary_uses_only_canonical_result_fields():
     assert "fetchSummary" not in javascript
 
 
-def test_detailed_analysis_renders_all_priority_prose_evidence_and_coverage():
+def test_detailed_analysis_keeps_priority_prose_and_hides_technical_coverage():
     javascript = JS.read_text(encoding="utf-8")
 
     for fragment in (
@@ -474,12 +469,24 @@ def test_detailed_analysis_renders_all_priority_prose_evidence_and_coverage():
         "area.recommended_action",
         "area.target_locator",
         "area.comment_reference",
-        "area.evidence_ids",
         "result.evidence_by_id",
         "result.limitations",
-        "result.document_coverage",
+        "function renderBasisAndLimitations(result)",
     ):
         assert fragment in javascript
+
+    detailed_renderer = javascript.split("function renderDetailedAnalysisView", 1)[1].split("function inferDocumentType", 1)[0]
+    for obsolete in (
+        "renderEvidenceGroup(",
+        "renderCoverageView(",
+        "renderEvidenceStatusDisclosure(",
+        "Traceability",
+        "Coverage and limitations",
+        "Evidence status",
+        "area.evidence_ids",
+    ):
+        assert obsolete not in detailed_renderer
+    assert "renderBasisAndLimitations(result)" in detailed_renderer
     assert "innerHTML" not in javascript
 
 
@@ -593,7 +600,8 @@ def test_task3_result_disclosures_and_statuses_use_focused_visual_contracts():
         ".output-card",
         ".traceability-panel",
         ".coverage-panel",
-        ".evidence-status-panel",
+        ".basis-limitations-panel",
+        ".readout-panel",
         ".evidence-group",
         ".status-aligned",
         ".status-partially-aligned",

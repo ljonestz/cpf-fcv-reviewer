@@ -116,7 +116,8 @@ def test_guided_journey_has_live_regions_and_reduced_motion_support():
     assert 'id="progress" hidden aria-labelledby="progress-title"' in html
     assert 'id="progress-message" role="status" aria-live="polite"' in html
     assert 'id="while-we-work" aria-live="off"' in html
-    assert 'id="evidence-status" role="status"' in html
+    assert 'id="evidence-status"' not in html
+    assert 'Basis and important limitations' in javascript
     assert "aria-current" in javascript
     assert ".progress-stage" in css
     assert "@media (prefers-reduced-motion: reduce)" in css
@@ -136,6 +137,8 @@ def test_assessment_renderers_use_semantic_sections_and_definition_lists():
     for fragment in (
         "function renderRraAssessments(result)",
         "function renderStrategyAssessments(result)",
+        "function renderReadoutPanel(title, value, className)",
+        "function appendAssessmentStanding(definitions, status, confidence)",
         'text("h3", "RRA driver-to-response assessment")',
         'text("h3", "2026-2030 FCV Strategy alignment")',
         'document.createElement("section")',
@@ -144,20 +147,34 @@ def test_assessment_renderers_use_semantic_sections_and_definition_lists():
         'document.createElement("dd")',
         "assessment.driver",
         "assessment.cpf_response",
-        "assessment.delivery_mechanism",
-        "assessment.result_or_indicator",
         "assessment.remaining_gap",
         "assessment.strategic_shift",
         "assessment.assessment",
         "assessment.status",
         "assessment.confidence",
-        "assessment.gap_locus",
-        "renderEvidenceGroup(result, assessment.evidence_ids)",
+        'text("dt", "Status and confidence")',
         "No current RRA was supplied; RRA alignment was not assessed.",
     ):
         assert fragment in javascript
 
     assert "innerHTML" not in javascript
+    rra_renderer = javascript.split("function renderRraAssessments(result)", 1)[1].split(
+        "function renderStrategyAssessments(result)", 1
+    )[0]
+    strategy_renderer = javascript.split("function renderStrategyAssessments(result)", 1)[1].split(
+        "function priorityAreaAnchorIds(result)", 1
+    )[0]
+    for renderer in (rra_renderer, strategy_renderer):
+        assert "renderEvidenceGroup" not in renderer
+        assert "assessment.gap_locus" not in renderer
+
+
+def test_priority_summary_links_have_unique_accessible_names():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert "link.setAttribute?.(\"aria-label\"," in javascript
+    assert "item.title" in javascript
+    assert "View detailed recommendation" in javascript
 
 
 def test_task3_holding_screen_limits_live_announcements_and_preserves_control_focus_styles():

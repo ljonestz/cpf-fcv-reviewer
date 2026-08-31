@@ -15,23 +15,24 @@ def test_detailed_readout_contracts_collapsible_accessible_sections_and_question
         "function splitNarrativeIntoChunks(value)",
         "function renderNarrative(value",
         "function renderDisclosure(label",
-        "function renderEvidenceStatusDisclosure(result)",
-        "function renderTraceability(result)",
-        "function renderCoverage(result)",
+        "function renderReadoutPanel(title, value, className)",
+        "function appendAssessmentStanding(definitions, status, confidence)",
         "How well does the CPF respond to the RRA and current FCV dynamics?",
         "How does the CPF contribute to current FCV Strategy priorities?",
-        'text("summary", "Traceability")',
-        'text("summary", "Coverage and limitations")',
-        'text("summary", "Evidence status")',
+        "renderReadoutPanel(",
+        "renderReadoutPanel(",
+        'renderDisclosure("Basis and important limitations", "basis-limitations-panel", list)',
     ):
         assert fragment in javascript
 
     for fragment in (
         ".narrative-chunk",
         ".narrative-chunk > strong",
-        ".traceability-panel",
-        ".coverage-panel",
-        ".evidence-status-panel",
+        ".readout-panel",
+        ".readout-panel-rra",
+        ".readout-panel-strategy",
+        ".priority-summary-grid",
+        ".basis-limitations-panel",
     ):
         assert fragment in css
 
@@ -146,7 +147,14 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
           metadata: {current_evidence_tier: "reduced", current_evidence_limitation: "Some current evidence was unavailable."},
           overall_read: longNarrative,
           alignment_readout: longNarrative,
-          revision_summary: [],
+          strategy_readout: "Strategy prose.",
+          revision_summary: [
+            {priority_area_id: "delivery#1", title: "Delivery pathway"},
+            {priority_area_id: "inclusion#2", title: "Inclusive services"},
+            {priority_area_id: "jobs#3", title: "Jobs and livelihoods"},
+            {priority_area_id: "finance#4", title: "Climate finance"},
+            {priority_area_id: "partnerships#5", title: "Local partnerships"},
+          ],
           rra_driver_assessments: [],
           fcv_strategy_assessments: [{
             strategic_shift: "anticipate_better", assessment: longNarrative,
@@ -155,6 +163,30 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
           priority_areas: [{
             priority_area_id: "delivery#1", heading: "Delivery pathway", assessment: longNarrative,
             why_it_matters: longNarrative, recommended_action: longNarrative,
+            target_locator: null, comment_reference: null, evidence_ids: [],
+          }, {
+            priority_area_id: "inclusion#2", heading: "Inclusive services",
+            assessment: "The inclusion gap is not yet explicit.",
+            why_it_matters: "Unequal access can deepen fragility.",
+            recommended_action: "Name the inclusion response in the CPF.",
+            target_locator: null, comment_reference: null, evidence_ids: [],
+          }, {
+            priority_area_id: "jobs#3", heading: "Jobs and livelihoods",
+            assessment: "The jobs gap needs a clearer response.",
+            why_it_matters: "Livelihoods shape resilience.",
+            recommended_action: "Clarify the jobs pathway and delivery roles.",
+            target_locator: null, comment_reference: null, evidence_ids: [],
+          }, {
+            priority_area_id: "finance#4", heading: "Climate finance",
+            assessment: "Climate finance needs a clearer conflict-sensitive pathway.",
+            why_it_matters: "Financing choices shape implementation feasibility.",
+            recommended_action: "Clarify the finance pathway and safeguards.",
+            target_locator: null, comment_reference: null, evidence_ids: [],
+          }, {
+            priority_area_id: "partnerships#5", heading: "Local partnerships",
+            assessment: "Local partnerships are not yet described.",
+            why_it_matters: "Local ownership supports durable delivery.",
+            recommended_action: "Name local partners and delivery roles.",
             target_locator: null, comment_reference: null, evidence_ids: [],
           }],
           limitations: ["The RRA was not supplied."],
@@ -222,14 +254,43 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         if (chunks.length !== 3 || chunks.some((chunk) => chunk.length > 4)) {
           throw Error(`narrative was not chunked into at most four sentences: ${JSON.stringify(chunks)}`);
         }
-        const view = hooks.renderDetailedAnalysis(result);
         const findAll = (root, predicate) => [
           ...(predicate(root) ? [root] : []),
           ...(root?.children || []).flatMap((child) => findAll(child, predicate)),
         ];
+        const view = hooks.renderDetailedAnalysis(result);
+        const summary = hooks.renderFiveMinuteReadout(result);
+        const summaryText = summary.textContent;
+        if (!(summaryText.indexOf("Overall assessment") < summaryText.indexOf("How well does the CPF respond") &&
+              summaryText.indexOf("How well does the CPF respond") < summaryText.indexOf("Strategy prose.") &&
+              summaryText.indexOf("Strategy prose.") < summaryText.indexOf("Priority measures"))) {
+          throw Error("five-minute hierarchy is incorrect");
+        }
+        if (!summaryText.includes("The inclusion gap is not yet explicit.") ||
+            !summaryText.includes("Name the inclusion response in the CPF.") ||
+            !summaryText.includes("The jobs gap needs a clearer response.") ||
+            !summaryText.includes("Clarify the jobs pathway and delivery roles.")) {
+          throw Error("priority summaries omitted their gap and response content");
+        }
+        const summaryPriorityCards = findAll(summary, (item) => item?.className === "priority-area");
+        if (summaryPriorityCards.length !== 3) throw Error("five-minute readout did not cap priority summaries at three cards");
+        const detailedPriorityCards = findAll(view, (item) => item?.className === "priority-area");
+        if (detailedPriorityCards.length !== 5) throw Error("detailed analysis did not retain all five priority areas");
+        for (const title of ["Delivery pathway", "Inclusive services", "Jobs and livelihoods", "Climate finance", "Local partnerships"]) {
+          if (!view.textContent.includes(title)) throw Error("detailed analysis omitted priority " + title);
+        }
+        const summaryLinks = findAll(summary, (item) => item?.tagName === "a");
+        const linkNames = summaryLinks.map((link) => link.attributes?.["aria-label"] || "");
+        if (summaryLinks.length !== 3 || new Set(linkNames).size !== 3 || ["Delivery pathway", "Inclusive services", "Jobs and livelihoods"].some((title) => !linkNames.some((name) => name.includes(title)))) {
+          throw Error("priority summary links did not have unique accessible names");
+        }
+        const readoutPanels = findAll(summary, (item) => item?.className?.includes("readout-panel"));
+        if (readoutPanels.length !== 2 || readoutPanels.some((panel) => findAll(panel, (item) => item?.tagName === "a").length)) {
+          throw Error("analytical readout panels contained navigation links or were missing");
+        }
         const details = findAll(view, (item) => item?.tagName === "details");
         const summaries = details.map((item) => item.children[0]?.textContent || "");
-        for (const label of ["Evidence status", "Traceability", "Coverage and limitations"]) {
+        for (const label of ["Basis and important limitations"]) {
           if (!summaries.includes(label)) throw Error(`missing accessible disclosure: ${label}`);
         }
         for (const detail of details) {
