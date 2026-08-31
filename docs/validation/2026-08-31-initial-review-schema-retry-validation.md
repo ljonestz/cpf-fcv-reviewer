@@ -58,9 +58,10 @@ subsequent code-quality re-review approved the complete implementation.
 
 ## Deployment
 
-The feature branch, `main`, and the Render-configured deployment branch point to
-`1ba44bf`. Render reported that exact commit live. `/health` returned HTTP 200 with
-release `1ba44bf`, and the public page returned HTTP 200 with the assessment form present.
+The Render-configured deployment branch points to tested code commit `1ba44bf`, and
+Render reported that exact commit live. The feature branch and `main` point to the later
+documentation-only commit `05498af`. `/health` returned HTTP 200 with release `1ba44bf`,
+and the public page returned HTTP 200 with the assessment form present.
 
 No paid or provider-backed assessment was run after deployment.
 

@@ -59,9 +59,9 @@ The stable FCV Project Screener is untouched and prohibited.
   research, drafting, and failure screenshots were saved. No result or DOCX was
   produced, and Guinea provider acceptance is not established.
 - Commits `003acfb` and `1ba44bf` implement and harden the initial schema retry. The
-  configured Render deployment branch, feature branch, and `main` point to `1ba44bf`;
-  Render reports that exact commit live. No paid or provider-backed assessment was run
-  after deployment.
+  configured Render deployment branch points to `1ba44bf`, which Render reports live.
+  The feature branch and `main` point to the later documentation-only commit `05498af`.
+  No paid or provider-backed assessment was run after deployment.
 
 ## Validation cost protocol
 
