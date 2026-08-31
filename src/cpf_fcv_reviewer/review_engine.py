@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
@@ -63,6 +65,79 @@ def _serialize_detail_profile(profile) -> dict[str, object]:
         "target_pages": profile.target_pages,
         "priority_area_range": list(profile.priority_area_range),
     }
+
+
+def _scrub_raw_evidence_ids_from_narrative(
+    draft: ReviewDraft,
+    evidence_ids: set[str],
+) -> ReviewDraft:
+    raw_ids = sorted(
+        (
+            evidence_id
+            for evidence_id in evidence_ids
+            if evidence_id
+            and (
+                re.search(r"[-_]\d", evidence_id)
+                or evidence_id.casefold().startswith("correction-")
+            )
+        ),
+        key=len,
+        reverse=True,
+    )
+    if not raw_ids:
+        return draft
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9_-])(?:{'|'.join(re.escape(item) for item in raw_ids)})(?![A-Za-z0-9_-])",
+        re.IGNORECASE,
+    )
+
+    def scrub(text: str) -> str:
+        return pattern.sub("the cited evidence", text)
+
+    return draft.model_copy(
+        update={
+            "overall_read": scrub(draft.overall_read),
+            "alignment_readout": scrub(draft.alignment_readout),
+            "revision_summary": tuple(
+                item.model_copy(update={"title": scrub(item.title)})
+                for item in draft.revision_summary
+            ),
+            "priority_areas": tuple(
+                item.model_copy(
+                    update={
+                        "heading": scrub(item.heading),
+                        "assessment": scrub(item.assessment),
+                        "why_it_matters": scrub(item.why_it_matters),
+                        "recommended_action": scrub(item.recommended_action),
+                        "comment_reference": (
+                            scrub(item.comment_reference)
+                            if item.comment_reference is not None
+                            else None
+                        ),
+                    }
+                )
+                for item in draft.priority_areas
+            ),
+            "rra_driver_assessments": tuple(
+                item.model_copy(
+                    update={
+                        "driver": scrub(item.driver),
+                        "cpf_response": scrub(item.cpf_response),
+                        "delivery_mechanism": scrub(item.delivery_mechanism),
+                        "result_or_indicator": scrub(item.result_or_indicator),
+                        "remaining_gap": scrub(item.remaining_gap),
+                    }
+                )
+                for item in draft.rra_driver_assessments
+            ),
+            "fcv_strategy_assessments": tuple(
+                item.model_copy(update={"assessment": scrub(item.assessment)})
+                for item in draft.fcv_strategy_assessments
+            ),
+            "limitations": tuple(scrub(item) for item in draft.limitations),
+            "coverage_note": scrub(draft.coverage_note),
+        }
+    )
 
 
 STRATEGY_REGISTRY_EVIDENCE_IDS = {
@@ -437,9 +512,6 @@ class ReviewEngine:
             },
             output_type=ReviewDraft,
         )
-        coverage = result.document_coverage.model_copy(
-            update={"coverage_note": draft.coverage_note}
-        )
         allow_coverage_status_repair = any(
             issue["code"] == "incomplete_coverage_absence_claim"
             for issue in issues
@@ -459,6 +531,11 @@ class ReviewEngine:
             allow_coverage_status_repair=allow_coverage_status_repair,
             allow_new_rra_rows=allow_new_rra_rows,
             allow_missing_strategy_rows=allow_missing_strategy_rows,
+        )
+        if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
+            draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
+        coverage = result.document_coverage.model_copy(
+            update={"coverage_note": draft.coverage_note}
         )
         content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})

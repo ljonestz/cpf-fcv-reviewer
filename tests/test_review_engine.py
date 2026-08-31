@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
@@ -37,7 +38,7 @@ from cpf_fcv_reviewer.review_profiles import (
     DetailProfile,
     StageProfile,
 )
-from cpf_fcv_reviewer.validators import validate_review
+from cpf_fcv_reviewer.validators import result_text, validate_review
 
 
 class FakeGateway:
@@ -500,6 +501,54 @@ def test_repair_preserves_and_replaces_alignment_readout():
 
     assert gateway.calls[0][1]["draft"]["alignment_readout"] == initial_alignment
     assert repaired.alignment_readout == repaired_alignment
+
+
+def test_repair_scrubs_known_raw_evidence_ids_only_from_narrative_fields():
+    meta = metadata()
+    initial = result_for(meta)
+    original_strategy_rows = list(initial.fcv_strategy_assessments)
+    original_strategy_rows[0] = original_strategy_rows[0].model_copy(
+        update={"assessment": "ev-primary-1 appears in the original assessment."}
+    )
+    initial = initial.model_copy(
+        update={"fcv_strategy_assessments": tuple(original_strategy_rows)}
+    )
+    repaired_draft = draft_for(meta)
+    repaired_area = repaired_draft.priority_areas[0].model_copy(
+        update={
+            "assessment": "ev-primary-1 supports this finding.",
+            "recommended_action": "Retain the similar token ev-primary-10.",
+        }
+    )
+    repaired_draft = repaired_draft.model_copy(
+        update={
+            "overall_read": "The finding follows from ev-primary-1.",
+            "priority_areas": (repaired_area,),
+            "coverage_note": "Coverage includes ev-primary-1.",
+        }
+    )
+
+    repaired = ReviewEngine(FakeGateway(repaired_draft)).repair(
+        initial,
+        [
+            {
+                "code": "raw_evidence_id_in_narrative",
+                "message": "Remove the raw evidence identifier.",
+            }
+        ],
+        evidence_ids={"ev-primary-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert not re.search(
+        r"(?<![A-Za-z0-9_-])ev-primary-1(?![A-Za-z0-9_-])",
+        result_text(repaired),
+        re.IGNORECASE,
+    )
+    assert "the cited evidence" in repaired.overall_read
+    assert "the cited evidence" in repaired.fcv_strategy_assessments[0].assessment
+    assert "ev-primary-10" in repaired.priority_areas[0].recommended_action
+    assert repaired.priority_areas[0].evidence_ids == ("ev-primary-1",)
+    assert repaired.document_coverage.coverage_note == "Coverage includes the cited evidence."
 
 
 def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
