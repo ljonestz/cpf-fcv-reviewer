@@ -1,11 +1,11 @@
 # Project status
 
-Updated 2026-08-30. The advisory CPF FCV Reviewer implementation is verified on `main`
-through code commit `9816de4`; repository instructions include the API-cost protocol
+Updated 2026-08-31. The advisory CPF FCV Reviewer implementation is verified on `main`
+through code commit `1ba44bf`; repository instructions include the API-cost protocol
 in `CLAUDE.md`. Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
-code commit `9816de4` live on 2026-08-30; `/health` returned `ok`, the public page
+code commit `1ba44bf` live on 2026-08-31; `/health` returned `ok`, the public page
 returned HTTP 200, and the assessment form was present. The service remains the free,
 volatile public test site. Operational production still fails closed without SQLite
 persistence; the public test site can run without a disk only through the explicit
@@ -13,10 +13,10 @@ persistence; the public test site can run without a disk only through the explic
 
 The note-first redesign organizes the detailed assessment around an overall read, explicit questions on RRA/current-dynamics alignment and FCV Strategy priorities, structured driver and strategy assessments, priority areas, and limitations. Narrative paragraphs are short and readable; traceability, evidence status, and coverage are collapsible in HTML. The DOCX follows the detailed HTML scope and omits internal reproducibility/referral clutter.
 
-Latest verified suite on 2026-08-30: 1,063 passed in 14.93 seconds. The provider-free
-smoke suite passed 34 tests, focused sanitizer/repair tests passed 61 tests, Python
-compilation and `git diff --check` passed. Ruff remains unavailable or blocked by the
-Windows environment. The stable FCV Project Screener is untouched and prohibited.
+Latest verified suite on 2026-08-31: 1,069 passed in 15.51 seconds. The provider-free
+smoke suite passed 34 tests, focused schema-retry tests passed 100 tests, 75 Python files
+compiled, and `git diff --check` passed. Ruff is not installed in the Windows environment.
+The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
 
@@ -28,6 +28,12 @@ Windows environment. The stable FCV Project Screener is untouched and prohibited
   repair phase. A single internal follow-up model call is allowed only when every
   residual issue is an allowlisted mechanical guardrail violation; all other residual
   issues remain fail-closed.
+- Initial `ReviewDraft` Pydantic failures receive one bounded retry without restarting
+  research. The retry reuses the existing bounded payload, exposes only allowlisted and
+  bounded schema locations/types, treats those diagnostics as untrusted, and propagates
+  a second failure through the existing fail-closed path. Non-validation errors are not
+  retried. Spec and code-quality reviews approved the implementation after a malicious
+  extra-field regression was added.
 - Narrative validation rejects raw evidence IDs, unsupported country FCV-list
   classifications, directional claims without current evidence, and unknown
   institutional referrals. Final repair applies an exact-boundary narrative-only raw-ID
@@ -52,6 +58,10 @@ Windows environment. The stable FCV Project Screener is untouched and prohibited
   code `review_failed`; application validation and repair did not run. Intake, holding,
   research, drafting, and failure screenshots were saved. No result or DOCX was
   produced, and Guinea provider acceptance is not established.
+- Commits `003acfb` and `1ba44bf` implement and harden the initial schema retry. The
+  configured Render deployment branch, feature branch, and `main` point to `1ba44bf`;
+  Render reports that exact commit live. No paid or provider-backed assessment was run
+  after deployment.
 
 ## Validation cost protocol
 
@@ -64,11 +74,10 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. Before considering another paid run, diagnose the initial review schema-validation
-   failure using safe field-level diagnostics or a local controlled reproduction, add a
-   narrow regression test, deploy the fix, and repeat the no-cost validation ladder.
-   Seek explicit approval only then for one new Guinea quality run. Guinea acceptance
-   requires a rendered summary and detailed view plus an inspected DOCX.
+1. With separate explicit approval, run one Guinea quality assessment on deployed commit
+   `1ba44bf`. Capture full-page intake, progress, summary, detailed, and failure PNGs as
+   applicable, inspect the rendered result and DOCX, and record only safe validation
+   outcomes. Until that succeeds, Guinea provider acceptance is not established.
 2. Run Haiti and Benin provider acceptance only when needed for broader readiness:
    confirm Haiti's scattered jobs/IFC/MIGA treatment and Benin's multi-document coverage.
 3. Keep the approved public registry current, versioned, checksummed, and

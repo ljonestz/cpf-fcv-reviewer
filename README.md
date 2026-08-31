@@ -8,13 +8,16 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified implementation: `main` through `9816de4` (1,063 tests; 34 provider-free smoke tests).
-- Last verified deployment: `9816de4` on 2026-08-30. Render reported the deploy live,
+- Latest verified implementation: `main` through `1ba44bf` (1,069 tests; 34 provider-free smoke tests).
+- Last verified deployment: `1ba44bf` on 2026-08-31. Render reported the deploy live,
   `/health` returned `ok`, and the public page returned HTTP 200.
-- The authorized Guinea quality run on that deployment completed source preparation,
+- The authorized Guinea quality run on the earlier `9816de4` deployment completed source preparation,
   research, evidence building, and mapping, but the initial generated review failed
   schema validation before application validation or repair. No result or DOCX was
   produced, so the prototype is not production-ready.
+- Deployed commit `1ba44bf` adds one bounded, fail-closed initial schema retry with
+  sanitized diagnostics. No paid Guinea run has been made on this fix, so the prototype
+  remains not production-ready.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
@@ -73,6 +76,7 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 ## Documentation
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
+- [2026-08-31 initial-review schema-retry validation](docs/validation/2026-08-31-initial-review-schema-retry-validation.md): test-first evidence, safety review, full provider-free verification, and deployment checks.
 - [2026-08-30 Guinea production-fix validation](docs/validation/2026-08-30-guinea-production-fixes-validation.md): automated checks, Render deployment evidence, paid-run outcomes, and remaining acceptance limitation.
 - [2026-08-30 pilot reliability validation](docs/validation/2026-08-30-cpf-pilot-reliability-validation.md): automated, Guinea structural, and browser evidence plus provider limitations.
 - [Development instructions](CLAUDE.md): commands, repository map, safety constraints, and future-session checklist.
