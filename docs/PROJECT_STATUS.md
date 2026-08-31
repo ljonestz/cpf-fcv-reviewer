@@ -87,13 +87,18 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. Guinea provider acceptance is established for the public advisory prototype on
+1. The approved results/assistant/RRA-coverage design is recorded in
+   `docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md`.
+   Implementation planning remains pending. The design keeps the visual/narrative work
+   minor, wires the existing diagnostic-map concept for full-RRA coverage, and reuses
+   the 24-hour session store for bounded follow-on history.
+2. Guinea provider acceptance is established for the public advisory prototype on
    deployed commit `1ba44bf`, subject to its disclosed `reduced` current-evidence tier.
-2. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:
+3. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:
    confirm Haiti's scattered jobs/IFC/MIGA treatment and Benin's multi-document coverage.
-3. Keep the approved public registry current, versioned, checksummed, and
+4. Keep the approved public registry current, versioned, checksummed, and
    non-confidential, and keep internal OPCS/ITS sources on a separately governed track.
-4. ITS production use still requires separately approved identity, durable storage,
+5. ITS production use still requires separately approved identity, durable storage,
    authorization, audit/monitoring, authoritative source access, and
    information-security controls.
 

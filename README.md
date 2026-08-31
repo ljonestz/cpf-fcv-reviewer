@@ -75,6 +75,7 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 ## Documentation
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
+- [Approved results, assistant, and full-RRA coverage design](docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md): the next bounded implementation scope and acceptance criteria.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
 - [2026-08-31 initial-review schema-retry validation](docs/validation/2026-08-31-initial-review-schema-retry-validation.md): test-first evidence, safety review, full provider-free verification, and deployment checks.
 - [2026-08-30 Guinea production-fix validation](docs/validation/2026-08-30-guinea-production-fixes-validation.md): automated checks, Render deployment evidence, paid-run outcomes, and remaining acceptance limitation.
