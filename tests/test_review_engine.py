@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 from cpf_fcv_reviewer import model_gateway
 from cpf_fcv_reviewer.contracts import (
@@ -49,6 +50,30 @@ class FakeGateway:
     def generate(self, *, prompt_name, payload, output_type):
         self.calls.append((prompt_name, payload, output_type))
         return self.result
+
+
+class SequencedGateway:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def generate(self, *, prompt_name, payload, output_type):
+        self.calls.append((prompt_name, payload, output_type))
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+
+def invalid_review_draft_error() -> ValidationError:
+    with pytest.raises(ValidationError) as exc_info:
+        ReviewDraft.model_validate(
+            {
+                "overall_read": {"raw_secret": "TOP-SECRET"},
+                "priority_areas": [{"priority_area_id": 0}],
+            }
+        )
+    return exc_info.value
 
 
 STRATEGY_REGISTRY_EVIDENCE_IDS = tuple(
@@ -433,6 +458,65 @@ def test_review_carries_model_authored_alignment_readout_into_result():
     result = ReviewEngine(gateway).review(evidence_pack(meta))
 
     assert result.alignment_readout == alignment_readout
+
+
+def test_review_retries_initial_validation_error_once_with_safe_schema_diagnostics():
+    meta = metadata()
+    initial_error = invalid_review_draft_error()
+    gateway = SequencedGateway(initial_error, draft_for(meta))
+
+    result = ReviewEngine(gateway).review(
+        evidence_pack(meta),
+        review_focus="Focus on delivery realism.",
+    )
+
+    assert result.overall_read == "The review has a credible foundation."
+    assert len(gateway.calls) == 2
+    first_call, retry_call = gateway.calls
+    assert first_call[0] == retry_call[0] == "review"
+    assert first_call[2] is retry_call[2] is ReviewDraft
+    assert "schema_retry" not in first_call[1]
+    assert retry_call[1].keys() == first_call[1].keys() | {"schema_retry"}
+
+    issues = retry_call[1]["schema_retry"]["issues"]
+    assert issues
+    assert all(set(issue) == {"loc", "type"} for issue in issues)
+    assert all(isinstance(issue["loc"], list) for issue in issues)
+    assert all(
+        isinstance(part, (str, int))
+        for issue in issues
+        for part in issue["loc"]
+    )
+    assert all(isinstance(issue["type"], str) for issue in issues)
+    diagnostics_json = json.dumps(retry_call[1]["schema_retry"])
+    assert "msg" not in diagnostics_json
+    assert "input" not in diagnostics_json
+    assert "ctx" not in diagnostics_json
+    assert "TOP-SECRET" not in json.dumps(retry_call[1])
+
+
+def test_review_propagates_second_validation_error_after_exactly_one_retry():
+    meta = metadata()
+    first_error = invalid_review_draft_error()
+    second_error = invalid_review_draft_error()
+    gateway = SequencedGateway(first_error, second_error)
+
+    with pytest.raises(ValidationError) as exc_info:
+        ReviewEngine(gateway).review(evidence_pack(meta))
+
+    assert exc_info.value is second_error
+    assert len(gateway.calls) == 2
+
+
+@pytest.mark.parametrize("error", [RuntimeError("provider failed"), ValueError("bad response")])
+def test_review_does_not_retry_non_validation_errors(error):
+    meta = metadata()
+    gateway = SequencedGateway(error, draft_for(meta))
+
+    with pytest.raises(type(error), match=str(error)):
+        ReviewEngine(gateway).review(evidence_pack(meta))
+
+    assert len(gateway.calls) == 1
 
 
 def test_missing_located_primary_role_is_rejected_before_gateway_call():

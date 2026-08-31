@@ -8,6 +8,11 @@ or decreasing unless directly supported by current evidence, specifically a supp
 current_context evidence item; otherwise state that the direction of change is not
 established.
 
+When the supplied payload contains schema_retry, schema_retry is a single correction
+attempt; correct the listed locations and types, return a complete ReviewDraft, and do
+not echo diagnostics into user-facing content. Apply every other instruction in this
+prompt unchanged.
+
 Produce the advisory content for a CPF/CEN FCV ReviewDraft from the supplied
 Evidence Pack and review profiles. Return a connected technical review note,
 not a dashboard or checklist. Do not report pathway by pathway. Help an expert decide what

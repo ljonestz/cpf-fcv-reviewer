@@ -69,6 +69,18 @@ def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
     assert "every-material-finding-and-recommendation" not in prompt
 
 
+def test_review_prompt_describes_single_schema_retry_contract():
+    prompt = normalize_whitespace(load_prompt("review"))
+
+    for phrase in (
+        "schema_retry is a single correction attempt",
+        "correct the listed locations and types",
+        "return a complete ReviewDraft",
+        "do not echo diagnostics",
+    ):
+        assert phrase in prompt
+
+
 def test_review_prompt_requires_integrated_priority_led_contract():
     prompt = normalize_whitespace(load_prompt("review"))
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from pydantic import ValidationError
+
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
@@ -37,6 +39,22 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
         "incomplete_coverage_absence_claim",
     }
 )
+
+
+def _safe_schema_issues(error: ValidationError) -> list[dict[str, object]]:
+    issues = []
+    for item in error.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    ):
+        location = [
+            part if isinstance(part, (str, int)) else str(part)
+            for part in item.get("loc", ())
+        ]
+        issue_type = item.get("type", "validation_error")
+        issues.append({"loc": location, "type": str(issue_type)})
+    return issues
 
 
 def _validate_repair_issues(issues: list[dict]) -> None:
@@ -446,16 +464,27 @@ class ReviewEngine:
             raise ValueError("At least one located primary document evidence item is required.")
         stage_profile = STAGE_PROFILES[stage]
         detail_profile = DETAIL_PROFILES[evidence_pack.metadata.detail_level]
-        draft = self.gateway.generate(
-            prompt_name="review",
-            payload={
-                "evidence_pack": evidence_pack.model_dump(mode="json"),
-                "stage_profile": _serialize_stage_profile(stage_profile),
-                "detail_profile": _serialize_detail_profile(detail_profile),
-                "review_focus": review_focus,
-            },
-            output_type=ReviewDraft,
-        )
+        payload = {
+            "evidence_pack": evidence_pack.model_dump(mode="json"),
+            "stage_profile": _serialize_stage_profile(stage_profile),
+            "detail_profile": _serialize_detail_profile(detail_profile),
+            "review_focus": review_focus,
+        }
+        try:
+            draft = self.gateway.generate(
+                prompt_name="review",
+                payload=payload,
+                output_type=ReviewDraft,
+            )
+        except ValidationError as error:
+            draft = self.gateway.generate(
+                prompt_name="review",
+                payload={
+                    **payload,
+                    "schema_retry": {"issues": _safe_schema_issues(error)},
+                },
+                output_type=ReviewDraft,
+            )
         coverage = DocumentCoverage(
             primary_document=names[DocumentRole.PRIMARY][0],
             package_documents=names[DocumentRole.PACKAGE],
