@@ -58,29 +58,37 @@ The runs progressively isolated repair reliability:
    IDs in user-facing narrative only. Tests confirm that similar tokens are not altered
    and structured evidence IDs, locators, assessment IDs, priority IDs, and metadata are
    preserved.
+5. The explicitly authorized sixth run exercised deployed commit `9816de4`. Extraction,
+   source resolution, current-country research, evidence building, and mapping completed.
+   The initial generated review then failed Pydantic/schema validation with safe failure
+   code `review_failed`. Application validation and the bounded repair phase were not
+   reached.
 
-No additional paid run was made after `9816de4` in order to follow the API-cost
-conservation protocol. Consequently, this record does not claim a successful final
-Guinea result or DOCX export.
+The sixth run was not repeated. Consequently, this record does not claim a successful
+final Guinea result or DOCX export.
 
 ## Browser artifacts
 
-The latest run saved these non-overwriting full-page PNGs outside the repository:
+The sixth run saved these non-overwriting full-page PNGs outside the repository:
 
-- `GuineaCPFRRA/20260830_guinea_attempt5_intake_full.png`
-- `GuineaCPFRRA/20260830_guinea_attempt5_progress_full.png`
-- `GuineaCPFRRA/20260830_guinea_attempt5_failure_full.png`
+- `GuineaCPFRRA/20260830_guinea_attempt6_intake_full.png` (`1440 x 1443`)
+- `GuineaCPFRRA/20260830_guinea_attempt6_progress_initial_full.png` (`1440 x 1199`)
+- `GuineaCPFRRA/20260830_guinea_attempt6_progress_research_full.png` (`1440 x 1199`)
+- `GuineaCPFRRA/20260830_guinea_attempt6_progress_drafting_full.png` (`1440 x 1199`)
+- `GuineaCPFRRA/20260830_guinea_attempt6_failure_full.png` (`1440 x 1304`)
 
 No summary, detailed-result, or DOCX artifact exists for that failed run. HTML files are
 not treated as screenshot evidence.
 
 ## Remaining acceptance limitation
 
-One explicitly authorized paid Guinea run on deployed commit `9816de4` remains required
-to verify a successful real-provider result, capture full-page summary and detailed
-screenshots, download and inspect the DOCX, and confirm that no safe validation codes
-remain. Until then, automated and deterministic coverage is strong, but final Guinea
-provider acceptance is not established.
+The next step is an engineering fix for the initial generated-review schema failure,
+supported by a narrow regression test and the no-cost validation ladder. Only a newly
+deployed fix should be considered for another explicitly authorized paid Guinea run.
+That run must reach a successful real-provider result, capture full-page summary and
+detailed screenshots, download and inspect the DOCX, and confirm that no safe validation
+codes remain. Until then, final Guinea provider acceptance is not established and the
+prototype is not production-ready.
 
 ## Future-run cost protocol
 

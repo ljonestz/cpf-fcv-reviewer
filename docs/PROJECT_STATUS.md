@@ -43,10 +43,15 @@ Windows environment. The stable FCV Project Screener is untouched and prohibited
 - The live Guinea holding view uses the Project Screener-aligned ticker, compact timer,
   singular/plural time copy, rotating phrases, and separate Render keep-awake pages
   during active quality runs. Full-page PNGs were saved for every browser attempt.
-- The latest paid Guinea run on `90f962b` reduced six initial validation issues to one
-  residual raw evidence ID and then failed closed. Commit `9816de4` deterministically
-  fixes that exact residual and is deployed, but no additional paid run was made after
-  the fix. Therefore no successful post-fix Guinea result or DOCX is claimed.
+- The paid Guinea run on `90f962b` reduced six initial validation issues to one residual
+  raw evidence ID and then failed closed. Commit `9816de4` deterministically fixed that
+  exact residual and was deployed.
+- The explicitly authorized Guinea quality run on deployed commit `9816de4` completed
+  extraction, source resolution, current-country research, evidence building, and
+  mapping. The initial generated review then failed schema validation with safe failure
+  code `review_failed`; application validation and repair did not run. Intake, holding,
+  research, drafting, and failure screenshots were saved. No result or DOCX was
+  produced, and Guinea provider acceptance is not established.
 
 ## Validation cost protocol
 
@@ -59,10 +64,11 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. With explicit approval for another paid run, perform one full Guinea quality assessment
-   on deployed commit `9816de4`. Capture full-page summary/detailed PNGs and the DOCX,
-   inspect the rendered output, and record safe validation outcomes before claiming
-   Guinea acceptance.
+1. Before considering another paid run, diagnose the initial review schema-validation
+   failure using safe field-level diagnostics or a local controlled reproduction, add a
+   narrow regression test, deploy the fix, and repeat the no-cost validation ladder.
+   Seek explicit approval only then for one new Guinea quality run. Guinea acceptance
+   requires a rendered summary and detailed view plus an inspected DOCX.
 2. Run Haiti and Benin provider acceptance only when needed for broader readiness:
    confirm Haiti's scattered jobs/IFC/MIGA treatment and Benin's multi-document coverage.
 3. Keep the approved public registry current, versioned, checksummed, and

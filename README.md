@@ -11,6 +11,10 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Latest verified implementation: `main` through `9816de4` (1,063 tests; 34 provider-free smoke tests).
 - Last verified deployment: `9816de4` on 2026-08-30. Render reported the deploy live,
   `/health` returned `ok`, and the public page returned HTTP 200.
+- The authorized Guinea quality run on that deployment completed source preparation,
+  research, evidence building, and mapping, but the initial generated review failed
+  schema validation before application validation or repair. No result or DOCX was
+  produced, so the prototype is not production-ready.
 
 The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
