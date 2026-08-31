@@ -413,12 +413,23 @@ class ReviewEngine:
             exclude={"metadata", "document_coverage"},
         )
         draft_payload["coverage_note"] = result.document_coverage.coverage_note
+        available_evidence_ids = evidence_ids or set()
         draft = self.gateway.generate(
             prompt_name="repair",
             payload={
                 "draft": draft_payload,
                 "validation_issues": issues,
                 "forbidden_phrases": forbidden_phrases,
+                "repair_support_evidence_ids": {
+                    "current_context": sorted(
+                        item for item in available_evidence_ids if item.startswith("current-")
+                    ),
+                    "registry_language": sorted(
+                        item
+                        for item in available_evidence_ids
+                        if item.startswith("registry-") and "-PUB-FCV-STRAT-" in item
+                    ),
+                },
                 "diagnostic_mode": result.metadata.diagnostic_mode.value,
                 "review_stage": stage,
                 "stage_profile": _serialize_stage_profile(stage_profile),

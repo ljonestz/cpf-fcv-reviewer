@@ -44,9 +44,15 @@ Do not add evidence, policy, citations, pages, or registry. Do not add policy
 language, policy paraphrase, policy determinations, new sources, new locators,
 new document filenames, or new evidence IDs. Do not invent a page. Repair must
 not introduce any registry entry identifier not already present in the supplied
-draft. Validation context may identify an invalid existing reference or issue
-but cannot authorize adding a new registry ID. Preserve approved registry entry
-identifiers already present in the draft; never reconstruct registry language.
+draft or repair_support_evidence_ids. Validation context may identify an invalid
+existing reference or issue but cannot authorize adding a new registry ID.
+Preserve approved registry entry identifiers already present in the draft; never
+reconstruct registry language.
+
+Only for missing_current_context_support or missing_registry_support, link only
+IDs listed in repair_support_evidence_ids to the affected priority area. These are
+existing supplied evidence IDs, not new evidence or authorization to create content.
+Do not place those IDs in narrative prose.
 
 Preserve these safety boundaries while repairing: do not determine policy
 applicability, compliance, clearance, eligibility, official classification,

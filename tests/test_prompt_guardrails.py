@@ -260,9 +260,11 @@ def test_repair_prompt_preserves_links_and_excludes_question_section():
         "complete ReviewDraft",
         "preserve revision_summary priority_area_id links",
         (
-            "must not introduce any registry entry identifier not already present in the supplied "
-            "draft"
+            "must not introduce any registry entry identifier not already present in the "
+            "supplied draft or repair_support_evidence_ids"
         ),
+        "Only for missing_current_context_support or missing_registry_support",
+        "link only IDs listed in repair_support_evidence_ids",
         (
             "Validation context may identify an invalid existing "
             "reference or issue but cannot authorize adding a "

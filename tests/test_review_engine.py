@@ -534,6 +534,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         "draft": expected_draft,
         "validation_issues": issues,
         "forbidden_phrases": ("forbidden",),
+        "repair_support_evidence_ids": {"current_context": [], "registry_language": []},
         "diagnostic_mode": "rra_alignment",
         "review_stage": "concept_review",
         "stage_profile": {
@@ -583,9 +584,22 @@ def test_repair_accepts_evidence_support_issues_and_passes_them_to_gateway():
         },
     ]
 
-    ReviewEngine(gateway).repair(result_for(meta), issues)
+    ReviewEngine(gateway).repair(
+        result_for(meta),
+        issues,
+        evidence_ids={
+            "primary-001",
+            "current-002",
+            "registry-PUB-FCV-STRAT-003",
+            "registry-PUB-GUARD-003",
+        },
+    )
 
     assert gateway.calls[0][1]["validation_issues"] == issues
+    assert gateway.calls[0][1]["repair_support_evidence_ids"] == {
+        "current_context": ["current-002"],
+        "registry_language": ["registry-PUB-FCV-STRAT-003"],
+    }
 
 
 def test_repair_accepts_new_assessment_validation_issues():

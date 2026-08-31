@@ -920,6 +920,17 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                     "missing_current_context_support",
                     "unknown_institutional_referral",
                 }
+                available_current_ids = payload["repair_support_evidence_ids"][
+                    "current_context"
+                ]
+                assert current_context_evidence_id in available_current_ids
+                assert all(item.startswith("current-") for item in available_current_ids)
+                assert payload["repair_support_evidence_ids"]["registry_language"] == [
+                    "registry-SYN-PUB-FCV-STRAT-001",
+                    "registry-SYN-PUB-FCV-STRAT-002",
+                    "registry-SYN-PUB-FCV-STRAT-003",
+                    "registry-SYN-PUB-FCV-STRAT-004",
+                ]
                 repaired_draft = dict(payload["draft"])
                 repaired_priority = dict(repaired_draft["priority_areas"][0])
                 repaired_priority["evidence_ids"] = (

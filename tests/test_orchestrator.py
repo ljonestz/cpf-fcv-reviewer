@@ -101,9 +101,19 @@ def test_repair_start_exposes_only_safe_validation_metadata():
 
 def test_failed_repair_emits_terminal_failure_without_completion():
     events = []
+    sensitive_message = "Sensitive evidence excerpt: operation quartz-739."
 
     def validate(context):
-        context["validation_issues"] = ["still bad"]
+        context["validation_issues"] = [
+            {
+                "code": "stage_length_overreach",
+                "message": sensitive_message,
+            },
+            {
+                "code": "prohibited_policy_language",
+                "message": "Sensitive forbidden phrase.",
+            },
+        ]
         return context
 
     orchestrator = ReviewOrchestrator(
@@ -114,6 +124,12 @@ def test_failed_repair_emits_terminal_failure_without_completion():
     with pytest.raises(ValueError, match="only repair"):
         orchestrator.run({}, lambda kind, data: events.append((kind, data)))
 
+    repair_failure = next(data for kind, data in events if kind == "repair_failed")
+    assert repair_failure == {
+        "issue_count": 2,
+        "codes": ["stage_length_overreach", "prohibited_policy_language"],
+    }
+    assert sensitive_message not in str(repair_failure)
     assert events[-1][0] == "run_failed"
     assert not any(kind == "run_complete" for kind, _ in events)
 
