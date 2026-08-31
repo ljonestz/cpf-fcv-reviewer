@@ -95,6 +95,15 @@ def test_review_prompt_requires_integrated_priority_led_contract():
         assert phrase in prompt
 
 
+def test_repair_prompt_gives_precise_stage_length_remediation():
+    repair_prompt = normalize_whitespace(load_prompt("repair"))
+
+    assert "stage_length_overreach" in repair_prompt
+    assert "recommended_action" in repair_prompt
+    assert "whitespace-separated words" in repair_prompt
+    assert "five words below max_immediate_insertion_words" in repair_prompt
+
+
 def test_repair_prompt_preserves_integrated_note_and_only_repairs_supplied_issues():
     prompt = normalize_whitespace(load_prompt("repair"))
 

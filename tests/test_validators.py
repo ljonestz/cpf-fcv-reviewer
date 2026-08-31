@@ -634,6 +634,23 @@ def test_known_stage_recommended_action_uses_profile_word_limit(stage, scale):
         assert ("stage_length_overreach" in {issue.code for issue in issues}) is expected
 
 
+def test_stage_length_issue_identifies_priority_area_and_word_counts():
+    action = " ".join(f"word-{index}" for index in range(61))
+
+    issues = validate_stage_behavior(
+        "finalization",
+        action,
+        RecommendationScale.FINE_TUNING,
+        priority_area_id="pa-3",
+    )
+
+    issue = next(item for item in issues if item.code == "stage_length_overreach")
+    assert issue.message == (
+        "pa-3 recommended_action has 61 whitespace-separated words; "
+        "finalization allows at most 60."
+    )
+
+
 def test_early_drafting_accumulates_scale_and_length_violations():
     action = " ".join(f"word-{index}" for index in range(81))
 

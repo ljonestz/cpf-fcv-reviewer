@@ -351,6 +351,7 @@ def validate_review(
                 result.metadata.review_stage,
                 priority_area.recommended_action,
                 priority_area.recommendation_scale,
+                priority_area_id=priority_area.priority_area_id,
             )
         )
         if priority_area.sensitivity.value == "withhold":
@@ -498,6 +499,8 @@ def validate_stage_behavior(
     review_stage: str,
     action: str,
     recommendation_scale: RecommendationScale | None = None,
+    *,
+    priority_area_id: str | None = None,
 ) -> tuple[ValidationIssue, ...]:
     profile = STAGE_PROFILES.get(review_stage)
     issues: list[ValidationIssue] = []
@@ -509,11 +512,13 @@ def validate_stage_behavior(
             )
         )
     if profile is not None and len(action.split()) > profile.max_immediate_insertion_words:
+        word_count = len(action.split())
+        target = priority_area_id or "Priority area"
         issues.append(
             ValidationIssue(
                 "stage_length_overreach",
-                f"Recommended action exceeds the {profile.max_immediate_insertion_words}-word "
-                f"limit for {review_stage}.",
+                f"{target} recommended_action has {word_count} whitespace-separated words; "
+                f"{review_stage} allows at most {profile.max_immediate_insertion_words}.",
             )
         )
     if review_stage == "finalization" and any(

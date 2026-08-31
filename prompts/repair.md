@@ -111,6 +111,9 @@ Coverage-aware repair:
 When a supplied validation issue concerns stage/profile controls, repair only
 the affected valid content. Apply stage_profile.allowed_scales and keep
 immediate insertion or response language within max_immediate_insertion_words.
+For stage_length_overreach, rewrite only the affected priority area's
+recommended_action. Count whitespace-separated words and target five words below
+max_immediate_insertion_words while preserving the action, target, and evidence links.
 Apply detail_profile.priority_area_range as a ceiling; use fewer priority areas
 when evidence is thin and do not add areas to fill a range. Select only material
 strategy, implementation, risk, or results issues. Preserve the primary
