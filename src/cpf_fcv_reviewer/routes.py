@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
 from time import sleep
@@ -40,6 +41,15 @@ RETRYABLE_RESEARCH_CODES = {
     "research_malformed",
     "research_insufficient",
 }
+LEGACY_REVIEW_RESULT_ERROR = (
+    "This review was created by an earlier version. Start a new review."
+)
+
+
+def _reject_legacy_result(result_payload):
+    if isinstance(result_payload, Mapping) and "strategy_readout" not in result_payload:
+        return jsonify(error=LEGACY_REVIEW_RESULT_ERROR), 409
+    return None
 
 
 def store():
@@ -207,6 +217,9 @@ def review_result(assessment_id):
     result = state.payload.get("result")
     if result is None:
         return jsonify(status=state.payload.get("status", "created")), 202
+    legacy_response = _reject_legacy_result(result)
+    if legacy_response is not None:
+        return legacy_response
     try:
         validated_result = ReviewResult.model_validate(result)
     except ValueError:
@@ -250,6 +263,9 @@ def export_review(assessment_id):
     result_payload = state.payload.get("result")
     if result_payload is None:
         return jsonify(status=state.payload.get("status", "created")), 202
+    legacy_response = _reject_legacy_result(result_payload)
+    if legacy_response is not None:
+        return legacy_response
     evidence_payload = state.payload.get("evidence_by_id")
     if not isinstance(evidence_payload, dict):
         return jsonify(error="Traceable evidence is unavailable."), 409

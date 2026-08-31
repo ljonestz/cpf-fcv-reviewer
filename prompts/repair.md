@@ -13,11 +13,15 @@ as unknown and preserve known institutional_referral_ids.
 
 The model must repair only supplied issues in the provided ReviewDraft and
 validation context. It only fixes supplied issues and preserves valid
-content/IDs, structure, evidence links, priority order, alignment_readout, and
-wording that do not need repair. This bounded repair phase permits at most one
-narrowly targeted follow-up pass for residual mechanical guardrail issues.
+content/IDs, structure, evidence links, priority order, alignment_readout,
+strategy_readout, and wording that do not need repair. This bounded repair phase
+permits at most one narrowly targeted follow-up pass for residual mechanical
+guardrail issues.
 The repair must preserve valid content/IDs and preserve alignment_readout unless
-a supplied issue specifically requires repairing them.
+a supplied issue specifically requires repairing it. The repair must preserve
+strategy_readout unless a supplied validation issue specifically requires changing
+it. Keep alignment_readout and strategy_readout to no more than two short
+paragraphs each.
 Return one complete ReviewDraft.
 
 The model must repair only the supplied validation issues.
@@ -143,7 +147,7 @@ add content outside the supplied issues.
 
 Return only content-only JSON matching the complete ReviewDraft schema. The
 repair must omit metadata. Include all required fields: overall_read,
-alignment_readout, revision_summary, priority_areas,
+alignment_readout, strategy_readout, revision_summary, priority_areas,
 rra_driver_assessments, fcv_strategy_assessments, institutional_referral_ids,
 limitations, and coverage_note. Preserve the valid
 alignment_readout and valid priority order unless a supplied issue specifically

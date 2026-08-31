@@ -237,6 +237,10 @@ class SmokeModelGateway:
                 f"{SMOKE_MARKER} The submitted draft can be tested against the supplied "
                 "synthetic context without relying on an external provider."
             ),
+            strategy_readout=(
+                f"{SMOKE_MARKER} The CPF advances prevention and jobs. "
+                "Operational differentiation remains incomplete."
+            ),
             revision_summary=(
                 RevisionSummaryItem(
                     priority_area_id="smoke-pa-1",

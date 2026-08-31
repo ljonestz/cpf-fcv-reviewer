@@ -69,6 +69,21 @@ def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
     assert "every-material-finding-and-recommendation" not in prompt
 
 
+def test_review_prompt_requires_concise_readouts_and_integrated_delivery_response():
+    prompt = normalize_whitespace(load_prompt("review"))
+
+    for phrase in (
+        "alignment_readout",
+        "strategy_readout",
+        "no more than two short paragraphs",
+        "cpf_response to naturally incorporate the material delivery mechanism",
+        "result/indicator content",
+        "delivery_mechanism and result_or_indicator",
+        "populated as structured fields",
+    ):
+        assert phrase in prompt
+
+
 def test_review_prompt_describes_single_schema_retry_contract():
     prompt = normalize_whitespace(load_prompt("review"))
 
@@ -137,6 +152,18 @@ def test_repair_prompt_preserves_integrated_note_and_only_repairs_supplied_issue
         "exact evidence IDs only",
         "never invent source IDs, Strategy IDs, or locators",
         "alignment_readout",
+    ):
+        assert phrase in prompt
+
+
+def test_repair_prompt_preserves_strategy_readout_and_limits_changes():
+    prompt = normalize_whitespace(load_prompt("repair"))
+
+    for phrase in (
+        "preserve strategy_readout",
+        "strategy_readout unless a supplied validation issue specifically requires changing it",
+        "alignment_readout and strategy_readout to no more than two short paragraphs",
+        "Include all required fields: overall_read, alignment_readout, strategy_readout",
     ):
         assert phrase in prompt
 

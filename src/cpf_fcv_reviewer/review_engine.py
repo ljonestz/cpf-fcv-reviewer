@@ -142,6 +142,7 @@ def _scrub_raw_evidence_ids_from_narrative(
         update={
             "overall_read": scrub(draft.overall_read),
             "alignment_readout": scrub(draft.alignment_readout),
+            "strategy_readout": scrub(draft.strategy_readout),
             "revision_summary": tuple(
                 item.model_copy(update={"title": scrub(item.title)})
                 for item in draft.revision_summary

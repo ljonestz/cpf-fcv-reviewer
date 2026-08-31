@@ -248,6 +248,10 @@ def _test_rra_assessments(payload):
 
 
 def _valid_review_draft(output_type, payload, **values):
+    values.setdefault(
+        "strategy_readout",
+        "The CPF advances prevention and jobs. Operational differentiation remains incomplete.",
+    )
     if not values.get("fcv_strategy_assessments"):
         values["fcv_strategy_assessments"] = _test_strategy_assessments(payload)
     if _assessment_mode(payload) == DiagnosticMode.RRA_ALIGNMENT.value:

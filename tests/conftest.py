@@ -59,6 +59,9 @@ def make_valid_result():
             "The draft partly reflects the diagnostic and current context, but the strategic "
             "response remains incomplete."
         ),
+        strategy_readout=(
+            "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+        ),
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",

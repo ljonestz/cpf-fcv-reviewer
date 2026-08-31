@@ -72,6 +72,9 @@ Coverage-aware interpretation:
 
 Populate rra_driver_assessments with the chain:
 driver -> CPF response -> delivery mechanism -> result/indicator -> remaining gap.
+Require cpf_response to naturally incorporate the material delivery mechanism and
+result/indicator content while keeping delivery_mechanism and result_or_indicator
+populated as structured fields.
 In rra_alignment mode, include at least one row. When the supplied RRA coverage
 is sufficient, assess the material chain; when it is insufficient, include a
 not_assessable row that states the coverage limitation without inventing a gap.
@@ -137,6 +140,10 @@ The content order is:
    dynamics, and materially relevant approved FCV Strategy language. Ground
    this synthesis through the linked priority areas; do not invent evidence IDs
    in this field.
+   Use strategy_readout for a concise synthesis of the material FCV Strategy
+   implications for the CPF, grounded in the structured strategic-shift
+   assessments and linked priority areas. Keep both alignment_readout and
+   strategy_readout to no more than two short paragraphs each.
 3. What to revise: write a concise revision_summary of 3–5 ordered linked
    measures,
    exactly order-matched to priority_areas, with one priority_area_id link for
@@ -201,6 +208,6 @@ prompt versions, or validation outcomes.
 
 Return only content matching the ReviewDraft schema. Return content-only JSON,
 omit metadata, and include all required ReviewDraft fields:
-overall_read, alignment_readout, revision_summary, priority_areas,
-rra_driver_assessments, fcv_strategy_assessments, institutional_referral_ids,
-limitations, and coverage_note.
+overall_read, alignment_readout, strategy_readout, revision_summary,
+priority_areas, rra_driver_assessments, fcv_strategy_assessments,
+institutional_referral_ids, limitations, and coverage_note.

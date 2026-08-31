@@ -96,6 +96,9 @@ def _result(
         metadata=_metadata(),
         overall_read="The supplied evidence supports a bounded advisory review.",
         alignment_readout="The supplied evidence supports a cautious FCV alignment readout.",
+        strategy_readout=(
+            "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+        ),
         revision_summary=revision_summary,
         priority_areas=priority_areas,
         fcv_strategy_assessments=_strategy_assessments(),

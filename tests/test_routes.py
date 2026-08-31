@@ -604,6 +604,31 @@ def test_result_includes_validated_traceable_evidence_for_browser_expansion(
     assert payload["evidence_by_id"]["ev-1"]["locator"]["excerpt"]
 
 
+@pytest.mark.parametrize("path_suffix", ["result", "export.docx"])
+def test_legacy_result_without_strategy_readout_is_explicitly_invalidated(
+    make_valid_result, path_suffix
+):
+    result, _ = make_valid_result
+    result_payload = result.model_dump(mode="json")
+    result_payload.pop("strategy_readout")
+    app = make_app()
+    assessment_id = app.extensions["session_store"].create(
+        {
+            "status": "complete",
+            "result": result_payload,
+        }
+    )
+
+    response = app.test_client().get(
+        f"/api/reviews/{assessment_id}/{path_suffix}"
+    )
+
+    assert response.status_code == 409
+    assert response.get_json() == {
+        "error": "This review was created by an earlier version. Start a new review."
+    }
+
+
 def test_result_rejects_evidence_mapping_key_that_differs_from_item_id(
     make_valid_result,
 ):

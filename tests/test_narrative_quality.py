@@ -131,6 +131,9 @@ def build_result(case: dict) -> ReviewResult:
             "translated into an explicit results pathway."
         ),
         alignment_readout="The draft shows partial alignment with the FCV framing.",
+        strategy_readout=(
+            "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+        ),
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id=area_id,

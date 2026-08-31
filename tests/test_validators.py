@@ -137,11 +137,15 @@ def result(
     strategy_assessments_override: tuple[FCVStrategyAssessment, ...] | None = None,
     limitations: tuple[str, ...] = ("No current RRA was available.",),
     overall_read: str = "The CPF has a useful foundation but needs a clearer delivery narrative.",
+    strategy_readout: str = (
+        "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+    ),
 ) -> ReviewResult:
     return ReviewResult(
         metadata=metadata(stage=stage, mode=mode),
         overall_read=overall_read,
         alignment_readout="The CPF shows partial alignment with relevant FCV priorities.",
+        strategy_readout=strategy_readout,
         revision_summary=summaries,
         priority_areas=areas,
         rra_driver_assessments=rra_assessments,
@@ -217,6 +221,20 @@ def test_alignment_readout_prohibited_policy_language_is_rejected():
     assert [issue.code for issue in issues] == ["prohibited_policy_language"]
 
 
+def test_strategy_readout_prohibited_policy_language_is_rejected():
+    reviewed = result().model_copy(
+        update={"strategy_readout": "The CPF is eligible for expedited support."}
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        prohibited_terms={"expedited support"},
+    )
+
+    assert [issue.code for issue in issues] == ["prohibited_policy_language"]
+
+
 def test_supplied_evidence_ids_are_structured_not_user_facing_narrative():
     baseline = validate_review(result(), evidence_ids={"ev-1"}, prohibited_terms=set())
     assert "raw_evidence_id_in_narrative" not in {issue.code for issue in baseline}
@@ -229,6 +247,15 @@ def test_supplied_evidence_ids_are_structured_not_user_facing_narrative():
         for issue in issues
         if issue.code == "raw_evidence_id_in_narrative"
     ] == ["User-facing narrative must not include raw evidence IDs: ['ev-1']."]
+
+
+def test_strategy_readout_raw_evidence_id_is_rejected_from_narrative():
+    reviewed = result(strategy_readout="The strategy readout cites ev-1.")
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert [
+        issue.code for issue in issues if issue.code == "raw_evidence_id_in_narrative"
+    ] == ["raw_evidence_id_in_narrative"]
 
 
 def test_correction_evidence_id_is_rejected_from_narrative():

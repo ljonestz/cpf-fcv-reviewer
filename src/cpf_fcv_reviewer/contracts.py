@@ -395,6 +395,7 @@ class ReviewResult(FrozenModel):
     metadata: RunMetadata
     overall_read: str
     alignment_readout: str
+    strategy_readout: str
     revision_summary: tuple[RevisionSummaryItem, ...]
     priority_areas: tuple[PriorityArea, ...]
     rra_driver_assessments: tuple[RRADriverAssessment, ...] = ()
@@ -408,10 +409,10 @@ class ReviewResult(FrozenModel):
     def requires_nonblank_overall_read(cls, value: str) -> str:
         return _requires_nonblank_text(value, "Overall read")
 
-    @field_validator("alignment_readout")
+    @field_validator("alignment_readout", "strategy_readout")
     @classmethod
-    def requires_nonblank_alignment_readout(cls, value: str) -> str:
-        return _requires_nonblank_text(value, "Alignment readout")
+    def requires_nonblank_readout(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Review readout")
 
 
 class ReviewDraft(FrozenModel):
@@ -419,6 +420,7 @@ class ReviewDraft(FrozenModel):
 
     overall_read: str
     alignment_readout: str
+    strategy_readout: str
     revision_summary: tuple[RevisionSummaryItem, ...]
     priority_areas: tuple[PriorityArea, ...]
     rra_driver_assessments: tuple[RRADriverAssessment, ...] = ()
@@ -432,7 +434,7 @@ class ReviewDraft(FrozenModel):
     def requires_nonblank_draft_text(cls, value: str) -> str:
         return _requires_nonblank_text(value, "Review draft text")
 
-    @field_validator("alignment_readout")
+    @field_validator("alignment_readout", "strategy_readout")
     @classmethod
-    def requires_nonblank_alignment_readout(cls, value: str) -> str:
-        return _requires_nonblank_text(value, "Alignment readout")
+    def requires_nonblank_readout(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Review readout")

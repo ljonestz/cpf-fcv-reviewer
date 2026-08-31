@@ -115,6 +115,9 @@ class FakeModelAdapter:
             metadata=evidence_pack.metadata,
             overall_read="The CPF has a credible foundation.",
             alignment_readout="The CPF addresses some FCV concerns but needs clearer alignment.",
+            strategy_readout=(
+                "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+            ),
             revision_summary=(
                 RevisionSummaryItem(
                     priority_area_id="pa-1",

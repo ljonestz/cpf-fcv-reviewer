@@ -232,10 +232,14 @@ def draft_for(
         "The draft partly reflects the diagnostic and current context, but the strategic "
         "response remains incomplete."
     ),
+    strategy_readout: str = (
+        "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+    ),
 ) -> ReviewDraft:
     return ReviewDraft(
         overall_read="The review has a credible foundation.",
         alignment_readout=alignment_readout,
+        strategy_readout=strategy_readout,
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",
@@ -275,11 +279,15 @@ def result_for(
         "The draft partly reflects the diagnostic and current context, but the strategic "
         "response remains incomplete."
     ),
+    strategy_readout: str = (
+        "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+    ),
 ) -> ReviewResult:
     return ReviewResult(
         metadata=meta,
         overall_read="The review has a credible foundation.",
         alignment_readout=alignment_readout,
+        strategy_readout=strategy_readout,
         revision_summary=(
             RevisionSummaryItem(
                 priority_area_id="pa-1",
@@ -460,6 +468,26 @@ def test_review_carries_model_authored_alignment_readout_into_result():
     assert result.alignment_readout == alignment_readout
 
 
+def test_review_carries_model_authored_strategy_readout_into_result():
+    meta = metadata()
+    strategy_readout = (
+        "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+    )
+    gateway = FakeGateway(draft_for(meta, strategy_readout=strategy_readout))
+
+    result = ReviewEngine(gateway).review(evidence_pack(meta))
+
+    assert result.strategy_readout == strategy_readout
+
+
+@pytest.mark.parametrize("value", ["", "   ", "\t\n"])
+def test_review_draft_rejects_blank_strategy_readout(value):
+    meta = metadata()
+
+    with pytest.raises(ValidationError, match="Review readout cannot be blank"):
+        draft_for(meta, strategy_readout=value)
+
+
 def test_review_retries_initial_validation_error_once_with_safe_schema_diagnostics():
     meta = metadata()
     initial_error = invalid_review_draft_error()
@@ -633,6 +661,7 @@ def test_repair_scrubs_known_raw_evidence_ids_only_from_narrative_fields():
     repaired_draft = repaired_draft.model_copy(
         update={
             "overall_read": "The finding follows from ev-primary-1.",
+            "strategy_readout": "The strategy readout cites ev-primary-1.",
             "priority_areas": (repaired_area,),
             "coverage_note": "Coverage includes ev-primary-1.",
         }
@@ -655,6 +684,7 @@ def test_repair_scrubs_known_raw_evidence_ids_only_from_narrative_fields():
         re.IGNORECASE,
     )
     assert "the cited evidence" in repaired.overall_read
+    assert "the cited evidence" in repaired.strategy_readout
     assert "the cited evidence" in repaired.fcv_strategy_assessments[0].assessment
     assert "ev-primary-10" in repaired.priority_areas[0].recommended_action
     assert repaired.priority_areas[0].evidence_ids == ("ev-primary-1",)
@@ -712,6 +742,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
     assert set(payload["draft"]) == {
         "overall_read",
         "alignment_readout",
+        "strategy_readout",
         "revision_summary",
         "priority_areas",
         "rra_driver_assessments",

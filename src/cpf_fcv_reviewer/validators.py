@@ -127,7 +127,7 @@ def validate_reproducibility_metadata(
 
 def result_text(result: ReviewResult) -> str:
     """Return every user-facing review field that can carry a policy claim."""
-    parts = [result.overall_read, result.alignment_readout]
+    parts = [result.overall_read, result.alignment_readout, result.strategy_readout]
     parts.extend(summary.title for summary in result.revision_summary)
     for assessment in result.rra_driver_assessments:
         parts.extend(

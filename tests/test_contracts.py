@@ -410,7 +410,17 @@ def test_review_result_rejects_blank_alignment_readout(make_valid_result, value)
     payload = result.model_dump()
     payload["alignment_readout"] = value
 
-    with pytest.raises(ValidationError, match="Alignment readout cannot be blank"):
+    with pytest.raises(ValidationError, match="Review readout cannot be blank"):
+        ReviewResult.model_validate(payload)
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_review_result_rejects_blank_strategy_readout(make_valid_result, value):
+    result, _ = make_valid_result
+    payload = result.model_dump()
+    payload["strategy_readout"] = value
+
+    with pytest.raises(ValidationError, match="Review readout cannot be blank"):
         ReviewResult.model_validate(payload)
 
 
@@ -420,6 +430,9 @@ def test_review_draft_requires_alignment_readout(make_valid_result):
     with pytest.raises(ValidationError, match="alignment_readout"):
         ReviewDraft(
             overall_read=result.overall_read,
+            strategy_readout=(
+                "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+            ),
             revision_summary=result.revision_summary,
             priority_areas=result.priority_areas,
             institutional_referral_ids=(),
@@ -438,6 +451,9 @@ def test_review_draft_preserves_nonblank_alignment_readout(make_valid_result):
     draft = ReviewDraft(
         overall_read=result.overall_read,
         alignment_readout=alignment_readout,
+        strategy_readout=(
+            "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+        ),
         revision_summary=result.revision_summary,
         priority_areas=result.priority_areas,
         fcv_strategy_assessments=result.fcv_strategy_assessments,
@@ -457,6 +473,9 @@ def test_review_draft_allows_empty_rra_and_partial_strategy_collections(make_val
     draft = ReviewDraft(
         overall_read=result.overall_read,
         alignment_readout="The draft is partly aligned with the diagnostic.",
+        strategy_readout=(
+            "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+        ),
         revision_summary=result.revision_summary,
         priority_areas=result.priority_areas,
         rra_driver_assessments=(),
@@ -472,10 +491,13 @@ def test_review_draft_allows_empty_rra_and_partial_strategy_collections(make_val
 def test_review_draft_rejects_blank_alignment_readout(make_valid_result, value):
     result, _ = make_valid_result
 
-    with pytest.raises(ValidationError, match="Alignment readout cannot be blank"):
+    with pytest.raises(ValidationError, match="Review readout cannot be blank"):
         ReviewDraft(
             overall_read=result.overall_read,
             alignment_readout=value,
+            strategy_readout=(
+                "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+            ),
             revision_summary=result.revision_summary,
             priority_areas=result.priority_areas,
             institutional_referral_ids=(),
@@ -492,6 +514,9 @@ def test_review_draft_rejects_blank_overall_read(make_valid_result, value):
         ReviewDraft(
             overall_read=value,
             alignment_readout="The draft is partly aligned with the diagnostic.",
+            strategy_readout=(
+                "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+            ),
             revision_summary=result.revision_summary,
             priority_areas=result.priority_areas,
             institutional_referral_ids=(),
@@ -508,6 +533,9 @@ def test_review_draft_rejects_blank_coverage_note(make_valid_result, value):
         ReviewDraft(
             overall_read=result.overall_read,
             alignment_readout="The draft is partly aligned with the diagnostic.",
+            strategy_readout=(
+                "The CPF advances prevention and jobs. Operational differentiation remains incomplete."
+            ),
             revision_summary=result.revision_summary,
             priority_areas=result.priority_areas,
             institutional_referral_ids=(),
