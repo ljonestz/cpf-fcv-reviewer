@@ -90,8 +90,9 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
     harness = textwrap.dedent(
         """
         const nodes = {};
-        function node() { return { hidden: false, disabled: false, value: "", id: "", tagName: "", tabIndex: 0, focused: false, children: [], handlers: {},
+        function node() { return { hidden: false, disabled: false, value: "", id: "", tagName: "", tabIndex: 0, focused: false, children: [], handlers: {}, attributes: {},
           addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); }, append(...v) { this.children.push(...v); },
+          setAttribute(name, value) { this.attributes[name] = String(value); },
           replaceChildren(...v) { this.children = v; }, reset() {}, focus() { this.focused = true; }, click() { return Promise.all((this.handlers.click || []).map(fn => fn())); },
           trigger(type) { return Promise.all((this.handlers[type] || []).map(fn => fn({preventDefault(){}}))); } }; }
         for (const id of ["#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress", "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country", "#country-detection", "#primary-upload", "#detail-level", "#submit-review", "#submit-correction", "#correction-text", "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog", "#close-process-dialog"]) nodes[id] = node();

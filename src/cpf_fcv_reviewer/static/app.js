@@ -45,6 +45,10 @@ const evidenceStatus = document.querySelector("#evidence-status") || document.cr
 const evidenceStatusLabel = document.querySelector("#evidence-status-label") || document.createElement("strong");
 const evidenceStatusLimitation = document.querySelector("#evidence-status-limitation") || document.createElement("span");
 let assessmentId = sessionStorage.getItem("cpf_fcv_assessment_id") || "";
+const savedCountry = sessionStorage.getItem("cpf_fcv_country") || "";
+if (assessmentId && savedCountry && savedCountry !== assessmentId) {
+  countryInput.value = savedCountry;
+}
 let activeEventSource;
 let operationEpoch = 0;
 let resetPending = false;
@@ -1218,6 +1222,7 @@ async function restoreSavedReview() {
     }
     if (response.status === 410) {
       sessionStorage.removeItem("cpf_fcv_assessment_id");
+      sessionStorage.removeItem("cpf_fcv_country");
       assessmentId = "";
       showLanding("This saved review expired. Upload again.");
       return;
@@ -1319,6 +1324,7 @@ form.addEventListener("submit", async (event) => {
     const created = await response.json();
     if (!isCurrentOperation(operation)) return;
     assessmentId = created.assessment_id;
+    sessionStorage.setItem("cpf_fcv_country", countryInput.value.trim());
     sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
     watchEvents(created.event_url, created.result_url, operation);
   } catch (_error) {
@@ -1461,6 +1467,7 @@ async function resetReview() {
   activeEventSource?.close();
   activeEventSource = undefined;
   sessionStorage.removeItem("cpf_fcv_assessment_id");
+  sessionStorage.removeItem("cpf_fcv_country");
   assessmentId = "";
   if (summaryPanel === detailedPanel) {
     results.replaceChildren();

@@ -171,6 +171,21 @@ def test_browser_state_is_session_only_and_reset_clears_assessment_id():
     assert 'sessionStorage.removeItem("cpf_fcv_assessment_id")' in javascript
 
 
+def test_saved_review_restores_country_title_from_session_state():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert 'sessionStorage.getItem("cpf_fcv_country")' in javascript
+    assert "savedCountry !== assessmentId" in javascript
+    submit_handler = javascript.split(
+        'form.addEventListener("submit", async (event) => {', 1
+    )[1].split("\n});", 1)[0]
+    country_write = 'sessionStorage.setItem("cpf_fcv_country", countryInput.value.trim())'
+    assessment_write = 'sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId)'
+    assert country_write in submit_handler
+    assert submit_handler.index(country_write) < submit_handler.index(assessment_write)
+    assert 'sessionStorage.removeItem("cpf_fcv_country")' in javascript
+
+
 def test_start_new_review_and_result_reset_share_guarded_purge_behavior():
     javascript = JS.read_text(encoding="utf-8")
 
