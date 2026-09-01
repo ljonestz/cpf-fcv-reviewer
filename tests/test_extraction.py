@@ -8,6 +8,7 @@ from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from cpf_fcv_reviewer import extraction
 from cpf_fcv_reviewer.extraction import (
+    DiagnosticCoverageUnavailable,
     ExtractionLimitExceeded,
     extract_document,
     extract_docx_bytes,
@@ -74,6 +75,9 @@ def test_detector_docx_segment_budget_stops_element_expansion():
     with pytest.raises(ExtractionLimitExceeded):
         extract_docx_bytes(make_docx(), "CPF.docx", max_segments=2)
 
+
+def test_diagnostic_coverage_unavailable_is_a_safe_extraction_limit():
+    assert issubclass(DiagnosticCoverageUnavailable, ExtractionLimitExceeded)
 
 def test_pdf_segment_budget_stops_page_expansion():
     with pytest.raises(ExtractionLimitExceeded, match="segment"):
@@ -290,3 +294,93 @@ def test_extract_document_propagates_pdf_sampling_flag():
 
     assert [segment.page for segment in extracted.segments] == [1, 5]
     assert [segment.element for segment in extracted.segments] == ["page 1", "page 5"]
+
+
+def test_full_pdf_extraction_preserves_all_extractable_pages_and_blank_warning():
+    extracted = extract_document(
+        make_pdf([f"Benin RRA page {page}" if page != 50 else "" for page in range(1, 103)]),
+        "benin-rra.pdf",
+        max_segments=250,
+        max_characters=600_000,
+        max_uncompressed_bytes=50_000_000,
+    )
+
+    assert len(extracted.segments) == 101
+    assert extracted.segments[0].page == 1
+    assert extracted.segments[-1].page == 102
+    assert any(segment.page == 72 for segment in extracted.segments)
+    assert "page 50 extracted no text" in extracted.warnings
+
+
+def test_full_pdf_page_bound_fails_before_sampling_or_text_extraction(monkeypatch):
+    calls = []
+
+    class FakePage:
+        def extract_text(self):
+            calls.append(True)
+            return "Page text"
+
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda stream: SimpleNamespace(pages=[FakePage() for _ in range(251)]),
+    )
+
+    with pytest.raises(ExtractionLimitExceeded, match="page/segment"):
+        extract_pdf_bytes(
+            b"pdf",
+            "oversized-rra.pdf",
+            max_segments=250,
+        )
+
+    assert calls == []
+
+
+def test_text_extraction_enforces_uncompressed_byte_bound():
+    with pytest.raises(ExtractionLimitExceeded, match="byte budget"):
+        extract_text_bytes(
+            b"Readable text",
+            "oversized-rra.txt",
+            max_uncompressed_bytes=1,
+        )
+
+
+def test_pdf_sampling_allows_more_than_segment_bound_for_identification(monkeypatch):
+    calls = []
+
+    class FakePage:
+        def __init__(self, page_number):
+            self.page_number = page_number
+
+        def extract_text(self):
+            calls.append(self.page_number)
+            return f"Page {self.page_number}"
+
+        def get_contents(self):
+            return None
+
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda stream: SimpleNamespace(
+            pages=[FakePage(page_number) for page_number in range(1, 252)]
+        ),
+    )
+
+    extracted = extract_pdf_bytes(
+        b"pdf",
+        "long-rra.pdf",
+        max_pages=16,
+        sample_across_document=True,
+        max_segments=250,
+        max_characters=600_000,
+        max_uncompressed_bytes=50_000_000,
+    )
+
+    assert len(extracted.segments) == 16
+    assert calls[0] == 1
+    assert calls[-1] == 251
+    assert extracted.warnings[-1] == (
+        "long-rra.pdf: sampled 16 of 251 PDF pages; "
+        "conclusions about absence are limited."
+    )

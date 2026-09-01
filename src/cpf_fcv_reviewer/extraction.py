@@ -19,6 +19,10 @@ class ExtractionLimitExceeded(ValueError):
     """Raised when a caller-specific extraction budget is exceeded."""
 
 
+class DiagnosticCoverageUnavailable(ExtractionLimitExceeded):
+    """Raised when a selected diagnostic cannot be safely covered in full."""
+
+
 @dataclass(frozen=True)
 class ExtractedSegment:
     text: str
@@ -94,6 +98,14 @@ def extract_pdf_bytes(
 ) -> ExtractedDocument:
     reader = PdfReader(BytesIO(data))
     page_count = len(reader.pages)
+    if (
+        max_segments is not None
+        and not sample_across_document
+        and page_count > max_segments
+    ):
+        raise ExtractionLimitExceeded(
+            "PDF page/segment budget exceeded."
+        )
     if sample_across_document:
         page_indices = _distributed_page_indices(page_count, max_pages)
     elif max_pages is None or page_count <= max_pages:
@@ -257,7 +269,13 @@ def extract_text_bytes(
     *,
     max_segments: int | None = None,
     max_characters: int | None = None,
+    max_uncompressed_bytes: int | None = None,
 ) -> ExtractedDocument:
+    if (
+        max_uncompressed_bytes is not None
+        and len(data) > max_uncompressed_bytes
+    ):
+        raise ExtractionLimitExceeded("Text byte budget exceeded.")
     text = data.decode("utf-8-sig").strip()
     if max_characters is not None and len(text) > max_characters:
         raise ExtractionLimitExceeded("Text character budget exceeded.")
@@ -308,5 +326,6 @@ def extract_document(
             name,
             max_segments=max_segments,
             max_characters=max_characters,
+            max_uncompressed_bytes=max_uncompressed_bytes,
         )
     raise ValueError(f"Unsupported file type: {suffix}")

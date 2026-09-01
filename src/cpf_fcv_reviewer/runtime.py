@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, date, datetime
 from hashlib import sha256
@@ -16,15 +17,18 @@ from pypdf.errors import PdfReadError
 
 from .contracts import (
     DetailLevel,
+    DiagnosticMap,
     DiagnosticMode,
     DocumentRole,
     EvidenceItem,
     EvidenceLocator,
     UserCorrection,
 )
+from .diagnostic_map import validate_diagnostic_coverage
 from .diagnostic_sources import identify_uploaded_diagnostic
-from .evidence_builder import build_reproducible_evidence_pack
+from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .extraction import (
+    DiagnosticCoverageUnavailable,
     ExtractionLimitExceeded,
     PDF_SAMPLING_WARNING_SUFFIX,
     extract_document,
@@ -72,6 +76,16 @@ OPTIONAL_UPLOAD_EXCLUDED_WARNING = (
 )
 SUPPORTED_UPLOAD_SUFFIXES = frozenset({".pdf", ".docx", ".txt", ".md"})
 OPTIONAL_PDF_SAMPLE_PAGES = 16
+DIAGNOSTIC_MAX_PAGES = 250
+DIAGNOSTIC_MAX_CHARACTERS = 600_000
+DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES = 50_000_000
+DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS = 160_000
+DIAGNOSTIC_FILENAME_MARKERS = (
+    "risk and resilience assessment",
+    "risk & resilience assessment",
+    "accepted equivalent diagnostic",
+    "fcv risk assessment",
+)
 EXPECTED_OPTIONAL_EXTRACTION_ERRORS = (
     BadZipFile,
     ExtractionLimitExceeded,
@@ -504,6 +518,14 @@ def _has_valid_docx_container(data: bytes) -> bool:
         return False
 
 
+def _filename_suggests_diagnostic(name: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9&]+", " ", name.casefold())
+    return bool(
+        re.search(r"(?<![a-z0-9])rra(?![a-z0-9])", normalized)
+        or any(marker in normalized for marker in DIAGNOSTIC_FILENAME_MARKERS)
+    )
+
+
 def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
     if suffix == ".pdf":
         return (
@@ -538,9 +560,25 @@ def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[
                     name,
                     max_pdf_pages=OPTIONAL_PDF_SAMPLE_PAGES,
                     sample_pdf_across_document=True,
+                    max_segments=DIAGNOSTIC_MAX_PAGES,
+                    max_characters=DIAGNOSTIC_MAX_CHARACTERS,
+                    max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
                 )
             else:
-                document = extract_document(data, name)
+                document = extract_document(
+                    data,
+                    name,
+                    max_segments=DIAGNOSTIC_MAX_PAGES,
+                    max_characters=DIAGNOSTIC_MAX_CHARACTERS,
+                    max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+                )
+        except ExtractionLimitExceeded as exc:
+            if _filename_suggests_diagnostic(name):
+                raise DiagnosticCoverageUnavailable(
+                    "named uploaded diagnostic exceeded a safe extraction bound."
+                ) from exc
+            warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
+            continue
         except EXPECTED_OPTIONAL_EXTRACTION_ERRORS:
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
@@ -551,6 +589,108 @@ def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[
         retained_uploads.append((index, item))
         warnings.extend(document.warnings)
     return tuple(documents), tuple(retained_uploads), tuple(warnings)
+
+
+def _resolve_uploaded_diagnostic_source(
+    context: dict,
+    source_index: int,
+) -> tuple[DocumentRole, int, object, dict] | None:
+    package_documents = tuple(context.get("package_documents", ()))
+    context_documents = tuple(context.get("context_documents", ()))
+    if source_index < len(package_documents):
+        role = DocumentRole.PACKAGE
+        position = source_index
+        documents = package_documents
+        uploads = context.get("package_document_uploads", ())
+    else:
+        position = source_index - len(package_documents)
+        if position >= len(context_documents):
+            return None
+        role = DocumentRole.CONTEXT
+        documents = context_documents
+        uploads = context.get("context_document_uploads", ())
+    if position < 0 or position >= len(documents) or position >= len(uploads):
+        return None
+    _upload_index, upload = uploads[position]
+    return role, position, documents[position], upload
+
+
+def _replace_document_with_full_diagnostic(
+    context: dict,
+    *,
+    role: DocumentRole,
+    position: int,
+    full_document,
+) -> None:
+    key = "package_documents" if role is DocumentRole.PACKAGE else "context_documents"
+    documents = tuple(context.get(key, ()))
+    if position < 0 or position >= len(documents):
+        raise ValueError("Selected uploaded diagnostic position is unavailable.")
+    context[key] = tuple(
+        full_document if index == position else document
+        for index, document in enumerate(documents)
+    )
+
+
+def _remove_warning_multiset(
+    values: tuple[str, ...],
+    removals: tuple[str, ...],
+) -> tuple[str, ...]:
+    remaining = list(values)
+    for warning in removals:
+        try:
+            remaining.remove(warning)
+        except ValueError:
+            pass
+    return tuple(remaining)
+
+
+def _diagnostic_page_items(
+    document,
+    *,
+    document_role: DocumentRole,
+) -> tuple[EvidenceItem, ...]:
+    items = []
+    for index, segment in enumerate(document.segments, start=1):
+        evidence_id = (
+            f"diagnostic-page-{segment.page:03d}"
+            if segment.page is not None
+            else f"diagnostic-segment-{index:03d}"
+        )
+        items.append(
+            EvidenceItem(
+                evidence_id=evidence_id,
+                evidence_type="document_fact",
+                text=segment.text,
+                locator=EvidenceLocator(
+                    document_title=document.name,
+                    page=segment.page,
+                    heading=segment.heading,
+                    element=segment.element,
+                    excerpt=_truncate_at_word_boundary(segment.text, 600),
+                ),
+                confidence="high",
+                document_role=document_role,
+            )
+        )
+    return tuple(items)
+
+
+def _diagnostic_coverage_warning(document) -> str:
+    page_numbers = [
+        segment.page for segment in document.segments if segment.page is not None
+    ]
+    warning_pages = [
+        int(match.group(1))
+        for warning in document.warnings
+        if (match := re.search(r"page (\d+) extracted no text", warning))
+    ]
+    attempted = max((*page_numbers, *warning_pages), default=len(document.segments))
+    extractable = len(page_numbers) if page_numbers else len(document.segments)
+    return (
+        f"{document.name}: {attempted} pages attempted; "
+        f"{extractable} pages with extractable text; diagnostic mapping complete."
+    )
 
 
 def _allow_document_led(context: dict) -> bool:
@@ -585,14 +725,15 @@ def _preserve_research_limitation(context: dict):
     research_result = context.get("research_result")
     if result is None or research_result is None:
         return result
-    return result.model_copy(
-        update={
-            "limitations": _append_limitation_once(
-                result.limitations,
-                research_result.limitation,
-            )
-        }
+    limitations = _append_limitation_once(
+        result.limitations,
+        research_result.limitation,
     )
+    limitations = _append_limitation_once(
+        limitations,
+        context.get("diagnostic_coverage_warning"),
+    )
+    return result.model_copy(update={"limitations": limitations})
 
 
 def build_runtime_services(
@@ -693,6 +834,25 @@ def build_runtime_services(
         review_focus = review_focus.strip()[:4000]
 
         package_documents = tuple(context.get("package_documents", ()))
+        context_documents = tuple(context.get("context_documents", ()))
+        diagnostic_role = context.get("diagnostic_document_role")
+        diagnostic_position = context.get("diagnostic_document_position")
+        if (
+            context.get("full_diagnostic_document") is not None
+            and isinstance(diagnostic_position, int)
+        ):
+            if diagnostic_role is DocumentRole.PACKAGE:
+                package_documents = tuple(
+                    document
+                    for index, document in enumerate(package_documents)
+                    if index != diagnostic_position
+                )
+            elif diagnostic_role is DocumentRole.CONTEXT:
+                context_documents = tuple(
+                    document
+                    for index, document in enumerate(context_documents)
+                    if index != diagnostic_position
+                )
         document_groups = (
             (DocumentRole.PRIMARY, (primary_document,), 12),
             (
@@ -700,7 +860,7 @@ def build_runtime_services(
                 package_documents,
                 _package_segment_budget(package_documents),
             ),
-            (DocumentRole.CONTEXT, tuple(context.get("context_documents", ())), 16),
+            (DocumentRole.CONTEXT, context_documents, 16),
         )
         selected_segments = []
         for document_role, documents, per_document_limit in document_groups:
@@ -860,6 +1020,96 @@ def build_runtime_services(
         )
         return context
 
+    def map_uploaded_diagnostic(context):
+        full_diagnostic = context.get("full_diagnostic_document")
+        if full_diagnostic is None:
+            return context
+        diagnostic_role = context.get(
+            "diagnostic_document_role",
+            DocumentRole.PACKAGE,
+        )
+        page_items = _diagnostic_page_items(
+            full_diagnostic,
+            document_role=diagnostic_role,
+        )
+        if not page_items:
+            raise DiagnosticCoverageUnavailable(
+                "Selected uploaded diagnostic contains no extractable text."
+            )
+        material_ids = tuple(item.evidence_id for item in page_items)
+        mapping_evidence = []
+        for item in page_items:
+            item_payload = item.model_dump(mode="json")
+            item_payload["locator"].pop("excerpt", None)
+            mapping_evidence.append(item_payload)
+        mapping_payload = {
+            "diagnostic_title": full_diagnostic.name,
+            "material_evidence_ids": list(material_ids),
+            "evidence": mapping_evidence,
+        }
+        serialized_mapping_payload = json.dumps(
+            mapping_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        estimated_input_tokens = (
+            max(
+                len(serialized_mapping_payload),
+                len(serialized_mapping_payload.encode("utf-8")),
+            )
+            + 2
+        ) // 3
+        if estimated_input_tokens > DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS:
+            raise DiagnosticCoverageUnavailable(
+                "Diagnostic mapping request exceeds the safe input budget."
+            )
+        diagnostic_map = model_gateway.generate(
+            prompt_name="diagnostic_map",
+            payload=mapping_payload,
+            output_type=DiagnosticMap,
+        )
+        try:
+            validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
+        except ValueError as exc:
+            raise DiagnosticCoverageUnavailable(
+                "Selected uploaded diagnostic mapping is incomplete."
+            ) from exc
+
+        base_pack = context["evidence_pack"]
+        referenced_ids = {
+            evidence_id
+            for entry in diagnostic_map.entries
+            for evidence_id in entry.source_evidence_ids
+        }
+        page_excerpts = tuple(
+            item.model_copy(
+                update={
+                    "text": _truncate_at_word_boundary(item.text, 600),
+                }
+            )
+            for item in page_items
+            if item.evidence_id in referenced_ids
+        )
+        if len(page_excerpts) != len(page_items):
+            raise DiagnosticCoverageUnavailable(
+                "Selected uploaded diagnostic mapping is incomplete."
+            )
+        base_evidence = base_pack.evidence
+        context["diagnostic_map"] = diagnostic_map
+        context["diagnostic_page_evidence"] = page_items
+        context["evidence_pack"] = build_evidence_pack(
+            metadata=base_pack.metadata,
+            evidence=base_evidence + page_excerpts,
+            diagnostic_entries=diagnostic_map.entries,
+            material_diagnostic_ids=material_ids,
+            corrections=base_pack.user_corrections,
+            warnings=(
+                *base_pack.warnings,
+                context["diagnostic_coverage_warning"],
+            ),
+        )
+        return context
+
     def review_validation_issues(context):
         evidence_ids = {item.evidence_id for item in context["evidence_pack"].evidence}
         issues = list(
@@ -895,12 +1145,62 @@ def build_runtime_services(
                 context["result"] = _preserve_research_limitation(context)
             if name == "research":
                 payload = context.get("payload", {})
-                uploaded_diagnostic = identify_uploaded_diagnostic(
+                diagnostic_documents = (
                     tuple(context.get("package_documents", ()))
-                    + tuple(context.get("context_documents", ())),
+                    + tuple(context.get("context_documents", ()))
+                )
+                uploaded_diagnostic = identify_uploaded_diagnostic(
+                    diagnostic_documents,
                     country=payload.get("country", ""),
                 )
                 context["uploaded_diagnostic"] = uploaded_diagnostic
+                if uploaded_diagnostic is not None:
+                    resolved = _resolve_uploaded_diagnostic_source(
+                        context,
+                        uploaded_diagnostic.source_index,
+                    )
+                    if resolved is None:
+                        raise ValueError(
+                            "Selected uploaded diagnostic bytes were not retained."
+                        )
+                    (
+                        diagnostic_role,
+                        diagnostic_position,
+                        sampled_document,
+                        upload,
+                    ) = resolved
+                    try:
+                        full_diagnostic = extract_document(
+                            upload["bytes"],
+                            upload["name"],
+                            max_pdf_pages=DIAGNOSTIC_MAX_PAGES,
+                            max_segments=DIAGNOSTIC_MAX_PAGES,
+                            max_characters=DIAGNOSTIC_MAX_CHARACTERS,
+                            max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+                        )
+                    except ExtractionLimitExceeded as exc:
+                        raise DiagnosticCoverageUnavailable(
+                            "Selected uploaded diagnostic could not be extracted in full."
+                        ) from exc
+                    context["full_diagnostic_document"] = full_diagnostic
+                    context["diagnostic_document_role"] = diagnostic_role
+                    context["diagnostic_document_position"] = diagnostic_position
+                    _replace_document_with_full_diagnostic(
+                        context,
+                        role=diagnostic_role,
+                        position=diagnostic_position,
+                        full_document=full_diagnostic,
+                    )
+                    context["diagnostic_coverage_warning"] = (
+                        _diagnostic_coverage_warning(full_diagnostic)
+                    )
+                    context["extraction_warnings"] = (
+                        _remove_warning_multiset(
+                            tuple(context.get("extraction_warnings", ())),
+                            sampled_document.warnings,
+                        )
+                        + full_diagnostic.warnings
+                    )
                 review_date = review_date_provider()
                 dated_diagnostic = (
                     uploaded_diagnostic
@@ -927,15 +1227,10 @@ def build_runtime_services(
                     diagnostic_summary=(
                         " ".join(
                             segment.text
-                            for document in (
-                                *tuple(context.get("package_documents", ())),
-                                *tuple(context.get("context_documents", ())),
-                            )
-                            if dated_diagnostic is not None
-                            and document.name == dated_diagnostic.name
-                            for segment in document.segments[:3]
+                            for segment in context["full_diagnostic_document"].segments[:3]
                         )[:1200]
                         if dated_diagnostic is not None
+                        and context.get("full_diagnostic_document") is not None
                         else ""
                     ),
                 )
@@ -946,6 +1241,8 @@ def build_runtime_services(
                 )
             if name == "build_evidence":
                 return build_uploaded_evidence(context)
+            if name == "map":
+                return map_uploaded_diagnostic(context)
             if name == "validate" and {
                 "result",
                 "evidence_pack",

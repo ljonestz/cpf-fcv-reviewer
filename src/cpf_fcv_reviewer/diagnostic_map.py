@@ -36,6 +36,15 @@ def validate_diagnostic_coverage(
         for entry in entries
         for evidence_id in entry.source_evidence_ids
     )
+    unknown = [
+        evidence_id
+        for evidence_id in mapped
+        if evidence_id not in material_counts
+    ]
+    if unknown:
+        raise ValueError(
+            "Unknown diagnostic evidence: " + ", ".join(unknown)
+        )
     missing = [item for item in material_evidence_ids if mapped[item] == 0]
     duplicated = [item for item in material_evidence_ids if mapped[item] > 1]
     if missing:

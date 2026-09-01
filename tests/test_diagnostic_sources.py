@@ -177,3 +177,15 @@ def test_returns_none_for_multiple_matching_diagnostics():
     )
 
     assert identify_uploaded_diagnostic(documents, country="Benin") is None
+
+
+def test_identified_diagnostic_preserves_supplied_source_position():
+    documents = (
+        document("same.pdf", "Benin package evidence without a diagnostic marker."),
+        document("same.pdf", "Benin Risk and Resilience Assessment."),
+    )
+
+    result = identify_uploaded_diagnostic(documents, country="Benin")
+
+    assert result is not None
+    assert result.source_index == 1

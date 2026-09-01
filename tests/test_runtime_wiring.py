@@ -4,6 +4,7 @@ from hashlib import sha256
 from io import BytesIO
 from pathlib import Path, PurePosixPath
 from struct import pack_into, unpack_from
+from types import SimpleNamespace
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
@@ -16,6 +17,8 @@ from cpf_fcv_reviewer.contracts import (
     AssessmentConfidence,
     AssessmentStatus,
     CurrentEvidenceTier,
+    DiagnosticEntry,
+    DiagnosticMap,
     DiagnosticMode,
     DocumentRole,
     EvidenceLocator,
@@ -30,6 +33,7 @@ from cpf_fcv_reviewer.contracts import (
     SensitivityCategory,
 )
 from cpf_fcv_reviewer.extraction import (
+    DiagnosticCoverageUnavailable,
     DocumentUnreadable,
     ExtractedDocument,
     ExtractedSegment,
@@ -91,6 +95,64 @@ def test_primary_segment_selection_samples_across_long_documents():
     assert selected_text[-1] == "Primary segment 100"
 
 
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    (
+        (
+            "oversized-identification.pdf",
+            {
+                "max_pdf_pages": runtime.OPTIONAL_PDF_SAMPLE_PAGES,
+                "sample_pdf_across_document": True,
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
+        ),
+        (
+            "oversized-identification.docx",
+            {
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
+        ),
+        (
+            "oversized-identification.txt",
+            {
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
+        ),
+    ),
+)
+def test_runtime_optional_preflight_applies_diagnostic_bounds_and_excludes_over_limit(
+    monkeypatch,
+    name,
+    expected,
+):
+    calls = []
+
+    def fake_extract(data, document_name, **kwargs):
+        calls.append((document_name, kwargs))
+        raise ExtractionLimitExceeded("optional diagnostic bound exceeded")
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+    monkeypatch.setattr(
+        runtime, "_has_valid_optional_container", lambda data, suffix: True
+    )
+
+    documents, retained_uploads, warnings = runtime._extract_optional_uploads(
+        ({"name": name, "bytes": b"oversized"},)
+    )
+
+    assert documents == ()
+    assert retained_uploads == ()
+    assert warnings == (OPTIONAL_UPLOAD_WARNING,)
+    assert calls == [(name, expected)]
+
 def test_runtime_optional_pdf_sampling_kwargs_are_pdf_only(monkeypatch):
     calls = []
 
@@ -130,9 +192,22 @@ def test_runtime_optional_pdf_sampling_kwargs_are_pdf_only(monkeypatch):
     assert calls == [
         (
             "long-support.pdf",
-            {"max_pdf_pages": 16, "sample_pdf_across_document": True},
+            {
+                "max_pdf_pages": 16,
+                "sample_pdf_across_document": True,
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
         ),
-        ("supporting.txt", {}),
+        (
+            "supporting.txt",
+            {
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
+        ),
     ]
 
 
@@ -1060,7 +1135,7 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
             warnings=(),
         )
 
-    def fake_extract(data, name, *, max_pdf_pages=None):
+    def fake_extract(data, name, **kwargs):
         if name == "benin-cpf.txt":
             return document(name, "Readable primary evidence. " * 10)
         if name == "malformed-package.pdf":
@@ -1378,7 +1453,7 @@ def test_runtime_optional_extraction_does_not_swallow_programming_defects(monkey
     services = _runtime_services(monkeypatch)
     extract = dict(services["review_orchestrator"].steps)["extract"]
 
-    def fake_extract(data, name, *, max_pdf_pages=None):
+    def fake_extract(data, name, **kwargs):
         if name == "benin-cpf.txt":
             return ExtractedDocument(
                 name=name,
@@ -1699,7 +1774,7 @@ def test_runtime_package_deep_section_sampling_covers_later_high_value_sections(
             warnings=(),
         )
 
-    def fake_extract(data, name, *, max_pdf_pages=None):
+    def fake_extract(data, name, **kwargs):
         if name == "benin-cpf.txt":
             return extracted(
                 name,
@@ -1826,7 +1901,7 @@ def test_runtime_package_phase_two_uses_only_additional_markers(monkeypatch):
             warnings=(),
         )
 
-    def fake_extract(data, name, *, max_pdf_pages=None):
+    def fake_extract(data, name, **kwargs):
         if name == "benin-cpf.txt":
             return extracted(
                 name,
@@ -1920,7 +1995,7 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
             warnings=(),
         )
 
-    def fake_extract(data, name, *, max_pdf_pages=None):
+    def fake_extract(data, name, **kwargs):
         if name == "benin-cpf.txt":
             return extracted(name, "primary", 20)
         if name.startswith("package-"):
@@ -2175,6 +2250,20 @@ def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
             pass
 
         def generate(self, *, prompt_name, payload, output_type):
+            if prompt_name == "diagnostic_map":
+                ids = tuple(item["evidence_id"] for item in payload["evidence"])
+                return DiagnosticMap(
+                    entries=(
+                        DiagnosticEntry(
+                            entry_id="test-diagnostic-map",
+                            short_name="Mapped diagnostic",
+                            group="principal_driver",
+                            materiality="high",
+                            source_evidence_ids=ids,
+                            grouping_rationale="The test maps every supplied diagnostic segment.",
+                        ),
+                    )
+                )
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
             return _valid_review_draft(output_type, payload,
                 overall_read="The review identifies a delivery constraint.",
@@ -2356,6 +2445,20 @@ def test_runtime_does_not_turn_uploaded_rra_into_current_context(monkeypatch):
             pass
 
         def generate(self, *, prompt_name, payload, output_type):
+            if prompt_name == "diagnostic_map":
+                ids = tuple(item["evidence_id"] for item in payload["evidence"])
+                return DiagnosticMap(
+                    entries=(
+                        DiagnosticEntry(
+                            entry_id="test-diagnostic-map",
+                            short_name="Mapped diagnostic",
+                            group="principal_driver",
+                            materiality="high",
+                            source_evidence_ids=ids,
+                            grouping_rationale="The test maps every supplied diagnostic segment.",
+                        ),
+                    )
+                )
             captured["pack"] = EvidencePack.model_validate(payload["evidence_pack"])
             return _valid_review_draft(output_type, payload,
                 overall_read="The uploaded draft can be reviewed with caution.",
@@ -2396,7 +2499,9 @@ def test_runtime_does_not_turn_uploaded_rra_into_current_context(monkeypatch):
 
     assert controller.allow_document_led == [True]
     assert not [
-        item for item in captured["pack"].evidence if item.evidence_type == "current_context"
+        item
+        for item in captured["pack"].evidence
+        if item.evidence_type == "current_context"
     ]
     assert context["evidence_pack"].metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
 
@@ -2473,3 +2578,613 @@ def test_runtime_preserves_research_limitation_once_through_repair(monkeypatch):
     assert result.metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
     assert result.metadata.current_evidence_limitation == limitation
     assert result.metadata.repair_count == 1
+
+
+def test_runtime_resolves_duplicate_name_to_context_rra_and_preserves_package_evidence(
+    monkeypatch,
+):
+    calls = []
+    captured = {}
+    package_sampling_warning = (
+        "same.pdf: sampled 8 of 8 PDF pages; "
+        "conclusions about absence are limited."
+    )
+    context_sampling_warning = (
+        "same.pdf: sampled 16 of 102 PDF pages; "
+        "conclusions about absence are limited."
+    )
+    primary = ExtractedDocument(
+        name="benin-cpf.txt",
+        segments=(
+            ExtractedSegment(
+                "Readable CPF text " * 20, None, None, "paragraph 1"
+            ),
+        ),
+        warnings=(),
+    )
+    package_bounded = ExtractedDocument(
+        name="same.pdf",
+        segments=(
+            ExtractedSegment(
+                "Package-only same-name evidence.", 1, None, "page 1"
+            ),
+        ),
+        warnings=(package_sampling_warning,),
+    )
+    context_bounded = ExtractedDocument(
+        name="same.pdf",
+        segments=(
+            ExtractedSegment(
+                "Benin Risk and Resilience Assessment, March 2025.",
+                1,
+                None,
+                "page 1",
+            ),
+        ),
+        warnings=(context_sampling_warning,),
+    )
+    context_full = ExtractedDocument(
+        name="same.pdf",
+        segments=(
+            ExtractedSegment("Context RRA page 1.", 1, None, "page 1"),
+            ExtractedSegment("Context RRA deep-page issue.", 72, None, "page 72"),
+        ),
+        warnings=("page 50 extracted no text",),
+    )
+
+    def fake_extract(data, name, **kwargs):
+        calls.append((data, name, kwargs))
+        if name == "benin-cpf.txt":
+            return primary
+        if kwargs.get("sample_pdf_across_document"):
+            return package_bounded if data == b"package-bytes" else context_bounded
+        if data != b"context-rra-bytes":
+            raise AssertionError("full extraction used unrelated same-name bytes")
+        return context_full
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+    monkeypatch.setattr(
+        runtime, "_has_valid_optional_container", lambda data, suffix: True
+    )
+
+    class FakeGateway:
+        def generate(self, *, prompt_name, payload, output_type):
+            if prompt_name == "diagnostic_map":
+                captured["map_payload"] = payload
+                ids = tuple(item["evidence_id"] for item in payload["evidence"])
+                return DiagnosticMap(
+                    entries=(
+                        DiagnosticEntry(
+                            entry_id="duplicate-name-map",
+                            short_name="Context RRA pages",
+                            group="principal_driver",
+                            materiality="high",
+                            source_evidence_ids=ids,
+                            grouping_rationale="Every context RRA page is retained.",
+                        ),
+                    )
+                )
+            captured["review_payload"] = payload
+            return _valid_review_draft(
+                output_type,
+                payload,
+                overall_read="The review identifies a context delivery constraint.",
+                alignment_readout="The mapped context RRA identifies a deep-page issue.",
+                revision_summary=(),
+                priority_areas=(),
+                institutional_referral_ids=(),
+                limitations=(),
+                coverage_note="The review covers the package and context RRA.",
+            )
+
+    controller = _InjectedResearchController()
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=FakeGateway(),
+        research_controller=controller,
+    )
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "duplicate-name-rra",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "detail_level": "standard",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                "package_documents": [
+                    {"name": "same.pdf", "bytes": b"package-bytes"},
+                ],
+                "context_documents": [
+                    {"name": "same.pdf", "bytes": b"context-rra-bytes"},
+                ],
+                "review_focus": "",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    assert context["uploaded_diagnostic"].source_index == 1
+    assert context["diagnostic_document_role"] is DocumentRole.CONTEXT
+    assert context["diagnostic_document_position"] == 0
+    full_calls = [
+        (data, kwargs)
+        for data, name, kwargs in calls
+        if name == "same.pdf" and not kwargs.get("sample_pdf_across_document")
+    ]
+    assert full_calls == [
+        (
+            b"context-rra-bytes",
+            {
+                "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
+        ),
+    ]
+    map_items = captured["map_payload"]["evidence"]
+    assert {item["document_role"] for item in map_items} == {"context"}
+    assert {item["locator"]["page"] for item in map_items} == {1, 72}
+    final_pack = EvidencePack.model_validate(captured["review_payload"]["evidence_pack"])
+    package_items = [
+        item
+        for item in final_pack.evidence
+        if item.locator is not None
+        and item.locator.document_title == "same.pdf"
+        and item.document_role is DocumentRole.PACKAGE
+    ]
+    assert any("Package-only same-name evidence." in item.text for item in package_items)
+    mapped_deep_page = next(
+        item
+        for item in final_pack.evidence
+        if item.evidence_id == "diagnostic-page-072"
+    )
+    assert mapped_deep_page.document_role is DocumentRole.CONTEXT
+    assert mapped_deep_page.locator.page == 72
+    assert package_sampling_warning in final_pack.warnings
+    assert context_sampling_warning not in final_pack.warnings
+    assert "page 50 extracted no text" in final_pack.warnings
+    assert controller.requests[0].diagnostic_summary == (
+        "Context RRA page 1. Context RRA deep-page issue."
+    )
+
+
+def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypatch):
+    calls = []
+    captured = {}
+    full_segments = tuple(
+        ExtractedSegment(
+            text=(f"Benin RRA page {page}. " + ("Deep page 102 issue. " if page == 102 else "")),
+            page=page,
+            heading=None,
+            element=f"page {page}",
+        )
+        for page in range(1, 103)
+        if page != 50
+    )
+    primary = ExtractedDocument(
+        name="benin-cpf.txt",
+        segments=(ExtractedSegment("Readable CPF text " * 20, None, None, "paragraph 1"),),
+        warnings=(),
+    )
+    bounded = ExtractedDocument(
+        name="benin-rra.pdf",
+        segments=tuple(
+            ExtractedSegment(
+                f"Benin Risk and Resilience Assessment page {page}",
+                page,
+                None,
+                f"page {page}",
+            )
+            for page in range(1, 17)
+        ),
+        warnings=(
+            "benin-rra.pdf: sampled 16 of 102 PDF pages; "
+            "conclusions about absence are limited.",
+        ),
+    )
+    full = ExtractedDocument(
+        name="benin-rra.pdf",
+        segments=full_segments,
+        warnings=("page 50 extracted no text",),
+    )
+
+    def fake_extract(data, name, **kwargs):
+        calls.append((name, kwargs))
+        if name == "benin-cpf.txt":
+            return primary
+        if kwargs.get("sample_pdf_across_document"):
+            return bounded
+        return full
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+
+    class FakeGateway:
+        def generate(self, *, prompt_name, payload, output_type):
+            calls.append((prompt_name, payload))
+            if prompt_name == "diagnostic_map":
+                captured["map_payload"] = payload
+                ids = tuple(item["evidence_id"] for item in payload["evidence"])
+                return DiagnosticMap(
+                    entries=(
+                        DiagnosticEntry(
+                            entry_id="diagnostic-all-pages",
+                            short_name="Mapped diagnostic pages",
+                            group="principal_driver",
+                            materiality="high",
+                            source_evidence_ids=ids,
+                            grouping_rationale="Every supplied extractable page is retained.",
+                        ),
+                    )
+                )
+            captured["review_payload"] = payload
+            deep_id = "diagnostic-page-102"
+            return _valid_review_draft(
+                output_type,
+                payload,
+                overall_read="The CPF needs a clearer response.",
+                alignment_readout="The mapped diagnostic identifies a deep-page delivery issue.",
+                revision_summary=(),
+                priority_areas=(),
+                rra_driver_assessments=(
+                    RRADriverAssessment(
+                        assessment_id="deep-page-driver",
+                        driver="The deep-page issue is material.",
+                        cpf_response="The CPF partly responds.",
+                        delivery_mechanism="Targeted delivery is proposed.",
+                        result_or_indicator="A service indicator is included.",
+                        remaining_gap="The deep-page issue remains.",
+                        status=AssessmentStatus.PARTIALLY_ALIGNED,
+                        confidence=AssessmentConfidence.HIGH,
+                        gap_locus=GapLocus.MONITORING_ADAPTATION,
+                        evidence_ids=(deep_id,),
+                    ),
+                ),
+                institutional_referral_ids=(),
+                limitations=(),
+                coverage_note="The review covers the complete uploaded RRA.",
+            )
+
+    gateway = FakeGateway()
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=gateway,
+        research_controller=_InjectedResearchController(),
+    )
+    context = services["review_orchestrator"].run(
+        {
+            "assessment_id": "complete-rra-map",
+            "payload": {
+                "country": "Benin",
+                "review_stage": "finalization",
+                "detail_level": "standard",
+                "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                "package_documents": [{"name": "benin-rra.pdf", "bytes": b"%PDF-1.7"}],
+                "context_documents": [],
+                "review_focus": "",
+                "corrections": [],
+            },
+        },
+        lambda kind, data: None,
+    )
+
+    map_payload = captured["map_payload"]
+    mapped_items = map_payload["evidence"]
+    assert len(mapped_items) == 101
+    assert len({item["evidence_id"] for item in mapped_items}) == 101
+    assert all("excerpt" not in item["locator"] for item in mapped_items)
+    full_call = next(
+        kwargs
+        for name, kwargs in calls
+        if name == "benin-rra.pdf"
+        and not kwargs.get("sample_pdf_across_document")
+    )
+    assert full_call == {
+        "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+        "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+        "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+        "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+    }
+    by_id = {item["evidence_id"]: item for item in mapped_items}
+    assert by_id["diagnostic-page-072"]["locator"]["page"] == 72
+    assert by_id["diagnostic-page-102"]["locator"]["page"] == 102
+    assert by_id["diagnostic-page-102"]["text"].endswith("Deep page 102 issue. ")
+    assert "page 50 extracted no text" in context["evidence_pack"].warnings
+    coverage_line = (
+        "benin-rra.pdf: 102 pages attempted; 101 pages with extractable text; "
+        "diagnostic mapping complete."
+    )
+    assert context["result"].limitations.count(coverage_line) == 1
+    assert any(
+        "diagnostic mapping complete" in warning
+        for warning in context["evidence_pack"].warnings
+    )
+    final_payload = captured["review_payload"]["evidence_pack"]
+    final_ids = {item["evidence_id"] for item in final_payload["evidence"]}
+    assert "diagnostic-page-102" in final_ids
+    deep_excerpt = next(
+        item
+        for item in final_payload["evidence"]
+        if item["evidence_id"] == "diagnostic-page-102"
+    )
+    assert len(deep_excerpt["text"]) <= 600
+    assert "Deep page 102 issue." in deep_excerpt["text"]
+    assert final_payload["diagnostic_entries"]
+    assert [name for name, _ in calls if name == "diagnostic_map"] == ["diagnostic_map"]
+    assert [name for name, _ in calls if name == "review"] == ["review"]
+    assert context["result"].rra_driver_assessments[0].evidence_ids == ("diagnostic-page-102",)
+
+
+def test_runtime_full_rra_limit_failure_skips_mapping_and_review(monkeypatch):
+    calls = []
+    primary = ExtractedDocument(
+        name="benin-cpf.txt",
+        segments=(ExtractedSegment("Readable CPF text " * 20, None, None, "paragraph 1"),),
+        warnings=(),
+    )
+    bounded = ExtractedDocument(
+        name="benin-rra.pdf",
+        segments=(
+            ExtractedSegment("Benin Risk and Resilience Assessment.", 1, None, "page 1"),
+        ),
+        warnings=(),
+    )
+
+    def fake_extract(data, name, **kwargs):
+        calls.append((name, kwargs))
+        if name == "benin-cpf.txt":
+            return primary
+        if kwargs.get("sample_pdf_across_document"):
+            return bounded
+        raise ExtractionLimitExceeded("PDF character budget exceeded.")
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+
+    class FakeGateway:
+        def generate(self, *, prompt_name, payload, output_type):
+            calls.append((prompt_name, payload))
+            raise AssertionError("No model call should occur after full RRA extraction failure.")
+
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=FakeGateway(),
+        research_controller=_InjectedResearchController(),
+    )
+
+    with pytest.raises(DiagnosticCoverageUnavailable, match="full"):
+        services["review_orchestrator"].run(
+            {
+                "assessment_id": "rra-over-limit",
+                "payload": {
+                    "country": "Benin",
+                    "review_stage": "finalization",
+                    "detail_level": "standard",
+                    "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                    "package_documents": [
+                        {"name": "benin-rra.pdf", "bytes": b"%PDF-1.7"}
+                    ],
+                    "context_documents": [],
+                    "review_focus": "",
+                    "corrections": [],
+                },
+            },
+            lambda kind, data: None,
+        )
+
+    assert not [
+        call
+        for call in calls
+        if isinstance(call[0], str)
+        and call[0] in {"diagnostic_map", "review"}
+    ]
+
+
+def _fresh_diagnostic_map_context(completed_context, final_pack, full_document):
+    base_evidence = tuple(
+        item
+        for item in final_pack.evidence
+        if not item.evidence_id.startswith("diagnostic-")
+    )
+    base_pack = final_pack.model_copy(
+        update={"evidence": base_evidence, "diagnostic_entries": ()}
+    )
+    return {
+        "full_diagnostic_document": full_document,
+        "diagnostic_document_role": completed_context["diagnostic_document_role"],
+        "diagnostic_coverage_warning": completed_context["diagnostic_coverage_warning"],
+        "evidence_pack": base_pack,
+    }
+
+
+def test_runtime_serialized_diagnostic_map_budget_is_exact_and_byte_sensitive(monkeypatch):
+    completed_context, final_pack = _run_narrow_runtime(
+        monkeypatch,
+        (
+            "Benin Risk and Resilience Assessment, March 2025. "
+            + ((chr(0x00e9) + "vidence ") * 100)
+        ).encode("utf-8"),
+        controller=_InjectedResearchController(),
+    )
+    full_document = completed_context["full_diagnostic_document"]
+
+    class RecordingMapGateway:
+        def __init__(self):
+            self.payloads = []
+
+        def generate(self, *, prompt_name, payload, output_type):
+            assert prompt_name == "diagnostic_map"
+            self.payloads.append(payload)
+            ids = tuple(item["evidence_id"] for item in payload["evidence"])
+            return DiagnosticMap(
+                entries=(
+                    DiagnosticEntry(
+                        entry_id="budget-map",
+                        short_name="Budget test map",
+                        group="principal_driver",
+                        materiality="high",
+                        source_evidence_ids=ids,
+                        grouping_rationale="Every supplied page is mapped.",
+                    ),
+                )
+            )
+
+    def map_with(gateway):
+        services = build_runtime_services(
+            production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+            model_gateway=gateway,
+            research_controller=_InjectedResearchController(),
+        )
+        return dict(services["review_orchestrator"].steps)["map"](
+            _fresh_diagnostic_map_context(
+                completed_context,
+                final_pack,
+                full_document,
+            )
+        )
+
+    monkeypatch.setattr(runtime, "DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS", 160_000)
+    initial_gateway = RecordingMapGateway()
+    map_with(initial_gateway)
+    mapping_payload = initial_gateway.payloads[0]
+    serialized = json.dumps(
+        mapping_payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    character_estimate = (len(serialized) + 2) // 3
+    byte_estimate = (len(serialized.encode("utf-8")) + 2) // 3
+    assert byte_estimate > character_estimate
+    assert all("excerpt" not in item["locator"] for item in mapping_payload["evidence"])
+
+    near_gateway = RecordingMapGateway()
+    monkeypatch.setattr(runtime, "DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS", byte_estimate)
+    map_with(near_gateway)
+    assert len(near_gateway.payloads) == 1
+
+    failing_gateway = RecordingMapGateway()
+    monkeypatch.setattr(
+        runtime,
+        "DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS",
+        byte_estimate - 1,
+    )
+    with pytest.raises(DiagnosticCoverageUnavailable, match="safe input budget"):
+        map_with(failing_gateway)
+    assert failing_gateway.payloads == []
+
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "benin-rra.txt",
+        "benin-risk-and-resilience-assessment.docx",
+        "benin-risk-&-resilience-assessment.txt",
+        "accepted-equivalent-diagnostic.pdf",
+        "fcv-risk-assessment.txt",
+    ),
+)
+def test_runtime_named_diagnostic_extraction_limit_is_not_silently_excluded(
+    monkeypatch,
+    name,
+):
+    def fake_extract(data, document_name, **kwargs):
+        raise ExtractionLimitExceeded("named diagnostic bound exceeded")
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+    monkeypatch.setattr(
+        runtime, "_has_valid_optional_container", lambda data, suffix: True
+    )
+
+    with pytest.raises(DiagnosticCoverageUnavailable, match="named"):
+        runtime._extract_optional_uploads(
+            ({"name": name, "bytes": b"oversized"},)
+        )
+
+
+def test_runtime_251_page_rra_samples_for_identification_but_fails_full_coverage(
+    monkeypatch,
+):
+    calls = []
+    events = []
+    primary = ExtractedDocument(
+        name="benin-cpf.txt",
+        segments=(
+            ExtractedSegment("Readable CPF text " * 20, None, None, "paragraph 1"),
+        ),
+        warnings=(),
+    )
+
+    class FakePage:
+        def __init__(self, page_number):
+            self.page_number = page_number
+
+        def extract_text(self):
+            return f"Benin Risk and Resilience Assessment page {self.page_number}."
+
+        def get_contents(self):
+            return None
+
+    monkeypatch.setattr(
+        extraction,
+        "PdfReader",
+        lambda stream: SimpleNamespace(
+            pages=[FakePage(page_number) for page_number in range(1, 252)]
+        ),
+    )
+    real_extract = runtime.extract_document
+
+    def fake_extract(data, name, **kwargs):
+        calls.append((name, kwargs))
+        if name == "benin-cpf.txt":
+            return primary
+        if kwargs.get("sample_pdf_across_document"):
+            return real_extract(data, name, **kwargs)
+        raise ExtractionLimitExceeded("PDF page/segment budget exceeded.")
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+
+    class FakeGateway:
+        def generate(self, *, prompt_name, payload, output_type):
+            raise AssertionError("No model call should occur after full RRA failure.")
+
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=FakeGateway(),
+        research_controller=_InjectedResearchController(),
+    )
+
+    with pytest.raises(DiagnosticCoverageUnavailable, match="full"):
+        services["review_orchestrator"].run(
+            {
+                "assessment_id": "rra-251-page-over-limit",
+                "payload": {
+                    "country": "Benin",
+                    "review_stage": "finalization",
+                    "detail_level": "standard",
+                    "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
+                    "package_documents": [
+                        {"name": "benin-rra-251.pdf", "bytes": b"%PDF-1.7"}
+                    ],
+                    "context_documents": [],
+                    "review_focus": "",
+                    "corrections": [],
+                },
+            },
+            lambda kind, data: events.append((kind, data)),
+        )
+
+    assert calls[1][0] == "benin-rra-251.pdf"
+    assert calls[1][1]["sample_pdf_across_document"] is True
+    assert calls[1][1]["max_pdf_pages"] == runtime.OPTIONAL_PDF_SAMPLE_PAGES
+    assert calls[2][0] == "benin-rra-251.pdf"
+    assert calls[2][1]["max_pdf_pages"] == runtime.DIAGNOSTIC_MAX_PAGES
+    assert not [
+        event
+        for event in events
+        if event[0] == "step_complete" and event[1].get("step") == "review"
+    ]
+    assert events[-1] == (
+        "run_failed",
+        {"error": "diagnostic_coverage_unavailable"},
+    )

@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 
 from cpf_fcv_reviewer.app import create_app
-from cpf_fcv_reviewer.extraction import DocumentUnreadable, require_readable_primary
+from cpf_fcv_reviewer.extraction import (
+    DiagnosticCoverageUnavailable,
+    DocumentUnreadable,
+    require_readable_primary,
+)
 from cpf_fcv_reviewer.orchestrator import ReviewOrchestrator, safe_failure_code
 from cpf_fcv_reviewer.registry import RegistryUnavailable
 from cpf_fcv_reviewer.research_controller import (
@@ -25,6 +29,7 @@ from cpf_fcv_reviewer.routes import run_assessment
         (TimeoutError(), "model_timeout"),
         (RegistryUnavailable(), "registry_unavailable"),
         (DocumentUnreadable(), "document_unreadable"),
+        (DiagnosticCoverageUnavailable(), "diagnostic_coverage_unavailable"),
         (ResearchTimeout(), "research_timeout"),
         (ResearchProviderFailure(), "research_provider_failed"),
         (MalformedResearch(), "research_malformed"),
@@ -47,6 +52,7 @@ def test_unreadable_primary_uses_dedicated_exception():
     ("error", "expected_code"),
     [
         (TimeoutError("request abc failed"), "model_timeout"),
+        (DiagnosticCoverageUnavailable("threshold detail"), "diagnostic_coverage_unavailable"),
         (
             RegistryUnavailable("registry path C:/secret unavailable"),
             "registry_unavailable",
@@ -109,6 +115,11 @@ def test_invalid_repair_is_attempted_once_then_fails_without_partial_result():
 def test_frontend_uses_only_safe_failure_codes():
     javascript = Path("src/cpf_fcv_reviewer/static/app.js").read_text(encoding="utf-8")
     assert "failureLabels[data.error]" in javascript
+    assert "diagnostic_coverage_unavailable" in javascript
+    assert (
+        "The uploaded diagnostic could not be assessed in full. Upload a shorter "
+        "or text-searchable version, or start a new review without it."
+    ) in javascript
     assert "data.message" not in javascript
 
 

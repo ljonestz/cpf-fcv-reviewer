@@ -1,6 +1,6 @@
 import pytest
 
-from cpf_fcv_reviewer.contracts import DiagnosticEntry
+from cpf_fcv_reviewer.contracts import DiagnosticEntry, DiagnosticMap
 from cpf_fcv_reviewer.diagnostic_map import (
     prioritize,
     validate_diagnostic_coverage,
@@ -123,3 +123,25 @@ def test_prioritize_uses_entry_id_as_a_stable_final_tiebreaker():
         "d-a",
         "d-z",
     )
+
+
+def test_diagnostic_map_requires_between_one_and_twenty_entries():
+    entry = _entry("d1", "ev-1")
+
+    assert DiagnosticMap(entries=(entry,)).entries == (entry,)
+    with pytest.raises(ValueError):
+        DiagnosticMap(entries=())
+    with pytest.raises(ValueError):
+        DiagnosticMap(
+            entries=tuple(
+                _entry(f"d{index}", f"ev-{index}") for index in range(21)
+            )
+        )
+
+
+def test_unknown_diagnostic_assignment_fails_closed():
+    with pytest.raises(ValueError, match="Unknown diagnostic evidence: ev-unknown"):
+        validate_diagnostic_coverage(
+            ("ev-1",),
+            (_entry("d1", "ev-1"), _entry("d2", "ev-unknown")),
+        )

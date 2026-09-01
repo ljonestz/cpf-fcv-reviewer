@@ -178,6 +178,10 @@ class DiagnosticEntry(FrozenModel):
     grouping_rationale: str
 
 
+class DiagnosticMap(FrozenModel):
+    entries: tuple[DiagnosticEntry, ...] = Field(min_length=1, max_length=20)
+
+
 class RRADriverAssessment(FrozenModel):
     assessment_id: str
     driver: str

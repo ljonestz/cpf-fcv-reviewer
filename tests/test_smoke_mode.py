@@ -11,12 +11,16 @@ from docx import Document
 
 from cpf_fcv_reviewer.app import create_smoke_app
 from cpf_fcv_reviewer.config import build_config
-from cpf_fcv_reviewer.contracts import ReviewDraft, ReviewResult
+from cpf_fcv_reviewer.contracts import DiagnosticMap, ReviewDraft, ReviewResult
 from cpf_fcv_reviewer.public_research import retain_public_claims
 from cpf_fcv_reviewer.research_controller import ResearchMode, ResearchRequest
 from cpf_fcv_reviewer.review_profiles import STAGE_PROFILES
 from cpf_fcv_reviewer.routes import run_assessment
-from cpf_fcv_reviewer.smoke import SmokeModelGateway, SmokeResearchGateway
+from cpf_fcv_reviewer.smoke import (
+    SMOKE_MARKER,
+    SmokeModelGateway,
+    SmokeResearchGateway,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -123,6 +127,43 @@ def _submit_smoke_review(client, review_stage: str = "decision_review") -> dict:
     assert response.status_code == 201
     return response.get_json()
 
+
+def test_smoke_model_gateway_maps_every_supplied_diagnostic_page():
+    gateway = SmokeModelGateway()
+    page_ids = ("diagnostic-page-001", "diagnostic-page-072", "diagnostic-page-102")
+    payload = {
+        "material_evidence_ids": page_ids,
+        "evidence": [
+            {
+                "evidence_id": evidence_id,
+                "text": f"{SMOKE_MARKER} synthetic diagnostic page",
+                "locator": {
+                    "document_title": "Synthetic RRA.txt",
+                    "page": page,
+                    "excerpt": f"{SMOKE_MARKER} excerpt",
+                },
+                "confidence": "high",
+                "document_role": "context",
+                "evidence_type": "document_fact",
+            }
+            for evidence_id, page in zip(page_ids, (1, 72, 102), strict=True)
+        ],
+    }
+
+    diagnostic_map = gateway.generate(
+        prompt_name="diagnostic_map",
+        payload=payload,
+        output_type=DiagnosticMap,
+    )
+
+    assert tuple(
+        evidence_id
+        for entry in diagnostic_map.entries
+        for evidence_id in entry.source_evidence_ids
+    ) == page_ids
+    assert len(diagnostic_map.entries) == 1
+    assert SMOKE_MARKER in diagnostic_map.entries[0].short_name
+    assert SMOKE_MARKER in diagnostic_map.entries[0].grouping_rationale
 
 def test_smoke_model_gateway_returns_schema_valid_review_and_repair_from_supplied_ids():
     gateway = SmokeModelGateway()
@@ -446,6 +487,57 @@ def test_smoke_routes_complete_with_schema_for_every_review_stage(review_stage):
     if review_stage == "response_to_comments":
         assert result.priority_areas[0].comment_reference
 
+
+def test_smoke_app_completes_full_pipeline_with_synthetic_rra_mapping():
+    app = create_smoke_app(start_background_runs=False)
+    client = app.test_client()
+    response = client.post(
+        "/api/reviews",
+        data={
+            "country": "Benin",
+            "review_stage": "decision_review",
+            "review_focus": "Synthetic smoke RRA mapping.",
+            "cpf": (
+                BytesIO((FIXTURES / "synthetic_en.txt").read_bytes()),
+                "Benin-synthetic-CPF.txt",
+            ),
+            "context_documents": (
+                BytesIO(
+                    (
+                        "Benin Risk and Resilience Assessment. March 2025. "
+                        f"{SMOKE_MARKER} synthetic context."
+                    ).encode()
+                ),
+                "Benin-synthetic-RRA.txt",
+            ),
+        },
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 201
+    created = response.get_json()
+
+    run_assessment(app, created["assessment_id"])
+
+    result_response = client.get(created["result_url"])
+    assert result_response.status_code == 200
+    payload = result_response.get_json()
+    evidence_by_id = payload.pop("evidence_by_id")
+    result = ReviewResult.model_validate(payload)
+    assert result.metadata.diagnostic_mode.value == "rra_alignment"
+    assert SMOKE_MARKER in result.overall_read
+    assert any(
+        "diagnostic mapping complete" in limitation
+        for limitation in result.limitations
+    )
+    assert any(
+        evidence_id.startswith("diagnostic-")
+        for evidence_id in evidence_by_id
+    )
+    events = app.extensions["session_store"].read_events(created["assessment_id"])
+    assert any(
+        event["type"] == "step_start" and event["data"]["step"] == "map"
+        for _, event in events
+    )
 
 def test_smoke_app_completes_without_anthropic_key_or_provider_construction(monkeypatch):
     def forbidden_provider(*args, **kwargs):

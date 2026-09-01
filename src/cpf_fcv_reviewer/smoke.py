@@ -9,6 +9,8 @@ from typing import Any
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
+    DiagnosticEntry,
+    DiagnosticMap,
     DiagnosticMode,
     EvidenceLocator,
     FCVStrategicShift,
@@ -144,6 +146,33 @@ class SmokeModelGateway:
     """Build deterministic review drafts from evidence IDs supplied by the app."""
 
     def generate(self, *, prompt_name: str, payload: dict, output_type: type[Any]):
+        if output_type is DiagnosticMap:
+            if prompt_name != "diagnostic_map":
+                raise ValueError("Smoke diagnostic mapping requires the diagnostic_map prompt.")
+            evidence = payload.get("evidence", ())
+            evidence_ids = tuple(
+                item["evidence_id"]
+                for item in evidence
+                if isinstance(item, dict)
+                and isinstance(item.get("evidence_id"), str)
+            )
+            if not evidence_ids:
+                raise ValueError("Smoke diagnostic mapping requires supplied page IDs.")
+            return DiagnosticMap(
+                entries=(
+                    DiagnosticEntry(
+                        entry_id="smoke-diagnostic-map",
+                        short_name=f"{SMOKE_MARKER} Uploaded diagnostic map",
+                        group="principal_driver",
+                        materiality="high",
+                        source_evidence_ids=evidence_ids,
+                        grouping_rationale=(
+                            f"{SMOKE_MARKER} Synthetic mapping covers every supplied "
+                            "extractable diagnostic page."
+                        ),
+                    ),
+                )
+            )
         if output_type is not ReviewDraft:
             raise ValueError("Smoke model only supports ReviewDraft output.")
         if prompt_name == "repair":

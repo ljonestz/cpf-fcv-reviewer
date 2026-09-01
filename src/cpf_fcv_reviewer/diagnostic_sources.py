@@ -35,6 +35,7 @@ MONTH_YEAR_PATTERN = re.compile(
 @dataclass(frozen=True)
 class UploadedDiagnostic:
     name: str
+    source_index: int
     kind: DiagnosticKind
     publication_date: date | None
 
@@ -65,7 +66,7 @@ def identify_uploaded_diagnostic(
         return None
 
     matches: list[UploadedDiagnostic] = []
-    for document in documents:
+    for source_index, document in enumerate(documents):
         text = _candidate_text(document)
         lowered = text.casefold()
         country_pattern = rf"(?<!\w){re.escape(normalized_country)}(?!\w)"
@@ -80,6 +81,7 @@ def identify_uploaded_diagnostic(
         matches.append(
             UploadedDiagnostic(
                 name=document.name,
+                source_index=source_index,
                 kind=kind,
                 publication_date=_publication_date(text),
             )
