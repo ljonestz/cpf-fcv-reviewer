@@ -8,7 +8,9 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified implementation: `main` through `1ba44bf` (1,069 tests; 34 provider-free smoke tests).
+- Latest provider-free verified implementation: `fix/guinea-production-fixes` through
+  `4d73d46` (1,142 tests; 36 provider-free smoke tests). Deployment and the single
+  Guinea quality run for this change set remain pending.
 - Last verified deployment: `1ba44bf` on 2026-08-31. Render reported the deploy live,
   `/health` returned `ok`, and the public page returned HTTP 200.
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
@@ -24,9 +26,15 @@ The review starts with three document buckets: the draft CPF/CEN, accompanying p
 
 Every review performs bounded current-country public-web research. An uploaded public RRA changes the research window but never suppresses that current research. Retryable research failures can be retried using the retained review package; retry never exposes partial output.
 
-Optional PDFs use deterministic, bounded sampling across the full page range. Package evidence is balanced across uploaded files, and incomplete coverage is disclosed rather than treated as proof that content is absent.
+Optional non-diagnostic PDFs use deterministic, bounded sampling across the full page
+range. A recognized uploaded RRA or equivalent diagnostic is instead extracted in full,
+within explicit safety bounds, and every extractable page is assigned exactly once through
+the diagnostic map. If complete RRA coverage cannot be established, the review fails
+closed rather than silently reverting to sampling. Package evidence remains balanced
+across uploaded files, and incomplete non-diagnostic coverage is disclosed rather than
+treated as proof that content is absent.
 
-Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The detailed narrative uses question-led RRA/current-dynamics and FCV Strategy sections, short WBG-style paragraphs, and collapsible traceability, evidence-status, and coverage material. The DOCX follows the detailed HTML scope, and download failures stay on the results page with an inline message.
+Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and one bounded basis/limitations disclosure. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
 
 ## Safety boundary
 
@@ -68,14 +76,16 @@ quality run, diagnose only from safe validation codes, add a local regression te
 repeat the no-cost ladder before seeking approval for another paid run.
 
 Paid browser quality runs must save unique full-page PNGs for intake, holding/progress,
-summary, detailed output, and failure states, plus the DOCX on success. Smoke output must
-remain clearly labelled synthetic and must not be presented as country-quality evidence.
+summary, detailed output, assistant streaming and refresh restoration, and failure states,
+plus the DOCX on success. Smoke output must remain clearly labelled synthetic and must
+not be presented as country-quality evidence.
 The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 
 ## Documentation
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
-- [Approved results, assistant, and full-RRA coverage design](docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md): the next bounded implementation scope and acceptance criteria.
+- [Approved results, assistant, and full-RRA coverage design](docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md): bounded implementation scope and acceptance criteria.
+- [2026-09-02 results, assistant, and full-RRA provider-free validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, DOCX structural inspection, and remaining deployment gate.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
 - [2026-08-31 initial-review schema-retry validation](docs/validation/2026-08-31-initial-review-schema-retry-validation.md): test-first evidence, safety review, full provider-free verification, and deployment checks.
 - [2026-08-30 Guinea production-fix validation](docs/validation/2026-08-30-guinea-production-fixes-validation.md): automated checks, Render deployment evidence, paid-run outcomes, and remaining acceptance limitation.

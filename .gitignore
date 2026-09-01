@@ -18,6 +18,7 @@ coverage.xml
 htmlcov/
 instance/
 tmp/
+output/playwright/
 *.log
 *.docx
 *.pdf

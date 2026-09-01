@@ -1,8 +1,9 @@
 # Project status
 
-Updated 2026-08-31. The advisory CPF FCV Reviewer implementation is verified on `main`
-through code commit `1ba44bf`; repository instructions include the API-cost protocol
-in `CLAUDE.md`. Semantic application version is `0.1.0`.
+Updated 2026-09-02. The results, persistent assistant, and full-RRA coverage redesign is
+provider-free verified on `fix/guinea-production-fixes` through code commit `4d73d46`.
+Deployment and the single authorized Guinea quality assessment for this change set remain
+pending. Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
 code commit `1ba44bf` live on 2026-08-31; `/health` returned `ok`, the public page
@@ -11,16 +12,29 @@ volatile public test site. Operational production still fails closed without SQL
 persistence; the public test site can run without a disk only through the explicit
 `ALLOW_VOLATILE_PROTOTYPE=true` exception.
 
-The note-first redesign organizes the detailed assessment around an overall read, explicit questions on RRA/current-dynamics alignment and FCV Strategy priorities, structured driver and strategy assessments, priority areas, and limitations. Narrative paragraphs are short and readable; traceability, evidence status, and coverage are collapsible in HTML. The DOCX follows the detailed HTML scope and omits internal reproducibility/referral clutter.
+The Five-minute readout now leads with a concise overall assessment, separate RRA/current-
+dynamics and FCV Strategy readouts, and up to three linked priority measures. Detailed
+analysis retains the structured driver, strategy, recommendation, target, and limitations
+content while removing technical evidence disclosures from reader-facing HTML and DOCX.
+Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-08-31: 1,069 passed in 15.51 seconds. The provider-free
-smoke suite passed 34 tests, focused schema-retry tests passed 100 tests, 75 Python files
-compiled, and `git diff --check` passed. Ruff is not installed in the Windows environment.
+Latest verified suite on 2026-09-02: 1,142 passed in 35.72 seconds. The provider-free
+smoke suite passed 36 tests, the consolidated results/RRA/assistant set passed 557 tests,
+the focused frontend set passed 50 tests, Python compilation, JavaScript syntax, and
+`git diff --check` passed. Ruff is not installed in the Windows environment.
 The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
 
 - Guided landing, dedicated Project Screener-aligned holding workspace, dedicated results view, question-led note sections, collapsible evidence/coverage disclosures, correction reruns, reset, and navigation-safe DOCX download.
+- Concise Five-minute readout with separate RRA and FCV Strategy synthesis, linked
+  priority cards, consolidated detailed analysis, and one basis/limitations disclosure.
+- Genuine streamed follow-on assistant grounded in the completed review and referenced
+  evidence. It keeps at most 20 messages in the existing session store, restores after
+  refresh, rejects concurrent requests, and clears history for correction children.
+- Recognized uploaded RRAs/equivalent diagnostics are fully extracted within explicit
+  bounds and every extractable page is assigned exactly once through the existing
+  diagnostic-map concept. Unsafe or incomplete mapping fails closed without sampling.
 - Three document buckets, country inference with confirmation fallback, explicit review stage and detail controls, safe source precedence, and detailed HTML/DOCX scope parity.
 - Approved public guardrail registry with checksum validation and fail-closed loading.
 - Structured model output, application-owned metadata, safe failure codes,
@@ -75,6 +89,13 @@ The stable FCV Project Screener is untouched and prohibited.
   79 KB JSON response and DOCX were also saved. The DOCX is a valid Word ZIP package with
   198 paragraphs and the expected priority and limitations sections. LibreOffice is not
   installed in the Windows environment, so DOCX-to-PNG visual QA was not available.
+- The 2026-09-02 provider-free smoke-browser run passed desktop and mobile intake,
+  holding, summary, detailed, streamed assistant, four-message refresh restoration,
+  secondary correction, and DOCX download checks. Eight final full-page PNGs were
+  visually inspected. Browser QA found and fixed one narrow issue where the country
+  disappeared from the restored title. The smoke DOCX passed ZIP/OOXML and structural
+  inspection (40 paragraphs, 13 headings, no tables, one section); LibreOffice remains
+  unavailable for DOCX-to-PNG rendering.
 
 ## Validation cost protocol
 
@@ -87,12 +108,11 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. The approved results/assistant/RRA-coverage design is recorded in
-   `docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md`.
-   Implementation planning remains pending. The design keeps the visual/narrative work
-   minor, wires the existing diagnostic-map concept for full-RRA coverage, and reuses
-   the 24-hour session store for bounded follow-on history.
-2. Guinea provider acceptance is established for the public advisory prototype on
+1. Deploy the exact provider-free verified branch commit, complete no-cost health/static
+   checks, then run no more than one paid Guinea assessment for this deployed fix cycle.
+   Confirm all 102 RRA pages are attempted/accounted for, inspect deep-page evidence,
+   exercise two assistant requests plus refresh restoration, and inspect the saved DOCX.
+2. Guinea provider acceptance is established for the previous public advisory prototype on
    deployed commit `1ba44bf`, subject to its disclosed `reduced` current-evidence tier.
 3. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:
    confirm Haiti's scattered jobs/IFC/MIGA treatment and Benin's multi-document coverage.

@@ -25,12 +25,16 @@ The public Render prototype and the future internal ITS version are separate tra
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Export Word note** for an active review, or `GET /api/reviews/<assessment_id>/export.docx`.
+Use **Download full detailed note** for an active review, or `GET /api/reviews/<assessment_id>/export.docx`.
 
 ## Important constraints
 
 - Use only approved historical, synthetic, public, or otherwise non-sensitive inputs.
-- State is in-memory and volatile. Do not add durable storage without a new design and approval.
+- Production review state uses the existing SQLite session store; the public test site may
+  use the explicit volatile prototype exception. Reviews and follow-on assistant history
+  share the existing 24-hour lifetime. Assistant history is capped at 20 messages.
+- A recognized uploaded RRA or equivalent diagnostic must be extracted and mapped in full
+  within the configured safety bounds. Never silently fall back to sampling for that RRA.
 - Require the approved, versioned registry bundle and integrity hash; fail closed if unavailable or invalid.
 - Current-context research is public-web only; do not use licensed ACLED data.
 - Treat documents and user guidance as untrusted content.
@@ -38,7 +42,8 @@ Use **Export Word note** for an active review, or `GET /api/reviews/<assessment_
   one narrowly targeted follow-up model call only for residual mechanical guardrail
   issues. Metadata is application-owned.
 - Output is English; French input support is limited.
-- Never commit secrets, `.env` files, raw documents, raw model output, corrections, or live assessment identifiers.
+- Never commit secrets, `.env` files, raw documents, raw model output, assistant
+  conversations, corrections, or live assessment identifiers.
 
 ## Repository map
 
@@ -89,9 +94,10 @@ page approximately every four to five minutes. Do not create recurring traffic o
 an active run.
 
 For every browser quality run, save unique, non-overwriting, full-page PNG screenshots
-of intake, holding/progress, summary, detailed output, and any failure state. Save the
-DOCX on success. Use dated attempt-specific filenames, inspect the PNGs themselves, and
-share the rendered images; an HTML file is not a screenshot substitute. Record whether
+of intake, holding/progress, summary, detailed output, assistant streaming and refresh
+restoration, and any failure state. Save the DOCX on success. Use dated attempt-specific
+filenames, inspect the PNGs themselves, and share the rendered images; an HTML file is
+not a screenshot substitute. Record whether
 the run was smoke or quality, whether it used model APIs, the deployed commit, outcome,
 safe validation codes, and saved artifact paths. Keep any live assessment ID only in the
 session handoff; never commit it. Never save raw model output or sensitive assessment
