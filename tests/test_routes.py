@@ -489,6 +489,11 @@ def test_correction_is_labelled_and_persisted_in_child_state():
     app = make_app()
     client = app.test_client()
     created = create_review(client)
+    app.extensions["session_store"].update(
+        created["assessment_id"],
+        assistant_history=[{"role": "user", "content": "Parent-only context"}],
+        assistant_active=False,
+    )
 
     response = client.post(
         f"/api/reviews/{created['assessment_id']}/corrections",
@@ -508,6 +513,9 @@ def test_correction_is_labelled_and_persisted_in_child_state():
     assert state.payload["corrections"][-1]["rationale"] == "Country-team update"
     assert state.payload["parent_assessment_id"] == created["assessment_id"]
     assert state.payload["status"] == "created"
+    assert "assistant_history" not in state.payload
+    assert "assistant_active" not in state.payload
+    assert "assistant_active_owner" not in state.payload
 
 
 def test_blank_correction_is_rejected_without_mutating_state():

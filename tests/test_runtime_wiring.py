@@ -802,6 +802,7 @@ def test_runtime_builds_exact_named_step_sequence(monkeypatch):
     services = build_runtime_services(production_config(ALLOW_SYNTHETIC_REGISTRY=True))
 
     assert set(services) == {
+        "follow_on_gateway",
         "review_orchestrator",
         "registry_bundle",
         "research_controller",

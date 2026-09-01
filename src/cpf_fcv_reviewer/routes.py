@@ -5,6 +5,7 @@ import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
+from threading import RLock
 from time import sleep
 from uuid import uuid4
 
@@ -44,6 +45,11 @@ RETRYABLE_RESEARCH_CODES = {
 LEGACY_REVIEW_RESULT_ERROR = (
     "This review was created by an earlier version. Start a new review."
 )
+ASSISTANT_MESSAGE_MAX_LENGTH = 10_000
+ASSISTANT_HISTORY_MAX_MESSAGES = 20
+ASSISTANT_RETRY_MESSAGE = "The assistant could not complete that response. Please try again."
+ASSISTANT_PROCESS_OWNER = uuid4().hex
+_ASSISTANT_REQUEST_LOCK = RLock()
 
 
 def _reject_legacy_result(result_payload):
@@ -61,6 +67,161 @@ def _partial_research_keys(payload: dict) -> tuple[str, ...]:
         key
         for key in payload
         if key.startswith("research_") or key.endswith("_research")
+    )
+
+
+def _assistant_context(payload: dict):
+    if payload.get("status") != "complete":
+        raise ValueError("Review is not complete.")
+    result_payload = payload.get("result")
+    if not isinstance(result_payload, Mapping) or "strategy_readout" not in result_payload:
+        raise ValueError("Review result is unavailable.")
+    evidence_payload = payload.get("evidence_by_id")
+    if not isinstance(evidence_payload, dict):
+        raise ValueError("Traceable evidence is unavailable.")
+
+    result = ReviewResult.model_validate(result_payload)
+    evidence = {
+        evidence_id: EvidenceItem.model_validate(item)
+        for evidence_id, item in evidence_payload.items()
+    }
+    if any(
+        evidence_id != item.evidence_id
+        for evidence_id, item in evidence.items()
+    ):
+        raise ValueError("Traceable evidence is invalid.")
+    referenced_ids = {
+        evidence_id
+        for assessment in (
+            *result.priority_areas,
+            *result.rra_driver_assessments,
+            *result.fcv_strategy_assessments,
+        )
+        for evidence_id in assessment.evidence_ids
+    }
+    if not referenced_ids <= set(evidence):
+        raise ValueError("Traceable evidence is incomplete.")
+
+    history_payload = payload.get("assistant_history", [])
+    if not isinstance(history_payload, list):
+        raise ValueError("Assistant history is invalid.")
+    history = []
+    for item in history_payload[-ASSISTANT_HISTORY_MAX_MESSAGES:]:
+        if (
+            not isinstance(item, dict)
+            or item.get("role") not in {"user", "assistant"}
+            or not isinstance(item.get("content"), str)
+        ):
+            raise ValueError("Assistant history is invalid.")
+        history.append({"role": item["role"], "content": item["content"]})
+
+    relevant_evidence = {
+        evidence_id: evidence[evidence_id].model_dump(mode="json")
+        for evidence_id in sorted(referenced_ids)
+    }
+    return (
+        result.model_dump(mode="json"),
+        relevant_evidence,
+        tuple(history),
+    )
+
+
+@bp.get("/api/reviews/<assessment_id>/assistant")
+def assistant_history(assessment_id):
+    try:
+        state = store().get(assessment_id)
+        _, _, history = _assistant_context(state.payload)
+    except SessionExpired:
+        return jsonify(error="Assessment expired."), 410
+    except ValueError:
+        return jsonify(error="Assistant is available after a completed review."), 409
+    response = jsonify(list(history))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.post("/api/reviews/<assessment_id>/assistant")
+def assistant_response(assessment_id):
+    body = request.get_json(silent=True)
+    message = body.get("message") if isinstance(body, dict) else None
+    if not isinstance(message, str) or not message.strip():
+        return jsonify(error="Assistant message is required."), 400
+    message = message.strip()
+    if len(message) > ASSISTANT_MESSAGE_MAX_LENGTH:
+        return jsonify(error="Assistant message is too long."), 400
+
+    with _ASSISTANT_REQUEST_LOCK:
+        try:
+            state = store().get(assessment_id)
+            review, evidence, history = _assistant_context(state.payload)
+        except SessionExpired:
+            return jsonify(error="Assessment expired."), 410
+        except ValueError:
+            return jsonify(error="Assistant is available after a completed review."), 409
+        if (
+            state.payload.get("assistant_active") is True
+            and state.payload.get("assistant_active_owner") == ASSISTANT_PROCESS_OWNER
+        ):
+            return jsonify(error="An assistant response is already in progress."), 409
+        store().update(
+            assessment_id,
+            assistant_active=True,
+            assistant_active_owner=ASSISTANT_PROCESS_OWNER,
+        )
+
+    gateway = current_app.extensions.get("follow_on_gateway")
+    if gateway is None:
+        store().update(assessment_id, assistant_active=False)
+        return jsonify(error="Assistant is temporarily unavailable."), 503
+
+    def generate():
+        chunks = []
+        try:
+            for chunk in gateway.stream(
+                review=review,
+                evidence=evidence,
+                history=history,
+                message=message,
+            ):
+                if not isinstance(chunk, str) or not chunk:
+                    continue
+                chunks.append(chunk)
+                yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
+            response_text = "".join(chunks)
+            if not response_text:
+                raise RuntimeError("Assistant returned an empty response.")
+            updated_history = [
+                *history,
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": response_text},
+            ][-ASSISTANT_HISTORY_MAX_MESSAGES:]
+            store().update(assessment_id, assistant_history=updated_history)
+            yield "event: done\ndata: {}\n\n"
+        except SessionExpired:
+            expired_payload = {
+                "error": "This review expired before the response was saved.",
+                "retryable": False,
+            }
+            yield (
+                "event: error\ndata: "
+                f"{json.dumps(expired_payload)}\n\n"
+            )
+        except Exception:
+            current_app.logger.exception("follow_on_assistant_failed")
+            yield (
+                "event: error\ndata: "
+                f"{json.dumps({'error': ASSISTANT_RETRY_MESSAGE, 'retryable': True})}\n\n"
+            )
+        finally:
+            try:
+                store().update(assessment_id, assistant_active=False)
+            except SessionExpired:
+                pass
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -360,6 +521,9 @@ def add_correction(assessment_id):
     child_payload["status"] = "created"
     child_payload.pop("result", None)
     child_payload.pop("evidence_by_id", None)
+    child_payload.pop("assistant_history", None)
+    child_payload.pop("assistant_active", None)
+    child_payload.pop("assistant_active_owner", None)
 
     child_id = store().create(child_payload)
     current_app.extensions["assessment_queue"].enqueue(child_id)

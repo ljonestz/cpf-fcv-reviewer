@@ -34,6 +34,7 @@ from .extraction import (
     extract_document,
     require_readable_primary,
 )
+from .follow_on import AnthropicFollowOnGateway
 from .model_gateway import AnthropicModelGateway
 from .orchestrator import ReviewOrchestrator
 from .prompts import load_prompt
@@ -742,6 +743,7 @@ def build_runtime_services(
     model_gateway=None,
     research_gateway=None,
     research_controller=None,
+    follow_on_gateway=None,
     review_date_provider=date.today,
 ) -> dict:
     path = Path(config.get("REGISTRY_BUNDLE_PATH", ""))
@@ -775,6 +777,11 @@ def build_runtime_services(
 
     if model_gateway is None:
         model_gateway = AnthropicModelGateway(
+            config["ANTHROPIC_API_KEY"],
+            config["ANTHROPIC_MODEL_ID"],
+        )
+    if follow_on_gateway is None:
+        follow_on_gateway = AnthropicFollowOnGateway(
             config["ANTHROPIC_API_KEY"],
             config["ANTHROPIC_MODEL_ID"],
         )
@@ -1287,6 +1294,7 @@ def build_runtime_services(
         repair=repair,
     )
     return {
+        "follow_on_gateway": follow_on_gateway,
         "review_orchestrator": orchestrator,
         "registry_bundle": bundle,
         "research_controller": research_controller,

@@ -19,6 +19,21 @@ def test_sqlite_store_round_trips_binary_payload_across_instances(tmp_path):
     assert second.get(assessment_id).payload["cpf"]["bytes"] == b"%PDF-1.7\x00payload"
 
 
+def test_sqlite_store_restores_bounded_assistant_history_across_instances(tmp_path):
+    path = tmp_path / "reviews.sqlite3"
+    first = SQLiteSessionStore(path, ttl_seconds=60)
+    assessment_id = first.create({"status": "complete"})
+    history = [
+        {"role": "user", "content": "Clarify the assessment."},
+        {"role": "assistant", "content": "Grounded clarification."},
+    ]
+    first.update(assessment_id, assistant_history=history)
+
+    second = SQLiteSessionStore(path, ttl_seconds=60)
+
+    assert second.get(assessment_id).payload["assistant_history"] == history
+
+
 def test_sqlite_events_are_replayable_by_cursor(tmp_path):
     store = SQLiteSessionStore(tmp_path / "reviews.sqlite3", ttl_seconds=60)
     assessment_id = store.create({"status": "created"})

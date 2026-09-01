@@ -53,6 +53,15 @@ def _prompt_date(prompt: str, label: str, fallback: date) -> date:
         return fallback
 
 
+class SmokeFollowOnGateway:
+    """Stream a clearly labelled provider-free response for local UI QA."""
+
+    def stream(self, *, review, evidence, history, message):
+        del review, evidence, history, message
+        yield f"{SMOKE_MARKER} Draft follow-on response. "
+        yield "Use the completed review and cited evidence when refining this text."
+
+
 class SmokeResearchGateway:
     """Return only clearly labelled synthetic claims for local QA."""
 
@@ -349,5 +358,6 @@ def build_smoke_services(config: dict) -> dict:
         config,
         model_gateway=SmokeModelGateway(),
         research_gateway=SmokeResearchGateway(),
+        follow_on_gateway=SmokeFollowOnGateway(),
         review_date_provider=lambda: SMOKE_REVIEW_DATE,
     )
