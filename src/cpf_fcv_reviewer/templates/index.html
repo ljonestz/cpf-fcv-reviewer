@@ -149,13 +149,35 @@
         <section id="detailed-panel" role="tabpanel" aria-labelledby="result-tab-detailed" tabindex="0" hidden></section>
       </section>
 
-      <section id="corrections" hidden>
-        <h2>Add context or correct the review</h2>
-        <p>Corrections remain labelled as user-provided unless independently supported by evidence.</p>
-        <label for="correction-text">Correction or additional context</label>
-        <textarea id="correction-text"></textarea>
-        <button id="submit-correction" type="button">Add correction and rerun</button>
+      <section id="assistant-card" class="assistant-card" hidden aria-labelledby="assistant-heading">
+        <p class="eyebrow">FOLLOW-ON REVIEW ASSISTANT</p>
+        <h2 id="assistant-heading">What would you like to do next?</h2>
+        <p class="helper">Use the completed review as a starting point for a practical follow-on request. Suggestions prefill the message and do not send it.</p>
+        <div id="assistant-suggestions" class="assistant-suggestions" aria-label="Suggested follow-on requests">
+          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Draft a peer-review email based on the review.">Draft a peer-review email</button>
+          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Expand a priority measure from the review.">Expand a priority measure</button>
+          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Clarify the assessment and its practical implications.">Clarify the assessment</button>
+          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Summarise the review for management.">Summarise for management</button>
+        </div>
+        <div id="assistant-conversation" role="log" aria-live="polite" class="assistant-conversation" aria-relevant="additions text"></div>
+        <form id="assistant-form" class="assistant-form">
+          <label for="assistant-input">Follow-on request</label>
+          <textarea id="assistant-input" maxlength="10000" placeholder="Ask a follow-on question or edit a suggestion."></textarea>
+          <button id="assistant-send" type="submit">Send</button>
+        </form>
+        <p id="assistant-status" class="assistant-status" role="status" aria-live="polite" hidden></p>
       </section>
+
+      <details id="corrections" hidden class="correction-details">
+        <summary>Correct source information and rerun</summary>
+        <div class="correction-content">
+          <h2>Add context or correct the review</h2>
+          <p>Corrections remain labelled as user-provided unless independently supported by evidence.</p>
+          <label for="correction-text">Correction or additional context</label>
+          <textarea id="correction-text"></textarea>
+          <button id="submit-correction" type="button">Add correction and rerun</button>
+        </div>
+      </details>
 
     </section>
   </main>

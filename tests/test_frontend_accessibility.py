@@ -67,6 +67,23 @@ def test_corrections_remain_outside_both_tabpanels():
     assert corrections > detailed_end
 
 
+def test_follow_on_assistant_has_live_conversation_and_collapsed_correction_action():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+    css = CSS.read_text(encoding="utf-8")
+
+    assert 'id="assistant-conversation" role="log" aria-live="polite"' in html
+    assert 'id="assistant-form"' in html
+    assert 'id="assistant-input"' in html
+    assert 'id="assistant-send" type="submit"' in html
+    assert '<details id="corrections"' in html
+    assert '<summary>Correct source information and rerun</summary>' in html
+    assert "assistant-message" in javascript
+    assert ".assistant-conversation" in css
+    assert ".assistant-form" in css
+    assert "grid-template-columns: 1fr" in css.split("@media (max-width: 760px)", 1)[1]
+
+
 def test_completed_result_heading_is_focusable_and_receives_focus():
     html = HTML.read_text(encoding="utf-8")
     javascript = JS.read_text(encoding="utf-8")

@@ -23,6 +23,10 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
         'id="progress"',
         'id="results"',
         'id="correction-text"',
+        'id="assistant-card"',
+        'id="assistant-conversation"',
+        'id="assistant-input"',
+        'id="assistant-send"',
         'id="export-docx"',
         'id="reset-review"',
     ):
@@ -42,6 +46,41 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
     assert "Express review" in html
     assert "Early drafting / PCN" in html
     assert "Questions requiring a dedicated response" not in html
+
+
+def test_follow_on_assistant_uses_approved_shell_and_suggestion_labels():
+    html = HTML.read_text(encoding="utf-8")
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert "What would you like to do next?" in html
+    for label in (
+        "Draft a peer-review email",
+        "Expand a priority measure",
+        "Clarify the assessment",
+        "Summarise for management",
+    ):
+        assert label in html
+    assert 'id="assistant-conversation" role="log" aria-live="polite"' in html
+    assert '<label for="assistant-input">' in html
+    assert '>Send<' in html
+    assert "Correct source information and rerun" in html
+    assert '<details id="corrections"' in html
+
+    for fragment in (
+        "function loadAssistantHistory()",
+        "function prefillAssistant(",
+        "function sendAssistantMessage(",
+        "function renderAssistantMessage(",
+        "function restoreSavedReview()",
+        "if (assessmentId) void restoreSavedReview()",
+        "assistantSend.disabled = true",
+        'eventName === "chunk"',
+        'eventName === "error"',
+        'eventName === "done"',
+        "/assistant",
+        "finally",
+    ):
+        assert fragment in javascript
 
 
 def test_index_route_serves_the_interface():
@@ -96,6 +135,22 @@ def test_correction_prompt_uses_note_first_review_language():
     assert "Add context or correct a finding" not in html
 
 
+def test_correction_child_invalidates_parent_assistant_activity():
+    javascript = JS.read_text(encoding="utf-8")
+    handler = javascript.split(
+        'submitCorrection.addEventListener("click", async () => {', 1
+    )[1].split("\n});", 1)[0]
+
+    child_handoff = handler.split("assessmentId = child.assessment_id;", 1)[0]
+    for fragment in (
+        "assistantRequestEpoch += 1",
+        "assistantHistoryEpoch += 1",
+        "assistantStreaming = false",
+        'assistantConversation.setAttribute("aria-busy", "false")',
+    ):
+        assert fragment in child_handoff
+
+
 def test_country_detection_preflight_and_submit_gating_are_wired():
     javascript = JS.read_text(encoding="utf-8")
 
@@ -135,7 +190,7 @@ def test_start_new_review_and_result_reset_share_guarded_purge_behavior():
         assert fragment in reset_handler
     assert 'resetReviewButton.addEventListener("click", resetReview)' in javascript
     assert 'returnToIntake.addEventListener("click", resetReview)' in javascript
-    assert javascript.count('sessionStorage.removeItem("cpf_fcv_assessment_id")') == 1
+    assert javascript.count('sessionStorage.removeItem("cpf_fcv_assessment_id")') == 2
 
 
 def test_result_rendering_uses_connected_note_sections_and_safe_text_content():

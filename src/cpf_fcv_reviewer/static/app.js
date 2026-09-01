@@ -19,6 +19,13 @@ const summaryPanel = document.querySelector("#summary-panel") || results;
 const detailedPanel = document.querySelector("#detailed-panel") || results;
 const resultTabs = Array.from(document.querySelectorAll?.('[role="tab"][data-result-view]') || []);
 const corrections = document.querySelector("#corrections");
+const assistantCard = document.querySelector("#assistant-card") || document.createElement("section");
+const assistantConversation = document.querySelector("#assistant-conversation") || document.createElement("div");
+const assistantForm = document.querySelector("#assistant-form") || document.createElement("form");
+const assistantInput = document.querySelector("#assistant-input") || document.createElement("textarea");
+const assistantSend = document.querySelector("#assistant-send") || document.createElement("button");
+const assistantStatus = document.querySelector("#assistant-status") || document.createElement("p");
+const assistantSuggestions = Array.from(document.querySelectorAll?.("[data-assistant-suggestion]") || []);
 const actions = document.querySelector("#actions");
 const returnToIntake = document.querySelector("#return-to-intake");
 const researchRecovery = document.querySelector("#research-recovery") || document.createElement("section");
@@ -46,6 +53,9 @@ let countryRequiresConfirmation = false;
 let countryCorrection;
 let downloadError;
 let detectionEpoch = 0;
+let assistantStreaming = false;
+let assistantHistoryEpoch = 0;
+let assistantRequestEpoch = 0;
 const RESULT_RETRY_LIMIT = 3;
 const RESULT_RETRY_DELAY_MS = 250;
 const SOURCE_ERROR_LIMIT = 2;
@@ -262,6 +272,7 @@ function showLanding(notice = "") {
   stopJourneyClock();
   landingView.hidden = false;
   reviewWorkspace.hidden = true;
+  assistantCard.hidden = true;
   returnToIntake.hidden = true;
   researchRecovery.hidden = true;
   retryResearchButton.hidden = true;
@@ -277,6 +288,7 @@ function showProgress() {
   progress.hidden = false;
   progressTitle.focus({preventScroll: true});
   results.hidden = true;
+  assistantCard.hidden = true;
   corrections.hidden = true;
   actions.hidden = true;
   returnToIntake.hidden = true;
@@ -295,12 +307,14 @@ function showResults() {
   reviewWorkspace.hidden = false;
   progress.hidden = true;
   results.hidden = false;
+  assistantCard.hidden = false;
   corrections.hidden = false;
   actions.hidden = false;
   returnToIntake.hidden = true;
   researchRecovery.hidden = true;
   retryResearchButton.hidden = true;
   submitCorrection.disabled = false;
+  assistantSend.disabled = assistantStreaming;
 }
 
 function showRecoverableFailure(message) {
@@ -972,12 +986,188 @@ function renderResult(result) {
   const documentType = inferDocumentType(result.document_coverage.primary_document);
   const reviewStage = result.metadata?.review_stage;
   const stage = reviewStage ? " - " + reviewStage.replaceAll("_", " ") : "";
-  resultTitle.textContent = `${country} ${documentType} FCV review`;
+  resultTitle.textContent = [country, documentType, "FCV review"].filter(Boolean).join(" ");
   resultContext.textContent = `${result.document_coverage.primary_document}${stage}`;
   setResultView("summary");
   showResults();
   resultTitle.focus({preventScroll: true});
+  void loadAssistantHistory();
 }
+
+function renderAssistantMessage(role, content) {
+  const message = document.createElement("article");
+  message.className = `assistant-message assistant-message-${role}`;
+  message.setAttribute("data-assistant-role", role);
+  message.textContent = `${role === "user" ? "You" : "Assistant"}: ${content}`;
+  assistantConversation.append(message);
+  return message;
+}
+
+function setAssistantStatus(message) {
+  assistantStatus.textContent = message;
+  assistantStatus.hidden = !message;
+}
+
+function prefillAssistant(event) {
+  const suggestion = event.currentTarget || event.target;
+  const prompt = suggestion?.dataset?.assistantPrompt
+    || suggestion?.getAttribute?.("data-assistant-prompt")
+    || "";
+  assistantInput.value = prompt;
+  assistantInput.focus();
+}
+
+function renderAssistantHistory(history) {
+  assistantConversation.replaceChildren();
+  for (const item of history) {
+    if (
+      item && (item.role === "user" || item.role === "assistant")
+      && typeof item.content === "string" && item.content.trim()
+    ) {
+      renderAssistantMessage(item.role, item.content);
+    }
+  }
+}
+
+async function loadAssistantHistory() {
+  const requestedAssessmentId = assessmentId;
+  if (!requestedAssessmentId) return;
+  const historyEpoch = ++assistantHistoryEpoch;
+  assistantSend.disabled = true;
+  assistantConversation.setAttribute("aria-busy", "true");
+  try {
+    const response = await fetch(`/api/reviews/${requestedAssessmentId}/assistant`);
+    if (requestedAssessmentId !== assessmentId || historyEpoch !== assistantHistoryEpoch) return;
+    if (!response.ok) {
+      if (response.status === 410) setAssistantStatus("This review session has expired. Start a new review to continue.");
+      return;
+    }
+    const history = await response.json();
+    if (
+      requestedAssessmentId !== assessmentId
+      || historyEpoch !== assistantHistoryEpoch
+      || !Array.isArray(history)
+    ) return;
+    renderAssistantHistory(history);
+    setAssistantStatus("");
+  } catch (_error) {
+    if (requestedAssessmentId === assessmentId && historyEpoch === assistantHistoryEpoch) {
+      setAssistantStatus("The follow-on assistant is unavailable right now. Try again in a moment.");
+    }
+  } finally {
+    if (
+      requestedAssessmentId === assessmentId
+      && historyEpoch === assistantHistoryEpoch
+      && !assistantStreaming
+    ) {
+      assistantSend.disabled = false;
+      assistantConversation.setAttribute("aria-busy", "false");
+    }
+  }
+}
+
+function dispatchAssistantEvent(block, onEvent) {
+  let eventName = "message";
+  const dataLines = [];
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith("event:")) eventName = line.slice(6).trim();
+    if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  }
+  if (!dataLines.length) return;
+  try {
+    onEvent(eventName, JSON.parse(dataLines.join("\n")));
+  } catch (_error) {
+    onEvent("parse_error", {});
+  }
+}
+
+async function consumeAssistantStream(response, onEvent) {
+  const reader = response.body?.getReader?.();
+  if (!reader) throw new Error("Assistant stream unavailable.");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buffer += typeof value === "string" ? value : decoder.decode(value, {stream: true});
+    const blocks = buffer.split(/\r?\n\r?\n/);
+    buffer = blocks.pop() || "";
+    for (const block of blocks) dispatchAssistantEvent(block, onEvent);
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) dispatchAssistantEvent(buffer, onEvent);
+}
+
+async function sendAssistantMessage(event) {
+  event.preventDefault();
+  const message = assistantInput.value.trim();
+  const requestAssessmentId = assessmentId;
+  if (
+    !message || !requestAssessmentId || resetPending
+    || assistantStreaming || assistantSend.disabled
+  ) return;
+
+  const requestEpoch = ++assistantRequestEpoch;
+  assistantHistoryEpoch += 1;
+  assistantStreaming = true;
+  assistantSend.disabled = true;
+  assistantConversation.setAttribute("aria-busy", "true");
+  setAssistantStatus("");
+  renderAssistantMessage("user", message);
+  const assistantMessage = renderAssistantMessage("assistant", "");
+  let responseText = "";
+  let completed = false;
+  let failed = false;
+  try {
+    const response = await fetch(`/api/reviews/${requestAssessmentId}/assistant`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({message}),
+    });
+    if (!response.ok) throw new Error("Assistant request failed.");
+    await consumeAssistantStream(response, (eventName, data) => {
+      if (
+        requestAssessmentId !== assessmentId
+        || requestEpoch !== assistantRequestEpoch
+        || failed
+      ) return;
+      if (eventName === "chunk" && typeof data?.text === "string") {
+        responseText += data.text;
+        assistantMessage.textContent = `Assistant: ${responseText}`;
+      } else if (eventName === "error" || eventName === "parse_error") {
+        failed = true;
+        assistantMessage.remove();
+        setAssistantStatus("The assistant could not complete that response. Please try again.");
+      } else if (eventName === "done") {
+        completed = true;
+      }
+    });
+    if (!completed || !responseText) throw new Error("Assistant response incomplete.");
+    if (requestAssessmentId === assessmentId && requestEpoch === assistantRequestEpoch) {
+      assistantInput.value = "";
+    }
+  } catch (_error) {
+    if (
+      !failed
+      && requestAssessmentId === assessmentId
+      && requestEpoch === assistantRequestEpoch
+    ) {
+      assistantMessage.remove();
+      setAssistantStatus("The assistant could not complete that response. Please try again.");
+    }
+  } finally {
+    if (requestAssessmentId === assessmentId && requestEpoch === assistantRequestEpoch) {
+      assistantStreaming = false;
+      assistantSend.disabled = false;
+      assistantConversation.setAttribute("aria-busy", "false");
+    }
+  }
+}
+
+for (const suggestion of assistantSuggestions) {
+  suggestion.addEventListener("click", prefillAssistant);
+}
+assistantForm.addEventListener("submit", sendAssistantMessage);
 
 function isActiveSource(source) {
   return activeEventSource === source;
@@ -1010,6 +1200,37 @@ async function loadResult(resultUrl, operation, attempt = 1) {
   if (!response.ok) throw new Error("Review result is unavailable.");
   const result = await response.json();
   return isCurrentOperation(operation) ? result : null;
+}
+
+async function restoreSavedReview() {
+  const requestedAssessmentId = assessmentId;
+  if (!requestedAssessmentId) return;
+  const operation = ++operationEpoch;
+  showProgress();
+  progressMessage.textContent = "Restoring the saved review";
+  try {
+    const resultUrl = `/api/reviews/${requestedAssessmentId}/result`;
+    const response = await fetch(resultUrl);
+    if (!isCurrentOperation(operation) || requestedAssessmentId !== assessmentId) return;
+    if (response.status === 202) {
+      watchEvents(`/api/reviews/${requestedAssessmentId}/events`, resultUrl, operation);
+      return;
+    }
+    if (response.status === 410) {
+      sessionStorage.removeItem("cpf_fcv_assessment_id");
+      assessmentId = "";
+      showLanding("This saved review expired. Upload again.");
+      return;
+    }
+    if (!response.ok) throw new Error("Saved review unavailable.");
+    const result = await response.json();
+    if (!isCurrentOperation(operation) || requestedAssessmentId !== assessmentId) return;
+    renderResult(result);
+  } catch (_error) {
+    if (isCurrentOperation(operation) && requestedAssessmentId === assessmentId) {
+      showLanding("The saved review could not be restored. You can try again or start a new review.");
+    }
+  }
 }
 
 function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
@@ -1155,6 +1376,11 @@ submitCorrection.addEventListener("click", async () => {
     }
     const child = await response.json();
     if (!isCurrentOperation(operation)) return;
+    assistantRequestEpoch += 1;
+    assistantHistoryEpoch += 1;
+    assistantStreaming = false;
+    assistantSend.disabled = true;
+    assistantConversation.setAttribute("aria-busy", "false");
     assessmentId = child.assessment_id;
     sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
     showProgress();
@@ -1244,6 +1470,14 @@ async function resetReview() {
   }
   resultContext.textContent = "";
   resultTitle.textContent = "CPF / CEN FCV review";
+  assistantConversation.replaceChildren();
+  assistantInput.value = "";
+  setAssistantStatus("");
+  assistantHistoryEpoch += 1;
+  assistantRequestEpoch += 1;
+  assistantStreaming = false;
+  assistantSend.disabled = true;
+  assistantConversation.setAttribute("aria-busy", "false");
   evidenceStatusLabel.textContent = "";
   evidenceStatusLimitation.textContent = "";
   evidenceStatus.hidden = true;
@@ -1284,6 +1518,8 @@ async function resetReview() {
 resetReviewButton.addEventListener("click", resetReview);
 returnToIntake.addEventListener("click", resetReview);
 
+if (assessmentId) void restoreSavedReview();
+
 if (window.__CPF_FCV_REVIEWER_TEST__) {
   window.__cpfFcvReviewerTestHooks = {
     getActiveSource: () => activeEventSource,
@@ -1297,5 +1533,10 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     renderFiveMinuteReadout,
     renderDetailedAnalysis,
     splitNarrativeIntoChunks,
+    loadAssistantHistory,
+    prefillAssistant,
+    sendAssistantMessage,
+    renderAssistantMessage,
+    restoreSavedReview,
   };
 }
