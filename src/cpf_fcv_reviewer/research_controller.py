@@ -414,9 +414,21 @@ class ResearchController:
         missing: tuple[str, ...],
         request: ResearchRequest,
     ) -> str:
-        recent_count = self._recent_claim_count(claims, request)
-        source_word = "source" if recent_count == 1 else "sources"
-        count_word = "one" if recent_count == 1 else str(recent_count)
+        recent_claims = tuple(
+            claim for claim in claims if self._is_recent(claim, request)
+        )
+        recent_count = len(recent_claims)
+        source_count = len(
+            {
+                _normalize_source_url(claim.source_url)
+                for claim in recent_claims
+                if claim.source_url
+            }
+        )
+        claim_word = "claim" if recent_count == 1 else "claims"
+        source_word = "source" if source_count == 1 else "sources"
+        recent_count_word = "one" if recent_count == 1 else str(recent_count)
+        source_count_word = "one" if source_count == 1 else str(source_count)
         verb = "was" if recent_count == 1 else "were"
         labels = {
             "claims": "the minimum number of claims",
@@ -427,7 +439,8 @@ class ResearchController:
         }
         gaps = ", ".join(labels.get(item, item) for item in missing)
         return (
-            f"Only {count_word} public {source_word} {verb} established recently; "
+            f"{recent_count_word} recent {claim_word} from {source_count_word} "
+            f"institutional {source_word} {verb} established; "
             f"current-country coverage remains incomplete for {gaps}."
         )
 
@@ -444,9 +457,10 @@ class ResearchController:
             f"review_date: {request.review_date.isoformat()}",
         ]
         if request.mode is ResearchMode.RRA_UPDATE:
+            if attempt == 1:
+                lines.append("diagnostic_target: the named RRA or diagnostic")
             lines.extend(
                 (
-                    f"diagnostic_title: {request.diagnostic_title}",
                     f"diagnostic_date: {request.diagnostic_date.isoformat()}",
                     (
                         "Focus on the diagnostic date-to-review date gap and re-test "
@@ -462,6 +476,19 @@ class ResearchController:
             labels = ", ".join(missing)
             lines.append(f"Retry attempt {attempt}: missing coverage: {labels}.")
             lines.append("Shift source emphasis toward authoritative sources not yet represented.")
+            if {"structural_dynamic", "current_development"}.intersection(missing):
+                if request.mode is ResearchMode.RRA_UPDATE:
+                    target = "the named RRA or diagnostic"
+                else:
+                    target = "the current-country question"
+                lines.append(
+                    "Seek missing non-economic governance, conflict, institutional, "
+                    f"security, social, or service-delivery evidence relevant to {target}."
+                )
+                lines.append(
+                    "Do not return additional evidence focused on already-covered "
+                    "economic themes."
+                )
         return "\n".join(lines)
 
     def _missing_coverage(
@@ -568,7 +595,7 @@ def _require_finite_number(value: object, name: str, *, positive: bool) -> None:
 def _normalize_source_url(url: str) -> str:
     parsed = urlsplit(url.strip())
     scheme = parsed.scheme.casefold()
-    hostname = (parsed.hostname or "").casefold()
+    hostname = (parsed.hostname or "").rstrip(".").casefold()
     try:
         port = parsed.port
     except ValueError:

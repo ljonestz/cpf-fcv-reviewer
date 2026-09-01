@@ -1526,6 +1526,22 @@ def test_public_research_prompt_requires_exact_modes_and_source_hierarchy():
         assert term in prompt
 
 
+def test_public_research_prompt_targets_missing_non_economic_themes_on_retry():
+    prompt = public_research.load_research_prompt()
+
+    for term in (
+        "non-economic",
+        "governance",
+        "conflict",
+        "institutional",
+        "security",
+        "social",
+        "service-delivery",
+        "already-covered economic themes",
+    ):
+        assert term in prompt
+
+
 def test_current_context_claim_rejects_unknown_context_kind():
     with pytest.raises(ValidationError):
         _claim(context_kind="unclassified")
