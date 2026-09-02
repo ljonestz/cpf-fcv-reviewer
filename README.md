@@ -9,18 +9,18 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Latest provider-free verified implementation: `fix/guinea-production-fixes` through
-  code commit `67ab97c` (1,177 tests). Review-schema failure after one retry now uses
+  deployed code commit `a52505c` (1,177 tests). Review-schema failure after one retry uses
   a dedicated safe code with bounded, content-free attempt diagnostics. Provider-visible
   schema and prompt guidance mirror the locally enforced narrative, assessment,
   evidence-ID, and locator requirements. The implementation keeps the existing
-  architecture and dependencies and made no paid API call during validation.
-- Last verified deployment: `361fe8c` on 2026-09-02. Render reported the exact commit
-  live, `/health` returned `ok`, and the public page returned HTTP 200 before the quality
-  run. Its single authorized Guinea assessment completed extraction, current-country
-  research, full-RRA mapping, and drafting, then failed closed with safe code
-  `review_failed`; Render recorded a `ValidationError`. No result, assistant conversation,
-  or DOCX was produced, so provider acceptance for the role-aware redesign remains
-  unestablished. The unchanged deployment must not be rerun.
+  architecture and dependencies and made no paid API call during implementation validation.
+- Last verified deployment: `a52505c74d72bc08d4f973436f8b8204c76b1d0b` on
+  2026-09-03. Render reported the exact commit live and `/health` returned `ok`. Its one
+  authorized Guinea assessment ended in `run_complete`; the result contract, 58 evidence
+  records, evidence references, metadata, HTML result, and 47,218-byte DOCX structure
+  passed validation. Current research was unavailable after bounded attempts, so the
+  result truthfully uses the `document_led` tier. Do not rerun the unchanged deployment.
+
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
   result schema, 32 evidence records, reproducibility metadata, and application validation
@@ -95,6 +95,10 @@ summary, detailed output, assistant streaming and refresh restoration, and failu
 plus the DOCX on success. Smoke output must remain clearly labelled synthetic and must
 not be presented as country-quality evidence.
 The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
+Exercise the external quality runner against deterministic smoke mode before a paid
+submission, and persist its transient assessment handle outside Git immediately after
+creation. The 2026-09-03 runner stopped after the successful result because two helpers
+had drifted from current Playwright and locator APIs; no second assessment was submitted.
 
 ## Documentation
 
@@ -105,6 +109,7 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 - [2026-09-02 Guinea quality validation on 361fe8c](docs/validation/2026-09-02-guinea-production-quality-361fe8c.md): the single provider-backed attempt, safe failure evidence, resource checks, and external artifacts.
 - [2026-09-02 review-schema diagnostics validation](docs/validation/2026-09-02-review-schema-diagnostics-validation.md):
   provider-free schema guidance, redaction, retry, and diagnosability evidence.
+- [2026-09-03 Guinea production quality validation on a52505c](docs/validation/2026-09-03-guinea-production-quality-a52505c.md): successful schema path, result and DOCX checks, visible-browser evidence, substantive limitations, and QA-runner findings.
 - [2026-09-02 results, assistant, and full-RRA validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, deployment cycles, and current Guinea acceptance status.
 - [2026-09-02 full-RRA map reliability fix validation](docs/validation/2026-09-02-full-rra-map-reliability-fix-validation.md): test-first implementation, security review, provider-free checks, and current deployment status.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.

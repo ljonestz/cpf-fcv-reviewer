@@ -1,22 +1,20 @@
 # Project status
 
-Updated 2026-09-02. Review-schema failure observability and provider-visible validation
-guidance are provider-free verified on `fix/guinea-production-fixes` through code commit
-`67ab97c`. After exactly one schema retry, a terminal failure now reports the dedicated
-`review_schema_invalid` code with bounded, content-free attempt diagnostics. The schema
-and prompt expose the locally enforced narrative, assessment, evidence-ID, and locator
-requirements before generation. This closes the prior diagnosability gap without retaining
-validation messages, rejected values, model output, model identifiers, or document text.
-The fix is not yet deployed or provider-tested. Semantic application version is `0.1.0`.
+Updated 2026-09-03. Review-schema failure observability and provider-visible validation
+guidance are verified through deployed code commit
+`a52505c74d72bc08d4f973436f8b8204c76b1d0b`. The complete provider-free suite passed,
+and one explicitly authorized paid Guinea assessment completed with `run_complete`.
+The post-drafting schema failure seen on `361fe8c` did not recur. The result contract,
+all evidence references, application metadata, HTML result, and DOCX structure passed
+their checks. Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
-code commit `361fe8c` live on 2026-09-02; `/health` returned `ok` with that exact release and
-the public page returned HTTP 200 before the quality run. Its one authorized Guinea
-assessment completed extraction, current-country research, full-RRA mapping, and drafting,
-then failed closed. Render recorded `error_type=ValidationError` and
-`failure_code=review_failed`, with no matching provider, timeout, OOM, or HTTP 5xx event in
-the run window. Memory peaked at approximately 171 MB against a 537 MB limit. The unchanged
-build was not rerun. The service remains the free, volatile public test site. Operational
+`a52505c74d72bc08d4f973436f8b8204c76b1d0b` live on 2026-09-03; `/health` returned `ok`
+with that exact release. The successful Guinea result contains 58 evidence records, four
+priority areas, five RRA rows, and citations reaching RRA page 56. Current public research
+exhausted its attempts, so the result truthfully uses the `document_led` tier and discloses
+its reliance on the submitted CPF and dated 2022 RRA. The service remains the free,
+volatile public test site. Operational
 production still fails closed without SQLite persistence; the public test site can run
 without a disk only through the explicit `ALLOW_VOLATILE_PROTOTYPE=true` exception.
 
@@ -26,13 +24,13 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-09-02: 1,177 provider-free tests passed in 106.46 seconds;
+Latest verified suite on 2026-09-03: 1,177 provider-free tests passed in 106.46 seconds;
 the focused schema/contracts/prompt/failure set passed 250 tests. Python compilation and
 `git diff --check` passed. The Anthropic SDK schema-transform regression confirmed that
 the new descriptions survive into the provider-visible schema. Independent review found
 no critical issue; its remaining locator-guidance finding was fixed and regression-tested.
-Ruff and Black are not installed, so those optional checks were unavailable. No paid API
-call was made for this fix.
+Ruff and Black are not installed, so those optional checks were unavailable. Exactly one
+paid Guinea assessment was submitted after the provider-free and deployment gates.
 The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
@@ -181,8 +179,17 @@ The stable FCV Project Screener is untouched and prohibited.
   model identifiers, and document text from both events and logs. Provider-visible schema
   descriptions and review prompt version `3.0.1` now mirror the hidden narrative,
   conditional assessment, evidence-ID, and target-locator validators. The complete
-  provider-free suite passed all 1,177 tests; deployment and provider acceptance remain
-  pending.
+  provider-free suite passed all 1,177 tests.
+- Deployed commit `a52505c` passed exact-release health checks and one authorized Guinea
+  quality assessment. The event stream ended in `run_complete`; one bounded application
+  repair handled five allowlisted `raw_evidence_id_in_narrative` and
+  `stage_length_overreach` issues, with no `repair_failed` or `run_failed` event. The
+  result contract passed with 58 evidence records, four priorities, five RRA rows, and
+  23 distinct RRA references. The 47,218-byte DOCX passed ZIP/OOXML and structural checks.
+  Eleven unique production PNGs and the DOCX were saved outside Git. The external QA
+  runner then stopped on a stale Playwright call signature and a stale locator-field
+  assumption; these did not affect the application, but full two-turn production assistant
+  acceptance was not completed and no second assessment was submitted.
 
 ## Validation cost protocol
 
@@ -195,24 +202,28 @@ the no-cost ladder before another paid run is considered. Save full-page PNGs an
 successful DOCX with unique filenames; never substitute HTML for screenshots or relabel
 smoke output as country-quality output.
 
+Before any future paid submission, exercise the external runner end to end against the
+deterministic smoke service, including its current Playwright keyword arguments and current
+locator contract. Persist the transient assessment handle outside Git immediately after
+creation so a completed run can be recovered without another provider invocation.
+
 ## Remaining considerations
 
-1. Do not rerun deployed `361fe8c`. Deploy exact code commit `67ab97c`, verify the
-   reported release at `/health`, and complete static-page checks before considering any
-   provider-backed Guinea assessment. A paid run requires separate authorization. If it
-   fails with `review_schema_invalid`, retain only the newly allowed sanitized diagnostic
-   fields and return to provider-free regression testing. On success, confirm RRA
-   citations include
-   relevant deep-page evidence, package documents are reflected in detail where supplied,
-   two assistant requests restore after refresh, and the saved DOCX is structurally and
-   visually inspected where tooling permits.
-2. Guinea provider acceptance is established for the previous public advisory prototype on
-   deployed commit `1ba44bf`, subject to its disclosed `reduced` current-evidence tier.
-3. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:
+1. Do not rerun deployed `a52505c`. The schema-generation path, result rendering,
+   evidence integrity, and structural DOCX export are accepted for this build. Current-
+   evidence richness remains limited by the disclosed `document_led` tier.
+2. Use a provider-free design cycle to set an explicit Five-minute-readout concision budget
+   and decide whether semantic finalization-stage calibration needs a narrower prompt or
+   validator. The current three top readouts total 818 words, and some mechanically valid
+   `fine_tuning` actions imply substantial delivery changes.
+3. Complete full two-turn assistant production acceptance only during a later separately
+   justified paid cycle; do not run another assessment solely to repair the external QA
+   harness. Visual DOCX pagination also remains unverified because LibreOffice is absent.
+4. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:
    confirm Haiti's scattered jobs/IFC/MIGA treatment and Benin's multi-document coverage.
-4. Keep the approved public registry current, versioned, checksummed, and
+5. Keep the approved public registry current, versioned, checksummed, and
    non-confidential, and keep internal OPCS/ITS sources on a separately governed track.
-5. ITS production use still requires separately approved identity, durable storage,
+6. ITS production use still requires separately approved identity, durable storage,
    authorization, audit/monitoring, authoritative source access, and
    information-security controls.
 
