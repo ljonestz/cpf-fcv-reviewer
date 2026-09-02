@@ -1,10 +1,12 @@
 # Project status
 
-Updated 2026-09-02. The results, persistent assistant, and full-RRA coverage redesign is
-provider-free verified on `fix/guinea-production-fixes` through code commit `095873b`.
-Three authorized deployed Guinea cycles failed closed during diagnostic mapping; deployed
-provider acceptance for the redesign is not established. Semantic application version is
-`0.1.0`.
+Updated 2026-09-02. The role-aware source-coverage correction is provider-free verified on
+`fix/guinea-production-fixes` through code commit `24a8d22`. It replaces exact-once RRA
+output coverage with thematic representative citations, reviews bounded accompanying
+package documents completely, and enforces the primary/package/context attention order.
+It has not been deployed or provider-tested. Three earlier authorized Guinea cycles failed
+closed during diagnostic mapping; provider acceptance for the redesign is not established.
+Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
 code commit `00d3a64` live on 2026-09-02; `/health` returned `ok` with that exact release,
@@ -21,12 +23,14 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-09-02: 1,154 passed in 23.06 seconds. The provider-free
-smoke suite passed 36 tests, the focused prompt/runtime set passed 146 tests, and Python
-compilation, JavaScript syntax, and `git diff --check` passed. Provider-free browser QA
-passed eight selected full-page states, four-message assistant restoration, secondary
-correction, and DOCX download/structural checks. Ruff and LibreOffice are not installed
-in the Windows environment.
+Latest verified suite on 2026-09-02: 1,170 passed in 54.07 seconds. The nine-module
+source-coverage set passed 341 tests and the provider-free smoke suite passed 36 tests.
+Python compilation, JavaScript syntax, and `git diff --check` passed. Provider-free
+current-HEAD browser QA covered nine full-page desktop/mobile states, two streamed
+assistant requests with four-message restoration, secondary correction, and the safe
+package-coverage failure. A fresh smoke DOCX passed ZIP/OOXML and structural checks (35
+paragraphs, 12 headings, no tables, one section). Ruff and LibreOffice are not installed;
+DOCX-to-page visual rendering was therefore unavailable.
 The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
@@ -38,13 +42,19 @@ The stable FCV Project Screener is untouched and prohibited.
   evidence. It keeps at most 20 messages in the existing session store, restores after
   refresh, rejects concurrent requests, and clears history for correction children.
 - Recognized uploaded RRAs/equivalent diagnostics are fully extracted within explicit
-  bounds and every extractable page is assigned exactly once through the existing
-  diagnostic-map concept. Unsafe or incomplete mapping fails closed without sampling.
+  bounds and never silently sampled. The existing diagnostic-map concept synthesizes
+  drivers, resilience sources, and key risks with known, nonempty representative
+  citations. Uncited pages and cross-theme citation reuse are permitted; duplicate IDs
+  within an entry and unknown IDs are rejected.
 - Full-diagnostic map generation targets 8-12 thematic entries while permitting up to
-  20 when distinct material drivers require it. A coverage correction receives only a
-  sanitized scaffold of validated categories and authoritative, globally de-duplicated
-  page IDs; model-authored labels, rationales, entry IDs, unknown IDs, and raw text are
-  excluded. The map stage still makes at most two calls and fails closed.
+  20 when distinct material drivers require it. One sanitized correction call is retained
+  for schema-invalid output only. The former exact-once coverage correction and requirement
+  to assign every RRA page to an output entry have been removed.
+- The primary CPF/CEN is the principal assessment lens. Up to ten accompanying package
+  documents are reviewed in detail: they are fully re-extracted, and all retained segments
+  reach the model within the 400-segment, 300,000-character, and 160,000 estimated-token
+  input budgets. Exceeding a bound fails closed with the safe package-coverage category.
+  The RRA and other contextual inputs provide higher-level thematic support.
 - Three document buckets, country inference with confirmation fallback, explicit review stage and detail controls, safe source precedence, and detailed HTML/DOCX scope parity.
 - Approved public guardrail registry with checksum validation and fail-closed loading.
 - Structured model output, application-owned metadata, safe failure codes,
@@ -64,8 +74,10 @@ The stable FCV Project Screener is untouched and prohibited.
   sanitizer while preserving structured evidence links, locators, IDs, and metadata.
 - DOCX export no longer depends on an unused referral-registry hydration lookup and
   remains independently testable as a valid Word ZIP package.
-- PDF extraction is text-first and bounded. Optional PDFs use deterministic full-range sampling with true page locators and explicit incomplete-coverage warnings. Long TXT/Markdown inputs are chunked across the full document.
-- Package evidence is balanced across uploaded files. Incompletely sampled RRA/Strategy evidence cannot support an unqualified `not evidenced` absence claim.
+- PDF extraction is text-first and bounded. Package PDFs use complete extraction within
+  the package limits; contextual non-diagnostic PDFs may use deterministic full-range
+  sampling with true page locators and explicit incomplete-coverage warnings. Long
+  TXT/Markdown inputs are chunked across the full document.
 - SQLite-backed jobs, replayable events, restart recovery, 24-hour production retention, and persistence-before-completion event ordering are implemented.
 - Deterministic synthetic early-drafting, decision-review, and finalization quality cases passed as part of the automated suite. These are not a substitute for approved-material reference evaluation.
 - The dedicated holding view passed browser QA at 1280px and 390px. It preserves the existing stage/timer/guidance lifecycle, has no horizontal overflow, and moves focus correctly into holding and results views.
@@ -144,6 +156,14 @@ The stable FCV Project Screener is untouched and prohibited.
   made. A local regression now covers two schema-valid but incomplete map responses and
   asserts the two-call ceiling and preserved `ValueError` cause. The post-run focused
   prompt/runtime gate passed 146 tests and the complete suite passed all 1,154 tests.
+- Commits `20adf15` and `bdaa38e` replace exact-once RRA output coverage with thematic
+  representative-reference validation while preserving full bounded extraction and a
+  single schema retry. Commits `93b7666` and `f538434` fully extract bounded package
+  documents and keep coverage warnings synchronized. Commit `087b3cc` supplies every
+  retained package segment with stable evidence IDs. Commits `568d4f4` and `24a8d22`
+  enforce the attention hierarchy, complete serialized-input budget, safe package failure,
+  and schema-retry budget. All four task checkpoints passed independent specification and
+  code-quality review.
 
 ## Validation cost protocol
 
@@ -156,14 +176,12 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. Do not rerun deployed `00d3a64`. Before another paid cycle, agree a bounded reliability
-   change that avoids asking the correction call to regenerate the whole map. One candidate
-   is an application-merged patch contract limited to authoritative IDs still missing after
-   the first schema-valid response; this is a design change and is not yet approved. Repeat
-   the local, smoke, exact-release health, and static-page gates for any implementation, and
-   limit any newly authorized deployment to one Guinea assessment. On success, confirm all
-   102 RRA pages are attempted/accounted for, inspect deep-page evidence, exercise two
-   assistant requests plus refresh restoration, and inspect the saved DOCX.
+1. Do not rerun deployed `00d3a64`. After separate approval, deploy the exact final
+   provider-free checkpoint, verify that release through no-cost health/static checks, and
+   run at most one paid Guinea assessment for that deployed code. On success, confirm
+   thematic RRA citations include relevant deep-page evidence, package documents are
+   reflected in detail, two assistant requests restore after refresh, and the saved DOCX
+   is structurally and visually inspected where tooling permits.
 2. Guinea provider acceptance is established for the previous public advisory prototype on
    deployed commit `1ba44bf`, subject to its disclosed `reduced` current-evidence tier.
 3. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:

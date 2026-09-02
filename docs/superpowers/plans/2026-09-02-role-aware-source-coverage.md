@@ -1,5 +1,9 @@
 # Role-Aware Source Coverage Implementation Plan
 
+> Execution record: this checklist is preserved as the approved historical plan. Verified
+> completion evidence is recorded in
+> `docs/validation/2026-09-02-role-aware-source-coverage-validation.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace exact-once RRA page mapping with representative thematic citations while fully processing bounded accompanying package documents in the final review.

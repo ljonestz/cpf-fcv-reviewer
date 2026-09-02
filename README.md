@@ -9,11 +9,10 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Latest provider-free verified implementation: `fix/guinea-production-fixes` through
-  code commit `095873b` (current branch: 1,154 tests; 36 provider-free smoke tests).
-  Full-diagnostic mapping now
-  targets compact thematic output without merging distinct drivers, and its single
-  coverage correction receives only a sanitized structural scaffold. The two-call
-  ceiling, full exact-once page coverage, and fail-closed behavior remain unchanged.
+  code commit `24a8d22` (current branch: 1,170 tests; 36 provider-free smoke tests).
+  Review attention is role-aware: the CPF/CEN is the principal lens, accompanying
+  package documents are reviewed in detail, and the RRA and other context are thematic
+  supporting inputs. The implementation keeps the existing architecture and dependencies.
 - Last verified deployment: `00d3a64` on 2026-09-02. Render reported the exact commit
   live, `/health` returned `ok`, and the public page, review form, assistant shell, and
   post-deploy error-log check passed. Its single authorized Guinea assessment progressed
@@ -34,15 +33,17 @@ The review starts with three document buckets: the draft CPF/CEN, accompanying p
 
 Every review performs bounded current-country public-web research. An uploaded public RRA changes the research window but never suppresses that current research. Retryable research failures can be retried using the retained review package; retry never exposes partial output.
 
-Optional non-diagnostic PDFs use deterministic, bounded sampling across the full page
-range. A recognized uploaded RRA or equivalent diagnostic is instead extracted in full,
-within explicit safety bounds, and every extractable page is assigned exactly once through
-the diagnostic map. If the first map is schema-invalid or fails exact-once coverage, one
-correction attempt may reuse the same bounded input; a third map call is never made. If
-complete RRA coverage cannot be established, the review fails closed rather than silently
-reverting to sampling. Package evidence remains balanced
-across uploaded files, and incomplete non-diagnostic coverage is disclosed rather than
-treated as proof that content is absent.
+Up to ten accompanying package documents are fully re-extracted and every retained
+segment is supplied to the review within explicit limits of 400 segments, 300,000
+characters, and a 160,000 estimated-input-token ceiling. If that detailed package review
+cannot be completed, the assessment fails closed instead of silently sampling. A
+recognized uploaded RRA or equivalent diagnostic is also extracted in full within the
+configured safety bounds and is never silently reduced to sampled pages. Its diagnostic
+map synthesizes drivers, resilience sources, and key risks using known, nonempty,
+representative citations; it does not require the model to assign every RRA page to an
+output theme. One sanitized retry remains available only for a schema-invalid map.
+Other contextual material may be summarized at a higher level, with incomplete coverage
+disclosed rather than treated as proof that content is absent.
 
 Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and one bounded basis/limitations disclosure. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
 
@@ -95,6 +96,8 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
 - [Approved results, assistant, and full-RRA coverage design](docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md): bounded implementation scope and acceptance criteria.
+- [Approved role-aware source coverage design](docs/superpowers/specs/2026-09-02-role-aware-source-coverage-design.md): primary/package/context attention hierarchy and bounded RRA synthesis.
+- [2026-09-02 role-aware source coverage validation](docs/validation/2026-09-02-role-aware-source-coverage-validation.md): provider-free tests, browser evidence, DOCX checks, and deployment checkpoint.
 - [2026-09-02 results, assistant, and full-RRA validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, deployment cycles, and current Guinea acceptance status.
 - [2026-09-02 full-RRA map reliability fix validation](docs/validation/2026-09-02-full-rra-map-reliability-fix-validation.md): test-first implementation, security review, provider-free checks, and current deployment status.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
