@@ -68,6 +68,9 @@ def test_mechanical_repair_retry_gate_accepts_duplicates_and_rejects_other_issue
             {"code": "stage_length_overreach"},
         ]
     )
+    assert runtime._can_retry_mechanical_repair(
+        [{"code": "missing_registry_support"}]
+    )
     assert not runtime._can_retry_mechanical_repair(
         [{"code": "missing_current_context_support"}]
     )

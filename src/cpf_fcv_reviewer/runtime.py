@@ -71,6 +71,7 @@ MECHANICAL_REPAIR_RETRY_CODES = frozenset(
         "raw_evidence_id_in_narrative",
         "stage_length_overreach",
         "prohibited_policy_language",
+        "missing_registry_support",
     }
 )
 
