@@ -510,6 +510,33 @@ def test_review_request_budget_allows_exact_boundary_and_rejects_one_token_over(
         ReviewEngine(gateway).review(one_token_over)
 
 
+def test_review_rejects_over_budget_schema_retry_before_second_gateway_call(
+    monkeypatch,
+):
+    meta = metadata()
+    pack = evidence_pack(meta)
+    initial_error = invalid_review_draft_error()
+    dry_run_gateway = SequencedGateway(initial_error, draft_for(meta))
+    monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", 10**9)
+
+    ReviewEngine(dry_run_gateway).review(pack)
+    initial_payload = dry_run_gateway.calls[0][1]
+    ceiling = review_engine._estimated_input_tokens(initial_payload)
+    retry_payload = {
+        **initial_payload,
+        "schema_retry": {"issues": review_engine._safe_schema_issues(initial_error)},
+    }
+    assert review_engine._estimated_input_tokens(retry_payload) > ceiling
+
+    gateway = SequencedGateway(initial_error, draft_for(meta))
+    monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", ceiling)
+
+    with pytest.raises(PackageCoverageUnavailable, match="request budget"):
+        ReviewEngine(gateway).review(pack)
+
+    assert len(gateway.calls) == 1
+
+
 def test_review_carries_model_authored_alignment_readout_into_result():
     meta = metadata()
     alignment_readout = (

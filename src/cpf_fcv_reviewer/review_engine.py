@@ -516,12 +516,17 @@ class ReviewEngine:
                 output_type=ReviewDraft,
             )
         except ValidationError as error:
+            retry_payload = {
+                **payload,
+                "schema_retry": {"issues": _safe_schema_issues(error)},
+            }
+            if _estimated_input_tokens(retry_payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
+                raise PackageCoverageUnavailable(
+                    "Complete review request exceeds the safe request budget."
+                )
             draft = self.gateway.generate(
                 prompt_name="review",
-                payload={
-                    **payload,
-                    "schema_retry": {"issues": _safe_schema_issues(error)},
-                },
+                payload=retry_payload,
                 output_type=ReviewDraft,
             )
         coverage = DocumentCoverage(
