@@ -18,8 +18,8 @@ from .contracts import (
 )
 from .diagnostic_map import (
     prioritize,
-    validate_diagnostic_coverage,
     validate_diagnostic_entry_ids,
+    validate_diagnostic_references,
 )
 from .reproducibility import build_run_metadata
 
@@ -63,8 +63,10 @@ def build_evidence_pack(
 
     validate_diagnostic_entry_ids(diagnostic_entries)
 
-    referenced_ids = material_diagnostic_ids + tuple(
-        evidence_id for entry in diagnostic_entries for evidence_id in entry.source_evidence_ids
+    referenced_ids = tuple(
+        evidence_id
+        for entry in diagnostic_entries
+        for evidence_id in entry.source_evidence_ids
     )
     known_evidence_ids = set(evidence_ids)
     unknown_ids = tuple(dict.fromkeys(referenced_ids))
@@ -73,7 +75,7 @@ def build_evidence_pack(
         raise ValueError(f"Unknown diagnostic evidence references: {', '.join(unknown_ids)}")
 
     if metadata.diagnostic_mode == DiagnosticMode.RRA_ALIGNMENT:
-        validate_diagnostic_coverage(material_diagnostic_ids, diagnostic_entries)
+        validate_diagnostic_references(material_diagnostic_ids, diagnostic_entries)
     return EvidencePack(
         metadata=metadata,
         evidence=evidence,

@@ -2807,16 +2807,21 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
             calls.append((prompt_name, payload))
             if prompt_name == "diagnostic_map":
                 captured["map_payload"] = payload
-                ids = tuple(item["evidence_id"] for item in payload["evidence"])
+                ids = tuple(
+                    item["evidence_id"]
+                    for item in payload["evidence"]
+                    if item["evidence_id"]
+                    in {"diagnostic-page-003", "diagnostic-page-044", "diagnostic-page-102"}
+                )
                 return DiagnosticMap(
                     entries=(
                         DiagnosticEntry(
-                            entry_id="diagnostic-all-pages",
-                            short_name="Mapped diagnostic pages",
+                            entry_id="diagnostic-themes",
+                            short_name="Mapped diagnostic themes",
                             group="principal_driver",
                             materiality="high",
                             source_evidence_ids=ids,
-                            grouping_rationale="Every supplied extractable page is retained.",
+                            grouping_rationale="Representative pages support the themes.",
                         ),
                     )
                 )
@@ -2845,7 +2850,9 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
                 ),
                 institutional_referral_ids=(),
                 limitations=(),
-                coverage_note="The review covers the complete uploaded RRA.",
+                coverage_note=(
+                    "The review uses representative citations from the uploaded RRA."
+                ),
             )
 
     gateway = FakeGateway()
@@ -2895,16 +2902,24 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
     assert "page 50 extracted no text" in context["evidence_pack"].warnings
     coverage_line = (
         "benin-rra.pdf: 102 pages attempted; 101 pages with extractable text; "
-        "diagnostic mapping complete."
+        "thematic diagnostic synthesis complete."
     )
     assert context["result"].limitations.count(coverage_line) == 1
     assert any(
-        "diagnostic mapping complete" in warning
+        "thematic diagnostic synthesis complete" in warning
         for warning in context["evidence_pack"].warnings
     )
     final_payload = captured["review_payload"]["evidence_pack"]
-    final_ids = {item["evidence_id"] for item in final_payload["evidence"]}
-    assert "diagnostic-page-102" in final_ids
+    final_ids = {
+        item["evidence_id"]
+        for item in final_payload["evidence"]
+        if item["evidence_id"].startswith("diagnostic-")
+    }
+    assert final_ids == {
+        "diagnostic-page-003",
+        "diagnostic-page-044",
+        "diagnostic-page-102",
+    }
     deep_excerpt = next(
         item
         for item in final_payload["evidence"]
@@ -3055,45 +3070,35 @@ def _valid_diagnostic_map(*, payload, **_):
     )
 
 
-def _incomplete_diagnostic_map(*, payload, **_):
+def _referentially_invalid_diagnostic_map(*, payload, **_):
     evidence_ids = tuple(item["evidence_id"] for item in payload["evidence"])
     return DiagnosticMap(
         entries=(
             DiagnosticEntry(
-                entry_id="incomplete-map",
-                short_name="Incomplete diagnostic pages",
+                entry_id="invalid-reference",
+                short_name="Invalid diagnostic reference",
                 group="principal_driver",
                 materiality="high",
-                source_evidence_ids=evidence_ids[:-1],
-                grouping_rationale="The first supplied pages are mapped.",
+                source_evidence_ids=(
+                    evidence_ids[0],
+                    "MODEL_OUTPUT_SECRET",
+                ),
+                grouping_rationale="The model output contains an unknown reference.",
             ),
         )
     )
 
 
-def _coverage_invalid_diagnostic_map(*, payload, **_):
-    evidence_ids = tuple(item["evidence_id"] for item in payload["evidence"])
+def _empty_diagnostic_map(*, payload, **_):
     return DiagnosticMap(
         entries=(
             DiagnosticEntry(
-                entry_id="duplicate-entry",
-                short_name="Duplicated diagnostic page",
+                entry_id="empty-reference",
+                short_name="Empty diagnostic reference",
                 group="principal_driver",
                 materiality="high",
-                source_evidence_ids=(
-                    evidence_ids[0],
-                    evidence_ids[0],
-                    "MODEL_OUTPUT_SECRET",
-                ),
-                grouping_rationale="The model output contains unsafe references.",
-            ),
-            DiagnosticEntry(
-                entry_id="duplicate-entry",
-                short_name="Another diagnostic page",
-                group="delivery_risk",
-                materiality="medium",
-                source_evidence_ids=(evidence_ids[0], evidence_ids[1]),
-                grouping_rationale="The page is material.",
+                source_evidence_ids=(),
+                grouping_rationale="The model output contains no references.",
             ),
         )
     )
@@ -3119,107 +3124,30 @@ def _run_diagnostic_map_step(monkeypatch, gateway, *, package_text=None):
     )
 
 
-def test_runtime_retries_diagnostic_map_coverage_once_with_expected_diagnostics(
+def test_runtime_fails_closed_for_referentially_invalid_schema_valid_map_without_coverage_retry(
     monkeypatch,
 ):
-    gateway = _SequencedDiagnosticMapGateway(
-        _incomplete_diagnostic_map,
-        _valid_diagnostic_map,
-    )
-    package_text = (
-        b"Benin Risk and Resilience Assessment, March 2025. "
-        + (b"Diagnostic evidence. " * 500)
-    )
+    gateway = _SequencedDiagnosticMapGateway(_referentially_invalid_diagnostic_map)
 
-    context = _run_diagnostic_map_step(
-        monkeypatch,
-        gateway,
-        package_text=package_text,
-    )
-
-    assert len(gateway.calls) == 2
-    first_call, retry_call = gateway.calls
-    assert "coverage_retry" not in first_call[1]
-    assert retry_call[1].keys() == first_call[1].keys() | {"coverage_retry"}
-    diagnostics = retry_call[1]["coverage_retry"]
-    assert diagnostics["missing_material_ids"] == [
-        retry_call[1]["material_evidence_ids"][-1]
-    ]
-    assert diagnostics["duplicated_material_ids"] == []
-    assert diagnostics["unknown_model_id_count"] == 0
-    assert diagnostics["duplicate_entry_id_count"] == 0
-    assert [
-        evidence_id
-        for entry in context["diagnostic_map"].entries
-        for evidence_id in entry.source_evidence_ids
-    ] == retry_call[1]["material_evidence_ids"]
-
-
-def test_runtime_does_not_use_third_diagnostic_map_call_after_schema_then_coverage_failure(
-    monkeypatch,
-):
-    gateway = _SequencedDiagnosticMapGateway(
-        _invalid_diagnostic_map_error(),
-        _incomplete_diagnostic_map,
-        AssertionError("third diagnostic map call is forbidden"),
-    )
-
-    with pytest.raises(DiagnosticCoverageUnavailable):
+    with pytest.raises(DiagnosticCoverageUnavailable, match="incomplete"):
         _run_diagnostic_map_step(monkeypatch, gateway)
 
-    assert len(gateway.calls) == 2
-    assert "schema_retry" in gateway.calls[1][1]
-    assert "coverage_retry" not in gateway.calls[1][1]
+    assert len(gateway.calls) == 1
+    assert "coverage_retry" not in gateway.calls[0][1]
+    assert "scaffold" not in gateway.calls[0][1]
 
 
-def test_runtime_sanitizes_diagnostic_map_coverage_retry(monkeypatch):
-    gateway = _SequencedDiagnosticMapGateway(
-        _coverage_invalid_diagnostic_map,
-        _valid_diagnostic_map,
-    )
-    package_text = (
-        b"Benin Risk and Resilience Assessment, March 2025. "
-        + (b"Diagnostic evidence. " * 500)
-    )
+def test_runtime_fails_closed_for_empty_representative_map_without_coverage_retry(
+    monkeypatch,
+):
+    gateway = _SequencedDiagnosticMapGateway(_empty_diagnostic_map)
 
-    _run_diagnostic_map_step(
-        monkeypatch,
-        gateway,
-        package_text=package_text,
-    )
+    with pytest.raises(DiagnosticCoverageUnavailable, match="incomplete"):
+        _run_diagnostic_map_step(monkeypatch, gateway)
 
-    diagnostics = gateway.calls[1][1]["coverage_retry"]
-    assert diagnostics == {
-        "missing_material_ids": [gateway.calls[1][1]["material_evidence_ids"][2]],
-        "duplicated_material_ids": [gateway.calls[1][1]["material_evidence_ids"][0]],
-        "unknown_model_id_count": 1,
-        "duplicate_entry_id_count": 1,
-        "scaffold": [
-            {
-                "slot": 1,
-                "group": "principal_driver",
-                "materiality": "high",
-                "source_evidence_ids": [
-                    gateway.calls[1][1]["material_evidence_ids"][0]
-                ],
-            },
-            {
-                "slot": 2,
-                "group": "delivery_risk",
-                "materiality": "medium",
-                "source_evidence_ids": [
-                    gateway.calls[1][1]["material_evidence_ids"][1]
-                ],
-            },
-        ],
-    }
-    diagnostics_json = json.dumps(diagnostics)
-    assert "MODEL_OUTPUT_SECRET" not in diagnostics_json
-    assert "unsafe references" not in diagnostics_json
-    assert all(
-        set(item) == {"slot", "group", "materiality", "source_evidence_ids"}
-        for item in diagnostics["scaffold"]
-    )
+    assert len(gateway.calls) == 1
+    assert "coverage_retry" not in gateway.calls[0][1]
+    assert "scaffold" not in gateway.calls[0][1]
 
 
 def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnostics(
@@ -3261,35 +3189,6 @@ def test_runtime_fails_closed_after_second_diagnostic_map_schema_validation_erro
 
     assert exc_info.value.__cause__ is second_error
     assert len(gateway.calls) == 2
-
-
-def test_runtime_fails_closed_when_coverage_retry_is_schema_invalid(monkeypatch):
-    second_error = _invalid_diagnostic_map_error()
-    gateway = _SequencedDiagnosticMapGateway(
-        _incomplete_diagnostic_map,
-        second_error,
-    )
-
-    with pytest.raises(DiagnosticCoverageUnavailable) as exc_info:
-        _run_diagnostic_map_step(monkeypatch, gateway)
-
-    assert exc_info.value.__cause__ is second_error
-    assert len(gateway.calls) == 2
-
-
-def test_runtime_fails_closed_when_coverage_retry_remains_incomplete(monkeypatch):
-    gateway = _SequencedDiagnosticMapGateway(
-        _incomplete_diagnostic_map,
-        _incomplete_diagnostic_map,
-        AssertionError("third diagnostic map call is forbidden"),
-    )
-
-    with pytest.raises(DiagnosticCoverageUnavailable) as exc_info:
-        _run_diagnostic_map_step(monkeypatch, gateway)
-
-    assert isinstance(exc_info.value.__cause__, ValueError)
-    assert len(gateway.calls) == 2
-    assert "coverage_retry" in gateway.calls[1][1]
 
 
 @pytest.mark.parametrize("error", [RuntimeError("provider failed"), ValueError("bad response")])

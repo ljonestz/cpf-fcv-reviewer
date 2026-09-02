@@ -15,44 +15,31 @@ def validate_diagnostic_entry_ids(entries: tuple[DiagnosticEntry, ...]) -> None:
         )
 
 
-def validate_diagnostic_coverage(
-    material_evidence_ids: tuple[str, ...],
+def validate_diagnostic_references(
+    authoritative_evidence_ids: tuple[str, ...],
     entries: tuple[DiagnosticEntry, ...],
 ) -> None:
-    material_counts = Counter(material_evidence_ids)
-    duplicate_material_ids = [
-        item for item, count in material_counts.items() if count > 1
-    ]
-    if duplicate_material_ids:
-        raise ValueError(
-            "Duplicate material evidence identifiers: "
-            f"{', '.join(duplicate_material_ids)}"
-        )
-
     validate_diagnostic_entry_ids(entries)
-
-    mapped = Counter(
-        evidence_id
-        for entry in entries
-        for evidence_id in entry.source_evidence_ids
-    )
-    unknown = [
-        evidence_id
-        for evidence_id in mapped
-        if evidence_id not in material_counts
-    ]
-    if unknown:
-        raise ValueError(
-            "Unknown diagnostic evidence: " + ", ".join(unknown)
-        )
-    missing = [item for item in material_evidence_ids if mapped[item] == 0]
-    duplicated = [item for item in material_evidence_ids if mapped[item] > 1]
-    if missing:
-        raise ValueError(f"Unmapped diagnostic evidence: {', '.join(missing)}")
-    if duplicated:
-        raise ValueError(
-            f"Diagnostic evidence mapped more than once: {', '.join(duplicated)}"
-        )
+    authoritative = set(authoritative_evidence_ids)
+    for entry in entries:
+        if not entry.source_evidence_ids:
+            raise ValueError(
+                f"Diagnostic entry {entry.entry_id} requires source evidence."
+            )
+        counts = Counter(entry.source_evidence_ids)
+        repeated = [item for item, count in counts.items() if count > 1]
+        if repeated:
+            raise ValueError(
+                f"Diagnostic entry {entry.entry_id} repeats source evidence: "
+                + ", ".join(repeated)
+            )
+        unknown = [
+            item
+            for item in entry.source_evidence_ids
+            if item not in authoritative
+        ]
+        if unknown:
+            raise ValueError("Unknown diagnostic evidence: " + ", ".join(unknown))
 
 
 def priority_key(entry: DiagnosticEntry) -> tuple[int, int, str, str]:

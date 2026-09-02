@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from io import BytesIO
@@ -26,7 +25,7 @@ from .contracts import (
     EvidenceLocator,
     UserCorrection,
 )
-from .diagnostic_map import validate_diagnostic_coverage
+from .diagnostic_map import validate_diagnostic_references
 from .diagnostic_sources import identify_uploaded_diagnostic
 from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .extraction import (
@@ -153,63 +152,6 @@ def _safe_diagnostic_map_schema_issues(
             issue_type = "validation_error"
         issues.append({"loc": location, "type": issue_type})
     return issues
-
-
-def _safe_diagnostic_map_coverage_issues(
-    material_evidence_ids: tuple[str, ...],
-    entries: tuple,
-) -> dict[str, object]:
-    material_counts = Counter(material_evidence_ids)
-    mapped = Counter(
-        evidence_id
-        for entry in entries
-        for evidence_id in entry.source_evidence_ids
-    )
-    entry_counts = Counter(entry.entry_id for entry in entries)
-    ordered_material_ids = tuple(dict.fromkeys(material_evidence_ids))
-    return {
-        "missing_material_ids": [
-            evidence_id
-            for evidence_id in ordered_material_ids
-            if mapped[evidence_id] == 0
-        ],
-        "duplicated_material_ids": [
-            evidence_id
-            for evidence_id in ordered_material_ids
-            if mapped[evidence_id] > 1
-        ],
-        "unknown_model_id_count": sum(
-            evidence_id not in material_counts for evidence_id in mapped
-        ),
-        "duplicate_entry_id_count": sum(
-            count > 1 for count in entry_counts.values()
-        ),
-    }
-
-
-def _safe_diagnostic_map_coverage_scaffold(
-    material_evidence_ids: tuple[str, ...],
-    entries: tuple,
-) -> list[dict[str, object]]:
-    """Build a bounded, validated scaffold for a coverage correction."""
-    authoritative_ids = set(material_evidence_ids)
-    seen_ids: set[str] = set()
-    scaffold = []
-    for slot, entry in enumerate(entries, start=1):
-        source_evidence_ids = []
-        for evidence_id in entry.source_evidence_ids:
-            if evidence_id in authoritative_ids and evidence_id not in seen_ids:
-                source_evidence_ids.append(evidence_id)
-                seen_ids.add(evidence_id)
-        scaffold.append(
-            {
-                "slot": slot,
-                "group": entry.group,
-                "materiality": entry.materiality,
-                "source_evidence_ids": source_evidence_ids,
-            }
-        )
-    return scaffold
 
 
 RELATIONSHIPS_NAMESPACE = (
@@ -786,7 +728,8 @@ def _diagnostic_coverage_warning(document) -> str:
     extractable = len(page_numbers) if page_numbers else len(document.segments)
     return (
         f"{document.name}: {attempted} pages attempted; "
-        f"{extractable} pages with extractable text; diagnostic mapping complete."
+        f"{extractable} pages with extractable text; "
+        "thematic diagnostic synthesis complete."
     )
 
 
@@ -1166,7 +1109,6 @@ def build_runtime_services(
             raise DiagnosticCoverageUnavailable(
                 "Diagnostic mapping request exceeds the safe input budget."
             )
-        schema_retry_used = False
         try:
             diagnostic_map = model_gateway.generate(
                 prompt_name="diagnostic_map",
@@ -1174,7 +1116,6 @@ def build_runtime_services(
                 output_type=DiagnosticMap,
             )
         except ValidationError as error:
-            schema_retry_used = True
             try:
                 diagnostic_map = model_gateway.generate(
                     prompt_name="diagnostic_map",
@@ -1191,40 +1132,11 @@ def build_runtime_services(
                     "Selected uploaded diagnostic mapping is invalid."
                 ) from retry_error
         try:
-            validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
+            validate_diagnostic_references(material_ids, diagnostic_map.entries)
         except ValueError as exc:
-            if schema_retry_used:
-                raise DiagnosticCoverageUnavailable(
-                    "Selected uploaded diagnostic mapping is incomplete."
-                ) from exc
-            try:
-                diagnostic_map = model_gateway.generate(
-                    prompt_name="diagnostic_map",
-                    payload={
-                        **mapping_payload,
-                        "coverage_retry": {
-                            **_safe_diagnostic_map_coverage_issues(
-                                material_ids,
-                                diagnostic_map.entries,
-                            ),
-                            "scaffold": _safe_diagnostic_map_coverage_scaffold(
-                                material_ids,
-                                diagnostic_map.entries,
-                            ),
-                        },
-                    },
-                    output_type=DiagnosticMap,
-                )
-            except ValidationError as retry_error:
-                raise DiagnosticCoverageUnavailable(
-                    "Selected uploaded diagnostic mapping is invalid."
-                ) from retry_error
-            try:
-                validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
-            except ValueError as retry_error:
-                raise DiagnosticCoverageUnavailable(
-                    "Selected uploaded diagnostic mapping is incomplete."
-                ) from retry_error
+            raise DiagnosticCoverageUnavailable(
+                "Selected uploaded diagnostic mapping is incomplete."
+            ) from exc
 
         base_pack = context["evidence_pack"]
         referenced_ids = {
@@ -1241,10 +1153,6 @@ def build_runtime_services(
             for item in page_items
             if item.evidence_id in referenced_ids
         )
-        if len(page_excerpts) != len(page_items):
-            raise DiagnosticCoverageUnavailable(
-                "Selected uploaded diagnostic mapping is incomplete."
-            )
         base_evidence = base_pack.evidence
         context["diagnostic_map"] = diagnostic_map
         context["diagnostic_page_evidence"] = page_items

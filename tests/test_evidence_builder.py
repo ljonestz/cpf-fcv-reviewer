@@ -124,14 +124,54 @@ def test_build_evidence_pack_sorts_entries_and_preserves_payload():
     assert pack.warnings == ("Public scan unavailable.",)
 
 
-def test_build_evidence_pack_rejects_unmapped_material_evidence():
-    with pytest.raises(ValueError, match="Unmapped diagnostic evidence: ev-1"):
+def test_build_evidence_pack_allows_uncited_material_evidence():
+    pack = build_evidence_pack(
+        metadata=_metadata(DiagnosticMode.RRA_ALIGNMENT),
+        evidence=(_evidence("ev-1"), _evidence("ev-2")),
+        diagnostic_entries=(_entry("d1", "ev-1"),),
+        material_diagnostic_ids=("ev-1", "ev-2"),
+    )
+
+    assert tuple(item.evidence_id for item in pack.evidence) == ("ev-1", "ev-2")
+
+
+def test_build_evidence_pack_rejects_empty_diagnostic_entry_sources():
+    empty = _entry("d1", "ev-1").model_copy(
+        update={"source_evidence_ids": ()}
+    )
+    with pytest.raises(ValueError, match="requires source evidence"):
         build_evidence_pack(
             metadata=_metadata(DiagnosticMode.RRA_ALIGNMENT),
             evidence=(_evidence("ev-1"),),
-            diagnostic_entries=(),
+            diagnostic_entries=(empty,),
             material_diagnostic_ids=("ev-1",),
         )
+
+
+def test_build_evidence_pack_rejects_duplicate_source_within_entry():
+    duplicate = _entry("d1", "ev-1").model_copy(
+        update={"source_evidence_ids": ("ev-1", "ev-1")}
+    )
+    with pytest.raises(ValueError, match="repeats source evidence"):
+        build_evidence_pack(
+            metadata=_metadata(DiagnosticMode.RRA_ALIGNMENT),
+            evidence=(_evidence("ev-1"),),
+            diagnostic_entries=(duplicate,),
+            material_diagnostic_ids=("ev-1",),
+        )
+
+
+def test_build_evidence_pack_allows_reused_source_across_entries():
+    entries = (_entry("d1", "ev-1"), _entry("d2", "ev-1"))
+
+    pack = build_evidence_pack(
+        metadata=_metadata(DiagnosticMode.RRA_ALIGNMENT),
+        evidence=(_evidence("ev-1"),),
+        diagnostic_entries=entries,
+        material_diagnostic_ids=("ev-1",),
+    )
+
+    assert len(pack.diagnostic_entries) == 2
 
 
 def test_build_evidence_pack_rejects_unknown_diagnostic_references():
