@@ -1,13 +1,13 @@
 # Project status
 
-Updated 2026-09-02. The role-aware source-coverage correction and its narrowly bounded
-residual registry-support repair are provider-free verified on
-`fix/guinea-production-fixes` through code commit `361fe8c`. The implementation replaces
-exact-once RRA output coverage with thematic representative citations, reviews bounded
-accompanying package documents completely, and enforces the primary/package/context
-attention order. The exact commit is deployed, but its single authorized Guinea quality
-assessment failed closed after drafting with safe code `review_failed`; provider acceptance
-for the redesign is not established. Semantic application version is `0.1.0`.
+Updated 2026-09-02. Review-schema failure observability and provider-visible validation
+guidance are provider-free verified on `fix/guinea-production-fixes` through code commit
+`67ab97c`. After exactly one schema retry, a terminal failure now reports the dedicated
+`review_schema_invalid` code with bounded, content-free attempt diagnostics. The schema
+and prompt expose the locally enforced narrative, assessment, evidence-ID, and locator
+requirements before generation. This closes the prior diagnosability gap without retaining
+validation messages, rejected values, model output, model identifiers, or document text.
+The fix is not yet deployed or provider-tested. Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
 code commit `361fe8c` live on 2026-09-02; `/health` returned `ok` with that exact release and
@@ -26,14 +26,13 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-09-02: 1,170 passed in 54.07 seconds. The nine-module
-source-coverage set passed 341 tests and the provider-free smoke suite passed 36 tests.
-Python compilation, JavaScript syntax, and `git diff --check` passed. Provider-free
-current-HEAD browser QA covered nine full-page desktop/mobile states, two streamed
-assistant requests with four-message restoration, secondary correction, and the safe
-package-coverage failure. A fresh smoke DOCX passed ZIP/OOXML and structural checks (35
-paragraphs, 12 headings, no tables, one section). Ruff and LibreOffice are not installed;
-DOCX-to-page visual rendering was therefore unavailable.
+Latest verified suite on 2026-09-02: 1,177 provider-free tests passed in 106.46 seconds;
+the focused schema/contracts/prompt/failure set passed 250 tests. Python compilation and
+`git diff --check` passed. The Anthropic SDK schema-transform regression confirmed that
+the new descriptions survive into the provider-visible schema. Independent review found
+no critical issue; its remaining locator-guidance finding was fixed and regression-tested.
+Ruff and Black are not installed, so those optional checks were unavailable. No paid API
+call was made for this fix.
 The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
@@ -174,22 +173,36 @@ The stable FCV Project Screener is untouched and prohibited.
   safe terminal event was `run_failed: review_failed`; Render classified the underlying
   error as `ValidationError`. No result, assistant exchange, correction interaction, mobile
   result, or DOCX was available for acceptance. The unchanged commit was not rerun.
+- Commit `67ab97c` closes the review-schema diagnosability gap. It records only attempt
+  number, issue count, allowlisted field/index paths, and normalized issue types after the
+  two permitted generation attempts. It maps known model-level requirements to stable
+  types, keeps the browser message generic, and stores no diagnostics in durable session
+  state. Redaction tests exclude raw validation prose, rejected input, unknown field names,
+  model identifiers, and document text from both events and logs. Provider-visible schema
+  descriptions and review prompt version `3.0.1` now mirror the hidden narrative,
+  conditional assessment, evidence-ID, and target-locator validators. The complete
+  provider-free suite passed all 1,177 tests; deployment and provider acceptance remain
+  pending.
 
 ## Validation cost protocol
 
 Future sessions must follow the repository protocol in `CLAUDE.md`: targeted local
 tests, provider-free smoke, deployed health/static checks, then at most one paid quality
 run per deployed fix cycle. Do not rerun unchanged code. After a failure, use only safe
-validation codes, add a regression test, and repeat the no-cost ladder before another
-paid run is considered. Save full-page PNGs and a successful DOCX with unique filenames;
-never substitute HTML for screenshots or relabel smoke output as country-quality output.
+validation codes and, for `review_schema_invalid`, only the bounded sanitized attempt,
+count, field/index path, and normalized-type diagnostics. Add a regression test and repeat
+the no-cost ladder before another paid run is considered. Save full-page PNGs and a
+successful DOCX with unique filenames; never substitute HTML for screenshots or relabel
+smoke output as country-quality output.
 
 ## Remaining considerations
 
-1. Do not rerun deployed `361fe8c`. Diagnose the current post-drafting `ValidationError`
-   from safe evidence before proposing another code change. Any further provider-backed
-   Guinea assessment requires a new deployed fix cycle, the complete no-cost validation
-   ladder, and separate authorization. On success, confirm thematic RRA citations include
+1. Do not rerun deployed `361fe8c`. Deploy exact code commit `67ab97c`, verify the
+   reported release at `/health`, and complete static-page checks before considering any
+   provider-backed Guinea assessment. A paid run requires separate authorization. If it
+   fails with `review_schema_invalid`, retain only the newly allowed sanitized diagnostic
+   fields and return to provider-free regression testing. On success, confirm RRA
+   citations include
    relevant deep-page evidence, package documents are reflected in detail where supplied,
    two assistant requests restore after refresh, and the saved DOCX is structurally and
    visually inspected where tooling permits.
