@@ -1,7 +1,7 @@
 # Project status
 
 Updated 2026-09-02. The results, persistent assistant, and full-RRA coverage redesign is
-provider-free verified on `fix/guinea-production-fixes` through code commit `bce5bb3`.
+provider-free verified on `fix/guinea-production-fixes` through code commit `095873b`.
 Three authorized deployed Guinea cycles failed closed during diagnostic mapping; deployed
 provider acceptance for the redesign is not established. Semantic application version is
 `0.1.0`.
@@ -19,9 +19,11 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-09-02: 1,152 passed in 26.06 seconds. The provider-free
-smoke suite passed 36 tests, the diagnostic retry/failure focused set passed 168 tests,
-Python compilation, JavaScript syntax, and `git diff --check` passed. Ruff is not installed
+Latest verified suite on 2026-09-02: 1,153 passed in 25.73 seconds. The provider-free
+smoke suite passed 36 tests, the focused prompt/runtime set passed 145 tests, and Python
+compilation, JavaScript syntax, and `git diff --check` passed. Provider-free browser QA
+passed eight selected full-page states, four-message assistant restoration, secondary
+correction, and DOCX download/structural checks. Ruff and LibreOffice are not installed
 in the Windows environment.
 The stable FCV Project Screener is untouched and prohibited.
 
@@ -36,6 +38,11 @@ The stable FCV Project Screener is untouched and prohibited.
 - Recognized uploaded RRAs/equivalent diagnostics are fully extracted within explicit
   bounds and every extractable page is assigned exactly once through the existing
   diagnostic-map concept. Unsafe or incomplete mapping fails closed without sampling.
+- Full-diagnostic map generation targets 8-12 thematic entries while permitting up to
+  20 when distinct material drivers require it. A coverage correction receives only a
+  sanitized scaffold of validated categories and authoritative, globally de-duplicated
+  page IDs; model-authored labels, rationales, entry IDs, unknown IDs, and raw text are
+  excluded. The map stage still makes at most two calls and fails closed.
 - Three document buckets, country inference with confirmation fallback, explicit review stage and detail controls, safe source precedence, and detailed HTML/DOCX scope parity.
 - Approved public guardrail registry with checksum validation and fail-closed loading.
 - Structured model output, application-owned metadata, safe failure codes,

@@ -9,9 +9,10 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Latest provider-free verified implementation: `fix/guinea-production-fixes` through
-  `bce5bb3` (1,152 tests; 36 provider-free smoke tests). This post-cycle commit
-  classifies a schema-invalid second diagnostic-map response under the existing safe
-  `diagnostic_coverage_unavailable` failure without adding calls or fallback behavior.
+  `095873b` (1,153 tests; 36 provider-free smoke tests). Full-diagnostic mapping now
+  targets compact thematic output without merging distinct drivers, and its single
+  coverage correction receives only a sanitized structural scaffold. The two-call
+  ceiling, full exact-once page coverage, and fail-closed behavior remain unchanged.
 - Last verified deployment: `0aa6d3d` on 2026-09-02. Render reported the exact commit
   live, `/health` returned `ok`, and the public page, review form, and assistant shell
   passed no-cost checks. Its single Guinea quality assessment failed closed during
@@ -92,6 +93,7 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
 - [Approved results, assistant, and full-RRA coverage design](docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md): bounded implementation scope and acceptance criteria.
 - [2026-09-02 results, assistant, and full-RRA validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, deployment cycles, and current Guinea acceptance status.
+- [2026-09-02 full-RRA map reliability fix validation](docs/validation/2026-09-02-full-rra-map-reliability-fix-validation.md): test-first implementation, security review, provider-free checks, and current deployment status.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
 - [2026-08-31 initial-review schema-retry validation](docs/validation/2026-08-31-initial-review-schema-retry-validation.md): test-first evidence, safety review, full provider-free verification, and deployment checks.
 - [2026-08-30 Guinea production-fix validation](docs/validation/2026-08-30-guinea-production-fixes-validation.md): automated checks, Render deployment evidence, paid-run outcomes, and remaining acceptance limitation.
