@@ -1,7 +1,7 @@
 # Role-aware source coverage redesign
 
 Date: 2026-09-02
-Status: approved in conversation; written review pending
+Status: approved
 
 ## Purpose
 
