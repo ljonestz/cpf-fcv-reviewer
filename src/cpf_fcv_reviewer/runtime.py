@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from io import BytesIO
@@ -152,6 +153,38 @@ def _safe_diagnostic_map_schema_issues(
             issue_type = "validation_error"
         issues.append({"loc": location, "type": issue_type})
     return issues
+
+
+def _safe_diagnostic_map_coverage_issues(
+    material_evidence_ids: tuple[str, ...],
+    entries: tuple,
+) -> dict[str, object]:
+    material_counts = Counter(material_evidence_ids)
+    mapped = Counter(
+        evidence_id
+        for entry in entries
+        for evidence_id in entry.source_evidence_ids
+    )
+    entry_counts = Counter(entry.entry_id for entry in entries)
+    ordered_material_ids = tuple(dict.fromkeys(material_evidence_ids))
+    return {
+        "missing_material_ids": [
+            evidence_id
+            for evidence_id in ordered_material_ids
+            if mapped[evidence_id] == 0
+        ],
+        "duplicated_material_ids": [
+            evidence_id
+            for evidence_id in ordered_material_ids
+            if mapped[evidence_id] > 1
+        ],
+        "unknown_model_id_count": sum(
+            evidence_id not in material_counts for evidence_id in mapped
+        ),
+        "duplicate_entry_id_count": sum(
+            count > 1 for count in entry_counts.values()
+        ),
+    }
 
 
 RELATIONSHIPS_NAMESPACE = (
@@ -1108,6 +1141,7 @@ def build_runtime_services(
             raise DiagnosticCoverageUnavailable(
                 "Diagnostic mapping request exceeds the safe input budget."
             )
+        schema_retry_used = False
         try:
             diagnostic_map = model_gateway.generate(
                 prompt_name="diagnostic_map",
@@ -1115,6 +1149,7 @@ def build_runtime_services(
                 output_type=DiagnosticMap,
             )
         except ValidationError as error:
+            schema_retry_used = True
             diagnostic_map = model_gateway.generate(
                 prompt_name="diagnostic_map",
                 payload={
@@ -1128,9 +1163,27 @@ def build_runtime_services(
         try:
             validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
         except ValueError as exc:
-            raise DiagnosticCoverageUnavailable(
-                "Selected uploaded diagnostic mapping is incomplete."
-            ) from exc
+            if schema_retry_used:
+                raise DiagnosticCoverageUnavailable(
+                    "Selected uploaded diagnostic mapping is incomplete."
+                ) from exc
+            diagnostic_map = model_gateway.generate(
+                prompt_name="diagnostic_map",
+                payload={
+                    **mapping_payload,
+                    "coverage_retry": _safe_diagnostic_map_coverage_issues(
+                        material_ids,
+                        diagnostic_map.entries,
+                    ),
+                },
+                output_type=DiagnosticMap,
+            )
+            try:
+                validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
+            except ValueError as retry_error:
+                raise DiagnosticCoverageUnavailable(
+                    "Selected uploaded diagnostic mapping is incomplete."
+                ) from retry_error
 
         base_pack = context["evidence_pack"]
         referenced_ids = {

@@ -3055,10 +3055,54 @@ def _valid_diagnostic_map(*, payload, **_):
     )
 
 
-def _run_diagnostic_map_step(monkeypatch, gateway):
+def _incomplete_diagnostic_map(*, payload, **_):
+    evidence_ids = tuple(item["evidence_id"] for item in payload["evidence"])
+    return DiagnosticMap(
+        entries=(
+            DiagnosticEntry(
+                entry_id="incomplete-map",
+                short_name="Incomplete diagnostic pages",
+                group="principal_driver",
+                materiality="high",
+                source_evidence_ids=evidence_ids[:-1],
+                grouping_rationale="The first supplied pages are mapped.",
+            ),
+        )
+    )
+
+
+def _coverage_invalid_diagnostic_map(*, payload, **_):
+    evidence_ids = tuple(item["evidence_id"] for item in payload["evidence"])
+    return DiagnosticMap(
+        entries=(
+            DiagnosticEntry(
+                entry_id="duplicate-entry",
+                short_name="Duplicated diagnostic page",
+                group="principal_driver",
+                materiality="high",
+                source_evidence_ids=(
+                    evidence_ids[0],
+                    evidence_ids[0],
+                    "MODEL_OUTPUT_SECRET",
+                ),
+                grouping_rationale="The model output contains unsafe references.",
+            ),
+            DiagnosticEntry(
+                entry_id="duplicate-entry",
+                short_name="Another diagnostic page",
+                group="delivery_risk",
+                materiality="medium",
+                source_evidence_ids=(evidence_ids[1],),
+                grouping_rationale="The page is material.",
+            ),
+        )
+    )
+
+
+def _run_diagnostic_map_step(monkeypatch, gateway, *, package_text=None):
     completed_context, final_pack = _run_narrow_runtime(
         monkeypatch,
-        b"Benin Risk and Resilience Assessment, March 2025.",
+        package_text or b"Benin Risk and Resilience Assessment, March 2025.",
         controller=_InjectedResearchController(),
     )
     services = build_runtime_services(
@@ -3073,6 +3117,87 @@ def _run_diagnostic_map_step(monkeypatch, gateway):
             completed_context["full_diagnostic_document"],
         )
     )
+
+
+def test_runtime_retries_diagnostic_map_coverage_once_with_expected_diagnostics(
+    monkeypatch,
+):
+    gateway = _SequencedDiagnosticMapGateway(
+        _incomplete_diagnostic_map,
+        _valid_diagnostic_map,
+    )
+    package_text = (
+        b"Benin Risk and Resilience Assessment, March 2025. "
+        + (b"Diagnostic evidence. " * 500)
+    )
+
+    context = _run_diagnostic_map_step(
+        monkeypatch,
+        gateway,
+        package_text=package_text,
+    )
+
+    assert len(gateway.calls) == 2
+    first_call, retry_call = gateway.calls
+    assert "coverage_retry" not in first_call[1]
+    assert retry_call[1].keys() == first_call[1].keys() | {"coverage_retry"}
+    diagnostics = retry_call[1]["coverage_retry"]
+    assert diagnostics["missing_material_ids"] == [
+        retry_call[1]["material_evidence_ids"][-1]
+    ]
+    assert diagnostics["duplicated_material_ids"] == []
+    assert diagnostics["unknown_model_id_count"] == 0
+    assert diagnostics["duplicate_entry_id_count"] == 0
+    assert [
+        evidence_id
+        for entry in context["diagnostic_map"].entries
+        for evidence_id in entry.source_evidence_ids
+    ] == retry_call[1]["material_evidence_ids"]
+
+
+def test_runtime_does_not_use_third_diagnostic_map_call_after_schema_then_coverage_failure(
+    monkeypatch,
+):
+    gateway = _SequencedDiagnosticMapGateway(
+        _invalid_diagnostic_map_error(),
+        _incomplete_diagnostic_map,
+        AssertionError("third diagnostic map call is forbidden"),
+    )
+
+    with pytest.raises(DiagnosticCoverageUnavailable):
+        _run_diagnostic_map_step(monkeypatch, gateway)
+
+    assert len(gateway.calls) == 2
+    assert "schema_retry" in gateway.calls[1][1]
+    assert "coverage_retry" not in gateway.calls[1][1]
+
+
+def test_runtime_sanitizes_diagnostic_map_coverage_retry(monkeypatch):
+    gateway = _SequencedDiagnosticMapGateway(
+        _coverage_invalid_diagnostic_map,
+        _valid_diagnostic_map,
+    )
+    package_text = (
+        b"Benin Risk and Resilience Assessment, March 2025. "
+        + (b"Diagnostic evidence. " * 500)
+    )
+
+    _run_diagnostic_map_step(
+        monkeypatch,
+        gateway,
+        package_text=package_text,
+    )
+
+    diagnostics = gateway.calls[1][1]["coverage_retry"]
+    assert diagnostics == {
+        "missing_material_ids": [gateway.calls[1][1]["material_evidence_ids"][2]],
+        "duplicated_material_ids": [gateway.calls[1][1]["material_evidence_ids"][0]],
+        "unknown_model_id_count": 1,
+        "duplicate_entry_id_count": 1,
+    }
+    diagnostics_json = json.dumps(diagnostics)
+    assert "MODEL_OUTPUT_SECRET" not in diagnostics_json
+    assert "unsafe references" not in diagnostics_json
 
 
 def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnostics(
