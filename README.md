@@ -29,8 +29,10 @@ Every review performs bounded current-country public-web research. An uploaded p
 Optional non-diagnostic PDFs use deterministic, bounded sampling across the full page
 range. A recognized uploaded RRA or equivalent diagnostic is instead extracted in full,
 within explicit safety bounds, and every extractable page is assigned exactly once through
-the diagnostic map. If complete RRA coverage cannot be established, the review fails
-closed rather than silently reverting to sampling. Package evidence remains balanced
+the diagnostic map. If the first map is schema-invalid or fails exact-once coverage, one
+correction attempt may reuse the same bounded input; a third map call is never made. If
+complete RRA coverage cannot be established, the review fails closed rather than silently
+reverting to sampling. Package evidence remains balanced
 across uploaded files, and incomplete non-diagnostic coverage is disclosed rather than
 treated as proof that content is absent.
 
@@ -85,7 +87,7 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 
 - [Current project status](docs/PROJECT_STATUS.md): completed work, deployment state, limitations, and next considerations.
 - [Approved results, assistant, and full-RRA coverage design](docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md): bounded implementation scope and acceptance criteria.
-- [2026-09-02 results, assistant, and full-RRA provider-free validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, DOCX structural inspection, and remaining deployment gate.
+- [2026-09-02 results, assistant, and full-RRA validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, deployment cycles, and current Guinea acceptance status.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
 - [2026-08-31 initial-review schema-retry validation](docs/validation/2026-08-31-initial-review-schema-retry-validation.md): test-first evidence, safety review, full provider-free verification, and deployment checks.
 - [2026-08-30 Guinea production-fix validation](docs/validation/2026-08-30-guinea-production-fixes-validation.md): automated checks, Render deployment evidence, paid-run outcomes, and remaining acceptance limitation.

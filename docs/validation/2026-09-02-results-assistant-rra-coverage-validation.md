@@ -1,14 +1,14 @@
-# Results, assistant, and full-RRA provider-free validation
+# Results, assistant, and full-RRA validation
 
 Date: 2026-09-02
 
 ## Scope
 
-This record covers provider-free validation of the approved results presentation,
-persistent follow-on assistant, and full-RRA diagnostic coverage redesign on
-`fix/guinea-production-fixes` through code commit `4d73d46`. It contains no uploaded
+This record covers provider-free and deployed validation of the approved results
+presentation, persistent follow-on assistant, and full-RRA diagnostic coverage redesign
+on `fix/guinea-production-fixes` through code commit `0aa6d3d`. It contains no uploaded
 documents, raw model output, assistant conversation export, credentials, or live
-assessment identifier. No deployment or paid model assessment was run during this phase.
+assessment identifier.
 
 ## Implementation acceptance
 
@@ -37,6 +37,10 @@ assessment identifier. No deployment or paid model assessment was run during thi
 | Provider-free smoke suite | 36 passed in 3.18 seconds |
 | Focused frontend contract/readability set after browser finding | 50 passed in 6.38 seconds |
 | Complete pytest suite | 1,142 passed in 35.72 seconds |
+| Diagnostic schema-retry focused suite | 139 passed in 1.09 seconds |
+| Schema-retry complete pytest suite | 1,147 passed in 35.15 seconds |
+| Diagnostic coverage-retry focused suite | 143 passed in 0.97 seconds |
+| Coverage-retry complete pytest suite | 1,151 passed in 46.54 seconds |
 | Python compilation | Passed: `python -m compileall -q src tests` |
 | JavaScript syntax | Passed: `node --check src/cpf_fcv_reviewer/static/app.js` |
 | Static whitespace | Passed: `git diff --check` |
@@ -84,13 +88,43 @@ are absent, and the package size is 39,397 bytes.
 
 LibreOffice/`soffice` is not installed in the bundled runtime, standard Program Files
 locations, or PATH. DOCX-to-PNG rendering therefore could not be completed, and no claim
-of rendered DOCX visual acceptance is made. The final deployed Guinea run must save and
-inspect its DOCX, using Word or an available renderer if LibreOffice remains unavailable.
+of rendered DOCX visual acceptance is made. Any future successful deployed Guinea run
+must save and inspect its DOCX, using Word or an available renderer if LibreOffice remains
+unavailable.
 
-## Remaining deployment gate
+## Deployed Guinea quality cycles
 
-Provider-free acceptance is complete. Before any paid call, push and deploy the exact
-verified commit, confirm Render reports it live, and complete health/static checks. Then
-run at most one Guinea quality assessment for that deployed fix cycle. The quality run
-must verify 102-page RRA accounting and deep-page use, final HTML hierarchy, two genuine
-assistant turns plus refresh restoration, and the saved DOCX. Never rerun unchanged code.
+Two explicitly authorized paid cycles were run with the 7-page Guinea CPF and 102-page
+Guinea RRA. Each deployed commit received exactly one assessment; unchanged code was not
+rerun.
+
+| Deployed commit | No-cost gate | Paid outcome |
+|---|---|---|
+| `cd2c57d` | Render live; health and static page passed | Stopped during diagnostic mapping with safe category `review_failed`; Render logged `ValidationError` |
+| `894ebe5` | Render live; health reported the exact commit; root, review form, and assistant shell passed | A schema-valid map reached exact-once coverage validation, which failed closed as `diagnostic_coverage_unavailable` |
+
+The second cycle established that structural parsing succeeded but the returned map did
+not account for every extractable page exactly once. No result,
+assistant conversation, or DOCX was produced in either cycle. The visual intake, holding,
+mapping, and failure states were saved as full-page PNGs and inspected without visible
+clipping, overlap, or broken controls under:
+
+- `output/playwright/2026-09-02-guinea-production-cd2c57d/`; and
+- `output/playwright/2026-09-02-guinea-production-894ebe5/`.
+
+Commit `0aa6d3d` adds a provider-free verified correction for the exact second-cycle
+failure. Diagnostic mapping still has at most two total model calls: the single correction
+slot is used for either a schema error or a coverage error. Coverage diagnostics expose
+only authoritative missing/duplicated material IDs and numeric counts for model-controlled
+unknown IDs and duplicate entry IDs. A second invalid map fails closed, and no sampling or
+deterministic fallback is used. Independent spec and code/security reviews approved the
+change.
+
+## Current acceptance status
+
+Results presentation, assistant persistence/streaming, DOCX structure, and the full-RRA
+fail-closed implementation are provider-free accepted. Deployed Guinea acceptance for the
+redesign is not established because both authorized cycles stopped before review drafting.
+Commit `0aa6d3d` is tested locally but has not been deployed or assessed with a provider.
+Any further deployment and paid Guinea run is a new fix cycle and requires explicit
+authorization after the no-cost deployed checks.

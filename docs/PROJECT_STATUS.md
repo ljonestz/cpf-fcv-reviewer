@@ -1,14 +1,15 @@
 # Project status
 
 Updated 2026-09-02. The results, persistent assistant, and full-RRA coverage redesign is
-provider-free verified on `fix/guinea-production-fixes` through code commit `4d73d46`.
-Deployment and the single authorized Guinea quality assessment for this change set remain
-pending. Semantic application version is `0.1.0`.
+provider-free verified on `fix/guinea-production-fixes` through code commit `0aa6d3d`.
+Two authorized deployed Guinea cycles failed closed during diagnostic mapping; deployed
+provider acceptance for the redesign is not established. Semantic application version is
+`0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
-code commit `1ba44bf` live on 2026-08-31; `/health` returned `ok`, the public page
-returned HTTP 200, and the assessment form was present. The service remains the free,
-volatile public test site. Operational production still fails closed without SQLite
+code commit `894ebe5` live on 2026-09-02; `/health` returned `ok` with that exact release,
+the public page returned HTTP 200, and the review and assistant shells were present. The
+service remains the free, volatile public test site. Operational production still fails closed without SQLite
 persistence; the public test site can run without a disk only through the explicit
 `ALLOW_VOLATILE_PROTOTYPE=true` exception.
 
@@ -18,10 +19,10 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-09-02: 1,142 passed in 35.72 seconds. The provider-free
-smoke suite passed 36 tests, the consolidated results/RRA/assistant set passed 557 tests,
-the focused frontend set passed 50 tests, Python compilation, JavaScript syntax, and
-`git diff --check` passed. Ruff is not installed in the Windows environment.
+Latest verified suite on 2026-09-02: 1,151 passed in 46.54 seconds. The provider-free
+smoke suite passed 36 tests, the diagnostic coverage-retry focused set passed 143 tests,
+Python compilation, JavaScript syntax, and `git diff --check` passed. Ruff is not installed
+in the Windows environment.
 The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
@@ -96,6 +97,19 @@ The stable FCV Project Screener is untouched and prohibited.
   disappeared from the restored title. The smoke DOCX passed ZIP/OOXML and structural
   inspection (40 paragraphs, 13 headings, no tables, one section); LibreOffice remains
   unavailable for DOCX-to-PNG rendering.
+- The paid Guinea cycle on deployed `cd2c57d` stopped during full-RRA diagnostic mapping
+  with safe category `review_failed`; Render identified a `ValidationError`. Commit
+  `894ebe5` added one sanitized schema correction attempt, passed 1,147 local tests, and
+  was deployed after health/static checks.
+- The single paid Guinea cycle on deployed `894ebe5` progressed through extraction and
+  current-evidence research. Its schema-valid diagnostic map then failed exact-once page
+  coverage and stopped as `diagnostic_coverage_unavailable`. Full-page intake, holding,
+  mapping, and failure PNGs were saved and visually inspected. No result, assistant turns,
+  or DOCX was produced.
+- Commit `0aa6d3d` adds one coverage correction path without increasing the two-call map
+  ceiling: schema correction or coverage correction consumes the same single retry slot.
+  It passed 143 focused tests and the complete 1,151-test suite and was approved by spec
+  and code/security review. It has not been deployed or provider-tested.
 
 ## Validation cost protocol
 
@@ -108,8 +122,8 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. Deploy the exact provider-free verified branch commit, complete no-cost health/static
-   checks, then run no more than one paid Guinea assessment for this deployed fix cycle.
+1. If another paid fix cycle is explicitly authorized, deploy exact commit `0aa6d3d`,
+   complete no-cost health/static checks, then run no more than one Guinea assessment.
    Confirm all 102 RRA pages are attempted/accounted for, inspect deep-page evidence,
    exercise two assistant requests plus refresh restoration, and inspect the saved DOCX.
 2. Guinea provider acceptance is established for the previous public advisory prototype on
