@@ -526,7 +526,7 @@ def test_smoke_app_completes_full_pipeline_with_synthetic_rra_mapping():
     assert result.metadata.diagnostic_mode.value == "rra_alignment"
     assert SMOKE_MARKER in result.overall_read
     assert any(
-        "diagnostic mapping complete" in limitation
+        "thematic diagnostic synthesis complete" in limitation
         for limitation in result.limitations
     )
     assert any(
