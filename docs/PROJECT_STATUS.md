@@ -1,19 +1,22 @@
 # Project status
 
-Updated 2026-09-02. The role-aware source-coverage correction is provider-free verified on
-`fix/guinea-production-fixes` through code commit `24a8d22`. It replaces exact-once RRA
-output coverage with thematic representative citations, reviews bounded accompanying
-package documents completely, and enforces the primary/package/context attention order.
-It has not been deployed or provider-tested. Three earlier authorized Guinea cycles failed
-closed during diagnostic mapping; provider acceptance for the redesign is not established.
-Semantic application version is `0.1.0`.
+Updated 2026-09-02. The role-aware source-coverage correction and its narrowly bounded
+residual registry-support repair are provider-free verified on
+`fix/guinea-production-fixes` through code commit `361fe8c`. The implementation replaces
+exact-once RRA output coverage with thematic representative citations, reviews bounded
+accompanying package documents completely, and enforces the primary/package/context
+attention order. The exact commit is deployed, but its single authorized Guinea quality
+assessment failed closed after drafting with safe code `review_failed`; provider acceptance
+for the redesign is not established. Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
-code commit `00d3a64` live on 2026-09-02; `/health` returned `ok` with that exact release,
-the public page returned HTTP 200, the review and assistant shells were present, and no
-post-deploy error logs were found before the quality run. Its one authorized Guinea
-assessment failed closed during diagnostic-map coverage validation; the unchanged build
-was not rerun. The service remains the free, volatile public test site. Operational
+code commit `361fe8c` live on 2026-09-02; `/health` returned `ok` with that exact release and
+the public page returned HTTP 200 before the quality run. Its one authorized Guinea
+assessment completed extraction, current-country research, full-RRA mapping, and drafting,
+then failed closed. Render recorded `error_type=ValidationError` and
+`failure_code=review_failed`, with no matching provider, timeout, OOM, or HTTP 5xx event in
+the run window. Memory peaked at approximately 171 MB against a 537 MB limit. The unchanged
+build was not rerun. The service remains the free, volatile public test site. Operational
 production still fails closed without SQLite persistence; the public test site can run
 without a disk only through the explicit `ALLOW_VOLATILE_PROTOTYPE=true` exception.
 
@@ -164,6 +167,13 @@ The stable FCV Project Screener is untouched and prohibited.
   enforce the attention hierarchy, complete serialized-input budget, safe package failure,
   and schema-retry budget. All four task checkpoints passed independent specification and
   code-quality review.
+- Commit `361fe8c` adds `missing_registry_support` to the existing one-extra-repair
+  allowlist without increasing the repair-call ceiling. The single authorized Guinea
+  quality assessment on that deployed commit saved intake, initial holding, research,
+  mapping, drafting, and failure PNGs, then failed closed after drafting. The only current
+  safe terminal event was `run_failed: review_failed`; Render classified the underlying
+  error as `ValidationError`. No result, assistant exchange, correction interaction, mobile
+  result, or DOCX was available for acceptance. The unchanged commit was not rerun.
 
 ## Validation cost protocol
 
@@ -176,12 +186,13 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. Do not rerun deployed `00d3a64`. After separate approval, deploy the exact final
-   provider-free checkpoint, verify that release through no-cost health/static checks, and
-   run at most one paid Guinea assessment for that deployed code. On success, confirm
-   thematic RRA citations include relevant deep-page evidence, package documents are
-   reflected in detail, two assistant requests restore after refresh, and the saved DOCX
-   is structurally and visually inspected where tooling permits.
+1. Do not rerun deployed `361fe8c`. Diagnose the current post-drafting `ValidationError`
+   from safe evidence before proposing another code change. Any further provider-backed
+   Guinea assessment requires a new deployed fix cycle, the complete no-cost validation
+   ladder, and separate authorization. On success, confirm thematic RRA citations include
+   relevant deep-page evidence, package documents are reflected in detail where supplied,
+   two assistant requests restore after refresh, and the saved DOCX is structurally and
+   visually inspected where tooling permits.
 2. Guinea provider acceptance is established for the previous public advisory prototype on
    deployed commit `1ba44bf`, subject to its disclosed `reduced` current-evidence tier.
 3. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:

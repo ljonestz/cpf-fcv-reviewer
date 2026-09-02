@@ -9,17 +9,17 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Latest provider-free verified implementation: `fix/guinea-production-fixes` through
-  code commit `24a8d22` (current branch: 1,170 tests; 36 provider-free smoke tests).
+  code commit `361fe8c` (current branch: 1,170 tests; 36 provider-free smoke tests).
   Review attention is role-aware: the CPF/CEN is the principal lens, accompanying
   package documents are reviewed in detail, and the RRA and other context are thematic
   supporting inputs. The implementation keeps the existing architecture and dependencies.
-- Last verified deployment: `00d3a64` on 2026-09-02. Render reported the exact commit
-  live, `/health` returned `ok`, and the public page, review form, assistant shell, and
-  post-deploy error-log check passed. Its single authorized Guinea assessment progressed
-  through full extraction and research, then failed closed during diagnostic-map coverage
-  validation with safe code `diagnostic_coverage_unavailable`. No result, assistant
-  conversation, or DOCX was produced, so provider acceptance for the redesign remains
-  unestablished. The unchanged deployment was not rerun.
+- Last verified deployment: `361fe8c` on 2026-09-02. Render reported the exact commit
+  live, `/health` returned `ok`, and the public page returned HTTP 200 before the quality
+  run. Its single authorized Guinea assessment completed extraction, current-country
+  research, full-RRA mapping, and drafting, then failed closed with safe code
+  `review_failed`; Render recorded a `ValidationError`. No result, assistant conversation,
+  or DOCX was produced, so provider acceptance for the role-aware redesign remains
+  unestablished. The unchanged deployment must not be rerun.
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
   result schema, 32 evidence records, reproducibility metadata, and application validation
@@ -98,6 +98,7 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 - [Approved results, assistant, and full-RRA coverage design](docs/superpowers/specs/2026-08-31-results-assistant-rra-coverage-design.md): bounded implementation scope and acceptance criteria.
 - [Approved role-aware source coverage design](docs/superpowers/specs/2026-09-02-role-aware-source-coverage-design.md): primary/package/context attention hierarchy and bounded RRA synthesis.
 - [2026-09-02 role-aware source coverage validation](docs/validation/2026-09-02-role-aware-source-coverage-validation.md): provider-free tests, browser evidence, DOCX checks, and deployment checkpoint.
+- [2026-09-02 Guinea quality validation on 361fe8c](docs/validation/2026-09-02-guinea-production-quality-361fe8c.md): the single provider-backed attempt, safe failure evidence, resource checks, and external artifacts.
 - [2026-09-02 results, assistant, and full-RRA validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, deployment cycles, and current Guinea acceptance status.
 - [2026-09-02 full-RRA map reliability fix validation](docs/validation/2026-09-02-full-rra-map-reliability-fix-validation.md): test-first implementation, security review, provider-free checks, and current deployment status.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
