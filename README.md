@@ -9,10 +9,11 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Latest provider-free verified implementation: `fix/guinea-production-fixes` through
-  code commit `361fe8c` (current branch: 1,170 tests; 36 provider-free smoke tests).
-  Review attention is role-aware: the CPF/CEN is the principal lens, accompanying
-  package documents are reviewed in detail, and the RRA and other context are thematic
-  supporting inputs. The implementation keeps the existing architecture and dependencies.
+  code commit `67ab97c` (1,177 tests). Review-schema failure after one retry now uses
+  a dedicated safe code with bounded, content-free attempt diagnostics. Provider-visible
+  schema and prompt guidance mirror the locally enforced narrative, assessment,
+  evidence-ID, and locator requirements. The implementation keeps the existing
+  architecture and dependencies and made no paid API call during validation.
 - Last verified deployment: `361fe8c` on 2026-09-02. Render reported the exact commit
   live, `/health` returned `ok`, and the public page returned HTTP 200 before the quality
   run. Its single authorized Guinea assessment completed extraction, current-country
@@ -83,8 +84,11 @@ Use **Download full detailed note** before the retained review expires or is res
 Use the validation ladder in `CLAUDE.md`: targeted local checks, provider-free smoke,
 deployed health/static checks, then one paid quality run only when real model or rendered
 output behavior must be verified. Never rerun an unchanged deployment. After a failed
-quality run, diagnose only from safe validation codes, add a local regression test, and
-repeat the no-cost ladder before seeking approval for another paid run.
+quality run, diagnose only from safe validation codes. For `review_schema_invalid`, the
+allowed diagnostic fields are attempt number, issue count, allowlisted field/index path,
+and normalized issue type; validation messages, rejected values, and model output remain
+prohibited. Add a local regression test and repeat the no-cost ladder before seeking
+approval for another paid run.
 
 Paid browser quality runs must save unique full-page PNGs for intake, holding/progress,
 summary, detailed output, assistant streaming and refresh restoration, and failure states,
@@ -99,6 +103,8 @@ The detailed future-session protocol is in [`CLAUDE.md`](CLAUDE.md).
 - [Approved role-aware source coverage design](docs/superpowers/specs/2026-09-02-role-aware-source-coverage-design.md): primary/package/context attention hierarchy and bounded RRA synthesis.
 - [2026-09-02 role-aware source coverage validation](docs/validation/2026-09-02-role-aware-source-coverage-validation.md): provider-free tests, browser evidence, DOCX checks, and deployment checkpoint.
 - [2026-09-02 Guinea quality validation on 361fe8c](docs/validation/2026-09-02-guinea-production-quality-361fe8c.md): the single provider-backed attempt, safe failure evidence, resource checks, and external artifacts.
+- [2026-09-02 review-schema diagnostics validation](docs/validation/2026-09-02-review-schema-diagnostics-validation.md):
+  provider-free schema guidance, redaction, retry, and diagnosability evidence.
 - [2026-09-02 results, assistant, and full-RRA validation](docs/validation/2026-09-02-results-assistant-rra-coverage-validation.md): automated checks, smoke-browser evidence, deployment cycles, and current Guinea acceptance status.
 - [2026-09-02 full-RRA map reliability fix validation](docs/validation/2026-09-02-full-rra-map-reliability-fix-validation.md): test-first implementation, security review, provider-free checks, and current deployment status.
 - [2026-08-31 Guinea production quality-run validation](docs/validation/2026-08-31-guinea-production-quality-run.md): successful provider-backed run, screenshots, JSON/DOCX checks, and acceptance outcome.
