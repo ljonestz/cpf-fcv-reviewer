@@ -173,116 +173,6 @@ OFFICE_DOCUMENT_RELATIONSHIP_TYPES = frozenset(
 HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 
-PACKAGE_SECTION_MARKERS = (
-    "results framework",
-    "results matrix",
-    "intervention logic",
-    "implementation arrangement",
-    "delivery arrangement",
-    "adaptive management",
-    "risk monitoring",
-    "partnership",
-    "fragility",
-    "conflict",
-    "rra",
-)
-PACKAGE_BASE_SEGMENTS = 16
-PACKAGE_MIN_SEGMENTS_PER_DOCUMENT = 3
-PACKAGE_MAX_SEGMENTS = 32
-
-
-def _package_segment_budget(documents: tuple) -> int:
-    return min(
-        PACKAGE_MAX_SEGMENTS,
-        max(
-            PACKAGE_BASE_SEGMENTS,
-            len(documents) * PACKAGE_MIN_SEGMENTS_PER_DOCUMENT,
-        ),
-    )
-
-
-def _select_package_segments(
-    documents: tuple,
-) -> list[tuple[object, object, DocumentRole]]:
-    """Select bounded, material package coverage in deterministic round-robin order."""
-    if not documents:
-        return []
-
-    package_budget = _package_segment_budget(documents)
-    candidates = []
-    for document in documents:
-        indexed_segments = tuple(enumerate(document.segments))
-        ordered_indices = []
-        matching_indices = set()
-        seen_indices = set()
-
-        def add_index(index: int) -> None:
-            if index not in seen_indices:
-                seen_indices.add(index)
-                ordered_indices.append(index)
-
-        if indexed_segments:
-            add_index(0)
-        for index, segment in indexed_segments:
-            if any(
-                marker in segment.text.casefold()
-                for marker in PACKAGE_SECTION_MARKERS
-            ):
-                matching_indices.add(index)
-                add_index(index)
-        for index, _ in indexed_segments:
-            add_index(index)
-        candidates.append(
-            tuple(
-                (
-                    index,
-                    indexed_segments[index][1],
-                    index in matching_indices,
-                )
-                for index in ordered_indices
-            )
-        )
-
-    selected = []
-    offsets = [0] * len(documents)
-    phase_one_counts = [0] * len(documents)
-
-    while len(selected) < package_budget:
-        added_this_round = False
-        for index, document in enumerate(documents):
-            if phase_one_counts[index] >= min(
-                PACKAGE_MIN_SEGMENTS_PER_DOCUMENT,
-                len(candidates[index]),
-            ):
-                continue
-            _, segment, _ = candidates[index][offsets[index]]
-            offsets[index] += 1
-            phase_one_counts[index] += 1
-            selected.append((document, segment, DocumentRole.PACKAGE))
-            added_this_round = True
-            if len(selected) >= package_budget:
-                break
-        if not added_this_round:
-            break
-
-    while len(selected) < package_budget:
-        added_this_round = False
-        for index, document in enumerate(documents):
-            while offsets[index] < len(candidates[index]):
-                _, segment, is_marker = candidates[index][offsets[index]]
-                offsets[index] += 1
-                if not is_marker:
-                    continue
-                selected.append((document, segment, DocumentRole.PACKAGE))
-                added_this_round = True
-                break
-            if len(selected) >= package_budget:
-                break
-        if not added_this_round:
-            break
-    return selected
-
-
 def _select_role_segments(
     document_role: DocumentRole,
     documents: tuple,
@@ -979,27 +869,57 @@ def build_runtime_services(
                     for index, document in enumerate(context_documents)
                     if index != diagnostic_position
                 )
-        document_groups = (
-            (DocumentRole.PRIMARY, (primary_document,), 12),
-            (
-                DocumentRole.PACKAGE,
-                package_documents,
-                _package_segment_budget(package_documents),
-            ),
-            (DocumentRole.CONTEXT, context_documents, 16),
+        selected_segments = _select_role_segments(
+            DocumentRole.PRIMARY, (primary_document,), 12
         )
-        selected_segments = []
-        for document_role, documents, per_document_limit in document_groups:
-            if document_role is DocumentRole.PACKAGE:
-                selected_segments.extend(_select_package_segments(documents))
-            else:
-                selected_segments.extend(
-                    _select_role_segments(document_role, documents, per_document_limit)
-                )
-
-        role_counts = {role: 0 for role, _, _ in document_groups}
+        context_segments = _select_role_segments(
+            DocumentRole.CONTEXT, context_documents, 16
+        )
+        role_counts = {DocumentRole.PRIMARY: 0, DocumentRole.CONTEXT: 0}
         evidence = []
         for document, segment, document_role in selected_segments:
+            role_counts[document_role] += 1
+            evidence.append(
+                EvidenceItem(
+                    evidence_id=(
+                        f"{document_role.value}-"
+                        f"{role_counts[document_role]:03d}"
+                    ),
+                    evidence_type="document_fact",
+                    text=_truncate_at_word_boundary(segment.text, 1600),
+                    locator=EvidenceLocator(
+                        document_title=document.name,
+                        page=segment.page,
+                        heading=segment.heading,
+                        element=segment.element,
+                        excerpt=_truncate_at_word_boundary(segment.text, 600),
+                    ),
+                    confidence="high",
+                    document_role=document_role,
+                )
+            )
+        for document_index, document in enumerate(package_documents, start=1):
+            for segment_index, segment in enumerate(document.segments, start=1):
+                evidence.append(
+                    EvidenceItem(
+                        evidence_id=(
+                            f"package-doc-{document_index:03d}-"
+                            f"segment-{segment_index:03d}"
+                        ),
+                        evidence_type="document_fact",
+                        text=segment.text,
+                        locator=EvidenceLocator(
+                            document_title=document.name,
+                            page=segment.page,
+                            heading=segment.heading,
+                            element=segment.element,
+                            excerpt=_truncate_at_word_boundary(segment.text, 600),
+                        ),
+                        confidence="high",
+                        document_role=DocumentRole.PACKAGE,
+                    )
+                )
+        for document, segment, document_role in context_segments:
             role_counts[document_role] += 1
             evidence.append(
                 EvidenceItem(
