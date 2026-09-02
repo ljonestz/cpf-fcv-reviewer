@@ -58,6 +58,16 @@ def test_failure_and_reset_are_recoverable_and_keep_review_states_separate():
     assert "landingNotice.hidden = !notice" in javascript
 
 
+def test_package_coverage_failure_has_a_generic_reader_facing_label():
+    javascript = JS.read_text(encoding="utf-8")
+
+    assert "package_coverage_unavailable:" in javascript
+    assert (
+        "The accompanying package could not be reviewed in full. "
+        "Upload fewer, shorter, or text-searchable package documents."
+    ) in javascript
+
+
 def test_guided_journey_cleanup_is_wired_to_existing_lifecycle_boundaries():
     javascript = JS.read_text(encoding="utf-8")
 

@@ -52,6 +52,10 @@ package, context, RRA, results, implementation, monitoring, and registry evidenc
 is available and readable. Do not treat unavailable evidence as evidence of
 absence.
 
+The attention hierarchy is fixed: primary CPF/CEN is the principal analytical lens;
+accompanying package evidence is detailed and complete within the declared readable-text
+bounds; RRA and contextual evidence are thematic supporting lenses.
+
 Coverage-aware interpretation:
 - Treat incomplete sampling as uncertainty, never as evidence of absence.
 - When relevant content exists but is scattered or weakly operationalized,

@@ -15,7 +15,9 @@ from cpf_fcv_reviewer.extraction import (
     ExtractedDocument,
     ExtractedSegment,
     ExtractionLimitExceeded,
+    PackageCoverageUnavailable,
 )
+from cpf_fcv_reviewer.orchestrator import safe_failure_code
 from cpf_fcv_reviewer.research_controller import (
     InsufficientResearch,
     MalformedResearch,
@@ -246,6 +248,12 @@ def test_primary_document_is_required():
 
     assert response.status_code == 400
     assert response.get_json()["error"] == "A primary CPF/CEN is required."
+
+
+def test_package_coverage_failure_uses_generic_safe_code():
+    assert safe_failure_code(PackageCoverageUnavailable("secret")) == (
+        "package_coverage_unavailable"
+    )
 
 
 def test_create_review_rejects_blank_country():

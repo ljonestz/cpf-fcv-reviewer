@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 
 from pydantic import ValidationError
@@ -15,6 +16,7 @@ from .contracts import (
     ReviewDraft,
     ReviewResult,
 )
+from .extraction import PackageCoverageUnavailable
 from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 
@@ -59,6 +61,12 @@ def _schema_property_names(schema: object) -> frozenset[str]:
 _REVIEW_DRAFT_SCHEMA_FIELDS = _schema_property_names(ReviewDraft.model_json_schema())
 _MAX_SCHEMA_RETRY_ISSUES = 25
 _MAX_SCHEMA_LOCATION_DEPTH = 8
+REVIEW_MAX_ESTIMATED_INPUT_TOKENS = 160_000
+
+
+def _estimated_input_tokens(payload: dict) -> int:
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return (max(len(serialized), len(serialized.encode("utf-8"))) + 2) // 3
 
 
 def _safe_schema_issues(error: ValidationError) -> list[dict[str, object]]:
@@ -497,6 +505,10 @@ class ReviewEngine:
             "detail_profile": _serialize_detail_profile(detail_profile),
             "review_focus": review_focus,
         }
+        if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
+            raise PackageCoverageUnavailable(
+                "Complete review request exceeds the safe request budget."
+            )
         try:
             draft = self.gateway.generate(
                 prompt_name="review",

@@ -31,7 +31,9 @@ from cpf_fcv_reviewer.contracts import (
     RunMetadata,
     SensitivityCategory,
 )
+from cpf_fcv_reviewer.extraction import PackageCoverageUnavailable
 from cpf_fcv_reviewer.model_gateway import AnthropicModelGateway
+from cpf_fcv_reviewer import review_engine
 from cpf_fcv_reviewer.review_engine import ReviewEngine
 from cpf_fcv_reviewer.review_profiles import (
     DETAIL_PROFILES,
@@ -178,6 +180,18 @@ def evidence_pack(meta: RunMetadata) -> EvidencePack:
         evidence=tuple(evidence),
         diagnostic_entries=diagnostic_entries,
     )
+
+
+def evidence_pack_with_package_text(text: str) -> EvidencePack:
+    meta = metadata()
+    pack = evidence_pack(meta)
+    evidence = tuple(
+        item.model_copy(update={"text": text})
+        if item.evidence_id == "ev-package-a-1"
+        else item
+        for item in pack.evidence
+    )
+    return pack.model_copy(update={"evidence": evidence})
 
 
 def strategy_rows() -> tuple[FCVStrategyAssessment, ...]:
@@ -453,6 +467,47 @@ def test_review_derives_deduplicated_role_coverage_and_excludes_model_note():
     assert result.document_coverage.coverage_note == "Model-authored note."
     assert "coverage_note" not in result.model_dump(exclude={"document_coverage"})
     assert gateway.calls[0][2] is ReviewDraft
+
+
+def test_review_rejects_over_budget_complete_payload_before_gateway():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+
+    with pytest.raises(PackageCoverageUnavailable, match="request budget"):
+        ReviewEngine(gateway).review(evidence_pack_with_package_text("x" * 500_000))
+
+    assert gateway.calls == []
+
+
+def test_review_request_budget_allows_exact_boundary_and_rejects_one_token_over(
+    monkeypatch,
+):
+    meta = metadata()
+    pack = evidence_pack(meta)
+    gateway = FakeGateway(draft_for(meta))
+    monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", 10**9)
+
+    ReviewEngine(gateway).review(pack)
+    payload = gateway.calls[-1][1]
+    ceiling = review_engine._estimated_input_tokens(payload)
+    monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", ceiling)
+
+    ReviewEngine(gateway).review(pack)
+
+    one_token_over = None
+    for suffix_length in range(1, 20):
+        candidate = evidence_pack_with_package_text("Evidence from Package-A.docx." + "x" * suffix_length)
+        candidate_payload = {
+            **payload,
+            "evidence_pack": candidate.model_dump(mode="json"),
+        }
+        if review_engine._estimated_input_tokens(candidate_payload) == ceiling + 1:
+            one_token_over = candidate
+            break
+    assert one_token_over is not None
+
+    with pytest.raises(PackageCoverageUnavailable, match="request budget"):
+        ReviewEngine(gateway).review(one_token_over)
 
 
 def test_review_carries_model_authored_alignment_readout_into_result():

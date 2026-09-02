@@ -269,6 +269,7 @@ const failureLabels = {
   registry_unavailable: "The approved registry is unavailable.",
   document_unreadable: "The primary document could not be read.",
   diagnostic_coverage_unavailable: "The uploaded diagnostic could not be assessed in full. Upload a shorter or text-searchable version, or start a new review without it.",
+  package_coverage_unavailable: "The accompanying package could not be reviewed in full. Upload fewer, shorter, or text-searchable package documents.",
   review_failed: "The review could not be completed.",
 };
 

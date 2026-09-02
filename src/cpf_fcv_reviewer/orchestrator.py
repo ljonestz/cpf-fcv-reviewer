@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from .extraction import DiagnosticCoverageUnavailable, DocumentUnreadable
+from .extraction import (
+    DiagnosticCoverageUnavailable,
+    DocumentUnreadable,
+    PackageCoverageUnavailable,
+)
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
 
@@ -13,6 +17,7 @@ Repair = Callable[[dict, list], dict]
 SAFE_FAILURES = {
     TimeoutError: "model_timeout",
     DiagnosticCoverageUnavailable: "diagnostic_coverage_unavailable",
+    PackageCoverageUnavailable: "package_coverage_unavailable",
     RegistryUnavailable: "registry_unavailable",
     DocumentUnreadable: "document_unreadable",
 }
