@@ -422,6 +422,23 @@ def test_diagnostic_map_prompt_describes_single_safe_coverage_retry():
         assert phrase in prompt
 
 
+def test_diagnostic_map_prompt_requires_bounded_thematic_full_diagnostic_output():
+    prompt = normalize_whitespace(load_prompt("diagnostic_map"))
+
+    for phrase in (
+        "Do not produce one page per entry",
+        "Treat 8–12 entries as a compact target, not a reason to merge unrelated drivers",
+        "exactly these six keys",
+        "entry_id, short_name, group, materiality, source_evidence_ids, grouping_rationale",
+        "Every supplied extractable-page evidence ID must be grouped exactly once",
+        "Each scaffold item contains only slot, group, materiality, and source_evidence_ids",
+        "contiguous slot values are application-generated",
+    ):
+        assert phrase in prompt
+    assert re.search(r"8[-–]12 thematic entries", prompt)
+    assert "Use up to 20 entries" in prompt
+
+
 @pytest.mark.parametrize("name", ["review", "repair"])
 def test_review_prompts_request_content_only_and_omit_application_metadata(name):
     prompt = normalize_whitespace(load_prompt(name))

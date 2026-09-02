@@ -187,6 +187,31 @@ def _safe_diagnostic_map_coverage_issues(
     }
 
 
+def _safe_diagnostic_map_coverage_scaffold(
+    material_evidence_ids: tuple[str, ...],
+    entries: tuple,
+) -> list[dict[str, object]]:
+    """Build a bounded, validated scaffold for a coverage correction."""
+    authoritative_ids = set(material_evidence_ids)
+    seen_ids: set[str] = set()
+    scaffold = []
+    for slot, entry in enumerate(entries, start=1):
+        source_evidence_ids = []
+        for evidence_id in entry.source_evidence_ids:
+            if evidence_id in authoritative_ids and evidence_id not in seen_ids:
+                source_evidence_ids.append(evidence_id)
+                seen_ids.add(evidence_id)
+        scaffold.append(
+            {
+                "slot": slot,
+                "group": entry.group,
+                "materiality": entry.materiality,
+                "source_evidence_ids": source_evidence_ids,
+            }
+        )
+    return scaffold
+
+
 RELATIONSHIPS_NAMESPACE = (
     "http://schemas.openxmlformats.org/package/2006/relationships"
 )
@@ -1177,10 +1202,16 @@ def build_runtime_services(
                     prompt_name="diagnostic_map",
                     payload={
                         **mapping_payload,
-                        "coverage_retry": _safe_diagnostic_map_coverage_issues(
-                            material_ids,
-                            diagnostic_map.entries,
-                        ),
+                        "coverage_retry": {
+                            **_safe_diagnostic_map_coverage_issues(
+                                material_ids,
+                                diagnostic_map.entries,
+                            ),
+                            "scaffold": _safe_diagnostic_map_coverage_scaffold(
+                                material_ids,
+                                diagnostic_map.entries,
+                            ),
+                        },
                     },
                     output_type=DiagnosticMap,
                 )

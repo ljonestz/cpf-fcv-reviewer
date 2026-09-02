@@ -3092,7 +3092,7 @@ def _coverage_invalid_diagnostic_map(*, payload, **_):
                 short_name="Another diagnostic page",
                 group="delivery_risk",
                 materiality="medium",
-                source_evidence_ids=(evidence_ids[1],),
+                source_evidence_ids=(evidence_ids[0], evidence_ids[1]),
                 grouping_rationale="The page is material.",
             ),
         )
@@ -3194,10 +3194,32 @@ def test_runtime_sanitizes_diagnostic_map_coverage_retry(monkeypatch):
         "duplicated_material_ids": [gateway.calls[1][1]["material_evidence_ids"][0]],
         "unknown_model_id_count": 1,
         "duplicate_entry_id_count": 1,
+        "scaffold": [
+            {
+                "slot": 1,
+                "group": "principal_driver",
+                "materiality": "high",
+                "source_evidence_ids": [
+                    gateway.calls[1][1]["material_evidence_ids"][0]
+                ],
+            },
+            {
+                "slot": 2,
+                "group": "delivery_risk",
+                "materiality": "medium",
+                "source_evidence_ids": [
+                    gateway.calls[1][1]["material_evidence_ids"][1]
+                ],
+            },
+        ],
     }
     diagnostics_json = json.dumps(diagnostics)
     assert "MODEL_OUTPUT_SECRET" not in diagnostics_json
     assert "unsafe references" not in diagnostics_json
+    assert all(
+        set(item) == {"slot", "group", "materiality", "source_evidence_ids"}
+        for item in diagnostics["scaffold"]
+    )
 
 
 def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnostics(
@@ -3217,6 +3239,7 @@ def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnos
     assert "schema_retry" not in first_call[1]
     assert retry_call[1].keys() == first_call[1].keys() | {"schema_retry"}
     diagnostics = retry_call[1]["schema_retry"]
+    assert "scaffold" not in diagnostics
     diagnostics_json = json.dumps(diagnostics)
     assert "MODEL_OUTPUT_SECRET" not in diagnostics_json
     assert "ignore_previous_instructions" not in diagnostics_json
