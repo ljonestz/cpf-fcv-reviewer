@@ -41,6 +41,8 @@ assessment identifier.
 | Schema-retry complete pytest suite | 1,147 passed in 35.15 seconds |
 | Diagnostic coverage-retry focused suite | 143 passed in 0.97 seconds |
 | Coverage-retry complete pytest suite | 1,151 passed in 46.54 seconds |
+| Post-cycle diagnostic retry/failure suite | 168 passed in 1.78 seconds |
+| Post-cycle complete pytest suite | 1,152 passed in 26.06 seconds |
 | Python compilation | Passed: `python -m compileall -q src tests` |
 | JavaScript syntax | Passed: `node --check src/cpf_fcv_reviewer/static/app.js` |
 | Static whitespace | Passed: `git diff --check` |
@@ -94,7 +96,7 @@ unavailable.
 
 ## Deployed Guinea quality cycles
 
-Two explicitly authorized paid cycles were run with the 7-page Guinea CPF and 102-page
+Three explicitly authorized paid cycles were run with the 7-page Guinea CPF and 102-page
 Guinea RRA. Each deployed commit received exactly one assessment; unchanged code was not
 rerun.
 
@@ -102,17 +104,21 @@ rerun.
 |---|---|---|
 | `cd2c57d` | Render live; health and static page passed | Stopped during diagnostic mapping with safe category `review_failed`; Render logged `ValidationError` |
 | `894ebe5` | Render live; health reported the exact commit; root, review form, and assistant shell passed | A schema-valid map reached exact-once coverage validation, which failed closed as `diagnostic_coverage_unavailable` |
+| `0aa6d3d` | Render live; health reported the exact commit; root, review form, and assistant shell passed | Stopped during diagnostic mapping after the one correction slot; Render logged `ValidationError` with safe category `review_failed` |
 
 The second cycle established that structural parsing succeeded but the returned map did
-not account for every extractable page exactly once. No result,
-assistant conversation, or DOCX was produced in either cycle. The visual intake, holding,
-mapping, and failure states were saved as full-page PNGs and inspected without visible
-clipping, overlap, or broken controls under:
+not account for every extractable page exactly once. The third cycle exercised the shared
+schema-or-coverage correction slot and then returned a schema-invalid map; because the UI
+never advanced beyond diagnostic mapping, the error is not attributed to final review
+drafting. No result, assistant conversation, or DOCX was produced in any cycle. The visual
+intake, holding, mapping, and failure states were saved as full-page PNGs and inspected
+without visible clipping, overlap, or broken controls under:
 
 - `output/playwright/2026-09-02-guinea-production-cd2c57d/`; and
-- `output/playwright/2026-09-02-guinea-production-894ebe5/`.
+- `output/playwright/2026-09-02-guinea-production-894ebe5/`; and
+- `output/playwright/2026-09-02-guinea-production-0aa6d3d/`.
 
-Commit `0aa6d3d` adds a provider-free verified correction for the exact second-cycle
+Commit `0aa6d3d` added a provider-free verified correction for the exact second-cycle
 failure. Diagnostic mapping still has at most two total model calls: the single correction
 slot is used for either a schema error or a coverage error. Coverage diagnostics expose
 only authoritative missing/duplicated material IDs and numeric counts for model-controlled
@@ -120,11 +126,21 @@ unknown IDs and duplicate entry IDs. A second invalid map fails closed, and no s
 deterministic fallback is used. Independent spec and code/security reviews approved the
 change.
 
+After the third cycle, commit `bce5bb3` added one narrow safe-failure regression fix.
+If either allowed correction response is schema-invalid, it is now wrapped as
+`diagnostic_coverage_unavailable` while preserving the `ValidationError` only as an
+internal cause. Both retry paths still stop after exactly two map calls. The change does
+not add a provider call, retry, sample, fallback, dependency, or abstraction. It passed
+168 focused tests, 36 provider-free smoke tests, and all 1,152 local tests. This commit
+has not been deployed or provider-tested, and another paid run is not justified solely
+to observe its safer error category.
+
 ## Current acceptance status
 
 Results presentation, assistant persistence/streaming, DOCX structure, and the full-RRA
 fail-closed implementation are provider-free accepted. Deployed Guinea acceptance for the
-redesign is not established because both authorized cycles stopped before review drafting.
-Commit `0aa6d3d` is tested locally but has not been deployed or assessed with a provider.
-Any further deployment and paid Guinea run is a new fix cycle and requires explicit
-authorization after the no-cost deployed checks.
+redesign is not established because all three authorized cycles stopped before review
+drafting. Commit `0aa6d3d` is live and received exactly one paid assessment; post-cycle
+commit `bce5bb3` is provider-free verified only. Any further deployment and paid Guinea
+run is a new fix cycle and requires an evidence-backed reliability change plus explicit
+authorization after the provider-free and no-cost deployed checks.
