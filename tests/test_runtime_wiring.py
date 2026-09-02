@@ -39,6 +39,7 @@ from cpf_fcv_reviewer.extraction import (
     ExtractedDocument,
     ExtractedSegment,
     ExtractionLimitExceeded,
+    PackageCoverageUnavailable,
 )
 from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.registry import load_registry_bundle
@@ -210,6 +211,161 @@ def test_runtime_optional_pdf_sampling_kwargs_are_pdf_only(monkeypatch):
             },
         ),
     ]
+
+
+def test_runtime_full_package_reextract_does_not_sample_pdf(monkeypatch):
+    calls = []
+    document = ExtractedDocument(
+        "annex.pdf",
+        (ExtractedSegment("Late package evidence", 40, None, "page 40"),),
+        (),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "extract_document",
+        lambda data, name, **kwargs: calls.append((name, kwargs)) or document,
+    )
+    context = {
+        "package_documents": (document,),
+        "package_document_uploads": ((1, {"name": "annex.pdf", "bytes": b"pdf"}),),
+    }
+
+    runtime._reextract_full_package_documents(context)
+
+    expected = {
+        "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+        "sample_pdf_across_document": False,
+        "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+        "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+        "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+    }
+    assert calls == [("annex.pdf", expected)]
+
+
+def test_runtime_rejects_more_than_ten_package_documents(monkeypatch):
+    uploads = tuple(
+        {"name": f"annex-{index}.txt", "bytes": b"package text"}
+        for index in range(11)
+    )
+
+    with pytest.raises(PackageCoverageUnavailable, match="document-count"):
+        runtime._extract_optional_uploads(uploads, strict_package=True)
+
+
+def test_runtime_package_segment_bound_fails_closed():
+    document = ExtractedDocument(
+        "annex.txt",
+        tuple(
+            ExtractedSegment("x", None, None, f"paragraph {index}")
+            for index in range(401)
+        ),
+        (),
+    )
+
+    with pytest.raises(PackageCoverageUnavailable, match="segment"):
+        runtime._validate_full_package_documents((document,))
+
+
+def test_runtime_package_character_bound_fails_closed():
+    document = ExtractedDocument(
+        "annex.txt",
+        (ExtractedSegment("x" * 300_001, None, None, "paragraph 1"),),
+        (),
+    )
+
+    with pytest.raises(PackageCoverageUnavailable, match="character"):
+        runtime._validate_full_package_documents((document,))
+
+
+@pytest.mark.parametrize(
+    ("name", "data", "message"),
+    (
+        ("annex.pdf", b"not-a-pdf", "unreadable"),
+        ("annex.txt", b"ignored", "unreadable"),
+    ),
+)
+def test_runtime_strict_package_preflight_fails_closed_for_unreadable_upload(
+    monkeypatch, name, data, message
+):
+    if name.endswith(".txt"):
+        monkeypatch.setattr(
+            runtime,
+            "extract_document",
+            lambda *args, **kwargs: ExtractedDocument(name, (), ()),
+        )
+
+    with pytest.raises(PackageCoverageUnavailable, match=message):
+        runtime._extract_optional_uploads(
+            ({"name": name, "bytes": data},), strict_package=True
+        )
+
+
+def test_runtime_strict_package_preflight_fails_closed_for_extraction_error(monkeypatch):
+    monkeypatch.setattr(
+        runtime, "_has_valid_optional_container", lambda data, suffix: True
+    )
+
+    def fail_extract(*args, **kwargs):
+        raise ExtractionLimitExceeded("private extraction detail")
+
+    monkeypatch.setattr(runtime, "extract_document", fail_extract)
+
+    with pytest.raises(PackageCoverageUnavailable, match="extracted in full"):
+        runtime._extract_optional_uploads(
+            ({"name": "annex.txt", "bytes": b"ignored"},),
+            strict_package=True,
+        )
+
+
+def test_runtime_full_package_reextract_skips_recognized_rra_position(monkeypatch):
+    diagnostic = ExtractedDocument(
+        "rra.pdf",
+        (ExtractedSegment("RRA evidence", 1, None, "page 1"),),
+        (),
+    )
+    package = ExtractedDocument(
+        "annex.pdf",
+        (ExtractedSegment("Sampled annex", 1, None, "page 1"),),
+        (),
+    )
+    full_package = ExtractedDocument(
+        "annex.pdf",
+        (ExtractedSegment("Full annex", 40, None, "page 40"),),
+        (),
+    )
+    calls = []
+
+    def fake_extract(data, name, **kwargs):
+        calls.append((data, name, kwargs))
+        return full_package
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+    context = {
+        "package_documents": (diagnostic, package),
+        "package_document_uploads": (
+            (1, {"name": "rra.pdf", "bytes": b"rra"}),
+            (2, {"name": "annex.pdf", "bytes": b"annex"}),
+        ),
+        "diagnostic_document_role": DocumentRole.PACKAGE,
+        "diagnostic_document_position": 0,
+    }
+
+    runtime._reextract_full_package_documents(context)
+
+    assert calls == [
+        (
+            b"annex",
+            "annex.pdf",
+            {
+                "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+                "sample_pdf_across_document": False,
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
+        )
+    ]
+    assert context["package_documents"] == (diagnostic, full_package)
 
 
 def test_package_segment_budget_is_bounded_and_scales_by_document_count():
@@ -1140,8 +1296,6 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
     def fake_extract(data, name, **kwargs):
         if name == "benin-cpf.txt":
             return document(name, "Readable primary evidence. " * 10)
-        if name == "malformed-package.pdf":
-            raise ExtractionLimitExceeded("PRIVATE_FORMAT_DETAIL")
         if name == "empty-context.txt":
             return document(name, "")
         return document(name, "Usable optional evidence.")
@@ -1153,7 +1307,6 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
         "detail_level": "standard",
         "cpf": {"name": "benin-cpf.txt", "bytes": b"primary"},
         "package_documents": [
-            {"name": "malformed-package.pdf", "bytes": b"PRIVATE_PACKAGE_TEXT"},
             {"name": "usable-package.txt", "bytes": b"usable package"},
         ],
         "context_documents": [
@@ -1173,14 +1326,11 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
         "usable-context.txt"
     ]
     warning = "An optional uploaded document could not be read and was excluded."
-    assert context["extraction_warnings"] == (warning, warning)
+    assert context["extraction_warnings"] == (warning,)
     assert not any(
         value in " ".join(context["extraction_warnings"])
         for value in (
-            "malformed-package.pdf",
             "empty-context.txt",
-            "PRIVATE_FORMAT_DETAIL",
-            "PRIVATE_PACKAGE_TEXT",
             "PRIVATE_CONTEXT_TEXT",
         )
     )
@@ -1192,7 +1342,7 @@ def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
 
     assert set(context["evidence_pack"].metadata.document_fingerprints) == {
         "primary:benin-cpf.txt",
-        "package:2:usable-package.txt",
+        "package:1:usable-package.txt",
         "context:2:usable-context.txt",
     }
 
@@ -2640,6 +2790,8 @@ def test_runtime_resolves_duplicate_name_to_context_rra_and_preserves_package_ev
             return primary
         if kwargs.get("sample_pdf_across_document"):
             return package_bounded if data == b"package-bytes" else context_bounded
+        if data == b"package-bytes":
+            return package_bounded
         if data != b"context-rra-bytes":
             raise AssertionError("full extraction used unrelated same-name bytes")
         return context_full
@@ -2719,6 +2871,16 @@ def test_runtime_resolves_duplicate_name_to_context_rra_and_preserves_package_ev
             b"context-rra-bytes",
             {
                 "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            },
+        ),
+        (
+            b"package-bytes",
+            {
+                "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+                "sample_pdf_across_document": False,
                 "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
                 "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
                 "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,

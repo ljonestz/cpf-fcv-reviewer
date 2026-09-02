@@ -31,6 +31,7 @@ from .evidence_builder import build_evidence_pack, build_reproducible_evidence_p
 from .extraction import (
     DiagnosticCoverageUnavailable,
     ExtractionLimitExceeded,
+    PackageCoverageUnavailable,
     PDF_SAMPLING_WARNING_SUFFIX,
     extract_document,
     require_readable_primary,
@@ -81,6 +82,9 @@ OPTIONAL_PDF_SAMPLE_PAGES = 16
 DIAGNOSTIC_MAX_PAGES = 250
 DIAGNOSTIC_MAX_CHARACTERS = 600_000
 DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES = 50_000_000
+PACKAGE_MAX_DOCUMENTS = 10
+PACKAGE_MAX_SEGMENTS_TOTAL = 400
+PACKAGE_MAX_CHARACTERS_TOTAL = 300_000
 DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS = 160_000
 _DIAGNOSTIC_MAP_SCHEMA_FIELDS = frozenset(
     {
@@ -579,7 +583,13 @@ def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
     return True
 
 
-def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[str, ...]]:
+def _extract_optional_uploads(
+    items: tuple | list,
+    *,
+    strict_package: bool = False,
+) -> tuple[tuple, tuple, tuple[str, ...]]:
+    if strict_package and len(items) > PACKAGE_MAX_DOCUMENTS:
+        raise PackageCoverageUnavailable("Package document-count budget exceeded.")
     documents = []
     retained_uploads = []
     warnings = []
@@ -590,6 +600,8 @@ def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[
         if suffix not in SUPPORTED_UPLOAD_SUFFIXES or not _has_valid_optional_container(
             data, suffix
         ):
+            if strict_package:
+                raise PackageCoverageUnavailable("A package document is unreadable.")
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         try:
@@ -612,22 +624,82 @@ def _extract_optional_uploads(items: tuple | list) -> tuple[tuple, tuple, tuple[
                     max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
                 )
         except ExtractionLimitExceeded as exc:
+            if strict_package:
+                raise PackageCoverageUnavailable(
+                    "A package document could not be extracted in full."
+                ) from exc
             if _filename_suggests_diagnostic(name):
                 raise DiagnosticCoverageUnavailable(
                     "named uploaded diagnostic exceeded a safe extraction bound."
                 ) from exc
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
-        except EXPECTED_OPTIONAL_EXTRACTION_ERRORS:
+        except EXPECTED_OPTIONAL_EXTRACTION_ERRORS as exc:
+            if strict_package:
+                raise PackageCoverageUnavailable(
+                    "A package document could not be extracted in full."
+                ) from exc
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         if not _has_usable_uploaded_document(document):
+            if strict_package:
+                raise PackageCoverageUnavailable("A package document is unreadable.")
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         documents.append(document)
         retained_uploads.append((index, item))
         warnings.extend(document.warnings)
     return tuple(documents), tuple(retained_uploads), tuple(warnings)
+
+
+def _validate_full_package_documents(documents: tuple) -> None:
+    segment_count = sum(len(document.segments) for document in documents)
+    character_count = sum(
+        len(segment.text)
+        for document in documents
+        for segment in document.segments
+    )
+    if segment_count > PACKAGE_MAX_SEGMENTS_TOTAL:
+        raise PackageCoverageUnavailable("Package segment budget exceeded.")
+    if character_count > PACKAGE_MAX_CHARACTERS_TOTAL:
+        raise PackageCoverageUnavailable("Package character budget exceeded.")
+
+
+def _reextract_full_package_documents(context: dict) -> None:
+    documents = list(context.get("package_documents", ()))
+    uploads = tuple(context.get("package_document_uploads", ()))
+    diagnostic_position = (
+        context.get("diagnostic_document_position")
+        if context.get("diagnostic_document_role") is DocumentRole.PACKAGE
+        else None
+    )
+    for position, (_upload_index, upload) in enumerate(uploads):
+        if position == diagnostic_position:
+            continue
+        try:
+            document = extract_document(
+                upload["bytes"],
+                upload["name"],
+                max_pdf_pages=DIAGNOSTIC_MAX_PAGES,
+                sample_pdf_across_document=False,
+                max_segments=DIAGNOSTIC_MAX_PAGES,
+                max_characters=DIAGNOSTIC_MAX_CHARACTERS,
+                max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            )
+        except EXPECTED_OPTIONAL_EXTRACTION_ERRORS + (ExtractionLimitExceeded,) as exc:
+            raise PackageCoverageUnavailable(
+                "A package document could not be extracted in full."
+            ) from exc
+        if not _has_usable_uploaded_document(document):
+            raise PackageCoverageUnavailable("A package document is unreadable.")
+        documents[position] = document
+    full_package = tuple(
+        document
+        for position, document in enumerate(documents)
+        if position != diagnostic_position
+    )
+    _validate_full_package_documents(full_package)
+    context["package_documents"] = tuple(documents)
 
 
 def _resolve_uploaded_diagnostic_source(
@@ -852,7 +924,8 @@ def build_runtime_services(
         primary_document = extract_document(primary["bytes"], primary["name"])
         require_readable_primary(primary_document)
         package_documents, package_uploads, package_warnings = _extract_optional_uploads(
-            payload.get("package_documents", ())
+            payload.get("package_documents", ()),
+            strict_package=True,
         )
         context_documents, context_uploads, context_warnings = _extract_optional_uploads(
             payload.get("context_documents", ())
@@ -1260,6 +1333,7 @@ def build_runtime_services(
                         )
                         + full_diagnostic.warnings
                     )
+                _reextract_full_package_documents(context)
                 review_date = review_date_provider()
                 dated_diagnostic = (
                     uploaded_diagnostic

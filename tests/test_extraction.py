@@ -10,6 +10,7 @@ from cpf_fcv_reviewer import extraction
 from cpf_fcv_reviewer.extraction import (
     DiagnosticCoverageUnavailable,
     ExtractionLimitExceeded,
+    PackageCoverageUnavailable,
     extract_document,
     extract_docx_bytes,
     extract_pdf_bytes,
@@ -78,6 +79,11 @@ def test_detector_docx_segment_budget_stops_element_expansion():
 
 def test_diagnostic_coverage_unavailable_is_a_safe_extraction_limit():
     assert issubclass(DiagnosticCoverageUnavailable, ExtractionLimitExceeded)
+
+
+def test_package_coverage_unavailable_is_a_safe_extraction_limit():
+    assert issubclass(PackageCoverageUnavailable, ExtractionLimitExceeded)
+
 
 def test_pdf_segment_budget_stops_page_expansion():
     with pytest.raises(ExtractionLimitExceeded, match="segment"):

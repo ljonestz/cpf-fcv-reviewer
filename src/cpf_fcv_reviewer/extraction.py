@@ -23,6 +23,10 @@ class DiagnosticCoverageUnavailable(ExtractionLimitExceeded):
     """Raised when a selected diagnostic cannot be safely covered in full."""
 
 
+class PackageCoverageUnavailable(ExtractionLimitExceeded):
+    """Raised when supplied package documents cannot be reviewed in full."""
+
+
 @dataclass(frozen=True)
 class ExtractedSegment:
     text: str
