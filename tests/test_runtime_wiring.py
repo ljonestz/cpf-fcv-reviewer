@@ -242,6 +242,38 @@ def test_runtime_full_package_reextract_does_not_sample_pdf(monkeypatch):
     assert calls == [("annex.pdf", expected)]
 
 
+def test_runtime_full_package_reextract_replaces_sampling_warnings(monkeypatch):
+    sampled_warning = (
+        "annex.pdf: sampled 16 of 40 PDF pages; "
+        "conclusions about absence are limited."
+    )
+    full_warning = "page 12 extracted no text"
+    sampled = ExtractedDocument(
+        "annex.pdf",
+        (ExtractedSegment("Sampled annex", 1, None, "page 1"),),
+        (sampled_warning,),
+    )
+    full = ExtractedDocument(
+        "annex.pdf",
+        (ExtractedSegment("Full annex", 40, None, "page 40"),),
+        (full_warning,),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "extract_document",
+        lambda *args, **kwargs: full,
+    )
+    context = {
+        "package_documents": (sampled,),
+        "package_document_uploads": ((1, {"name": "annex.pdf", "bytes": b"pdf"}),),
+        "extraction_warnings": (sampled_warning, "context warning"),
+    }
+
+    runtime._reextract_full_package_documents(context)
+
+    assert context["extraction_warnings"] == ("context warning", full_warning)
+
+
 def test_runtime_rejects_more_than_ten_package_documents(monkeypatch):
     uploads = tuple(
         {"name": f"annex-{index}.txt", "bytes": b"package text"}

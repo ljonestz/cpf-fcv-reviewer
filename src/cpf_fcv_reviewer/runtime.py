@@ -686,12 +686,19 @@ def _reextract_full_package_documents(context: dict) -> None:
                 max_characters=DIAGNOSTIC_MAX_CHARACTERS,
                 max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
             )
-        except EXPECTED_OPTIONAL_EXTRACTION_ERRORS + (ExtractionLimitExceeded,) as exc:
+        except EXPECTED_OPTIONAL_EXTRACTION_ERRORS as exc:
             raise PackageCoverageUnavailable(
                 "A package document could not be extracted in full."
             ) from exc
         if not _has_usable_uploaded_document(document):
             raise PackageCoverageUnavailable("A package document is unreadable.")
+        context["extraction_warnings"] = (
+            _remove_warning_multiset(
+                tuple(context.get("extraction_warnings", ())),
+                documents[position].warnings,
+            )
+            + document.warnings
+        )
         documents[position] = document
     full_package = tuple(
         document
