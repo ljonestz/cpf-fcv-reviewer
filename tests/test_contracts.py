@@ -717,3 +717,48 @@ def test_run_metadata_rejects_repair_count_above_one():
             model_id="test-model",
             repair_count=2,
         )
+
+
+def test_review_draft_schema_exposes_local_validation_requirements():
+    schema = ReviewDraft.model_json_schema()
+    definitions = schema["$defs"]
+
+    for field in (
+        "overall_read",
+        "alignment_readout",
+        "strategy_readout",
+        "coverage_note",
+    ):
+        assert "non-whitespace" in schema["properties"][field]["description"]
+
+    for definition, fields in (
+        ("RRADriverAssessment", ("driver", "cpf_response", "remaining_gap")),
+        ("FCVStrategyAssessment", ("assessment_id", "assessment")),
+        ("PriorityArea", ("heading", "assessment", "recommended_action")),
+        ("RevisionSummaryItem", ("priority_area_id", "title")),
+    ):
+        properties = definitions[definition]["properties"]
+        for field in fields:
+            assert "non-whitespace" in properties[field]["description"]
+
+    for definition in ("RRADriverAssessment", "FCVStrategyAssessment"):
+        properties = definitions[definition]["properties"]
+        assert "partially_aligned or not_evidenced" in properties["gap_locus"][
+            "description"
+        ]
+        assert "unless status is not_assessable" in properties["evidence_ids"][
+            "description"
+        ]
+
+    locator_schema = definitions["EvidenceLocator"]
+    locator_properties = locator_schema["properties"]
+    assert "page, heading, or element" in locator_schema["description"]
+    for field in ("document_title", "excerpt"):
+        assert "non-whitespace" in locator_properties[field]["description"]
+    for field in ("heading", "element"):
+        assert "non-whitespace" in locator_properties[field]["description"]
+
+    priority_evidence_items = definitions["PriorityArea"]["properties"][
+        "evidence_ids"
+    ]["items"]
+    assert "non-whitespace" in priority_evidence_items["description"]

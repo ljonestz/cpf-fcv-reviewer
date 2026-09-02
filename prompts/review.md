@@ -1,4 +1,4 @@
-Version: 3.0.0
+Version: 3.0.1
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -209,6 +209,21 @@ a concise account of evidence coverage, role distinctions, important gaps, and
 uncertainty. Do not invent, copy, or emit application-owned metadata, filenames,
 run identifiers, timestamps, hashes, model identifiers, registry versions,
 prompt versions, or validation outcomes.
+
+Before returning, check the complete ReviewDraft against these rules:
+
+- Every required narrative string must contain non-whitespace text.
+- Every target_locator must provide a real page, heading, or element.
+- target_locator document_title and excerpt must contain non-whitespace text.
+- target_locator heading and element must contain non-whitespace text when
+  supplied.
+- Every RRADriverAssessment and FCVStrategyAssessment with status
+  partially_aligned or not_evidenced must provide a non-null gap_locus.
+- Every assessment whose status is not not_assessable must provide at least one evidence_id.
+- An assessment with status not_assessable may use an empty evidence_ids collection.
+- Every evidence_ids entry must contain a non-whitespace identifier copied exactly from the
+  supplied evidence.
+- Include every required top-level field even when its collection is empty.
 
 Return only content matching the ReviewDraft schema. Return content-only JSON,
 omit metadata, and include all required ReviewDraft fields:

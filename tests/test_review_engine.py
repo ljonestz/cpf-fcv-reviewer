@@ -5,6 +5,7 @@ from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+from anthropic import transform_schema
 import pytest
 from pydantic import ValidationError
 
@@ -34,7 +35,7 @@ from cpf_fcv_reviewer.contracts import (
 from cpf_fcv_reviewer.extraction import PackageCoverageUnavailable
 from cpf_fcv_reviewer.model_gateway import AnthropicModelGateway
 from cpf_fcv_reviewer import review_engine
-from cpf_fcv_reviewer.review_engine import ReviewEngine
+from cpf_fcv_reviewer.review_engine import ReviewEngine, ReviewSchemaUnavailable
 from cpf_fcv_reviewer.review_profiles import (
     DETAIL_PROFILES,
     STAGE_PROFILES,
@@ -631,17 +632,70 @@ def test_review_schema_retry_does_not_forward_unknown_location_keys():
     )
 
 
-def test_review_propagates_second_validation_error_after_exactly_one_retry():
+def test_review_draft_guidance_survives_anthropic_schema_transform():
+    schema = transform_schema(ReviewDraft.model_json_schema())
+    definitions = schema["$defs"]
+
+    assert "non-whitespace" in schema["properties"]["overall_read"]["description"]
+    strategy = definitions["FCVStrategyAssessment"]["properties"]
+    assert "partially_aligned or not_evidenced" in strategy["gap_locus"]["description"]
+    assert "unless status is not_assessable" in strategy["evidence_ids"]["description"]
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected_type"),
+    [
+        ({"status": "partially_aligned", "gap_locus": None}, "gap_locus_required"),
+        ({"status": "aligned", "evidence_ids": []}, "assessment_evidence_required"),
+    ],
+)
+def test_safe_schema_issues_identify_known_model_level_rules(changes, expected_type):
+    payload = draft_for(metadata()).model_dump(mode="json")
+    payload["fcv_strategy_assessments"][0].update(changes)
+    with pytest.raises(ValidationError) as exc_info:
+        ReviewDraft.model_validate(payload)
+
+    assert {
+        "loc": ["fcv_strategy_assessments", 0],
+        "type": expected_type,
+    } in review_engine._safe_schema_issues(exc_info.value)
+
+
+def test_review_preserves_safe_diagnostics_after_exactly_one_schema_retry():
     meta = metadata()
     first_error = invalid_review_draft_error()
-    second_error = invalid_review_draft_error()
+    malicious_key = "second_attempt_secret_field"
+    invalid_payload = draft_for(meta).model_dump(mode="json")
+    invalid_payload[malicious_key] = "SECOND-ATTEMPT-SECRET"
+    with pytest.raises(ValidationError) as exc_info:
+        ReviewDraft.model_validate(invalid_payload)
+    second_error = exc_info.value
     gateway = SequencedGateway(first_error, second_error)
 
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(ReviewSchemaUnavailable) as unavailable:
         ReviewEngine(gateway).review(evidence_pack(meta))
 
-    assert exc_info.value is second_error
+    assert unavailable.value.__cause__ is second_error
     assert len(gateway.calls) == 2
+    assert unavailable.value.failure_code == "review_schema_invalid"
+    diagnostics = unavailable.value.safe_diagnostics
+    assert [attempt["attempt"] for attempt in diagnostics["attempts"]] == [1, 2]
+    assert all(
+        attempt["issue_count"] >= len(attempt["issues"])
+        for attempt in diagnostics["attempts"]
+    )
+    assert all(
+        set(attempt) == {"attempt", "issue_count", "issues"}
+        for attempt in diagnostics["attempts"]
+    )
+    serialized = json.dumps(diagnostics)
+    assert malicious_key not in serialized
+    assert "TOP-SECRET" not in serialized
+    assert "SECOND-ATTEMPT-SECRET" not in serialized
+    assert "msg" not in serialized
+    assert "input" not in serialized
+    assert "ctx" not in serialized
+    assert str(unavailable.value) == "Review output failed schema validation after one retry."
 
 
 @pytest.mark.parametrize("error", [RuntimeError("provider failed"), ValueError("bad response")])
@@ -1719,7 +1773,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.0")
+    assert call["system"].startswith("Version: 3.0.1")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 

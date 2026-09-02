@@ -7,6 +7,7 @@ from .extraction import (
     DocumentUnreadable,
     PackageCoverageUnavailable,
 )
+from .review_engine import ReviewSchemaUnavailable
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
 
@@ -24,12 +25,21 @@ SAFE_FAILURES = {
 
 
 def safe_failure_code(error: Exception) -> str:
+    if isinstance(error, ReviewSchemaUnavailable):
+        return error.failure_code
     if isinstance(error, ResearchFailure):
         return error.failure_code
     for error_type, code in SAFE_FAILURES.items():
         if isinstance(error, error_type):
             return code
     return "review_failed"
+
+
+def safe_failure_data(error: Exception) -> dict[str, object]:
+    data: dict[str, object] = {"error": safe_failure_code(error)}
+    if isinstance(error, ReviewSchemaUnavailable):
+        data["schema_diagnostics"] = error.safe_diagnostics
+    return data
 
 
 class ReviewOrchestrator:
@@ -93,7 +103,7 @@ class ReviewOrchestrator:
         except Exception as exc:
             context.clear()
             context["status"] = "failed"
-            emit("run_failed", {"error": safe_failure_code(exc)})
+            emit("run_failed", safe_failure_data(exc))
             raise
         finally:
             original_context.pop("_emit", None)

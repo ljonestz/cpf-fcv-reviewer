@@ -125,3 +125,15 @@ git add -- docs/PROJECT_STATUS.md docs/validation/2026-08-30-initial-review-sche
 git commit -m "docs: record schema retry verification"
 git push origin HEAD:refs/heads/fix/guinea-production-fixes
 ```
+
+## 2026-09-02 approved follow-up: terminal schema diagnostics
+
+The Guinea production run showed that the retry remained fail-closed but discarded the
+actionable cause when the second `ReviewDraft` validation also failed. Before another paid
+run, preserve a safe diagnostic envelope for both attempts, map it to a stable failure code,
+and expose only attempt number, issue count, allowlisted field/index paths, and normalized
+issue types in internal events and logs. Add provider-free tests proving that raw messages,
+invalid inputs, document text, and unknown field names cannot escape; retain exactly one
+retry and the generic browser-facing message. Audit hidden Pydantic constraints and improve
+provider guidance without weakening local validation. Complete focused, smoke, full-suite,
+lint, compilation, diff, and secret-pattern checks without a paid provider call.

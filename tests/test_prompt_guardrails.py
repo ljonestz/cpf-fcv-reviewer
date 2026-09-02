@@ -368,7 +368,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
 
 @pytest.mark.parametrize(
     ("name", "version"),
-    [("diagnostic_map", "1.2.0"), ("review", "3.0.0"), ("repair", "3.0.0")],
+    [("diagnostic_map", "1.2.0"), ("review", "3.0.1"), ("repair", "3.0.0")],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)
@@ -445,3 +445,28 @@ def test_review_prompts_request_content_only_and_omit_application_metadata(name)
     assert "ReviewDraft" in prompt
     assert "application-owned" in prompt
     assert "omit metadata" in prompt
+
+
+def test_review_prompt_mirrors_hidden_review_draft_validators():
+    prompt = normalize_whitespace(load_prompt("review"))
+
+    for phrase in (
+        "Every required narrative string must contain non-whitespace text",
+        "partially_aligned or not_evidenced must provide a non-null gap_locus",
+        (
+            "Every assessment whose status is not not_assessable must provide at "
+            "least one evidence_id"
+        ),
+        "Every target_locator must provide a real page, heading, or element",
+        (
+            "target_locator document_title and excerpt must contain non-whitespace "
+            "text"
+        ),
+        (
+            "target_locator heading and element must contain non-whitespace text "
+            "when supplied"
+        ),
+        "An assessment with status not_assessable may use an empty evidence_ids collection",
+        "Before returning, check the complete ReviewDraft against these rules",
+    ):
+        assert phrase in prompt

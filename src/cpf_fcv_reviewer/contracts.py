@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -21,6 +21,8 @@ def _requires_nonblank_items(values: tuple[str, ...], field_name: str) -> tuple[
     if any(not value.strip() for value in values):
         raise ValueError(f"{field_name} cannot contain blank entries.")
     return values
+
+ReviewNarrative = Annotated[str, Field(description="Must contain non-whitespace text.")]
 
 
 class ImmutableRegistryVersions(dict[str, str]):
@@ -100,12 +102,22 @@ class SensitivityCategory(StrEnum):
 
 
 class EvidenceLocator(FrozenModel):
-    document_title: str
+    """
+    A real document locator with at least one page, heading, or element coordinate.
+    """
+
+    document_title: ReviewNarrative
     document_version: str | None = None
     page: int | None = Field(default=None, ge=1)
-    heading: str | None = None
-    element: str | None = None
-    excerpt: str
+    heading: str | None = Field(
+        default=None,
+        description="When supplied, must contain non-whitespace text.",
+    )
+    element: str | None = Field(
+        default=None,
+        description="When supplied, must contain non-whitespace text.",
+    )
+    excerpt: ReviewNarrative
     is_paraphrase: bool = False
 
     @field_validator("document_title", "excerpt")
@@ -183,16 +195,21 @@ class DiagnosticMap(FrozenModel):
 
 
 class RRADriverAssessment(FrozenModel):
-    assessment_id: str
-    driver: str
-    cpf_response: str
-    delivery_mechanism: str
-    result_or_indicator: str
-    remaining_gap: str
+    assessment_id: ReviewNarrative
+    driver: ReviewNarrative
+    cpf_response: ReviewNarrative
+    delivery_mechanism: ReviewNarrative
+    result_or_indicator: ReviewNarrative
+    remaining_gap: ReviewNarrative
     status: AssessmentStatus
     confidence: AssessmentConfidence
-    gap_locus: GapLocus | None = None
-    evidence_ids: tuple[str, ...]
+    gap_locus: GapLocus | None = Field(
+        default=None,
+        description="Required when status is partially_aligned or not_evidenced.",
+    )
+    evidence_ids: tuple[ReviewNarrative, ...] = Field(
+        description="Must contain at least one identifier unless status is not_assessable."
+    )
 
     @field_validator(
         "assessment_id",
@@ -229,13 +246,18 @@ class RRADriverAssessment(FrozenModel):
 
 
 class FCVStrategyAssessment(FrozenModel):
-    assessment_id: str
+    assessment_id: ReviewNarrative
     strategic_shift: FCVStrategicShift
-    assessment: str
+    assessment: ReviewNarrative
     status: AssessmentStatus
     confidence: AssessmentConfidence
-    gap_locus: GapLocus | None = None
-    evidence_ids: tuple[str, ...]
+    gap_locus: GapLocus | None = Field(
+        default=None,
+        description="Required when status is partially_aligned or not_evidenced.",
+    )
+    evidence_ids: tuple[ReviewNarrative, ...] = Field(
+        description="Must contain at least one identifier unless status is not_assessable."
+    )
 
     @field_validator("assessment_id", "assessment")
     @classmethod
@@ -273,8 +295,8 @@ class RecommendationScale(StrEnum):
 
 
 class RevisionSummaryItem(FrozenModel):
-    priority_area_id: str
-    title: str = Field(max_length=100)
+    priority_area_id: ReviewNarrative
+    title: ReviewNarrative = Field(max_length=100)
 
     @field_validator("priority_area_id", "title")
     @classmethod
@@ -283,14 +305,14 @@ class RevisionSummaryItem(FrozenModel):
 
 
 class PriorityArea(FrozenModel):
-    priority_area_id: str
-    heading: str
-    assessment: str
-    why_it_matters: str
-    recommended_action: str
+    priority_area_id: ReviewNarrative
+    heading: ReviewNarrative
+    assessment: ReviewNarrative
+    why_it_matters: ReviewNarrative
+    recommended_action: ReviewNarrative
     target_locator: EvidenceLocator
     recommendation_scale: RecommendationScale
-    evidence_ids: tuple[str, ...] = Field(min_length=1)
+    evidence_ids: tuple[ReviewNarrative, ...] = Field(min_length=1)
     sensitivity: SensitivityCategory
     gap_locus: GapLocus
     comment_reference: str | None = None
@@ -422,16 +444,16 @@ class ReviewResult(FrozenModel):
 class ReviewDraft(FrozenModel):
     """Model-authored review content; authoritative run metadata is attached locally."""
 
-    overall_read: str
-    alignment_readout: str
-    strategy_readout: str
+    overall_read: ReviewNarrative
+    alignment_readout: ReviewNarrative
+    strategy_readout: ReviewNarrative
     revision_summary: tuple[RevisionSummaryItem, ...]
     priority_areas: tuple[PriorityArea, ...]
     rra_driver_assessments: tuple[RRADriverAssessment, ...] = ()
     fcv_strategy_assessments: tuple[FCVStrategyAssessment, ...]
     institutional_referral_ids: tuple[str, ...]
     limitations: tuple[str, ...]
-    coverage_note: str
+    coverage_note: ReviewNarrative
 
     @field_validator("overall_read", "coverage_note")
     @classmethod

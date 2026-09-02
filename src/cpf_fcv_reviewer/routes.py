@@ -27,7 +27,7 @@ from .export_docx import (
     validate_evidence_completeness,
 )
 from .extraction import extract_document, require_readable_primary
-from .orchestrator import safe_failure_code
+from .orchestrator import safe_failure_code, safe_failure_data
 from .session_store import SessionExpired
 from .validators import validate_reproducibility_metadata
 
@@ -587,6 +587,13 @@ def run_assessment(app, assessment_id):
         except Exception as exc:
             terminal_events.clear()
             failure_code = safe_failure_code(exc)
+            failure_data = safe_failure_data(exc)
+            schema_diagnostics = failure_data.get("schema_diagnostics")
+            serialized_schema_diagnostics = (
+                json.dumps(schema_diagnostics, separators=(",", ":"), sort_keys=True)
+                if isinstance(schema_diagnostics, dict)
+                else "none"
+            )
             status_code = getattr(exc, "status_code", None)
             cause_types = []
             cause = exc.__cause__
@@ -594,11 +601,13 @@ def run_assessment(app, assessment_id):
                 cause_types.append(type(cause).__name__)
                 cause = cause.__cause__
             current_app.logger.error(
-                "review_run_failed error_type=%s status_code=%s cause_chain=%s failure_code=%s",
+                "review_run_failed error_type=%s status_code=%s cause_chain=%s "
+                "failure_code=%s schema_diagnostics=%s",
                 type(exc).__name__,
                 status_code if isinstance(status_code, int) else "none",
                 ">".join(cause_types) or "none",
                 failure_code,
+                serialized_schema_diagnostics,
             )
             try:
                 state = store().get(assessment_id)
@@ -617,7 +626,7 @@ def run_assessment(app, assessment_id):
                 store().emit(
                     assessment_id,
                     "run_failed",
-                    {"error": failure_code},
+                    failure_data,
                 )
             except SessionExpired:
                 return

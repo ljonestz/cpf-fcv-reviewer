@@ -61,6 +61,15 @@ def _schema_property_names(schema: object) -> frozenset[str]:
 _REVIEW_DRAFT_SCHEMA_FIELDS = _schema_property_names(ReviewDraft.model_json_schema())
 _MAX_SCHEMA_RETRY_ISSUES = 25
 _MAX_SCHEMA_LOCATION_DEPTH = 8
+_SAFE_MODEL_VALIDATION_TYPES = {
+    "gap_locus is required for partially_aligned and not_evidenced assessments.": (
+        "gap_locus_required"
+    ),
+    "evidence_ids must contain at least one identifier unless status is not_assessable.": (
+        "assessment_evidence_required"
+    ),
+    "Document evidence requires page, heading, or element.": "document_coordinate_required",
+}
 REVIEW_MAX_ESTIMATED_INPUT_TOKENS = 160_000
 
 
@@ -73,7 +82,7 @@ def _safe_schema_issues(error: ValidationError) -> list[dict[str, object]]:
     issues = []
     for item in error.errors(
         include_url=False,
-        include_context=False,
+        include_context=True,
         include_input=False,
     )[:_MAX_SCHEMA_RETRY_ISSUES]:
         location = []
@@ -85,10 +94,42 @@ def _safe_schema_issues(error: ValidationError) -> list[dict[str, object]]:
             else:
                 location.append("unrecognized_field")
         issue_type = str(item.get("type", "validation_error"))
+        if issue_type == "value_error":
+            context = item.get("ctx")
+            context_error = context.get("error") if isinstance(context, dict) else None
+            if (
+                type(context_error) is ValueError
+                and len(context_error.args) == 1
+                and isinstance(context_error.args[0], str)
+            ):
+                issue_type = _SAFE_MODEL_VALIDATION_TYPES.get(context_error.args[0], issue_type)
         if not re.fullmatch(r"[a-z0-9_]{1,64}", issue_type):
             issue_type = "validation_error"
         issues.append({"loc": location, "type": issue_type})
     return issues
+
+
+class ReviewSchemaUnavailable(RuntimeError):
+    """A terminal review-schema failure with content-free diagnostics."""
+
+    failure_code = "review_schema_invalid"
+
+    def __init__(
+        self,
+        initial_error: ValidationError,
+        retry_error: ValidationError,
+    ) -> None:
+        self.safe_diagnostics = {
+            "attempts": [
+                {
+                    "attempt": attempt,
+                    "issue_count": error.error_count(),
+                    "issues": _safe_schema_issues(error),
+                }
+                for attempt, error in ((1, initial_error), (2, retry_error))
+            ]
+        }
+        super().__init__("Review output failed schema validation after one retry.")
 
 
 def _validate_repair_issues(issues: list[dict]) -> None:
@@ -524,11 +565,14 @@ class ReviewEngine:
                 raise PackageCoverageUnavailable(
                     "Complete review request exceeds the safe request budget."
                 )
-            draft = self.gateway.generate(
-                prompt_name="review",
-                payload=retry_payload,
-                output_type=ReviewDraft,
-            )
+            try:
+                draft = self.gateway.generate(
+                    prompt_name="review",
+                    payload=retry_payload,
+                    output_type=ReviewDraft,
+                )
+            except ValidationError as retry_error:
+                raise ReviewSchemaUnavailable(error, retry_error) from retry_error
         coverage = DocumentCoverage(
             primary_document=names[DocumentRole.PRIMARY][0],
             package_documents=names[DocumentRole.PACKAGE],

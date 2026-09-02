@@ -89,7 +89,10 @@ a cheaper check can still find the defect.
 
 Limit paid quality runs to one per deployed fix cycle. Never rerun an unchanged build.
 If a quality run fails, retrieve only safe `repair_start`, `repair_failed`, and
-`run_failed` codes, add a local regression test, implement the narrow fix, and repeat
+`run_failed` codes. For `review_schema_invalid`, also retrieve the sanitized schema
+diagnostics: attempt number, issue count, allowlisted field/index path, and normalized
+issue type only. Never retrieve validation messages, rejected values, or model output.
+Add a local regression test, implement the narrow fix, and repeat
 the local/smoke ladder before considering another paid run. Do not automatically start
 a second full quality run after a failure unless the user has explicitly authorized
 iterative quality runs; otherwise report the evidence and ask first.
