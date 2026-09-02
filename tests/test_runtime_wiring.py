@@ -3226,17 +3226,31 @@ def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnos
     assert all(set(issue) == {"loc", "type"} for issue in diagnostics["issues"])
 
 
-def test_runtime_propagates_second_diagnostic_map_schema_validation_error(
+def test_runtime_fails_closed_after_second_diagnostic_map_schema_validation_error(
     monkeypatch,
 ):
     first_error = _invalid_diagnostic_map_error()
     second_error = _invalid_diagnostic_map_error()
     gateway = _SequencedDiagnosticMapGateway(first_error, second_error)
 
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(DiagnosticCoverageUnavailable) as exc_info:
         _run_diagnostic_map_step(monkeypatch, gateway)
 
-    assert exc_info.value is second_error
+    assert exc_info.value.__cause__ is second_error
+    assert len(gateway.calls) == 2
+
+
+def test_runtime_fails_closed_when_coverage_retry_is_schema_invalid(monkeypatch):
+    second_error = _invalid_diagnostic_map_error()
+    gateway = _SequencedDiagnosticMapGateway(
+        _incomplete_diagnostic_map,
+        second_error,
+    )
+
+    with pytest.raises(DiagnosticCoverageUnavailable) as exc_info:
+        _run_diagnostic_map_step(monkeypatch, gateway)
+
+    assert exc_info.value.__cause__ is second_error
     assert len(gateway.calls) == 2
 
 

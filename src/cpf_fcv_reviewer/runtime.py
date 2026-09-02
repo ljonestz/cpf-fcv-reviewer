@@ -1150,16 +1150,21 @@ def build_runtime_services(
             )
         except ValidationError as error:
             schema_retry_used = True
-            diagnostic_map = model_gateway.generate(
-                prompt_name="diagnostic_map",
-                payload={
-                    **mapping_payload,
-                    "schema_retry": {
-                        "issues": _safe_diagnostic_map_schema_issues(error),
+            try:
+                diagnostic_map = model_gateway.generate(
+                    prompt_name="diagnostic_map",
+                    payload={
+                        **mapping_payload,
+                        "schema_retry": {
+                            "issues": _safe_diagnostic_map_schema_issues(error),
+                        },
                     },
-                },
-                output_type=DiagnosticMap,
-            )
+                    output_type=DiagnosticMap,
+                )
+            except ValidationError as retry_error:
+                raise DiagnosticCoverageUnavailable(
+                    "Selected uploaded diagnostic mapping is invalid."
+                ) from retry_error
         try:
             validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
         except ValueError as exc:
@@ -1167,17 +1172,22 @@ def build_runtime_services(
                 raise DiagnosticCoverageUnavailable(
                     "Selected uploaded diagnostic mapping is incomplete."
                 ) from exc
-            diagnostic_map = model_gateway.generate(
-                prompt_name="diagnostic_map",
-                payload={
-                    **mapping_payload,
-                    "coverage_retry": _safe_diagnostic_map_coverage_issues(
-                        material_ids,
-                        diagnostic_map.entries,
-                    ),
-                },
-                output_type=DiagnosticMap,
-            )
+            try:
+                diagnostic_map = model_gateway.generate(
+                    prompt_name="diagnostic_map",
+                    payload={
+                        **mapping_payload,
+                        "coverage_retry": _safe_diagnostic_map_coverage_issues(
+                            material_ids,
+                            diagnostic_map.entries,
+                        ),
+                    },
+                    output_type=DiagnosticMap,
+                )
+            except ValidationError as retry_error:
+                raise DiagnosticCoverageUnavailable(
+                    "Selected uploaded diagnostic mapping is invalid."
+                ) from retry_error
             try:
                 validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
             except ValueError as retry_error:
