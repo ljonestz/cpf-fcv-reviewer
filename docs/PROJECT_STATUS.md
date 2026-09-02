@@ -7,8 +7,9 @@ provider acceptance for the redesign is not established. Semantic application ve
 `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
-code commit `0aa6d3d` live on 2026-09-02; `/health` returned `ok` with that exact release,
-the public page returned HTTP 200, and the review and assistant shells were present. The
+code commit `00d3a64` live on 2026-09-02; `/health` returned `ok` with that exact release,
+the public page returned HTTP 200, the review and assistant shells were present, and no
+post-deploy error logs were found. No paid assessment has been submitted on this build. The
 service remains the free, volatile public test site. Operational production still fails closed without SQLite
 persistence; the public test site can run without a disk only through the explicit
 `ALLOW_VOLATILE_PROTOTYPE=true` exception.

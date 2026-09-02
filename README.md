@@ -13,11 +13,10 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
   targets compact thematic output without merging distinct drivers, and its single
   coverage correction receives only a sanitized structural scaffold. The two-call
   ceiling, full exact-once page coverage, and fail-closed behavior remain unchanged.
-- Last verified deployment: `0aa6d3d` on 2026-09-02. Render reported the exact commit
-  live, `/health` returned `ok`, and the public page, review form, and assistant shell
-  passed no-cost checks. Its single Guinea quality assessment failed closed during
-  full-RRA diagnostic mapping after the one correction slot; no result or DOCX was
-  produced. Provider acceptance for this redesign is therefore still pending.
+- Last verified deployment: `00d3a64` on 2026-09-02. Render reported the exact commit
+  live, `/health` returned `ok`, and the public page, review form, assistant shell, and
+  post-deploy error-log check passed. No paid assessment has been submitted on this
+  deployment; provider acceptance for the redesign is still pending.
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
   result schema, 32 evidence records, reproducibility metadata, and application validation

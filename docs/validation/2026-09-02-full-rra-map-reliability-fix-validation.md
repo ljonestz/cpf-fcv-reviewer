@@ -73,8 +73,14 @@ LibreOffice is not installed, so no DOCX page-render acceptance is claimed.
 
 ## Deployment and provider status
 
-Commit `095873b` has not yet been deployed or provider-tested. The public Render service
-continues to report `0aa6d3d` live, and deployed Guinea acceptance for the redesign remains
-pending. Before any paid assessment, deploy the exact reviewed commit, confirm the release
-through `/health`, run no-cost static checks, and limit the deployed cycle to one Guinea
-assessment. Never rerun unchanged code.
+The deployment branch was fast-forwarded to `00d3a64`, which includes code commit
+`095873b` and this validation record. Render deployment `dep-dabusi7avr4c73aslkjg`
+reached `live`; `/health` returned `ok` with the exact full SHA, the root page returned
+HTTP 200, the review form and assistant shell were present, and no error logs appeared
+after deployment.
+
+No paid assessment has been submitted on this build. Uploading the local Guinea CPF and
+RRA to the public prototype, where the configured external model provider processes them,
+requires explicit confirmation of that disclosure. If confirmed, limit this deployed
+cycle to one Guinea assessment, save unique full-page states and the DOCX on success, and
+never rerun unchanged code.
