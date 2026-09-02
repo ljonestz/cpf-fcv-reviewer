@@ -9,10 +9,11 @@ provider acceptance for the redesign is not established. Semantic application ve
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
 code commit `00d3a64` live on 2026-09-02; `/health` returned `ok` with that exact release,
 the public page returned HTTP 200, the review and assistant shells were present, and no
-post-deploy error logs were found. No paid assessment has been submitted on this build. The
-service remains the free, volatile public test site. Operational production still fails closed without SQLite
-persistence; the public test site can run without a disk only through the explicit
-`ALLOW_VOLATILE_PROTOTYPE=true` exception.
+post-deploy error logs were found before the quality run. Its one authorized Guinea
+assessment failed closed during diagnostic-map coverage validation; the unchanged build
+was not rerun. The service remains the free, volatile public test site. Operational
+production still fails closed without SQLite persistence; the public test site can run
+without a disk only through the explicit `ALLOW_VOLATILE_PROTOTYPE=true` exception.
 
 The Five-minute readout now leads with a concise overall assessment, separate RRA/current-
 dynamics and FCV Strategy readouts, and up to three linked priority measures. Detailed
@@ -20,8 +21,8 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-09-02: 1,153 passed in 25.73 seconds. The provider-free
-smoke suite passed 36 tests, the focused prompt/runtime set passed 145 tests, and Python
+Latest verified suite on 2026-09-02: 1,154 passed in 23.06 seconds. The provider-free
+smoke suite passed 36 tests, the focused prompt/runtime set passed 146 tests, and Python
 compilation, JavaScript syntax, and `git diff --check` passed. Provider-free browser QA
 passed eight selected full-page states, four-message assistant restoration, secondary
 correction, and DOCX download/structural checks. Ruff and LibreOffice are not installed
@@ -129,6 +130,20 @@ The stable FCV Project Screener is untouched and prohibited.
   `diagnostic_coverage_unavailable` after exactly two calls, whether the correction slot
   was used for schema or coverage. It passed 168 focused tests, 36 smoke tests, and all
   1,152 local tests. It has not been deployed or provider-tested.
+- Commit `095873b` makes the full-RRA map prompt compact without collapsing distinct
+  drivers and gives the single coverage retry only a sanitized structural scaffold. It
+  passed the complete 1,153-test suite, provider-free smoke and browser QA, and independent
+  specification and code-quality review before deployment in `00d3a64`.
+- The one explicitly authorized Guinea assessment on deployed `00d3a64` completed upload,
+  extraction, current-country research, evidence building, and both allowed map attempts.
+  It then failed closed with safe code `diagnostic_coverage_unavailable`; Render recorded
+  `DiagnosticCoverageUnavailable` caused by `ValueError`. This establishes that the second
+  response reached exact-once coverage validation, but the safe record does not identify
+  which source IDs were missing or duplicated. Seven unique full-page PNGs were saved and
+  visually inspected. No result, assistant turns, or DOCX was produced, and no retry was
+  made. A local regression now covers two schema-valid but incomplete map responses and
+  asserts the two-call ceiling and preserved `ValueError` cause. The post-run focused
+  prompt/runtime gate passed 146 tests and the complete suite passed all 1,154 tests.
 
 ## Validation cost protocol
 
@@ -141,13 +156,14 @@ never substitute HTML for screenshots or relabel smoke output as country-quality
 
 ## Remaining considerations
 
-1. Do not spend another Guinea run solely to verify the safe failure-code change in
-   `bce5bb3`; it does not alter map generation. Before another paid cycle, identify a
-   bounded, evidence-backed reliability correction, then repeat the local, smoke,
-   exact-release health, and static-page gates. Any newly authorized deployed cycle may
-   run no more than one Guinea assessment. On success, confirm all 102 RRA pages are
-   attempted/accounted for, inspect deep-page evidence, exercise two assistant requests
-   plus refresh restoration, and inspect the saved DOCX.
+1. Do not rerun deployed `00d3a64`. Before another paid cycle, agree a bounded reliability
+   change that avoids asking the correction call to regenerate the whole map. One candidate
+   is an application-merged patch contract limited to authoritative IDs still missing after
+   the first schema-valid response; this is a design change and is not yet approved. Repeat
+   the local, smoke, exact-release health, and static-page gates for any implementation, and
+   limit any newly authorized deployment to one Guinea assessment. On success, confirm all
+   102 RRA pages are attempted/accounted for, inspect deep-page evidence, exercise two
+   assistant requests plus refresh restoration, and inspect the saved DOCX.
 2. Guinea provider acceptance is established for the previous public advisory prototype on
    deployed commit `1ba44bf`, subject to its disclosed `reduced` current-evidence tier.
 3. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:

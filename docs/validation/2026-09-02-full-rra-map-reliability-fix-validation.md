@@ -79,8 +79,26 @@ reached `live`; `/health` returned `ok` with the exact full SHA, the root page r
 HTTP 200, the review form and assistant shell were present, and no error logs appeared
 after deployment.
 
-No paid assessment has been submitted on this build. Uploading the local Guinea CPF and
-RRA to the public prototype, where the configured external model provider processes them,
-requires explicit confirmation of that disclosure. If confirmed, limit this deployed
-cycle to one Guinea assessment, save unique full-page states and the DOCX on success, and
-never rerun unchanged code.
+## Paid Guinea quality outcome
+
+After explicit approval to send the local public Guinea CPF and RRA to the configured
+external model provider, exactly one assessment was submitted on deployed `00d3a64`. The
+run progressed through upload and validation, current-country research, evidence building,
+and diagnostic mapping. It then failed closed with safe code
+`diagnostic_coverage_unavailable`. Render recorded `DiagnosticCoverageUnavailable` with a
+`ValueError` cause, showing that a schema-valid response still failed exact-once coverage;
+the safe logs do not disclose which source IDs were missing or duplicated.
+
+Seven unique full-page PNGs were saved under the gitignored quality-run directory for the
+completed intake, initial holding view, upload/validation, current-evidence research,
+evidence connection, mapping progression, and safe failure state. Each was visually
+inspected. No completed result, assistant conversation, or DOCX existed to save. The
+unchanged deployment was not rerun, and the ignored run-state file containing the live
+assessment identifier was not inspected or committed.
+
+The production failure category is now covered locally by a narrow regression: two
+schema-valid but incomplete map responses raise `DiagnosticCoverageUnavailable`, preserve
+the final `ValueError` as the cause, and make exactly two model calls. This records the
+observed fail-closed behavior; it does not claim provider acceptance or change map
+generation. The exact regression passed, the post-run prompt/runtime gate passed 146
+tests, and the complete local suite passed all 1,154 tests in 23.06 seconds.

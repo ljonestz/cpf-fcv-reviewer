@@ -3277,6 +3277,21 @@ def test_runtime_fails_closed_when_coverage_retry_is_schema_invalid(monkeypatch)
     assert len(gateway.calls) == 2
 
 
+def test_runtime_fails_closed_when_coverage_retry_remains_incomplete(monkeypatch):
+    gateway = _SequencedDiagnosticMapGateway(
+        _incomplete_diagnostic_map,
+        _incomplete_diagnostic_map,
+        AssertionError("third diagnostic map call is forbidden"),
+    )
+
+    with pytest.raises(DiagnosticCoverageUnavailable) as exc_info:
+        _run_diagnostic_map_step(monkeypatch, gateway)
+
+    assert isinstance(exc_info.value.__cause__, ValueError)
+    assert len(gateway.calls) == 2
+    assert "coverage_retry" in gateway.calls[1][1]
+
+
 @pytest.mark.parametrize("error", [RuntimeError("provider failed"), ValueError("bad response")])
 def test_runtime_does_not_retry_non_validation_diagnostic_map_errors(monkeypatch, error):
     gateway = _SequencedDiagnosticMapGateway(error, _valid_diagnostic_map)

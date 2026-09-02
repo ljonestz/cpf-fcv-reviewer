@@ -9,14 +9,18 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Latest provider-free verified implementation: `fix/guinea-production-fixes` through
-  `095873b` (1,153 tests; 36 provider-free smoke tests). Full-diagnostic mapping now
+  code commit `095873b` (current branch: 1,154 tests; 36 provider-free smoke tests).
+  Full-diagnostic mapping now
   targets compact thematic output without merging distinct drivers, and its single
   coverage correction receives only a sanitized structural scaffold. The two-call
   ceiling, full exact-once page coverage, and fail-closed behavior remain unchanged.
 - Last verified deployment: `00d3a64` on 2026-09-02. Render reported the exact commit
   live, `/health` returned `ok`, and the public page, review form, assistant shell, and
-  post-deploy error-log check passed. No paid assessment has been submitted on this
-  deployment; provider acceptance for the redesign is still pending.
+  post-deploy error-log check passed. Its single authorized Guinea assessment progressed
+  through full extraction and research, then failed closed during diagnostic-map coverage
+  validation with safe code `diagnostic_coverage_unavailable`. No result, assistant
+  conversation, or DOCX was produced, so provider acceptance for the redesign remains
+  unestablished. The unchanged deployment was not rerun.
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
   result schema, 32 evidence records, reproducibility metadata, and application validation
