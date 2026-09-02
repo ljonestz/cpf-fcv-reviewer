@@ -14,6 +14,7 @@ from zlib import error as ZlibError
 from docx.opc.exceptions import PackageNotFoundError
 from lxml.etree import XMLParser, XMLSyntaxError, fromstring
 from pypdf.errors import PdfReadError
+from pydantic import ValidationError
 
 from .contracts import (
     DetailLevel,
@@ -81,6 +82,19 @@ DIAGNOSTIC_MAX_PAGES = 250
 DIAGNOSTIC_MAX_CHARACTERS = 600_000
 DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES = 50_000_000
 DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS = 160_000
+_DIAGNOSTIC_MAP_SCHEMA_FIELDS = frozenset(
+    {
+        "entries",
+        "entry_id",
+        "short_name",
+        "group",
+        "materiality",
+        "source_evidence_ids",
+        "grouping_rationale",
+    }
+)
+_MAX_DIAGNOSTIC_MAP_SCHEMA_RETRY_ISSUES = 25
+_MAX_SCHEMA_LOCATION_DEPTH = 8
 DIAGNOSTIC_FILENAME_MARKERS = (
     "risk and resilience assessment",
     "risk & resilience assessment",
@@ -114,6 +128,30 @@ def _can_retry_mechanical_repair(issues: list[dict]) -> bool:
         and issue.get("code") in MECHANICAL_REPAIR_RETRY_CODES
         for issue in issues
     )
+
+
+def _safe_diagnostic_map_schema_issues(
+    error: ValidationError,
+) -> list[dict[str, object]]:
+    issues = []
+    for item in error.errors(
+        include_url=False,
+        include_context=False,
+        include_input=False,
+    )[:_MAX_DIAGNOSTIC_MAP_SCHEMA_RETRY_ISSUES]:
+        location = []
+        for part in item.get("loc", ())[:_MAX_SCHEMA_LOCATION_DEPTH]:
+            if type(part) is int and 0 <= part <= 9999:
+                location.append(part)
+            elif isinstance(part, str) and part in _DIAGNOSTIC_MAP_SCHEMA_FIELDS:
+                location.append(part)
+            else:
+                location.append("unrecognized_field")
+        issue_type = str(item.get("type", "validation_error"))
+        if not re.fullmatch(r"[a-z0-9_]{1,64}", issue_type):
+            issue_type = "validation_error"
+        issues.append({"loc": location, "type": issue_type})
+    return issues
 
 
 RELATIONSHIPS_NAMESPACE = (
@@ -1070,11 +1108,23 @@ def build_runtime_services(
             raise DiagnosticCoverageUnavailable(
                 "Diagnostic mapping request exceeds the safe input budget."
             )
-        diagnostic_map = model_gateway.generate(
-            prompt_name="diagnostic_map",
-            payload=mapping_payload,
-            output_type=DiagnosticMap,
-        )
+        try:
+            diagnostic_map = model_gateway.generate(
+                prompt_name="diagnostic_map",
+                payload=mapping_payload,
+                output_type=DiagnosticMap,
+            )
+        except ValidationError as error:
+            diagnostic_map = model_gateway.generate(
+                prompt_name="diagnostic_map",
+                payload={
+                    **mapping_payload,
+                    "schema_retry": {
+                        "issues": _safe_diagnostic_map_schema_issues(error),
+                    },
+                },
+                output_type=DiagnosticMap,
+            )
         try:
             validate_diagnostic_coverage(material_ids, diagnostic_map.entries)
         except ValueError as exc:

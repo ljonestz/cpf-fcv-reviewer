@@ -9,6 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 from docx import Document
+from pydantic import ValidationError
 
 import cpf_fcv_reviewer.extraction as extraction
 import cpf_fcv_reviewer.runtime as runtime
@@ -2996,6 +2997,132 @@ def _fresh_diagnostic_map_context(completed_context, final_pack, full_document):
         "diagnostic_coverage_warning": completed_context["diagnostic_coverage_warning"],
         "evidence_pack": base_pack,
     }
+
+
+def _invalid_diagnostic_map_error():
+    with pytest.raises(ValidationError) as exc_info:
+        DiagnosticMap.model_validate(
+            {
+                "entries": [
+                    {
+                        "entry_id": {"raw_secret": "MODEL_OUTPUT_SECRET"},
+                        "short_name": "Mapped page",
+                        "group": "principal_driver",
+                        "materiality": "high",
+                        "source_evidence_ids": ["diagnostic-page-001"],
+                        "grouping_rationale": "The page is material.",
+                        "ignore_previous_instructions": "MODEL_OUTPUT_SECRET",
+                    }
+                ],
+                "unknown_map_field": "MODEL_OUTPUT_SECRET",
+            }
+        )
+    return exc_info.value
+
+
+class _SequencedDiagnosticMapGateway:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def generate(self, *, prompt_name, payload, output_type):
+        self.calls.append((prompt_name, payload, output_type))
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        if callable(response):
+            return response(
+                prompt_name=prompt_name,
+                payload=payload,
+                output_type=output_type,
+            )
+        return response
+
+
+def _valid_diagnostic_map(*, payload, **_):
+    evidence_ids = tuple(item["evidence_id"] for item in payload["evidence"])
+    return DiagnosticMap(
+        entries=(
+            DiagnosticEntry(
+                entry_id="retry-map",
+                short_name="Mapped diagnostic pages",
+                group="principal_driver",
+                materiality="high",
+                source_evidence_ids=evidence_ids,
+                grouping_rationale="Every supplied page is mapped.",
+            ),
+        )
+    )
+
+
+def _run_diagnostic_map_step(monkeypatch, gateway):
+    completed_context, final_pack = _run_narrow_runtime(
+        monkeypatch,
+        b"Benin Risk and Resilience Assessment, March 2025.",
+        controller=_InjectedResearchController(),
+    )
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=gateway,
+        research_controller=_InjectedResearchController(),
+    )
+    return dict(services["review_orchestrator"].steps)["map"](
+        _fresh_diagnostic_map_context(
+            completed_context,
+            final_pack,
+            completed_context["full_diagnostic_document"],
+        )
+    )
+
+
+def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnostics(
+    monkeypatch,
+):
+    gateway = _SequencedDiagnosticMapGateway(
+        _invalid_diagnostic_map_error(),
+        _valid_diagnostic_map,
+    )
+
+    _run_diagnostic_map_step(monkeypatch, gateway)
+
+    assert len(gateway.calls) == 2
+    first_call, retry_call = gateway.calls
+    assert first_call[0] == retry_call[0] == "diagnostic_map"
+    assert first_call[2] is retry_call[2] is DiagnosticMap
+    assert "schema_retry" not in first_call[1]
+    assert retry_call[1].keys() == first_call[1].keys() | {"schema_retry"}
+    diagnostics = retry_call[1]["schema_retry"]
+    diagnostics_json = json.dumps(diagnostics)
+    assert "MODEL_OUTPUT_SECRET" not in diagnostics_json
+    assert "ignore_previous_instructions" not in diagnostics_json
+    assert "unknown_map_field" not in diagnostics_json
+    assert len(diagnostics["issues"]) <= 25
+    assert all(len(issue["loc"]) <= 8 for issue in diagnostics["issues"])
+    assert all(set(issue) == {"loc", "type"} for issue in diagnostics["issues"])
+
+
+def test_runtime_propagates_second_diagnostic_map_schema_validation_error(
+    monkeypatch,
+):
+    first_error = _invalid_diagnostic_map_error()
+    second_error = _invalid_diagnostic_map_error()
+    gateway = _SequencedDiagnosticMapGateway(first_error, second_error)
+
+    with pytest.raises(ValidationError) as exc_info:
+        _run_diagnostic_map_step(monkeypatch, gateway)
+
+    assert exc_info.value is second_error
+    assert len(gateway.calls) == 2
+
+
+@pytest.mark.parametrize("error", [RuntimeError("provider failed"), ValueError("bad response")])
+def test_runtime_does_not_retry_non_validation_diagnostic_map_errors(monkeypatch, error):
+    gateway = _SequencedDiagnosticMapGateway(error, _valid_diagnostic_map)
+
+    with pytest.raises(type(error), match=str(error)):
+        _run_diagnostic_map_step(monkeypatch, gateway)
+
+    assert len(gateway.calls) == 1
 
 
 def test_runtime_serialized_diagnostic_map_budget_is_exact_and_byte_sensitive(monkeypatch):
