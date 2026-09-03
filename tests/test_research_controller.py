@@ -497,6 +497,7 @@ def test_document_led_requires_explicit_opt_in_and_no_accepted_claims():
     [
         ((), None, "insufficient_coverage"),
         ((), TimeoutError("provider timeout detail"), "provider_timeout"),
+        ((), ValueError("malformed response detail"), "malformed_response"),
         ((), OSError("provider failure detail"), "provider_failure"),
         (
             (claim("licensed").model_copy(update={"licensed_data_required": True}),),

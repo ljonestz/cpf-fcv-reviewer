@@ -309,18 +309,11 @@ class ResearchController:
                 event_data={"missing_coverage": last_missing},
             )
         if allow_document_led and not accepted:
-            if budget_exhausted:
-                reason = "budget_exhausted"
-            elif isinstance(last_failure, ResearchTimeout):
-                reason = "provider_timeout"
-            elif isinstance(last_failure, ResearchSourceRejected) or (
-                not accepted and rejected
-            ):
-                reason = "source_rejected"
-            elif last_failure is not None:
-                reason = "provider_failure"
-            else:
-                reason = "insufficient_coverage"
+            reason = self._document_led_reason(
+                budget_exhausted=budget_exhausted,
+                last_failure=last_failure,
+                rejected=rejected,
+            )
             return self._finish(
                 started=started,
                 claims=(),
@@ -416,6 +409,25 @@ class ResearchController:
         else:
             emit("research_document_led", event_data)
         return result
+
+    @staticmethod
+    def _document_led_reason(
+        *,
+        budget_exhausted: bool,
+        last_failure: ResearchFailure | None,
+        rejected: dict[str, str],
+    ) -> str:
+        if budget_exhausted:
+            return "budget_exhausted"
+        if isinstance(last_failure, ResearchTimeout):
+            return "provider_timeout"
+        if isinstance(last_failure, MalformedResearch):
+            return "malformed_response"
+        if isinstance(last_failure, ResearchSourceRejected) or rejected:
+            return "source_rejected"
+        if last_failure is not None:
+            return "provider_failure"
+        return "insufficient_coverage"
 
     def _recent_claim_count(
         self,
