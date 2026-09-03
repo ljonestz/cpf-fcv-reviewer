@@ -1754,6 +1754,34 @@ def test_runtime_accepts_injected_gateways_and_constructs_configured_research_co
     assert controller._backoff == (0.25,)
 
 
+def test_injected_research_gateway_does_not_construct_curated_recovery(monkeypatch):
+    class UnexpectedClient:
+        def __init__(self, **_kwargs):
+            raise AssertionError("curated client should not be constructed")
+
+    class UnexpectedGateway:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("curated gateway should not be constructed")
+
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.curated_research.BoundedInstitutionalClient",
+        UnexpectedClient,
+    )
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.curated_research.CuratedResearchGateway",
+        UnexpectedGateway,
+    )
+
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=object(),
+        follow_on_gateway=object(),
+        research_gateway=object(),
+    )
+
+    assert services["research_controller"].recovery_gateway is None
+
+
 def test_default_research_gateway_receives_attempt_timeout(monkeypatch):
     captured = {}
 

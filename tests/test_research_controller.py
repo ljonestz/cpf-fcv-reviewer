@@ -525,6 +525,27 @@ def test_document_led_emits_one_privacy_safe_terminal_reason(
     _assert_events_are_privacy_safe(events)
 
 
+def test_document_led_reason_prioritizes_provider_failure_over_rejected():
+    rejected = claim("licensed").model_copy(
+        update={"licensed_data_required": True}
+    )
+    events = []
+
+    result = controller(
+        ScriptedGateway((OSError("provider failure detail"), (rejected,))),
+        max_attempts=2,
+    ).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    terminal = [data for kind, data in events if kind == "research_document_led"]
+    assert terminal == [{"reason": "provider_failure"}]
+    _assert_events_are_privacy_safe(events)
+
+
 def test_document_led_emits_budget_exhausted_terminal_reason():
     now = [0.0]
 

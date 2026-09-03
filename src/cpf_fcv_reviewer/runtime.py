@@ -795,18 +795,19 @@ def build_runtime_services(
             config["ANTHROPIC_MODEL_ID"],
         )
     if research_controller is None:
-        from .curated_research import (
-            BoundedInstitutionalClient,
-            CuratedResearchGateway,
-        )
-
-        recovery_gateway = CuratedResearchGateway(
-            BoundedInstitutionalClient(
-                timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"]
-            ),
-            reliefweb_app_name=config.get("RELIEFWEB_APP_NAME", ""),
-        )
+        recovery_gateway = None
         if research_gateway is None:
+            from .curated_research import (
+                BoundedInstitutionalClient,
+                CuratedResearchGateway,
+            )
+
+            recovery_gateway = CuratedResearchGateway(
+                BoundedInstitutionalClient(
+                    timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"]
+                ),
+                reliefweb_app_name=config.get("RELIEFWEB_APP_NAME", ""),
+            )
             research_gateway = AnthropicPublicResearchGateway(
                 config["ANTHROPIC_API_KEY"],
                 config["ANTHROPIC_MODEL_ID"],

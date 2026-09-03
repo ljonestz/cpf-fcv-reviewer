@@ -423,10 +423,10 @@ class ResearchController:
             return "provider_timeout"
         if isinstance(last_failure, MalformedResearch):
             return "malformed_response"
+        if last_failure is not None and not isinstance(last_failure, ResearchSourceRejected):
+            return "provider_failure"
         if isinstance(last_failure, ResearchSourceRejected) or rejected:
             return "source_rejected"
-        if last_failure is not None:
-            return "provider_failure"
         return "insufficient_coverage"
 
     def _recent_claim_count(
