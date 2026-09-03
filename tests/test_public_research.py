@@ -684,6 +684,18 @@ def test_retain_public_claims_allows_institutional_titles_with_generic_words(sou
         ),
     ],
 )
+def test_retain_public_claims_rejects_world_bank_indicator_api_observations():
+    claim = _claim(
+        publisher="World Bank",
+        source_url="https://api.worldbank.org/v2/country/BEN/indicator/NY.GDP.PCAP.CD?date=2025",
+    )
+
+    retained, rejected = retain_public_claims((claim,))
+
+    assert retained == ()
+    assert rejected == {"claim-1": "permitted institutional public source is required"}
+
+
 def test_retain_public_claims_accepts_permitted_institutional_publishers(
     publisher: str, source_url: str
 ):
