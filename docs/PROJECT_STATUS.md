@@ -1,13 +1,14 @@
 # Project status
 
-Updated 2026-09-03. Controlled pilot hardening through code commit `9baae0c` is
-provider-free verified. The change sequence activates curated research recovery, gives
-document-led fallback a privacy-safe terminal reason, requires explicit FCV relevance
-and priority ordering, narrows finalization-stage overreach, and surfaces the existing
-FCV rationale on summary cards. Commit `9baae0c` has not been deployed or provider-
-tested, and no paid assessment was submitted for it. The last deployed and paid baseline
-remains `a52505c74d72bc08d4f973436f8b8204c76b1d0b`; the result contract, evidence
-references, metadata, HTML result, and DOCX structure passed for that earlier run.
+Updated 2026-09-03. Controlled pilot hardening through post-review code commit
+`1fd53d7` is the latest provider-free verified local head and supersedes `9baae0c` for
+current local pilot acceptance. It closes five finalization phrasing bypasses and ensures
+all-enabled curated institutional timeout/provider failures propagate to
+`ResearchController` safe categories rather than insufficiency. The earlier hardening
+also activates curated recovery, requires explicit FCV relevance and priority ordering,
+and surfaces the existing FCV rationale on summary cards. Commit `1fd53d7` has not been
+deployed or provider-tested, and no paid assessment was submitted for it. The last
+deployed and paid baseline remains `a52505c74d72bc08d4f973436f8b8204c76b1d0b`.
 Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
@@ -27,16 +28,13 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest local gate on 2026-09-03: the provider-free smoke suite passed 36 tests; the
-focused pilot set initially passed 476 tests with two Windows pytest temporary-directory
-ACL setup errors. A fresh complete run moved pytest's base directory outside OneDrive and
-passed all 1,237 tests with no failures or setup errors. Python compilation, JavaScript
-syntax, and
-`git diff --check` passed. The repository `.venv` is absent and Ruff is not installed in
-the configured Python 3.13 runtime, so Ruff was unavailable. The exact external smoke
-QA runner also passed end to end with no console/page errors, two assistant turns restored
-across refresh, and a successful DOCX download. The stable FCV Project Screener is
-untouched and prohibited.
+Latest local gate on 2026-09-03: post-review commit `1fd53d7` passed the complete
+provider-free suite, 1,250 tests in 45.94 seconds, using a unique non-OneDrive pytest
+basetemp. Python compilation, JavaScript syntax, and `git diff --check` passed. The
+repository `.venv` is absent and Ruff is not installed in the configured Python 3.13
+runtime, so Ruff was unavailable. The post-fix external smoke QA runner also passed end
+to end with no console/page errors, two assistant turns restored across refresh, and a
+successful DOCX download. The stable FCV Project Screener is untouched and prohibited.
 
 ## Completed to date
 
@@ -98,6 +96,15 @@ untouched and prohibited.
   visible on the summary card. The DOCX is a valid 39,400-byte Word ZIP/OOXML package
   with 40 paragraphs, no tables, and one section. No deployment, push, or paid API run
   was performed for this commit.
+- Post-review commit `1fd53d7` supersedes `9baae0c` for current local pilot
+  acceptance. It closes five finalization phrasing bypasses and routes all-enabled
+  curated institutional timeout/provider failures to `ResearchController` safe
+  categories rather than insufficiency. The completed provider-free external runner
+  reported `BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1` with no
+  console/page errors; the local server was stopped. Its eight PNGs and DOCX are under
+  `output/playwright/2026-09-03-controlled-pilot-smoke-1fd53d7/`. README identifies
+  `a52505c` as the deployed baseline only. No deployment, push, or paid API run was
+  performed for `1fd53d7`.
 - The public Guinea RRA structural check confirmed that the bounded review evidence includes deep pages supporting natural-resource, legitimacy, inclusion, jobs, and conflict analysis. This is not a provider-quality result.
 - The live Guinea holding view uses the Project Screener-aligned ticker, compact timer,
   singular/plural time copy, rotating phrases, and separate Render keep-awake pages
@@ -233,7 +240,7 @@ creation so a completed run can be recovered without another provider invocation
    and decide whether semantic finalization-stage calibration needs a narrower prompt or
    validator. The current three top readouts total 818 words, and some mechanically valid
    `fine_tuning` actions imply substantial delivery changes.
-3. The provider-free external runner now passes the two-turn assistant flow on `9baae0c`.
+3. The provider-free external runner passes the two-turn assistant flow on `1fd53d7`.
    Complete full two-turn assistant production acceptance only during a later separately
    justified paid cycle; do not run another assessment solely to repair the external QA
    harness. Visual DOCX pagination also remains unverified because LibreOffice is absent.

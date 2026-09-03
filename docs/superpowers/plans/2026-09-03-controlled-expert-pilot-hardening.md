@@ -69,11 +69,11 @@
 
 - [x] Run `.\.venv\Scripts\python.exe -m ruff check .` (attempted; unavailable because the worktree has no `.venv` and the configured Python 3.13 runtime has no Ruff module).
 - [x] Run `.\.venv\Scripts\python.exe -m pytest tests/test_smoke_mode.py -q` (equivalent Python 3.13 command: 36 passed).
-- [x] Run `.\.venv\Scripts\python.exe -m pytest -q` (equivalent Python 3.13 command with a non-OneDrive base temp directory: 1,237 passed).
+- [x] Run `.\.venv\Scripts\python.exe -m pytest -q` (post-review commit `1fd53d7`, equivalent Python 3.13 command with a unique non-OneDrive base temp directory: 1,250 passed in 45.94 seconds).
 - [x] Run `git diff --check`, inspect `git status --short`, and review the complete branch diff (whitespace check passed; generated browser output is ignored).
-- [x] Run the existing external QA runner end to end against smoke mode, including file injection, result, assistant, refresh, and DOCX download. This is a hard gate before paid submission (passed with no console/page errors).
+- [x] Run the existing external QA runner end to end against smoke mode, including file injection, result, assistant, refresh, and DOCX download. This is a hard gate before paid submission (post-fix `1fd53d7` passed with no console/page errors).
 - [x] Update `docs/PROJECT_STATUS.md` with verified commits, checks, deployment state, limitations, and next action. Preserve the dated Guinea validation record.
-- [x] Commit: `docs: record controlled pilot hardening`.
+- [x] Commit: `docs: record final controlled pilot gate`.
 - [ ] Stop before push, deployment, or a paid Guinea run without explicit authorization. After authorized deployment, verify the exact commit is live with no-cost checks and permit at most one paid Guinea run for the fix cycle.
 
 ## Acceptance criteria
