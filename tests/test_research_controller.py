@@ -136,8 +136,9 @@ def test_full_evidence_returns_explicit_full_tier():
         holistic_request(), lambda *_: None
     )
 
-    assert result.tier is CurrentEvidenceTier.FULL
-    assert result.limitation is None
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert result.claims == (recovery_claim,)
+    assert "one institutional publisher" in result.limitation
 
 
 @pytest.mark.parametrize("tier", [True, False, "full", 1, None])
@@ -305,7 +306,7 @@ def test_trailing_dns_dot_counts_as_the_canonical_source_url():
     assert "2 recent observations across one distinct URL and 2 institutional publishers were established;" in limitation
 
 
-def test_one_recent_curated_fcv_report_meets_the_practical_threshold():
+def test_one_recent_curated_fcv_report_completes_at_reduced_tier():
     recovery_claim = claim(
         "reliefweb:fcv-update",
         publisher="ReliefWeb",
