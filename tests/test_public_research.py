@@ -900,7 +900,7 @@ def test_canonical_source_urls_strip_default_ports_slashes_and_fragments():
     ) != public_research._normalize_source_url("https://www.worldbank.org/bound?q=2")
 
 
-def test_normalized_claims_must_match_retrieved_source_metadata(monkeypatch):
+def test_normalized_claims_match_url_and_use_retrieved_source_metadata(monkeypatch):
     source_url = "https://www.worldbank.org/bound?q=1"
     retrieved_url = "HTTPS://WWW.WORLDBANK.ORG:443/bound/?q=1#section"
     claim_url = "HTTPS://WWW.WORLDBANK.ORG.:443/bound/?q=1#section"
@@ -946,9 +946,14 @@ def test_normalized_claims_must_match_retrieved_source_metadata(monkeypatch):
 
     result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
-    assert len(result) == 1
-    assert result[0].source_url == source_url
-    assert result[0] != valid
+    assert [claim.claim_id for claim in result] == [
+        "valid",
+        "invalid-title",
+        "invalid-date",
+    ]
+    assert all(claim.source_title == source_title for claim in result)
+    assert all(claim.source_date == source_date for claim in result)
+    assert all(claim.source_url == source_url for claim in result)
 
 
 def test_uncited_retrieved_sources_are_unavailable_to_normalization(monkeypatch):
