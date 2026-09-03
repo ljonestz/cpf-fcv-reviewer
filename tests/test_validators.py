@@ -787,6 +787,11 @@ def test_finalization_rejects_wholesale_redesign():
         "Make financing contingent on quarterly reporting.",
         "Commit the CPF to a new delivery unit.",
         "The draft should establish a new coordination unit.",
+        "Make project support conditional on results.",
+        "Tie support to outcomes.",
+        "Require the CPF to create a new delivery unit.",
+        "Commit the World Bank Group to a new delivery unit.",
+        "Create a new delivery arrangement.",
     ],
 )
 def test_finalization_rejects_imperative_binding_or_architecture_overreach(action):
@@ -806,6 +811,7 @@ def test_finalization_rejects_imperative_binding_or_architecture_overreach(actio
         "Discuss whether financing should be conditional on results.",
         "Make financing available on a targeted basis.",
         "Make the existing financing conditional wording clearer.",
+        "Make support conditional wording clearer.",
         "Clarify and fine-tune the existing wording.",
     ],
 )

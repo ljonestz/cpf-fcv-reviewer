@@ -45,21 +45,33 @@ FINALIZATION_OVERREACH_TERMS = (
     "rebuild the entire",
     "redesign the whole",
 )
+FINALIZATION_COMMITMENT_SUBJECT_PATTERN = (
+    r"(?:world bank group|wbg|world bank|bank|government|cpf|"
+    r"implementing partners?)"
+)
+FINALIZATION_FINANCIAL_TARGET_PATTERN = (
+    r"(?:(?:the\s+)?project\s+)?"
+    r"(?:financing|funding|disbursement|support)"
+)
+FINALIZATION_ARCHITECTURE_NOUN_PATTERN = (
+    r"(?:delivery\s+(?:unit|mechanism|architecture|platform|system|arrangement)|"
+    r"coordination\s+(?:unit|mechanism|body)|"
+    r"institutional\s+(?:arrangement|architecture|mechanism|system|unit|body)|"
+    r"unit|office|fund|facility|mechanism|platform|institution|"
+    r"architecture|system|body|arrangement)"
+)
+
 FINALIZATION_BINDING_OVERREACH_PATTERN = re.compile(
-    r"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
-    r"(?:commit|bind)(?:\s+(?:the\s+)?(?:wbg|world bank|bank|government|"
-    r"cpf|implementing partners?))?\s+to\b|"
-    r"(?:require|mandate)\s+(?:the\s+)?(?:wbg|world bank|bank|government|"
-    r"implementing partners?)\s+to\b|"
-    r"(?:make|condition)\s+(?:financing|funding|disbursement|support)\s+"
-    r"(?:conditional|contingent)\b|"
-    r"condition\s+(?:financing|funding|disbursement|support)\s+on\b|"
-    r"tie\s+(?:financing|funding|disbursement)\s+to\b|"
-    r"(?:create|build|establish|set\s+up|launch)\s+"
-    r"(?:(?:a|an|the)\s+)?new\s+"
-    r"(?:delivery\s+(?:unit|mechanism|architecture|platform|system)|"
-    r"coordination\s+(?:unit|mechanism|body)|unit|office|fund|facility|"
-    r"mechanism|platform|institution|architecture|system|body)\b"
+    rf"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
+    rf"(?:commit|bind)(?:\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN})?\s+to\b|"
+    rf"(?:require|mandate)\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to\b|"
+    rf"(?:make|condition)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
+    rf"(?:conditional|contingent)\s+(?:on|upon)\b|"
+    rf"condition\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:on|upon)\b|"
+    rf"tie\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b|"
+    rf"(?:(?:require|mandate)\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to\s+)?"
+    rf"(?:create|build|establish|set\s+up|launch)\s+"
+    rf"(?:(?:a|an|the)\s+)?new\s+{FINALIZATION_ARCHITECTURE_NOUN_PATTERN}\b"
     r")",
     re.IGNORECASE,
 )
