@@ -1163,14 +1163,9 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
             gateway_calls.append(prompt_name)
             if prompt_name == "repair":
                 assert {issue["code"] for issue in payload["validation_issues"]} == {
-                    "missing_current_context_support",
                     "unknown_institutional_referral",
                 }
-                available_current_ids = payload["repair_support_evidence_ids"][
-                    "current_context"
-                ]
-                assert current_context_evidence_id in available_current_ids
-                assert all(item.startswith("current-") for item in available_current_ids)
+                assert payload["repair_support_evidence_ids"]["current_context"] == []
                 assert payload["repair_support_evidence_ids"]["registry_language"] == [
                     "registry-SYN-PUB-FCV-STRAT-001",
                     "registry-SYN-PUB-FCV-STRAT-002",
@@ -1178,12 +1173,6 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                     "registry-SYN-PUB-FCV-STRAT-004",
                 ]
                 repaired_draft = dict(payload["draft"])
-                repaired_priority = dict(repaired_draft["priority_areas"][0])
-                repaired_priority["evidence_ids"] = (
-                    *repaired_priority["evidence_ids"],
-                    current_context_evidence_id,
-                )
-                repaired_draft["priority_areas"] = (repaired_priority,)
                 repaired_draft["institutional_referral_ids"] = ()
                 return output_type.model_validate(repaired_draft)
 
