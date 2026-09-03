@@ -269,12 +269,7 @@ class ResearchController:
             if recovery_succeeded:
                 last_missing = self._missing_coverage(tuple(accepted.values()), request)
                 emit("research_curated_recovery", {"accepted_count": len(accepted)})
-                practical_fcv_report = any(
-                    claim.claim_id.startswith("reliefweb:")
-                    and self._is_recent(claim, request)
-                    for claim in recovery_claims
-                )
-                if not last_missing or practical_fcv_report:
+                if not last_missing:
                     return self._finish(
                         started=started,
                         claims=tuple(accepted.values()),
