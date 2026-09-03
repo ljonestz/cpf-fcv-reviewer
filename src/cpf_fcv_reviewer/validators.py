@@ -410,13 +410,6 @@ def validate_review(
             priority_area.evidence_ids,
             evidence_ids,
         )
-        if priority_area.sensitivity.value != "withhold":
-            _append_missing_current_context_issue(
-                issues,
-                priority_area.priority_area_id,
-                priority_area.evidence_ids,
-                evidence_ids,
-            )
         _append_missing_registry_issue(
             issues,
             priority_area.priority_area_id,
@@ -623,24 +616,6 @@ def validate_stage_behavior(
             )
         )
     return tuple(issues)
-
-
-def _append_missing_current_context_issue(
-    issues: list[ValidationIssue],
-    item_id: str,
-    cited_ids: tuple[str, ...],
-    evidence_ids: set[str],
-) -> None:
-    available_current_ids = {
-        evidence_id for evidence_id in evidence_ids if evidence_id.startswith("current-")
-    }
-    if available_current_ids and available_current_ids.isdisjoint(cited_ids):
-        issues.append(
-            ValidationIssue(
-                "missing_current_context_support",
-                f"{item_id} requires current-context evidence support.",
-            )
-        )
 
 
 def _append_missing_registry_issue(
