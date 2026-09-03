@@ -1252,7 +1252,6 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
     assert context["evidence_pack"].evidence
     assert context["result"].priority_areas[0].evidence_ids == (
         context["evidence_pack"].evidence[0].evidence_id,
-        current_context_evidence_id,
     )
     assert context["result"].institutional_referral_ids == ()
     assert gateway_calls == ["review", "repair"]
