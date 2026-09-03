@@ -180,7 +180,7 @@ def test_thin_recent_public_evidence_returns_reduced_tier_with_limitation():
     ).run(holistic_request(), lambda *event: events.append(event))
 
     assert result.tier is CurrentEvidenceTier.REDUCED
-    assert "one recent claim from one institutional source was established;" in result.limitation
+    assert "one recent observation across one distinct URL and one institutional publisher was established;" in result.limitation
     reduced = [data for kind, data in events if kind == "research_reduced"]
     assert len(reduced) == 1
     assert set(reduced[0]) == {"missing_coverage"}
@@ -197,7 +197,7 @@ def test_recent_claims_distinguish_claim_count_from_unique_source_count():
         max_attempts=1,
     ).run(holistic_request(), lambda *_: None)
 
-    assert "2 recent claims from 2 institutional sources were established;" in result.limitation
+    assert "2 recent observations across 2 distinct URLs and 2 institutional publishers were established;" in result.limitation
     assert "Only 2 public sources" not in result.limitation
 
 
@@ -218,7 +218,7 @@ def test_duplicate_normalized_source_url_reduces_source_count_not_claim_count():
         holistic_request(),
     )
 
-    assert "2 recent claims from one institutional source were established;" in limitation
+    assert "2 recent observations across one distinct URL and 2 institutional publishers were established;" in limitation
 
 
 def test_reduced_limitation_names_missing_thematic_coverage():
@@ -302,7 +302,41 @@ def test_trailing_dns_dot_counts_as_the_canonical_source_url():
         holistic_request(),
     )
 
-    assert "2 recent claims from one institutional source were established;" in limitation
+    assert "2 recent observations across one distinct URL and 2 institutional publishers were established;" in limitation
+
+
+def test_one_recent_curated_fcv_report_completes_at_reduced_tier():
+    recovery_claim = claim(
+        "reliefweb:fcv-update",
+        publisher="ReliefWeb",
+        context_kind="current_development",
+        source_url="https://reliefweb.int/report/benin/fcv-update",
+    ).model_copy(update={"source_type": "institutional public report"})
+
+    result = controller(
+        ScriptedGateway(((),)),
+        recovery_gateway=ScriptedRecoveryGateway((recovery_claim,)),
+        max_attempts=1,
+    ).run(holistic_request(), lambda *_: None)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert result.claims == (recovery_claim,)
+    assert "one institutional publisher" in result.limitation
+
+
+def test_generic_indicator_recovery_alone_remains_reduced():
+    indicator = claim("indicator").model_copy(
+        update={"source_type": "institutional public data"}
+    )
+
+    result = controller(
+        ScriptedGateway(((),)),
+        recovery_gateway=ScriptedRecoveryGateway((indicator,)),
+        max_attempts=1,
+    ).run(holistic_request(), lambda *_: None)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert "one institutional publisher" in result.limitation
 
 
 def test_primary_and_recovery_claims_merge_and_deduplicate():

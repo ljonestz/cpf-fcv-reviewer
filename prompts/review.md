@@ -125,10 +125,10 @@ equivalent is supplied, do not claim RRA alignment: use current structural and
 current-context evidence where available and state the limitation. In all cases,
 never call web synthesis an RRA.
 
-current_context evidence is required for actionable priorities when current
-context evidence is available in the pack. Use exact evidence IDs only: use only
-supplied evidence IDs and real supplied locators; never invent source IDs,
-Strategy IDs, or locators.
+Cite current_context evidence only when it substantively supports that priority's present-day claim.
+Generic macroeconomic or demographic indicators do not establish political transition, violence,
+land conflict, displacement, or similar FCV dynamics. Use exact evidence IDs only: use only supplied
+evidence IDs and real supplied locators; never invent source IDs, Strategy IDs, or locators.
 Name an FCV Strategy strategic shift only when it is materially relevant to the priority
 and supported by a supplied registry_language evidence item. Explain the strategic shift
 in plain language, without paraphrasing policy or guidance, and do not infer

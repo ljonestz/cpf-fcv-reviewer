@@ -176,15 +176,12 @@ def test_curated_gateway_uses_one_deadline_across_adapter_calls():
 
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         now[0] += 0.25
-        if urlsplit(url).path.endswith("/country"):
-            return json_response(
-                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
-            )
-        return json_response([{}, []])
+        assert urlsplit(url).path.endswith("/reports")
+        return json_response({"data": []})
 
     transport = StubClient(handler)
     client = BoundedInstitutionalClient(client=transport, monotonic=lambda: now[0])
-    gateway = CuratedResearchGateway(client)
+    gateway = CuratedResearchGateway(client, reliefweb_app_name="app")
 
     gateway.search(request(), timeout_seconds=1.0)
 
@@ -751,26 +748,10 @@ def test_reliefweb_skips_rows_without_explicit_valid_fields():
     assert gateway.reliefweb.search(request()) == ()
 
 
-def test_gateway_combines_deduplicates_and_sorts_independent_adapter_outputs():
+def test_gateway_uses_only_reliefweb_for_curated_recovery():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
-        if "worldbank.org" in url:
-            if urlsplit(url).path.endswith("/country"):
-                return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
-            indicator = urlsplit(url).path.rsplit("/", 1)[-1]
-            return json_response(
-                [
-                    {},
-                    [
-                        {
-                            "indicator": {"id": indicator, "value": indicator},
-                            "countryiso3code": "BEN",
-                            "date": "2025",
-                            "value": 1,
-                        }
-                    ],
-                ]
-            )
-        return json_response({"data": [{"fields": {"title": "RW", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}}]})
+        assert "worldbank.org" not in url
+        return json_response({"data": [{"fields": {"title": "Benin conflict update", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN OCHA"}]}}]})
 
     transport = StubClient(handler)
     gateway = CuratedResearchGateway(
@@ -779,107 +760,18 @@ def test_gateway_combines_deduplicates_and_sorts_independent_adapter_outputs():
 
     claims = gateway.search(request())
 
-    assert tuple(claim.claim_id for claim in claims) == tuple(sorted({claim.claim_id for claim in claims}))
-    assert len(claims) == len({claim.claim_id for claim in claims})
-    assert {claim.publisher for claim in claims} == {"World Bank", "ReliefWeb"}
+    assert len(claims) == 1
+    assert claims[0].publisher == "ReliefWeb"
+    assert all("worldbank.org" not in call[1] for call in transport.calls)
 
 
-def test_gateway_duplicate_winner_is_stable_when_payload_order_is_reversed():
-    def run(values: tuple[int, int]):
-        def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
-            path = urlsplit(url).path
-            if path.endswith("/country"):
-                return json_response([{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR", "value": "Africa"}}]])
-            indicator = path.rsplit("/", 1)[-1]
-            return json_response(
-                [
-                    {},
-                    [
-                        {
-                            "indicator": {"id": indicator, "value": indicator},
-                            "countryiso3code": "BEN",
-                            "date": "2025",
-                            "value": value,
-                        }
-                        for value in values
-                    ],
-                ]
-            )
-
-        gateway = CuratedResearchGateway(
-            BoundedInstitutionalClient(client=StubClient(handler))
-        )
-        return gateway.search(request())
-
-    forward = run((2, 1))
-    reverse = run((1, 2))
-
-    assert forward == reverse
-    assert forward
-    assert all(": 1 (2025)." in claim.text for claim in forward)
-
-
-def test_gateway_preserves_distinct_dated_world_bank_observations():
-    indicator_id = WORLDBANK_INDICATORS[0][0]
-
-    def run(observations: tuple[tuple[str, int], ...]):
-        def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
-            path = urlsplit(url).path
-            if path.endswith("/country"):
-                return json_response(
-                    [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
-                )
-            requested_indicator = path.rsplit("/", 1)[-1]
-            if requested_indicator != indicator_id:
-                return json_response([{}, []])
-            return json_response(
-                [
-                    {},
-                    [
-                        {
-                            "indicator": {"id": indicator_id, "value": indicator_id},
-                            "countryiso3code": "BEN",
-                            "date": observation_year,
-                            "value": value,
-                        }
-                        for observation_year, value in observations
-                    ],
-                ]
-            )
-
-        gateway = CuratedResearchGateway(
-            BoundedInstitutionalClient(client=StubClient(handler))
-        )
-        return gateway.search(request())
-
-    observations = (("2025", 2), ("2024", 1), ("2025", 2))
-    forward = run(observations)
-    reverse = run(tuple(reversed(observations)))
-
-    assert forward == reverse
-    assert [claim.source_date for claim in forward] == [date(2024, 1, 1), date(2025, 1, 1)]
-    assert len({claim.claim_id for claim in forward}) == 2
-    assert len({claim.source_url for claim in forward}) == 2
-    assert {
-        parse_qs(urlsplit(claim.source_url or "").query)["date"][0]
-        for claim in forward
-    } == {"2024", "2025"}
-    assert all(urlsplit(claim.source_url or "").scheme == "https" for claim in forward)
-    assert all(
-        urlsplit(claim.source_url or "").hostname == "api.worldbank.org"
-        for claim in forward
-    )
-    assert any(
-        claim.source_date == date(2025, 1, 1) and ": 2 (2025)." in claim.text
-        for claim in forward
-    )
-
-
-def test_gateway_continues_when_one_adapter_times_out():
-    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
-        if "worldbank.org" in url:
-            raise httpx.ReadTimeout("secret provider detail")
-        return json_response({"data": [{"fields": {"title": "RW", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}}]})
+def test_reliefweb_rejects_generic_non_fcv_reports():
+    def handler(_method: str, _url: str, _kwargs: dict[str, object]) -> StubResponse:
+        return json_response({"data": [
+            {"fields": {"title": "Benin annual population estimate", "url": "https://reliefweb.int/generic", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}},
+            {"fields": {"title": "Benin energy transition update", "url": "https://reliefweb.int/energy", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}},
+            {"fields": {"title": "Benin political transition update", "url": "https://reliefweb.int/fcv", "date": {"created": "2026-08-02"}, "source": [{"name": "UN OCHA"}]}},
+        ]})
 
     gateway = CuratedResearchGateway(
         BoundedInstitutionalClient(client=StubClient(handler)), reliefweb_app_name="app"
@@ -887,8 +779,7 @@ def test_gateway_continues_when_one_adapter_times_out():
 
     claims = gateway.search(request())
 
-    assert len(claims) == 1
-    assert claims[0].publisher == "ReliefWeb"
+    assert [claim.source_title for claim in claims] == ["Benin political transition update"]
 
 
 def test_gateway_raises_provider_failure_when_all_enabled_adapters_fail():
@@ -911,34 +802,12 @@ def test_gateway_raises_timeout_when_all_enabled_adapters_time_out():
         gateway.search(request())
 
 
-def test_gateway_does_not_count_disabled_adapter_as_enabled_failure():
-    transport = StubClient(lambda *_args: (_ for _ in ()).throw(httpx.ConnectError("secret")))
-    gateway = CuratedResearchGateway(BoundedInstitutionalClient(client=transport))
-
-    with pytest.raises(InstitutionalClientError):
-        gateway.search(request())
-
-
-def test_gateway_keeps_valid_empty_response_when_another_adapter_fails():
-    gateway = CuratedResearchGateway(
-        BoundedInstitutionalClient(
-            client=StubClient(lambda *_args: pytest.fail("transport should not be called"))
-        ),
-        reliefweb_app_name="app",
-    )
-    gateway.world_bank.search = lambda *_args, **_kwargs: (_ for _ in ()).throw(
-        InstitutionalClientError("secret provider failure")
-    )
-    gateway.reliefweb.search = lambda *_args, **_kwargs: ()
-
-    assert gateway.search(request()) == ()
-
-
 def test_gateway_does_not_swallow_programming_errors():
     gateway = CuratedResearchGateway(
-        BoundedInstitutionalClient(client=StubClient(lambda *_args: json_response({})))
+        BoundedInstitutionalClient(client=StubClient(lambda *_args: json_response({}))),
+        reliefweb_app_name="app",
     )
-    gateway.world_bank.search = lambda _request: (_ for _ in ()).throw(
+    gateway.reliefweb.search = lambda _request: (_ for _ in ()).throw(
         RuntimeError("programming defect")
     )
 

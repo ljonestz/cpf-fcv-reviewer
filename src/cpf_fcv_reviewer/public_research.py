@@ -245,6 +245,17 @@ _INSTITUTIONAL_PUBLISHER_HOSTS = {
     "international organization for migration": (("iom.int",), "IOM"),
     "iom": (("iom.int",), "IOM"),
     "reliefweb": (("reliefweb.int",), "ReliefWeb"),
+    "reuters": (("reuters.com",), "Reuters"),
+    "associated press": (("apnews.com",), "Associated Press"),
+    "ap": (("apnews.com",), "Associated Press"),
+    "bbc": (("bbc.com", "bbc.co.uk"), "BBC"),
+    "international crisis group": (("crisisgroup.org",), "International Crisis Group"),
+    "crisis group": (("crisisgroup.org",), "International Crisis Group"),
+    "iss africa": (("issafrica.org",), "ISS Africa"),
+    "africa center for strategic studies": (
+        ("africacenter.org",),
+        "Africa Center for Strategic Studies",
+    ),
 }
 
 _DISALLOWED_SOURCE_MARKERS = (
@@ -282,6 +293,8 @@ def _is_permitted_public_source(claim: CurrentContextClaim) -> bool:
     if source_url is None:
         return False
 
+    if _hostname(source_url) == "api.worldbank.org":
+        return False
     allowed_hosts = _publisher_host_allowlist(normalized_publisher)
     return bool(allowed_hosts and _host_matches(source_url, allowed_hosts))
 
@@ -668,11 +681,18 @@ def _validate_normalized_claims(
         source = sources_by_url.get(source_url)
         if source is None:
             continue
-        if claim.source_title != source.title:
+        if source.published_at is None:
             continue
-        if source.published_at is None or claim.source_date != source.published_at:
-            continue
-        matched_claims.append(claim.model_copy(update={"source_url": source.url}))
+        matched_claims.append(
+            claim.model_copy(
+                update={
+                    "publisher": _publisher_from_source(source),
+                    "source_title": source.title,
+                    "source_url": source.url,
+                    "source_date": source.published_at,
+                }
+            )
+        )
 
     retained, _ = retain_public_claims(tuple(matched_claims))
     return retained

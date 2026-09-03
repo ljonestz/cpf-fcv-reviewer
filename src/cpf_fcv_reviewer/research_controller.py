@@ -453,10 +453,15 @@ class ResearchController:
                 if claim.source_url
             }
         )
-        claim_word = "claim" if recent_count == 1 else "claims"
-        source_word = "source" if source_count == 1 else "sources"
+        publisher_count = len(
+            {claim.publisher.strip().casefold() for claim in recent_claims}
+        )
+        observation_word = "observation" if recent_count == 1 else "observations"
+        url_word = "URL" if source_count == 1 else "URLs"
+        publisher_word = "publisher" if publisher_count == 1 else "publishers"
         recent_count_word = "one" if recent_count == 1 else str(recent_count)
         source_count_word = "one" if source_count == 1 else str(source_count)
+        publisher_count_word = "one" if publisher_count == 1 else str(publisher_count)
         verb = "was" if recent_count == 1 else "were"
         labels = {
             "claims": "the minimum number of claims",
@@ -467,8 +472,9 @@ class ResearchController:
         }
         gaps = ", ".join(labels.get(item, item) for item in missing)
         return (
-            f"{recent_count_word} recent {claim_word} from {source_count_word} "
-            f"institutional {source_word} {verb} established; "
+            f"{recent_count_word} recent {observation_word} across {source_count_word} "
+            f"distinct {url_word} and {publisher_count_word} institutional "
+            f"{publisher_word} {verb} established; "
             f"current-country coverage remains incomplete for {gaps}."
         )
 

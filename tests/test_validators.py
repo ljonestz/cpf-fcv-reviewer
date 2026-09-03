@@ -533,7 +533,7 @@ def test_summary_titles_allow_ordinary_words_that_match_synthetic_evidence_ids()
     assert "invalid_revision_summary_title" not in {issue.code for issue in issues}
 
 
-def test_actionable_priority_requires_current_context_when_available():
+def test_current_context_is_not_forced_when_it_does_not_support_the_priority():
     reviewed = result(areas=(area(),))
 
     issues = validate_review(
@@ -541,46 +541,6 @@ def test_actionable_priority_requires_current_context_when_available():
         evidence_ids={"ev-1", "current-1"},
         prohibited_terms=set(),
     )
-
-    assert [
-        issue.message
-        for issue in issues
-        if issue.code == "missing_current_context_support"
-    ] == [
-        "pa-1 requires current-context evidence support."
-    ]
-
-
-def test_current_context_citation_satisfies_actionable_priority_support():
-    reviewed = result(areas=(area(evidence_ids=("ev-1", "current-1")),))
-
-    issues = validate_review(
-        reviewed,
-        evidence_ids={"ev-1", "current-1"},
-        prohibited_terms=set(),
-    )
-
-    assert "missing_current_context_support" not in {issue.code for issue in issues}
-
-
-def test_withheld_priority_is_exempt_from_current_context_support():
-    reviewed = result(
-        areas=(area(sensitivity=SensitivityCategory.WITHHOLD),),
-    )
-
-    issues = validate_review(
-        reviewed,
-        evidence_ids={"ev-1", "current-1"},
-        prohibited_terms=set(),
-    )
-
-    assert "missing_current_context_support" not in {issue.code for issue in issues}
-
-
-def test_no_current_context_available_does_not_require_current_support():
-    reviewed = result(areas=(area(),))
-
-    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
 
     assert "missing_current_context_support" not in {issue.code for issue in issues}
 

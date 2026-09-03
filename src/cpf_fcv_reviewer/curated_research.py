@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from math import isfinite
@@ -19,6 +20,13 @@ from .research_controller import ResearchRequest
 
 _ALLOWED_HOSTS = frozenset({"api.worldbank.org", "api.reliefweb.int"})
 _RELIEFWEB_RESULT_HOSTS = frozenset({"reliefweb.int", "api.reliefweb.int"})
+_FCV_TITLE_PATTERN = re.compile(
+    r"\b(?:conflicts?|violence|violent|political|governance|government|elections?|coup|"
+    r"humanitarian|displacement|displaced|refugees?|protection|peace|peacebuilding|"
+    r"insecurity)\b|\bland (?:conflict|dispute|tenure)\b|\bsocial cohesion\b|"
+    r"\bsecurity (?:update|situation|incident|threat|forces?|sector|crisis|risk)\b",
+    re.IGNORECASE,
+)
 
 # Keep this table explicit and small. The labels and context kinds are metadata for
 # observations, not interpretations of the returned values.
@@ -294,7 +302,6 @@ class CuratedResearchGateway:
         reliefweb_app_name: str | None = None,
     ) -> None:
         self.client = client
-        self.world_bank = WorldBankAdapter(client)
         self.reliefweb = ReliefWebAdapter(client, reliefweb_app_name)
 
     def search(
@@ -314,9 +321,7 @@ class CuratedResearchGateway:
                 raise ValueError("Recovery timeout must be a finite positive number.")
             deadline = self.client.monotonic() + float(timeout_seconds)
         candidates: list[CurrentContextClaim] = []
-        adapters = [self.world_bank]
-        if self.reliefweb.app_name:
-            adapters.append(self.reliefweb)
+        adapters = [self.reliefweb] if self.reliefweb.app_name else []
         adapter_failures: list[BaseException] = []
         for adapter in adapters:
             try:
@@ -523,6 +528,8 @@ def _reliefweb_claim(
         return None
     fields = row["fields"]
     title = _nonblank_string(fields.get("title"))
+    if title is None or _FCV_TITLE_PATTERN.search(title) is None:
+        return None
     source_url = _nonblank_string(fields.get("url"))
     source_name = _reliefweb_source_name(fields.get("source"))
     source_date = _reliefweb_date(fields.get("date"))

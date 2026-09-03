@@ -12,8 +12,12 @@ The request will specify exactly one mode. Follow that mode and do not combine t
   is available. Never call the output an RRA.
 
 Use only public sources from this permitted hierarchy: World Bank, UN entities, OECD, IMF,
-regional development banks, ICRC, IOM, and ReliefWeb. Do
-not use licensed event-level data, including licensed ACLED data.
+regional development banks, ICRC, IOM, and ReliefWeb; Reuters, Associated Press, and BBC; and
+International Crisis Group, ISS Africa, and the Africa Center for Strategic Studies. Prioritize
+analytical reports and recent reporting that directly updates political, conflict, security,
+displacement, humanitarian, governance, social, land, or service-delivery conditions.
+Do not use World Bank Indicators API observations as current-FCV evidence. Do not use
+licensed event-level data, including licensed ACLED data.
 
 Distinguish source-supported fact from interpretation, identify source dates, represent credible
 disagreement, and avoid overstating certainty in conflict-sensitive contexts.

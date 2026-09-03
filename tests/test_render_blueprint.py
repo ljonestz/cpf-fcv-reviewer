@@ -25,3 +25,9 @@ def test_render_blueprint_pins_current_strategy_registry_bundle():
 
     assert "cpf_fcv_reviewer_public_guardrails_v1.1.0.json" in blueprint
     assert "a849607cafa341ab98da05016d503665eb95a3da2ad039e0f06ae5fdb5dd7782" in blueprint
+
+
+def test_render_blueprint_enables_named_reliefweb_recovery():
+    blueprint = Path("render.yaml").read_text(encoding="utf-8")
+
+    assert "key: RELIEFWEB_APP_NAME\n        value: cpf-fcv-reviewer" in blueprint

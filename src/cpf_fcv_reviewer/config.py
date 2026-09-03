@@ -68,7 +68,7 @@ def build_config(
         "RESEARCH_RECOVERY_MAX_BYTES": int(
             environment("RESEARCH_RECOVERY_MAX_BYTES", "500000")
         ),
-        "RELIEFWEB_APP_NAME": environment("RELIEFWEB_APP_NAME", ""),
+        "RELIEFWEB_APP_NAME": environment("RELIEFWEB_APP_NAME", "cpf-fcv-reviewer"),
         "SESSION_TTL_SECONDS": (
             overrides["SESSION_TTL_SECONDS"]
             if "SESSION_TTL_SECONDS" in overrides
