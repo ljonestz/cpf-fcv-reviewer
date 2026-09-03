@@ -19,6 +19,24 @@ from .research_controller import ResearchRequest
 
 _ALLOWED_HOSTS = frozenset({"api.worldbank.org", "api.reliefweb.int"})
 _RELIEFWEB_RESULT_HOSTS = frozenset({"reliefweb.int", "api.reliefweb.int"})
+_FCV_TITLE_TERMS = (
+    "conflict",
+    "violence",
+    "security",
+    "political",
+    "transition",
+    "governance",
+    "humanitarian",
+    "displacement",
+    "displaced",
+    "refugee",
+    "protection",
+    "peace",
+    "land dispute",
+    "land conflict",
+    "social cohesion",
+    "food insecurity",
+)
 
 # Keep this table explicit and small. The labels and context kinds are metadata for
 # observations, not interpretations of the returned values.
@@ -294,7 +312,6 @@ class CuratedResearchGateway:
         reliefweb_app_name: str | None = None,
     ) -> None:
         self.client = client
-        self.world_bank = WorldBankAdapter(client)
         self.reliefweb = ReliefWebAdapter(client, reliefweb_app_name)
 
     def search(
@@ -314,9 +331,7 @@ class CuratedResearchGateway:
                 raise ValueError("Recovery timeout must be a finite positive number.")
             deadline = self.client.monotonic() + float(timeout_seconds)
         candidates: list[CurrentContextClaim] = []
-        adapters = [self.world_bank]
-        if self.reliefweb.app_name:
-            adapters.append(self.reliefweb)
+        adapters = [self.reliefweb] if self.reliefweb.app_name else []
         adapter_failures: list[BaseException] = []
         for adapter in adapters:
             try:
@@ -523,6 +538,8 @@ def _reliefweb_claim(
         return None
     fields = row["fields"]
     title = _nonblank_string(fields.get("title"))
+    if title is None or not any(term in title.casefold() for term in _FCV_TITLE_TERMS):
+        return None
     source_url = _nonblank_string(fields.get("url"))
     source_name = _reliefweb_source_name(fields.get("source"))
     source_date = _reliefweb_date(fields.get("date"))
