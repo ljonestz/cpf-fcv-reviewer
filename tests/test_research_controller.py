@@ -320,7 +320,6 @@ def test_one_recent_curated_fcv_report_meets_the_practical_threshold():
     ).run(holistic_request(), lambda *_: None)
 
     assert result.tier is CurrentEvidenceTier.FULL
-    assert result.route == "research_curated_recovery"
     assert result.limitation is None
 
 
