@@ -320,8 +320,9 @@ def test_one_recent_curated_fcv_report_completes_at_reduced_tier():
         max_attempts=1,
     ).run(holistic_request(), lambda *_: None)
 
-    assert result.tier is CurrentEvidenceTier.FULL
-    assert result.limitation is None
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert result.claims == (recovery_claim,)
+    assert "one institutional publisher" in result.limitation
 
 
 def test_generic_indicator_recovery_alone_remains_reduced():
