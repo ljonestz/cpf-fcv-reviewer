@@ -66,10 +66,13 @@ FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN = (
 )
 
 FINALIZATION_BINDING_OVERREACH_PATTERN = re.compile(
-    rf"(?:(?<!\w)(?:make|making)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
-    rf"(?:conditional|contingent)\s+(?:on|upon)\b|"
-    rf"(?<!\w)condition(?:ing)?\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:on|upon)\b|"
-    rf"(?<!\w)tie\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b|"
+    rf"(?:"
+    rf"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
+    rf"make\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:conditional|contingent)\s+(?:on|upon)\b|"
+    rf"condition\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:on|upon)\b|"
+    rf"tie\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b|"
+    rf"add\s+a\s+sentence\s+making\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:conditional|contingent)\s+(?:on|upon)\b"
+    rf")|"
     rf"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
     rf"(?:commit|bind)(?:\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN})?\s+to\s+"
     rf"{FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN}\b|"

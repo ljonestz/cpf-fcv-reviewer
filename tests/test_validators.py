@@ -815,6 +815,9 @@ def test_finalization_rejects_imperative_binding_or_architecture_overreach(actio
     [
         "The CPF discusses establishing a new delivery unit.",
         "Discuss whether financing should be conditional on results.",
+        "The CPF discusses making financing conditional on results.",
+        "Consider making project support conditional on results.",
+        "The draft does not make financing conditional on results.",
         "Make financing available on a targeted basis.",
         "Make the existing financing conditional wording clearer.",
         "Make support conditional wording clearer.",
