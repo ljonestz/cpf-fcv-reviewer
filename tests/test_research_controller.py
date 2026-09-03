@@ -492,6 +492,65 @@ def test_document_led_requires_explicit_opt_in_and_no_accepted_claims():
         ).run(holistic_request(), lambda *_: None)
 
 
+@pytest.mark.parametrize(
+    ("gateway_response", "gateway_error", "expected_reason"),
+    [
+        ((), None, "insufficient_coverage"),
+        ((), TimeoutError("provider timeout detail"), "provider_timeout"),
+        ((), OSError("provider failure detail"), "provider_failure"),
+        (
+            (claim("licensed").model_copy(update={"licensed_data_required": True}),),
+            None,
+            "source_rejected",
+        ),
+    ],
+)
+def test_document_led_emits_one_privacy_safe_terminal_reason(
+    gateway_response, gateway_error, expected_reason
+):
+    response = gateway_error if gateway_error is not None else gateway_response
+    events = []
+
+    result = controller(ScriptedGateway((response,)), max_attempts=1).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    terminal = [data for kind, data in events if kind == "research_document_led"]
+    assert len(terminal) == 1
+    assert terminal[0] == {"reason": expected_reason}
+    _assert_events_are_privacy_safe(events)
+
+
+def test_document_led_emits_budget_exhausted_terminal_reason():
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    events = []
+    result = controller(
+        ScriptedGateway(((),)),
+        max_attempts=2,
+        total_budget_seconds=1.0,
+        retry_backoff_seconds=1.0,
+        monotonic=lambda: now[0],
+        sleep=sleep,
+        jitter=lambda delay: delay,
+    ).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    terminal = [data for kind, data in events if kind == "research_document_led"]
+    assert terminal == [{"reason": "budget_exhausted"}]
+    _assert_events_are_privacy_safe(events)
+
+
 def test_rejected_claims_cannot_enable_reduced_mode():
     rejected = claim("licensed").model_copy(update={"licensed_data_required": True})
 

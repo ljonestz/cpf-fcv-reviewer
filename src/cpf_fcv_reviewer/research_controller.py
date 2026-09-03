@@ -256,6 +256,7 @@ class ResearchController:
                 failure = self._classify_exception(exc)
                 if isinstance(failure, ResearchConfigurationError):
                     raise failure from None
+                last_failure = failure
             else:
                 if recovery_succeeded:
                     self._merge_claims(
@@ -291,6 +292,9 @@ class ResearchController:
             last_missing = self._missing_coverage(accepted_claims, request)
         else:
             accepted_claims = ()
+        budget_exhausted = budget_exhausted or (
+            self.monotonic() - started >= self.total_budget_seconds
+        )
         if accepted_claims and self._recent_claim_count(accepted_claims, request):
             limitation = self._reduced_limitation(accepted_claims, last_missing, request)
             return self._finish(
@@ -305,6 +309,18 @@ class ResearchController:
                 event_data={"missing_coverage": last_missing},
             )
         if allow_document_led and not accepted:
+            if budget_exhausted:
+                reason = "budget_exhausted"
+            elif isinstance(last_failure, ResearchTimeout):
+                reason = "provider_timeout"
+            elif isinstance(last_failure, ResearchSourceRejected) or (
+                not accepted and rejected
+            ):
+                reason = "source_rejected"
+            elif last_failure is not None:
+                reason = "provider_failure"
+            else:
+                reason = "insufficient_coverage"
             return self._finish(
                 started=started,
                 claims=(),
@@ -317,7 +333,7 @@ class ResearchController:
                 ),
                 route="research_document_led",
                 emit=emit,
-                event_data={"reason": "independent_evidence_unavailable"},
+                event_data={"reason": reason},
             )
         if budget_exhausted:
             raise ResearchTimeout("Research total budget was exhausted.")

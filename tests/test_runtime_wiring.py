@@ -1781,6 +1781,85 @@ def test_default_research_gateway_receives_attempt_timeout(monkeypatch):
     assert captured["timeout_seconds"] == 12.5
 
 
+def test_default_research_controller_wires_curated_recovery(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, *, timeout_seconds):
+            captured["client_timeout_seconds"] = timeout_seconds
+
+    class FakeRecoveryGateway:
+        def __init__(self, client, *, reliefweb_app_name):
+            self.client = client
+            captured["client"] = client
+            captured["reliefweb_app_name"] = reliefweb_app_name
+
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.curated_research.BoundedInstitutionalClient", FakeClient
+    )
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.curated_research.CuratedResearchGateway",
+        FakeRecoveryGateway,
+    )
+
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicModelGateway",
+        lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicFollowOnGateway",
+        lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        lambda *_args, **_kwargs: object(),
+    )
+    services = build_runtime_services(
+        production_config(
+            ALLOW_SYNTHETIC_REGISTRY=True,
+            RESEARCH_ATTEMPT_TIMEOUT_SECONDS=12.5,
+            RELIEFWEB_APP_NAME="cpf-fcv-reviewer-test",
+        )
+    )
+
+    recovery = services["research_controller"].recovery_gateway
+    assert isinstance(recovery, FakeRecoveryGateway)
+    assert captured == {
+        "client_timeout_seconds": 12.5,
+        "client": recovery.client,
+        "reliefweb_app_name": "cpf-fcv-reviewer-test",
+    }
+
+
+def test_injected_research_controller_does_not_construct_curated_recovery(monkeypatch):
+    class UnexpectedClient:
+        def __init__(self, **_kwargs):
+            raise AssertionError("curated client should not be constructed")
+
+    class UnexpectedGateway:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("curated gateway should not be constructed")
+
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.curated_research.BoundedInstitutionalClient",
+        UnexpectedClient,
+    )
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.curated_research.CuratedResearchGateway",
+        UnexpectedGateway,
+    )
+    injected = _InjectedResearchController()
+
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=object(),
+        follow_on_gateway=object(),
+        research_controller=injected,
+    )
+
+    assert services["research_controller"] is injected
+
+
 def test_runtime_preserves_three_upload_roles_and_focus_in_evidence(monkeypatch):
     captured = {}
 
