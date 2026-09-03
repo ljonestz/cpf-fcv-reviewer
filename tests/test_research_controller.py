@@ -305,6 +305,40 @@ def test_trailing_dns_dot_counts_as_the_canonical_source_url():
     assert "2 recent observations across one distinct URL and 2 institutional publishers were established;" in limitation
 
 
+def test_one_recent_curated_fcv_report_meets_the_practical_threshold():
+    recovery_claim = claim(
+        "fcv-update",
+        publisher="ReliefWeb",
+        context_kind="current_development",
+        source_url="https://reliefweb.int/report/benin/fcv-update",
+    ).model_copy(update={"source_type": "institutional public report"})
+
+    result = controller(
+        ScriptedGateway(((),)),
+        recovery_gateway=ScriptedRecoveryGateway((recovery_claim,)),
+        max_attempts=1,
+    ).run(holistic_request(), lambda *_: None)
+
+    assert result.tier is CurrentEvidenceTier.FULL
+    assert result.route == "research_curated_recovery"
+    assert result.limitation is None
+
+
+def test_generic_indicator_recovery_alone_remains_reduced():
+    indicator = claim("indicator").model_copy(
+        update={"source_type": "institutional public data"}
+    )
+
+    result = controller(
+        ScriptedGateway(((),)),
+        recovery_gateway=ScriptedRecoveryGateway((indicator,)),
+        max_attempts=1,
+    ).run(holistic_request(), lambda *_: None)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert "one institutional publisher" in result.limitation
+
+
 def test_primary_and_recovery_claims_merge_and_deduplicate():
     primary = sufficient_claims()[:1]
     recovery = ScriptedRecoveryGateway((sufficient_claims()[0],) + sufficient_claims()[1:])
