@@ -781,6 +781,12 @@ def test_finalization_rejects_wholesale_redesign():
         "Commit the WBG to a new delivery unit.",
         "Make financing conditional on quarterly reporting.",
         "Establish a new coordination unit.",
+        "Create new delivery unit.",
+        "Build a new delivery unit.",
+        "Establish a new delivery system.",
+        "Make financing contingent on quarterly reporting.",
+        "Commit the CPF to a new delivery unit.",
+        "The draft should establish a new coordination unit.",
     ],
 )
 def test_finalization_rejects_imperative_binding_or_architecture_overreach(action):
@@ -799,6 +805,7 @@ def test_finalization_rejects_imperative_binding_or_architecture_overreach(actio
         "The CPF discusses establishing a new delivery unit.",
         "Discuss whether financing should be conditional on results.",
         "Make financing available on a targeted basis.",
+        "Make the existing financing conditional wording clearer.",
         "Clarify and fine-tune the existing wording.",
     ],
 )

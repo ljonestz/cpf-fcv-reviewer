@@ -46,20 +46,20 @@ FINALIZATION_OVERREACH_TERMS = (
     "redesign the whole",
 )
 FINALIZATION_BINDING_OVERREACH_PATTERN = re.compile(
-    r"^\s*(?:"
+    r"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
     r"(?:commit|bind)(?:\s+(?:the\s+)?(?:wbg|world bank|bank|government|"
-    r"implementing partners?))?\s+to\b|"
+    r"cpf|implementing partners?))?\s+to\b|"
     r"(?:require|mandate)\s+(?:the\s+)?(?:wbg|world bank|bank|government|"
     r"implementing partners?)\s+to\b|"
-    r"make\s+.*\b(?:financing|funding|disbursement|support)\b"
-    r".*\bconditional\b|"
-    r"condition\s+.*\b(?:financing|funding|disbursement|support)\b"
-    r".*\bon\b|"
+    r"(?:make|condition)\s+(?:financing|funding|disbursement|support)\s+"
+    r"(?:conditional|contingent)\b|"
+    r"condition\s+(?:financing|funding|disbursement|support)\s+on\b|"
     r"tie\s+(?:financing|funding|disbursement)\s+to\b|"
-    r"(?:establish|create|set\s+up|launch)\s+(?:a|an|the)\s+new\s+"
-    r"(?:delivery\s+(?:unit|mechanism|architecture|platform)|"
+    r"(?:create|build|establish|set\s+up|launch)\s+"
+    r"(?:(?:a|an|the)\s+)?new\s+"
+    r"(?:delivery\s+(?:unit|mechanism|architecture|platform|system)|"
     r"coordination\s+(?:unit|mechanism|body)|unit|office|fund|facility|"
-    r"mechanism|platform|institution|architecture|body)\b"
+    r"mechanism|platform|institution|architecture|system|body)\b"
     r")",
     re.IGNORECASE,
 )
