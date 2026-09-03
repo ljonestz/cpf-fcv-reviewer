@@ -21,8 +21,8 @@ come from one publisher.
   and named think-tank sources.
 - Deterministic recovery uses only recent FCV-relevant ReliefWeb report titles; World Bank
   indicator observations are no longer queried by the recovery gateway.
-- One recent vetted ReliefWeb FCV report can meet the practical recovery threshold.
-  Generic institutional data alone remain reduced.
+- One recent vetted ReliefWeb FCV report can complete the practical recovery path at the
+  reduced tier. Generic institutional data alone remain reduced and are not promoted.
 - Recommendations cite current context only when it substantively supports their
   present-day claim.
 - Reduced limitations separately count observations, distinct URLs, and institutional
@@ -33,7 +33,7 @@ come from one publisher.
 ## Provider-free verification
 
 - Focused current-research/review suite: **567 passed**.
-- Complete provider-free suite: **1,257 passed**.
+- Complete provider-free suite: **1,258 passed**.
 - Python compilation and JavaScript syntax checks: passed.
 - Complete external smoke-browser runner:
   `BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1`.
