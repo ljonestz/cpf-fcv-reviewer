@@ -769,6 +769,11 @@ function renderRevisionSummary(result, anchorIds) {
       text("h3", item.title),
       renderNarrative(firstNarrativeSentence(area?.assessment), "priority-assessment"),
       labelledNarrative(
+        "FCV relevance",
+        firstNarrativeSentence(area?.why_it_matters),
+        "priority-why-it-matters",
+      ),
+      labelledNarrative(
         "Recommended response",
         firstNarrativeSentence(area?.recommended_action),
         "recommended-action",

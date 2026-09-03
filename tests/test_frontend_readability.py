@@ -274,6 +274,15 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         }
         const summaryPriorityCards = findAll(summary, (item) => item?.className === "priority-area");
         if (summaryPriorityCards.length !== 3) throw Error("five-minute readout did not cap priority summaries at three cards");
+        const inclusionSummary = summaryPriorityCards.find((card) => card.textContent.includes("Inclusive services"));
+        const inclusionSummaryText = inclusionSummary?.textContent || "";
+        const relevanceLabel = "FCV relevance.";
+        if (!inclusionSummaryText.includes(relevanceLabel) ||
+            !inclusionSummaryText.includes("Unequal access can deepen fragility.") ||
+            !(inclusionSummaryText.indexOf("The inclusion gap is not yet explicit.") < inclusionSummaryText.indexOf(relevanceLabel) &&
+              inclusionSummaryText.indexOf(relevanceLabel) < inclusionSummaryText.indexOf("Name the inclusion response in the CPF."))) {
+          throw Error("priority summaries omitted FCV relevance or rendered it out of order");
+        }
         const detailedPriorityCards = findAll(view, (item) => item?.className === "priority-area");
         if (detailedPriorityCards.length !== 5) throw Error("detailed analysis did not retain all five priority areas");
         for (const title of ["Delivery pathway", "Inclusive services", "Jobs and livelihoods", "Climate finance", "Local partnerships"]) {
