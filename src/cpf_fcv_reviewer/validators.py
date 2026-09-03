@@ -79,10 +79,16 @@ FINALIZATION_NAMED_COMMITMENT_CONTENT_PATTERN = re.compile(
     rf"(?:facility|architecture)\b",
     re.IGNORECASE,
 )
+FINALIZATION_COMMITMENT_CONTENT_PATTERN = re.compile(
+    r"(?:new\s+(?:binding\s+)?commitments?\b|"
+    r"new\s+reporting\s+(?:obligations?|requirements?)\b|"
+    r"publish\s+(?:quarterly\s+)?reports?\b)",
+    re.IGNORECASE,
+)
 FINALIZATION_PRESCRIPTIVE_OPENING_PATTERN = re.compile(
     rf"^\s*(?:(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
     rf"(?:make|condition|tie|introduce|design|create|establish|build|develop|"
-    rf"set\s+up|launch|put\s+in\s+place|commit|add)\b|"
+    rf"set\s+up|launch|put\s+in\s+place|commit|bind|add)\b|"
     rf"revise\s+the\s+cpf\s+to\b|"
     rf"add\s+(?:wording\s+that|a\s+sentence)\b|"
     rf"(?:require|mandate)\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to\b)|"
@@ -94,6 +100,7 @@ FINALIZATION_CONTENT_PATTERNS = (
     FINALIZATION_NEW_ARCHITECTURE_CONTENT_PATTERN,
     FINALIZATION_FINANCIAL_CONTENT_PATTERN,
     FINALIZATION_NAMED_COMMITMENT_CONTENT_PATTERN,
+    FINALIZATION_COMMITMENT_CONTENT_PATTERN,
 )
 
 SUMMARY_TITLE_LOCATOR_PATTERN = re.compile(

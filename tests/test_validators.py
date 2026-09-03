@@ -806,6 +806,10 @@ def test_finalization_rejects_wholesale_redesign():
         "The draft should tie project disbursements to outcomes.",
         "Commit the World Bank Group to a new facility.",
         "The CPF commits to a new architecture.",
+        "Commit the WBG to a new binding commitment.",
+        "Commit the WBG to new reporting obligations.",
+        "Require the WBG to publish quarterly reports.",
+        "Bind the government to a new reporting requirement.",
     ],
 )
 def test_finalization_rejects_imperative_binding_or_architecture_overreach(action):
