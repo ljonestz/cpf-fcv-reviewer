@@ -48,7 +48,7 @@ def build_config(
         "REGISTRY_BUNDLE_SHA256": environment("REGISTRY_BUNDLE_SHA256", ""),
         "ALLOW_SYNTHETIC_REGISTRY": False,
         "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
-        "RESEARCH_MAX_ATTEMPTS": int(environment("RESEARCH_MAX_ATTEMPTS", "3")),
+        "RESEARCH_MAX_ATTEMPTS": int(environment("RESEARCH_MAX_ATTEMPTS", "1")),
         "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": float(
             environment("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "90")
         ),
