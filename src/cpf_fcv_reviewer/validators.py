@@ -50,7 +50,7 @@ FINALIZATION_COMMITMENT_SUBJECT_PATTERN = (
     r"implementing partners?)"
 )
 FINALIZATION_FINANCIAL_TARGET_PATTERN = (
-    r"(?:(?:the\s+)?project\s+)?"
+    r"(?:the\s+)?(?:project\s+)?"
     r"(?:financing|funding|disbursements?|support)"
 )
 FINALIZATION_ARCHITECTURE_NOUN_PATTERN = (
