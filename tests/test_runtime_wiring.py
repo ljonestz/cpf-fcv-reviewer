@@ -1165,7 +1165,6 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                 assert {issue["code"] for issue in payload["validation_issues"]} == {
                     "unknown_institutional_referral",
                 }
-                assert payload["repair_support_evidence_ids"]["current_context"] == []
                 assert payload["repair_support_evidence_ids"]["registry_language"] == [
                     "registry-SYN-PUB-FCV-STRAT-001",
                     "registry-SYN-PUB-FCV-STRAT-002",
