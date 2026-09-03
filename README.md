@@ -20,6 +20,7 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
   records, evidence references, metadata, HTML result, and 47,218-byte DOCX structure
   passed validation. Current research was unavailable after bounded attempts, so the
   result truthfully uses the `document_led` tier. Do not rerun the unchanged deployment.
+  This is a current-evidence limitation, not a document-extraction or schema defect.
 
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core

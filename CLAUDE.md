@@ -81,6 +81,10 @@ a cheaper check can still find the defect.
 2. Run the provider-free smoke suite (`python -m pytest tests/test_smoke_mode.py -q`)
    and, when visual behavior changed, a local smoke-browser flow. Clearly label smoke
    outputs as synthetic; never present them as a Guinea or other country quality result.
+   Before any provider-backed browser run, exercise the exact external runner end to end
+   against smoke mode, including programmatic file injection, result, assistant, refresh,
+   and download steps. Confirm its current Playwright call signatures and locator contract;
+   a runner-preflight failure blocks the paid submission.
 3. After deployment, confirm the exact commit is live through Render and perform only
    no-cost health/static-page checks before submitting an assessment.
 4. Run a full quality assessment only when real model behavior, evidence research,
@@ -112,9 +116,9 @@ restoration, and any failure state. Save the DOCX on success. Use dated attempt-
 filenames, inspect the PNGs themselves, and share the rendered images; an HTML file is
 not a screenshot substitute. Record whether
 the run was smoke or quality, whether it used model APIs, the deployed commit, outcome,
-safe validation codes, and saved artifact paths. Keep any live assessment ID only in the
-session handoff; never commit it. Never save raw model output or sensitive assessment
-content.
+safe validation codes, and saved artifact paths. Persist any live assessment ID immediately
+after creation only in a non-repository session handoff; never commit it. Never save raw
+model output or sensitive assessment content.
 
 ## Coordinating Agent Instructions
 

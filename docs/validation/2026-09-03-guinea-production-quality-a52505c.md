@@ -32,7 +32,8 @@ are explicit. The model identifier is `claude-sonnet-4-5`.
 Current public research exhausted the configured attempts without establishing a sufficient
 independent baseline. The application correctly used the `document_led` tier and disclosed
 that the analysis relies primarily on the submitted CPF and dated 2022 RRA. This is a
-truthful limitation, not a silent substitution of old evidence for current evidence.
+truthful current-evidence limitation, not a document-processing or schema defect and not a
+silent substitution of old evidence for current evidence.
 
 ## Retry, failure, and log evidence
 

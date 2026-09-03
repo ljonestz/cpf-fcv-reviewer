@@ -14,7 +14,8 @@ with that exact release. The successful Guinea result contains 58 evidence recor
 priority areas, five RRA rows, and citations reaching RRA page 56. Current public research
 exhausted its attempts, so the result truthfully uses the `document_led` tier and discloses
 its reliance on the submitted CPF and dated 2022 RRA. The service remains the free,
-volatile public test site. Operational
+volatile public test site. This is a current-evidence limitation, not a document-extraction
+or schema defect. Operational
 production still fails closed without SQLite persistence; the public test site can run
 without a disk only through the explicit `ALLOW_VOLATILE_PROTOTYPE=true` exception.
 
