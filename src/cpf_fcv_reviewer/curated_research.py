@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from math import isfinite
@@ -19,23 +20,12 @@ from .research_controller import ResearchRequest
 
 _ALLOWED_HOSTS = frozenset({"api.worldbank.org", "api.reliefweb.int"})
 _RELIEFWEB_RESULT_HOSTS = frozenset({"reliefweb.int", "api.reliefweb.int"})
-_FCV_TITLE_TERMS = (
-    "conflict",
-    "violence",
-    "security",
-    "political",
-    "transition",
-    "governance",
-    "humanitarian",
-    "displacement",
-    "displaced",
-    "refugee",
-    "protection",
-    "peace",
-    "land dispute",
-    "land conflict",
-    "social cohesion",
-    "food insecurity",
+_FCV_TITLE_PATTERN = re.compile(
+    r"\\b(?:conflicts?|violence|violent|political|governance|government|elections?|coup|"
+    r"humanitarian|displacement|displaced|refugees?|protection|peace|peacebuilding|"
+    r"insecurity)\\b|\\bland (?:conflict|dispute|tenure)\\b|\\bsocial cohesion\\b|"
+    r"\\bsecurity (?:update|situation|incident|threat|forces?|sector|crisis|risk)\\b",
+    re.IGNORECASE,
 )
 
 # Keep this table explicit and small. The labels and context kinds are metadata for
@@ -538,7 +528,7 @@ def _reliefweb_claim(
         return None
     fields = row["fields"]
     title = _nonblank_string(fields.get("title"))
-    if title is None or not any(term in title.casefold() for term in _FCV_TITLE_TERMS):
+    if title is None or _FCV_TITLE_PATTERN.search(title) is None:
         return None
     source_url = _nonblank_string(fields.get("url"))
     source_name = _reliefweb_source_name(fields.get("source"))
