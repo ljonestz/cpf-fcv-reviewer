@@ -136,9 +136,8 @@ def test_full_evidence_returns_explicit_full_tier():
         holistic_request(), lambda *_: None
     )
 
-    assert result.tier is CurrentEvidenceTier.REDUCED
-    assert result.claims == (recovery_claim,)
-    assert "one institutional publisher" in result.limitation
+    assert result.tier is CurrentEvidenceTier.FULL
+    assert result.limitation is None
 
 
 @pytest.mark.parametrize("tier", [True, False, "full", 1, None])
