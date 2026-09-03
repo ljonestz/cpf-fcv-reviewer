@@ -769,6 +769,7 @@ def test_reliefweb_rejects_generic_non_fcv_reports():
     def handler(_method: str, _url: str, _kwargs: dict[str, object]) -> StubResponse:
         return json_response({"data": [
             {"fields": {"title": "Benin annual population estimate", "url": "https://reliefweb.int/generic", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}},
+            {"fields": {"title": "Benin energy transition update", "url": "https://reliefweb.int/energy", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}},
             {"fields": {"title": "Benin political transition update", "url": "https://reliefweb.int/fcv", "date": {"created": "2026-08-02"}, "source": [{"name": "UN OCHA"}]}},
         ]})
 
