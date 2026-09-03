@@ -307,7 +307,7 @@ def test_trailing_dns_dot_counts_as_the_canonical_source_url():
 
 def test_one_recent_curated_fcv_report_meets_the_practical_threshold():
     recovery_claim = claim(
-        "fcv-update",
+        "reliefweb:fcv-update",
         publisher="ReliefWeb",
         context_kind="current_development",
         source_url="https://reliefweb.int/report/benin/fcv-update",
