@@ -293,6 +293,8 @@ def _is_permitted_public_source(claim: CurrentContextClaim) -> bool:
     if source_url is None:
         return False
 
+    if _hostname(source_url) == "api.worldbank.org":
+        return False
     allowed_hosts = _publisher_host_allowlist(normalized_publisher)
     return bool(allowed_hosts and _host_matches(source_url, allowed_hosts))
 
