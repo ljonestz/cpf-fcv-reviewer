@@ -28,10 +28,10 @@ content while removing technical evidence disclosures from reader-facing HTML an
 Structured evidence remains available internally for validation and the follow-on assistant.
 
 Latest local gate on 2026-09-03: the provider-free smoke suite passed 36 tests; the
-focused pilot set passed 476 tests with two Windows pytest temporary-directory ACL setup
-errors; and the complete suite passed 1,208 tests with 29 such setup errors. The errors
-are `PermissionError: [WinError 5]` while pytest creates numbered temporary directories,
-not application-test failures. Python compilation, JavaScript syntax, and
+focused pilot set initially passed 476 tests with two Windows pytest temporary-directory
+ACL setup errors. A fresh complete run moved pytest's base directory outside OneDrive and
+passed all 1,237 tests with no failures or setup errors. Python compilation, JavaScript
+syntax, and
 `git diff --check` passed. The repository `.venv` is absent and Ruff is not installed in
 the configured Python 3.13 runtime, so Ruff was unavailable. The exact external smoke
 QA runner also passed end to end with no console/page errors, two assistant turns restored

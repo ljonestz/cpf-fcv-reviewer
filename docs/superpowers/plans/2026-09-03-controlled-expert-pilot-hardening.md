@@ -69,7 +69,7 @@
 
 - [x] Run `.\.venv\Scripts\python.exe -m ruff check .` (attempted; unavailable because the worktree has no `.venv` and the configured Python 3.13 runtime has no Ruff module).
 - [x] Run `.\.venv\Scripts\python.exe -m pytest tests/test_smoke_mode.py -q` (equivalent Python 3.13 command: 36 passed).
-- [x] Run `.\.venv\Scripts\python.exe -m pytest -q` (equivalent Python 3.13 command: 1,208 passed, 29 Windows pytest temporary-directory ACL setup errors; no application-test failures).
+- [x] Run `.\.venv\Scripts\python.exe -m pytest -q` (equivalent Python 3.13 command with a non-OneDrive base temp directory: 1,237 passed).
 - [x] Run `git diff --check`, inspect `git status --short`, and review the complete branch diff (whitespace check passed; generated browser output is ignored).
 - [x] Run the existing external QA runner end to end against smoke mode, including file injection, result, assistant, refresh, and DOCX download. This is a hard gate before paid submission (passed with no console/page errors).
 - [x] Update `docs/PROJECT_STATUS.md` with verified commits, checks, deployment state, limitations, and next action. Preserve the dated Guinea validation record.

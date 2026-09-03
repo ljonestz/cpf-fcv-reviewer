@@ -19,11 +19,11 @@ not modified. The dated Guinea validation record remains unchanged.
   inherited value pointed to a missing Downloads certificate file.
 - Ruff was unavailable: the requested `.venv` interpreter is absent and the configured
   Python runtime has no `ruff` module.
-- The full suite used a unique workspace-local basetemp. It reported 1,208 passed and
-  29 setup errors, all `PermissionError: [WinError 5]` while pytest scanned or created
-  numbered temporary directories on Windows. The focused pilot set reported 476 passed
-  and two identical temporary-directory ACL setup errors. These are environment setup
-  errors, not application-test failures.
+- The first full and focused runs used workspace-local basetemp directories. They executed
+  1,208 and 476 tests respectively but encountered Windows ACL setup errors when pytest
+  created temporary files inside the OneDrive worktree. A fresh complete run used a
+  unique base temp directory under the existing Windows local-temp parent and passed all
+  1,237 tests with no failures or setup errors.
 - LibreOffice is not installed, so DOCX page-image rendering was not available. DOCX
   ZIP/OOXML and structural inspection were completed.
 
@@ -34,8 +34,8 @@ not modified. The dated Guinea validation record remains unchanged.
 | Python compilation | Passed: `python -m compileall -q src tests` |
 | JavaScript syntax | Passed: `node --check src/cpf_fcv_reviewer/static/app.js` |
 | Provider-free smoke suite | 36 passed |
-| Focused pilot gate | 476 passed; 2 Windows pytest temporary-directory ACL setup errors |
-| Complete pytest suite | 1,208 passed; 29 Windows pytest temporary-directory ACL setup errors |
+| Focused pilot gate | 476 passed; 2 OneDrive temporary-directory ACL setup errors on the initial run |
+| Complete pytest suite | 1,237 passed using a non-OneDrive base temp directory |
 | Ruff | Unavailable in this environment; no `.venv`, no installed module |
 | Static whitespace | Passed: `git diff --check` |
 
