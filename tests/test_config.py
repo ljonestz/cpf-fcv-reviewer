@@ -8,7 +8,7 @@ from cpf_fcv_reviewer.config import build_config
 def test_research_settings_have_bounded_defaults():
     config = build_config({"TESTING": True})
 
-    assert config["RESEARCH_MAX_ATTEMPTS"] == 3
+    assert config["RESEARCH_MAX_ATTEMPTS"] == 1
     assert config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"] == 90.0
     assert config["RESEARCH_TOTAL_BUDGET_SECONDS"] == 300.0
     assert config["RESEARCH_MINIMUM_CLAIMS"] == 4

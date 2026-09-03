@@ -1789,3 +1789,73 @@ def test_anthropic_gateway_rejects_missing_parsed_output(monkeypatch):
             payload={"input": "bounded"},
             output_type=ReviewDraft,
         )
+
+
+def test_prohibited_policy_repair_keeps_cleaned_rra_narrative():
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT)
+    initial = result_for(meta)
+    original = initial.rra_driver_assessments[0].model_copy(
+        update={"remaining_gap": "The CPF is eligible for additional support."}
+    )
+    initial = initial.model_copy(update={"rra_driver_assessments": (original,)})
+    cleaned = original.model_copy(
+        update={"remaining_gap": "The CPF could clarify the remaining support gap."}
+    )
+    repaired_draft = draft_for(meta).model_copy(
+        update={"rra_driver_assessments": (cleaned,)}
+    )
+
+    repaired = ReviewEngine(FakeGateway(repaired_draft)).repair(
+        initial,
+        [
+            {
+                "code": "prohibited_policy_language",
+                "message": "Repair policy language.",
+            }
+        ],
+        forbidden_phrases=("eligible for",),
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+
+    assert repaired.rra_driver_assessments == (cleaned,)
+
+
+def test_prohibited_policy_repair_keeps_cleaned_strategy_narrative():
+    meta = metadata()
+    initial = result_for(meta)
+    original = initial.fcv_strategy_assessments[0].model_copy(
+        update={"assessment": "The CPF is eligible for additional support."}
+    )
+    initial = initial.model_copy(
+        update={
+            "fcv_strategy_assessments": (
+                original,
+                *initial.fcv_strategy_assessments[1:],
+            )
+        }
+    )
+    cleaned = original.model_copy(
+        update={"assessment": "The CPF could clarify the remaining support gap."}
+    )
+    repaired_draft = draft_for(meta).model_copy(
+        update={
+            "fcv_strategy_assessments": (
+                cleaned,
+                *initial.fcv_strategy_assessments[1:],
+            )
+        }
+    )
+
+    repaired = ReviewEngine(FakeGateway(repaired_draft)).repair(
+        initial,
+        [
+            {
+                "code": "prohibited_policy_language",
+                "message": "Repair policy language.",
+            }
+        ],
+        forbidden_phrases=("eligible for",),
+        evidence_ids=set(STRATEGY_REGISTRY_EVIDENCE_IDS),
+    )
+
+    assert repaired.fcv_strategy_assessments[0] == cleaned

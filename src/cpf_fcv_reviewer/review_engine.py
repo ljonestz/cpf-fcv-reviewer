@@ -509,6 +509,71 @@ def _normalize_repaired_assessments(
 
 
 
+
+_POLICY_RRA_TEXT_FIELDS = (
+    "driver",
+    "cpf_response",
+    "delivery_mechanism",
+    "result_or_indicator",
+    "remaining_gap",
+)
+
+
+def _clean_policy_fields(original, candidate, fields, forbidden_phrases):
+    phrases = tuple(
+        phrase.casefold() for phrase in forbidden_phrases if phrase.strip()
+    )
+    updates = {}
+    for field in fields:
+        original_text = getattr(original, field)
+        candidate_text = getattr(candidate, field)
+        if (
+            any(phrase in original_text.casefold() for phrase in phrases)
+            and not any(phrase in candidate_text.casefold() for phrase in phrases)
+        ):
+            updates[field] = candidate_text
+    return original.model_copy(update=updates) if updates else original
+
+
+def _preserve_cleaned_policy_assessment_text(
+    normalized: ReviewDraft,
+    repaired: ReviewDraft,
+    forbidden_phrases: tuple[str, ...],
+) -> ReviewDraft:
+    repaired_rra = {row.assessment_id: row for row in repaired.rra_driver_assessments}
+    rra_rows = tuple(
+        _clean_policy_fields(
+            row,
+            repaired_rra[row.assessment_id],
+            _POLICY_RRA_TEXT_FIELDS,
+            forbidden_phrases,
+        )
+        if row.assessment_id in repaired_rra
+        else row
+        for row in normalized.rra_driver_assessments
+    )
+    repaired_strategy = {
+        (row.strategic_shift, row.assessment_id): row
+        for row in repaired.fcv_strategy_assessments
+    }
+    strategy_rows = tuple(
+        _clean_policy_fields(
+            row,
+            repaired_strategy[(row.strategic_shift, row.assessment_id)],
+            ("assessment",),
+            forbidden_phrases,
+        )
+        if (row.strategic_shift, row.assessment_id) in repaired_strategy
+        else row
+        for row in normalized.fcv_strategy_assessments
+    )
+    return normalized.model_copy(
+        update={
+            "rra_driver_assessments": rra_rows,
+            "fcv_strategy_assessments": strategy_rows,
+        }
+    )
+
 def _document_names(evidence_pack: EvidencePack) -> dict[DocumentRole, tuple[str, ...]]:
     return {
         role: tuple(
@@ -641,6 +706,7 @@ class ReviewEngine:
             issue["code"] == "incomplete_strategy_assessment"
             for issue in issues
         )
+        repaired_assessments = draft
         draft = _normalize_repaired_assessments(
             result,
             draft,
@@ -649,6 +715,12 @@ class ReviewEngine:
             allow_new_rra_rows=allow_new_rra_rows,
             allow_missing_strategy_rows=allow_missing_strategy_rows,
         )
+        if any(issue["code"] == "prohibited_policy_language" for issue in issues):
+            draft = _preserve_cleaned_policy_assessment_text(
+                draft,
+                repaired_assessments,
+                forbidden_phrases,
+            )
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
         coverage = result.document_coverage.model_copy(
