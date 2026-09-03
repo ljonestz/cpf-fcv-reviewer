@@ -176,15 +176,12 @@ def test_curated_gateway_uses_one_deadline_across_adapter_calls():
 
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         now[0] += 0.25
-        if urlsplit(url).path.endswith("/country"):
-            return json_response(
-                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
-            )
-        return json_response([{}, []])
+        assert urlsplit(url).path.endswith("/reports")
+        return json_response({"data": []})
 
     transport = StubClient(handler)
     client = BoundedInstitutionalClient(client=transport, monotonic=lambda: now[0])
-    gateway = CuratedResearchGateway(client)
+    gateway = CuratedResearchGateway(client, reliefweb_app_name="app")
 
     gateway.search(request(), timeout_seconds=1.0)
 
