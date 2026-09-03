@@ -54,35 +54,46 @@ FINALIZATION_FINANCIAL_TARGET_PATTERN = (
     r"(?:financing|funding|disbursements?|support)"
 )
 FINALIZATION_ARCHITECTURE_NOUN_PATTERN = (
-    r"(?:delivery\s+(?:unit|mechanism|architecture|platform|system|arrangement)|"
-    r"coordination\s+(?:unit|mechanism|body)|"
-    r"institutional\s+(?:arrangement|architecture|mechanism|system|unit|body)|"
-    r"unit|office|fund|facility|mechanism|platform|institution|"
-    r"architecture|system|body|arrangement)"
+    r"(?:"
+    r"(?:delivery|institutional|coordination)\s+"
+    r"(?:unit|mechanism|architecture|platform|system|arrangement|body)|"
+    r"architecture)"
 )
-FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN = (
-    r"(?:(?:a|an|the)\s+)?new\s+"
-    + FINALIZATION_ARCHITECTURE_NOUN_PATTERN
-)
-
-FINALIZATION_BINDING_OVERREACH_PATTERN = re.compile(
-    rf"(?:"
-    rf"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
-    rf"make\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:conditional|contingent)\s+(?:on|upon)\b|"
-    rf"condition\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:on|upon)\b|"
-    rf"tie\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b|"
-    rf"add\s+a\s+sentence\s+making\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:conditional|contingent)\s+(?:on|upon)\b"
-    rf")|"
-    rf"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
-    rf"(?:commit|bind)(?:\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN})?\s+to\s+"
-    rf"{FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN}\b|"
-    rf"(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+commits?\s+to\s+{FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN}\b|"
-    rf"(?:(?:require|mandate)\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to\s+)?"
-    rf"(?:create|build|establish|add|develop|put\s+in\s+place|set\s+up|launch)\s+"
-    rf"{FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN}\b"
-    rf")"
-    r")",
+FINALIZATION_NEW_ARCHITECTURE_CONTENT_PATTERN = re.compile(
+    rf"(?:(?:a|an|the)\s+)?(?:[a-z-]+\s+)?new\s+"
+    rf"{FINALIZATION_ARCHITECTURE_NOUN_PATTERN}\b",
     re.IGNORECASE,
+)
+FINALIZATION_FINANCIAL_CONTENT_PATTERN = re.compile(
+    rf"(?:{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
+    rf"(?:conditional|contingent)\s+(?:on|upon)\b|"
+    rf"(?:condition|conditioning)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
+    rf"(?:on|upon)\b|"
+    rf"(?:tie|ties)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b)",
+    re.IGNORECASE,
+)
+FINALIZATION_NAMED_COMMITMENT_CONTENT_PATTERN = re.compile(
+    rf"(?:(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+commits?\s+to|"
+    rf"commit\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to)\s+"
+    rf"(?:(?:a|an|the)\s+)?(?:[a-z-]+\s+)?new\s+"
+    rf"(?:facility|architecture)\b",
+    re.IGNORECASE,
+)
+FINALIZATION_PRESCRIPTIVE_OPENING_PATTERN = re.compile(
+    rf"^\s*(?:(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
+    rf"(?:make|condition|tie|introduce|design|create|establish|build|develop|"
+    rf"set\s+up|launch|put\s+in\s+place|commit|add)\b|"
+    rf"revise\s+the\s+cpf\s+to\b|"
+    rf"add\s+(?:wording\s+that|a\s+sentence)\b|"
+    rf"(?:require|mandate)\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to\b)|"
+    rf"(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+commits?\s+to\b"
+    rf")",
+    re.IGNORECASE,
+)
+FINALIZATION_CONTENT_PATTERNS = (
+    FINALIZATION_NEW_ARCHITECTURE_CONTENT_PATTERN,
+    FINALIZATION_FINANCIAL_CONTENT_PATTERN,
+    FINALIZATION_NAMED_COMMITMENT_CONTENT_PATTERN,
 )
 
 SUMMARY_TITLE_LOCATOR_PATTERN = re.compile(
@@ -550,6 +561,12 @@ def _append_invalid_summary_title_issue(
     issues.append(ValidationIssue("invalid_revision_summary_title", message))
 
 
+def _has_finalization_binding_overreach(action: str) -> bool:
+    if FINALIZATION_PRESCRIPTIVE_OPENING_PATTERN.match(action) is None:
+        return False
+    return any(pattern.search(action) for pattern in FINALIZATION_CONTENT_PATTERNS)
+
+
 def validate_stage_behavior(
     review_stage: str,
     action: str,
@@ -585,7 +602,7 @@ def validate_stage_behavior(
                 "Finalization permits targeted edits, not wholesale redesign.",
             )
         )
-    if review_stage == "finalization" and FINALIZATION_BINDING_OVERREACH_PATTERN.search(
+    if review_stage == "finalization" and _has_finalization_binding_overreach(
         action
     ):
         issues.append(

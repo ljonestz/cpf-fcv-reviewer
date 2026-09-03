@@ -798,6 +798,14 @@ def test_finalization_rejects_wholesale_redesign():
         "Make project disbursements conditional on results.",
         "The CPF commits to a new delivery unit.",
         "Add a sentence making funding conditional on results.",
+        "The draft should introduce a new institutional arrangement.",
+        "Design a new coordination mechanism.",
+        "Revise the CPF to establish a new delivery unit.",
+        "Add wording that creates a new delivery system.",
+        "Add a sentence making project support conditional on results.",
+        "The draft should tie project disbursements to outcomes.",
+        "Commit the World Bank Group to a new facility.",
+        "The CPF commits to a new architecture.",
     ],
 )
 def test_finalization_rejects_imperative_binding_or_architecture_overreach(action):
