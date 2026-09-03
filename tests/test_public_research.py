@@ -672,6 +672,16 @@ def test_retain_public_claims_allows_institutional_titles_with_generic_words(sou
             "United Nations Entity for Gender Equality and the Empowerment of Women",
             "https://www.unwomen.org/update",
         ),
+        ("Reuters", "https://www.reuters.com/world/africa/update"),
+        ("Associated Press", "https://apnews.com/article/update"),
+        ("BBC", "https://www.bbc.com/news/articles/update"),
+        ("BBC", "https://www.bbc.co.uk/news/articles/update"),
+        ("International Crisis Group", "https://www.crisisgroup.org/africa/update"),
+        ("ISS Africa", "https://issafrica.org/iss-today/update"),
+        (
+            "Africa Center for Strategic Studies",
+            "https://africacenter.org/spotlight/update",
+        ),
     ],
 )
 def test_retain_public_claims_accepts_permitted_institutional_publishers(
@@ -1120,6 +1130,38 @@ def test_invalid_normalized_claims_fall_back_to_block_level_salvage(monkeypatch)
     assert result[0].source_date == date(2025, 4, 30)
 
 
+def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift():
+    source = public_research.ResearchSource(
+        title="Guinea transition update",
+        url="https://www.reuters.com/world/africa/guinea-transition-update",
+        published_at=date(2026, 8, 30),
+    )
+    artifact = public_research.SearchArtifact(
+        narrative="Guinea's political transition remains uncertain.",
+        sources=(source,),
+    )
+    normalized = _claim(
+        publisher="World Bank",
+        source_title="Model-rewritten title",
+        source_url=source.url,
+        source_date=date(2026, 8, 29),
+        text="Guinea's political transition remains uncertain.",
+    )
+
+    retained = public_research._validate_normalized_claims((normalized,), artifact)
+
+    assert retained == (
+        normalized.model_copy(
+            update={
+                "publisher": "Reuters",
+                "source_title": source.title,
+                "source_date": source.published_at,
+                "source_url": source.url,
+            }
+        ),
+    )
+
+
 def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
     source_url = "https://www.worldbank.org/exception-fallback"
 
@@ -1431,7 +1473,15 @@ def test_public_research_prompt_requests_plain_text_cited_synthesis():
     )
     for term in permitted_hierarchy:
         assert term in prompt
-    assert "ICG" not in prompt
+    for term in (
+        "Reuters",
+        "Associated Press",
+        "BBC",
+        "International Crisis Group",
+        "ISS Africa",
+        "Africa Center for Strategic Studies",
+    ):
+        assert term in prompt
     assert "public analytics" not in prompt
     assert "trusted media" not in prompt
     assert "licensed ACLED" in prompt
