@@ -138,6 +138,9 @@ def test_review_prompt_requires_fcv_materiality_and_explicit_causal_links():
         "then stage-appropriate actionability",
         "existing commitments and architecture",
         "new binding commitments, conditionality, or new institutional/delivery architecture",
+        "first sentence of why_it_matters",
+        "When evidenced, concise bases include FCV drivers, resilience, legitimacy, "
+        "distributional effects and perceptions, or conflict-sensitive delivery",
     ):
         assert phrase in prompt
 
@@ -151,6 +154,9 @@ def test_repair_prompt_mirrors_only_order_and_finalization_repairs():
         "narrowly revise only the affected recommended_action",
         "stay within existing commitments and architecture",
         "Do not alter descriptive/discussion text or ordinary fine-tuning",
+        "Reorder the complete RevisionSummaryItem records to match priority_areas",
+        "Preserve each title with its existing priority_area_id",
+        "never mutate IDs in place or detach title-ID pairs",
     ):
         assert phrase in prompt
 

@@ -310,8 +310,8 @@ class PriorityArea(FrozenModel):
     assessment: ReviewNarrative
     why_it_matters: ReviewNarrative = Field(
         description=(
-            "Must explain an evidenced direct or indirect FCV causal pathway "
-            "for why this priority matters."
+            "The first sentence must state the evidenced direct or indirect FCV "
+            "causal pathway for why this priority matters."
         )
     )
     recommended_action: ReviewNarrative

@@ -51,7 +51,7 @@ FINALIZATION_COMMITMENT_SUBJECT_PATTERN = (
 )
 FINALIZATION_FINANCIAL_TARGET_PATTERN = (
     r"(?:(?:the\s+)?project\s+)?"
-    r"(?:financing|funding|disbursement|support)"
+    r"(?:financing|funding|disbursements?|support)"
 )
 FINALIZATION_ARCHITECTURE_NOUN_PATTERN = (
     r"(?:delivery\s+(?:unit|mechanism|architecture|platform|system|arrangement)|"
@@ -60,18 +60,24 @@ FINALIZATION_ARCHITECTURE_NOUN_PATTERN = (
     r"unit|office|fund|facility|mechanism|platform|institution|"
     r"architecture|system|body|arrangement)"
 )
+FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN = (
+    r"(?:(?:a|an|the)\s+)?new\s+"
+    + FINALIZATION_ARCHITECTURE_NOUN_PATTERN
+)
 
 FINALIZATION_BINDING_OVERREACH_PATTERN = re.compile(
-    rf"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
-    rf"(?:commit|bind)(?:\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN})?\s+to\b|"
-    rf"(?:require|mandate)\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to\b|"
-    rf"(?:make|condition)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
+    rf"(?:(?<!\w)(?:make|making)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
     rf"(?:conditional|contingent)\s+(?:on|upon)\b|"
-    rf"condition\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:on|upon)\b|"
-    rf"tie\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b|"
+    rf"(?<!\w)condition(?:ing)?\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+(?:on|upon)\b|"
+    rf"(?<!\w)tie\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b|"
+    rf"^\s*(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
+    rf"(?:commit|bind)(?:\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN})?\s+to\s+"
+    rf"{FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN}\b|"
+    rf"(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+commits?\s+to\s+{FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN}\b|"
     rf"(?:(?:require|mandate)\s+(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+to\s+)?"
-    rf"(?:create|build|establish|set\s+up|launch)\s+"
-    rf"(?:(?:a|an|the)\s+)?new\s+{FINALIZATION_ARCHITECTURE_NOUN_PATTERN}\b"
+    rf"(?:create|build|establish|add|develop|put\s+in\s+place|set\s+up|launch)\s+"
+    rf"{FINALIZATION_NEW_ARCHITECTURE_OBJECT_PATTERN}\b"
+    rf")"
     r")",
     re.IGNORECASE,
 )

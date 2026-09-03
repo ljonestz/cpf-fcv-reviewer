@@ -792,6 +792,12 @@ def test_finalization_rejects_wholesale_redesign():
         "Require the CPF to create a new delivery unit.",
         "Commit the World Bank Group to a new delivery unit.",
         "Create a new delivery arrangement.",
+        "Add a new delivery unit.",
+        "Develop a new delivery system.",
+        "Put in place a new coordination mechanism.",
+        "Make project disbursements conditional on results.",
+        "The CPF commits to a new delivery unit.",
+        "Add a sentence making funding conditional on results.",
     ],
 )
 def test_finalization_rejects_imperative_binding_or_architecture_overreach(action):
@@ -812,6 +818,7 @@ def test_finalization_rejects_imperative_binding_or_architecture_overreach(actio
         "Make financing available on a targeted basis.",
         "Make the existing financing conditional wording clearer.",
         "Make support conditional wording clearer.",
+        "Require the CPF to clarify existing wording.",
         "Clarify and fine-tune the existing wording.",
     ],
 )

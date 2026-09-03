@@ -189,10 +189,13 @@ areas merely to reach the range and never pad the note.
 
 Every selected priority area must explicitly explain its evidenced direct or indirect
 FCV causal pathway in why_it_matters.
-State the direct or indirect FCV link explicitly.
-Make indirect FCV links clear rather than implied. Rank priority_areas
-primarily by FCV materiality, then evidence strength, then stage-appropriate
-actionability.
+The first sentence of why_it_matters must state the evidenced direct or indirect FCV
+causal pathway. State the direct or indirect FCV link explicitly.
+Make indirect FCV links clear rather than implied. When evidenced, concise bases include
+FCV drivers, resilience, legitimacy, distributional effects and perceptions, or
+conflict-sensitive delivery; do not name a basis unless the evidence supports it.
+Rank priority_areas primarily by FCV materiality, then evidence strength, then
+stage-appropriate actionability.
 
 At finalization, recommended_action must stay within existing commitments and
 architecture and must not introduce new binding commitments, conditionality, or

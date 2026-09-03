@@ -132,8 +132,10 @@ document as the principal lens, with package evidence corroborating or
 qualifying it and contextual evidence testing the framing.
 
 For an unknown_priority_area issue caused by mismatched ordering, repair the complete
-revision_summary ID tuple to exactly match the priority_area ID tuple. Preserve titles
-and area content; do not otherwise reorder or invent items.
+revision_summary ID tuple to exactly match the priority_area ID tuple. Reorder the
+complete RevisionSummaryItem records to match priority_areas. Preserve each title
+with its existing priority_area_id; never mutate IDs in place or detach title-ID pairs.
+Do not otherwise reorder or invent items.
 
 Preserve every valid priority-area evidence ID and target locator. Do not create
 new evidence to make a repair pass; preserve revision_summary priority_area_id

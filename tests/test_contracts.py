@@ -302,6 +302,7 @@ def test_priority_area_why_it_matters_describes_an_evidenced_fcv_causal_pathway(
         "description"
     ]
 
+    assert "first sentence" in description.casefold()
     assert "evidenced" in description
     assert "direct or indirect FCV causal pathway" in description
 
