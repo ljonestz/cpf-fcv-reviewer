@@ -1,12 +1,14 @@
 # Project status
 
-Updated 2026-09-03. Review-schema failure observability and provider-visible validation
-guidance are verified through deployed code commit
-`a52505c74d72bc08d4f973436f8b8204c76b1d0b`. The complete provider-free suite passed,
-and one explicitly authorized paid Guinea assessment completed with `run_complete`.
-The post-drafting schema failure seen on `361fe8c` did not recur. The result contract,
-all evidence references, application metadata, HTML result, and DOCX structure passed
-their checks. Semantic application version is `0.1.0`.
+Updated 2026-09-03. Controlled pilot hardening through code commit `9baae0c` is
+provider-free verified. The change sequence activates curated research recovery, gives
+document-led fallback a privacy-safe terminal reason, requires explicit FCV relevance
+and priority ordering, narrows finalization-stage overreach, and surfaces the existing
+FCV rationale on summary cards. Commit `9baae0c` has not been deployed or provider-
+tested, and no paid assessment was submitted for it. The last deployed and paid baseline
+remains `a52505c74d72bc08d4f973436f8b8204c76b1d0b`; the result contract, evidence
+references, metadata, HTML result, and DOCX structure passed for that earlier run.
+Semantic application version is `0.1.0`.
 
 The public prototype is <https://cpf-fcv-review-prototype.onrender.com/>. Render reported
 `a52505c74d72bc08d4f973436f8b8204c76b1d0b` live on 2026-09-03; `/health` returned `ok`
@@ -25,14 +27,16 @@ analysis retains the structured driver, strategy, recommendation, target, and li
 content while removing technical evidence disclosures from reader-facing HTML and DOCX.
 Structured evidence remains available internally for validation and the follow-on assistant.
 
-Latest verified suite on 2026-09-03: 1,177 provider-free tests passed in 106.46 seconds;
-the focused schema/contracts/prompt/failure set passed 250 tests. Python compilation and
-`git diff --check` passed. The Anthropic SDK schema-transform regression confirmed that
-the new descriptions survive into the provider-visible schema. Independent review found
-no critical issue; its remaining locator-guidance finding was fixed and regression-tested.
-Ruff and Black are not installed, so those optional checks were unavailable. Exactly one
-paid Guinea assessment was submitted after the provider-free and deployment gates.
-The stable FCV Project Screener is untouched and prohibited.
+Latest local gate on 2026-09-03: the provider-free smoke suite passed 36 tests; the
+focused pilot set passed 476 tests with two Windows pytest temporary-directory ACL setup
+errors; and the complete suite passed 1,208 tests with 29 such setup errors. The errors
+are `PermissionError: [WinError 5]` while pytest creates numbered temporary directories,
+not application-test failures. Python compilation, JavaScript syntax, and
+`git diff --check` passed. The repository `.venv` is absent and Ruff is not installed in
+the configured Python 3.13 runtime, so Ruff was unavailable. The exact external smoke
+QA runner also passed end to end with no console/page errors, two assistant turns restored
+across refresh, and a successful DOCX download. The stable FCV Project Screener is
+untouched and prohibited.
 
 ## Completed to date
 
@@ -82,6 +86,18 @@ The stable FCV Project Screener is untouched and prohibited.
 - SQLite-backed jobs, replayable events, restart recovery, 24-hour production retention, and persistence-before-completion event ordering are implemented.
 - Deterministic synthetic early-drafting, decision-review, and finalization quality cases passed as part of the automated suite. These are not a substitute for approved-material reference evaluation.
 - The dedicated holding view passed browser QA at 1280px and 390px. It preserves the existing stage/timer/guidance lifecycle, has no horizontal overflow, and moves focus correctly into holding and results views.
+- The controlled pilot gate on code commit `9baae0c` passed provider-free browser QA. The
+  existing external runner injected the synthetic CPF and RRA, completed the result and
+  detailed views, exercised two streamed assistant turns with four-message refresh
+  restoration, opened the secondary correction disclosure, and downloaded the DOCX.
+  It reported `BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1` with
+  no console or page errors. Eight full-page PNGs and one DOCX are under the unique,
+  gitignored folder `output/playwright/2026-09-03-controlled-pilot-smoke-9baae0c/`.
+  Visual inspection of the desktop summary, detailed view, and 390-pixel mobile summary
+  found no obvious clipping, overlap, or horizontal overflow; `FCV relevance.` is
+  visible on the summary card. The DOCX is a valid 39,400-byte Word ZIP/OOXML package
+  with 40 paragraphs, no tables, and one section. No deployment, push, or paid API run
+  was performed for this commit.
 - The public Guinea RRA structural check confirmed that the bounded review evidence includes deep pages supporting natural-resource, legitimacy, inclusion, jobs, and conflict analysis. This is not a provider-quality result.
 - The live Guinea holding view uses the Project Screener-aligned ticker, compact timer,
   singular/plural time copy, rotating phrases, and separate Render keep-awake pages
@@ -217,7 +233,8 @@ creation so a completed run can be recovered without another provider invocation
    and decide whether semantic finalization-stage calibration needs a narrower prompt or
    validator. The current three top readouts total 818 words, and some mechanically valid
    `fine_tuning` actions imply substantial delivery changes.
-3. Complete full two-turn assistant production acceptance only during a later separately
+3. The provider-free external runner now passes the two-turn assistant flow on `9baae0c`.
+   Complete full two-turn assistant production acceptance only during a later separately
    justified paid cycle; do not run another assessment solely to repair the external QA
    harness. Visual DOCX pagination also remains unverified because LibreOffice is absent.
 4. Run Haiti and Benin provider acceptance only if broader cross-country readiness is needed:
