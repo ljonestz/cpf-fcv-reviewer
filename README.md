@@ -8,8 +8,9 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest provider-free verified implementation: `fix/guinea-production-fixes` through
-  deployed code commit `a52505c` (1,177 tests). Review-schema failure after one retry uses
+- Latest DEPLOYED provider-free baseline: deployed code commit `a52505c` (1,177 tests).
+  This identifies the last deployed baseline, not the latest local implementation; no new
+  deployment is claimed here. Review-schema failure after one retry uses
   a dedicated safe code with bounded, content-free attempt diagnostics. Provider-visible
   schema and prompt guidance mirror the locally enforced narrative, assessment,
   evidence-ID, and locator requirements. The implementation keeps the existing

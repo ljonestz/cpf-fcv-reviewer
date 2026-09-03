@@ -12,6 +12,7 @@ import pytest
 from cpf_fcv_reviewer.curated_research import (
     BoundedInstitutionalClient,
     CuratedResearchGateway,
+    InstitutionalClientError,
     WORLDBANK_INDICATORS,
     WorldBankAdapter,
 )
@@ -140,6 +141,36 @@ def test_bounded_client_does_not_swallow_iterator_programming_errors():
         client.get_json("https://api.worldbank.org/v2/country")
 
 
+@pytest.mark.parametrize(
+    ("transport_error", "expected_error"),
+    [
+        (httpx.ReadTimeout("secret timeout"), TimeoutError),
+        (httpx.ConnectError("secret provider failure"), InstitutionalClientError),
+    ],
+)
+def test_bounded_client_preserves_safe_timeout_and_provider_categories(
+    transport_error, expected_error
+):
+    client = BoundedInstitutionalClient(
+        client=StubClient(lambda *_args: (_ for _ in ()).throw(transport_error))
+    )
+
+    with pytest.raises(expected_error) as error:
+        client.get_json("https://api.worldbank.org/v2/country")
+
+    assert "secret" not in str(error.value)
+
+
+def test_bounded_client_raises_timeout_for_expired_deadline():
+    client = BoundedInstitutionalClient(
+        client=StubClient(lambda *_args: pytest.fail("transport should not be called")),
+        monotonic=lambda: 10.0,
+    )
+
+    with pytest.raises(TimeoutError):
+        client.get_json("https://api.worldbank.org/v2/country", deadline=10.0)
+
+
 def test_curated_gateway_uses_one_deadline_across_adapter_calls():
     now = [10.0]
 
@@ -177,7 +208,7 @@ def test_bounded_client_rejects_redirects_status_content_type_and_bad_length(res
     transport = StubClient(lambda *_args: response)
     client = BoundedInstitutionalClient(client=transport, max_bytes=10_000)
 
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(InstitutionalClientError) as error:
         client.get_json("https://api.worldbank.org/v2/country?token=secret-token")
 
     assert "secret-token" not in str(error.value)
@@ -193,7 +224,7 @@ def test_bounded_client_rejects_incremental_body_over_cap_without_content_length
     )
     client = BoundedInstitutionalClient(client=transport, max_bytes=10_000)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(InstitutionalClientError):
         client.get_json("https://api.worldbank.org/v2/country")
 
 
@@ -325,6 +356,31 @@ def test_world_bank_indicator_failures_preserve_other_indicator_claims(
         for indicator_id, _label, _context_kind in WORLDBANK_INDICATORS
         if indicator_id != failed_indicator
     ]
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "expected_error"),
+    [("timeout", TimeoutError), ("provider", InstitutionalClientError)],
+)
+def test_world_bank_raises_safe_category_when_every_indicator_query_fails(
+    failure_kind, expected_error
+):
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        path = urlsplit(url).path
+        if path.endswith("/country"):
+            return json_response(
+                [{}, [{"id": "BEN", "name": "Benin", "region": {"id": "AFR"}}]]
+            )
+        if failure_kind == "timeout":
+            raise httpx.ReadTimeout("secret timeout")
+        raise httpx.ConnectError("secret provider failure")
+
+    adapter = WorldBankAdapter(BoundedInstitutionalClient(client=StubClient(handler)))
+
+    with pytest.raises(expected_error) as error:
+        adapter.search(request())
+
+    assert "secret" not in str(error.value)
 
 
 def test_world_bank_does_not_swallow_programming_errors_during_indicator_fetch():
@@ -835,11 +891,45 @@ def test_gateway_continues_when_one_adapter_times_out():
     assert claims[0].publisher == "ReliefWeb"
 
 
-def test_gateway_returns_empty_when_both_adapters_fail():
+def test_gateway_raises_provider_failure_when_all_enabled_adapters_fail():
     transport = StubClient(lambda *_args: (_ for _ in ()).throw(httpx.ConnectError("secret")))
     gateway = CuratedResearchGateway(
         BoundedInstitutionalClient(client=transport), reliefweb_app_name="app"
     )
+
+    with pytest.raises(InstitutionalClientError):
+        gateway.search(request())
+
+
+def test_gateway_raises_timeout_when_all_enabled_adapters_time_out():
+    transport = StubClient(lambda *_args: (_ for _ in ()).throw(httpx.ReadTimeout("secret")))
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=transport), reliefweb_app_name="app"
+    )
+
+    with pytest.raises(TimeoutError):
+        gateway.search(request())
+
+
+def test_gateway_does_not_count_disabled_adapter_as_enabled_failure():
+    transport = StubClient(lambda *_args: (_ for _ in ()).throw(httpx.ConnectError("secret")))
+    gateway = CuratedResearchGateway(BoundedInstitutionalClient(client=transport))
+
+    with pytest.raises(InstitutionalClientError):
+        gateway.search(request())
+
+
+def test_gateway_keeps_valid_empty_response_when_another_adapter_fails():
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: pytest.fail("transport should not be called"))
+        ),
+        reliefweb_app_name="app",
+    )
+    gateway.world_bank.search = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        InstitutionalClientError("secret provider failure")
+    )
+    gateway.reliefweb.search = lambda *_args, **_kwargs: ()
 
     assert gateway.search(request()) == ()
 

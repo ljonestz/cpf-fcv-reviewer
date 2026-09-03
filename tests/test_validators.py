@@ -814,6 +814,11 @@ def test_finalization_rejects_wholesale_redesign():
         "Commit the WBG to new reporting obligations.",
         "Require the WBG to publish quarterly reports.",
         "Bind the government to a new reporting requirement.",
+        "The World Bank should create a new delivery unit.",
+        "The government must establish a new delivery unit.",
+        "Require financing to be conditional on results.",
+        "Link funding to outcomes.",
+        "Make support dependent on results.",
     ],
 )
 def test_finalization_rejects_imperative_binding_or_architecture_overreach(action):

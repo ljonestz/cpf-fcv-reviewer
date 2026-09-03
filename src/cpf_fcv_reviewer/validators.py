@@ -66,10 +66,11 @@ FINALIZATION_NEW_ARCHITECTURE_CONTENT_PATTERN = re.compile(
 )
 FINALIZATION_FINANCIAL_CONTENT_PATTERN = re.compile(
     rf"(?:{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
-    rf"(?:conditional|contingent)\s+(?:on|upon)\b|"
+    rf"(?:to\s+be\s+)?(?:conditional|contingent)\s+(?:on|upon)\b|"
     rf"(?:condition|conditioning)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+"
     rf"(?:on|upon)\b|"
-    rf"(?:tie|ties)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b)",
+    rf"(?:tie|ties|link|links)\s+{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+to\b|"
+    rf"{FINALIZATION_FINANCIAL_TARGET_PATTERN}\s+dependent\s+(?:on|upon)\b)",
     re.IGNORECASE,
 )
 FINALIZATION_NAMED_COMMITMENT_CONTENT_PATTERN = re.compile(
@@ -86,8 +87,11 @@ FINALIZATION_COMMITMENT_CONTENT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 FINALIZATION_PRESCRIPTIVE_OPENING_PATTERN = re.compile(
-    rf"^\s*(?:(?:(?:the\s+)?(?:draft|cpf)\s+should\s+)?(?:"
-    rf"(?:make|condition|tie|introduce|design|create|establish|build|develop|"
+    rf"^\s*(?:"
+    rf"(?:(?:the\s+)?(?:draft|cpf)\s+should\s+|"
+    rf"(?:the\s+)?{FINALIZATION_COMMITMENT_SUBJECT_PATTERN}\s+"
+    rf"(?:should|must)\s+)?(?:"
+    rf"(?:make|require|condition|tie|link|introduce|design|create|establish|build|develop|"
     rf"set\s+up|launch|put\s+in\s+place|commit|bind|add)\b|"
     rf"revise\s+the\s+cpf\s+to\b|"
     rf"add\s+(?:wording\s+that|a\s+sentence)\b|"

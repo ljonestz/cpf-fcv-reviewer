@@ -29,7 +29,7 @@ WORLDBANK_INDICATORS = (
 )
 
 
-class InstitutionalClientError(ValueError):
+class InstitutionalClientError(RuntimeError):
     """Safe, provider-neutral error for bounded institutional HTTP requests."""
 
 
@@ -107,7 +107,9 @@ class BoundedInstitutionalClient:
                 body = _read_bounded_body(response, self.max_bytes)
         except InstitutionalClientError:
             raise
-        except (httpx.HTTPError, TimeoutError, OSError):
+        except (httpx.TimeoutException, TimeoutError):
+            raise TimeoutError("Institutional request timed out.") from None
+        except (httpx.HTTPError, OSError):
             raise InstitutionalClientError("Institutional request failed.") from None
 
         try:
@@ -122,7 +124,7 @@ class BoundedInstitutionalClient:
             raise ValueError("Institutional deadline must be finite.")
         remaining = float(deadline) - self.monotonic()
         if remaining <= 0:
-            raise InstitutionalClientError("Institutional request deadline expired.")
+            raise TimeoutError("Institutional request deadline expired.")
         seconds = min(self.timeout_seconds, remaining)
         return httpx.Timeout(connect=seconds, read=seconds, write=seconds, pool=seconds)
 
@@ -146,6 +148,8 @@ class WorldBankAdapter:
             return ()
 
         claims: list[CurrentContextClaim] = []
+        indicator_failures: list[BaseException] = []
+        successful_indicator_queries = 0
         for indicator_id, label, context_kind in WORLDBANK_INDICATORS:
             try:
                 payload = _get_json(
@@ -154,18 +158,27 @@ class WorldBankAdapter:
                     params={"format": "json", "per_page": "5"},
                     deadline=deadline,
                 )
-                claims.extend(
-                    _world_bank_claims(
-                        payload,
-                        request=request,
-                        iso3=iso3,
-                        indicator_id=indicator_id,
-                        fallback_label=label,
-                        context_kind=context_kind,
-                    )
+                indicator_claims = _world_bank_claims(
+                    payload,
+                    request=request,
+                    iso3=iso3,
+                    indicator_id=indicator_id,
+                    fallback_label=label,
+                    context_kind=context_kind,
                 )
-            except (InstitutionalClientError, _InstitutionalResponseShapeError):
+            except (
+                InstitutionalClientError,
+                TimeoutError,
+                _InstitutionalResponseShapeError,
+            ) as exc:
+                indicator_failures.append(exc)
                 continue
+            successful_indicator_queries += 1
+            claims.extend(indicator_claims)
+        if indicator_failures and successful_indicator_queries == 0:
+            if all(isinstance(error, TimeoutError) for error in indicator_failures):
+                raise TimeoutError("World Bank indicator queries timed out.")
+            raise InstitutionalClientError("World Bank indicator queries failed.")
         return tuple(claims)
 
     def _resolve_country(self, country: str, *, deadline: float | None = None) -> str | None:
@@ -301,15 +314,33 @@ class CuratedResearchGateway:
                 raise ValueError("Recovery timeout must be a finite positive number.")
             deadline = self.client.monotonic() + float(timeout_seconds)
         candidates: list[CurrentContextClaim] = []
-        for adapter in (self.world_bank, self.reliefweb):
+        adapters = [self.world_bank]
+        if self.reliefweb.app_name:
+            adapters.append(self.reliefweb)
+        adapter_failures: list[BaseException] = []
+        for adapter in adapters:
             try:
                 if deadline is None:
                     claims = adapter.search(request)
                 else:
                     claims = adapter.search(request, deadline=deadline)
-            except (InstitutionalClientError, _InstitutionalResponseShapeError):
+            except (
+                InstitutionalClientError,
+                TimeoutError,
+                _InstitutionalResponseShapeError,
+            ) as exc:
+                adapter_failures.append(exc)
                 continue
             candidates.extend(claims)
+
+        if (
+            not candidates
+            and adapter_failures
+            and len(adapter_failures) == len(adapters)
+        ):
+            if all(isinstance(error, TimeoutError) for error in adapter_failures):
+                raise TimeoutError("Curated institutional research timed out.")
+            raise InstitutionalClientError("Curated institutional research failed.")
 
         by_id: dict[str, CurrentContextClaim] = {}
         by_source_url: dict[str, CurrentContextClaim] = {}
@@ -420,7 +451,9 @@ def _read_bounded_body(response: Any, max_bytes: int) -> bytes:
             body.extend(chunk)
     except InstitutionalClientError:
         raise
-    except (httpx.HTTPError, TimeoutError, OSError):
+    except (httpx.TimeoutException, TimeoutError):
+        raise TimeoutError("Institutional request timed out.") from None
+    except (httpx.HTTPError, OSError):
         raise InstitutionalClientError("Institutional request failed.") from None
     return bytes(body)
 
