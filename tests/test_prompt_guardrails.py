@@ -126,6 +126,35 @@ def test_review_prompt_requires_integrated_priority_led_contract():
         assert phrase in prompt
 
 
+def test_review_prompt_requires_fcv_materiality_and_explicit_causal_links():
+    prompt = normalize_whitespace(load_prompt("review"))
+
+    for phrase in (
+        "Every selected priority area must explicitly explain its evidenced "
+        "direct or indirect FCV causal pathway",
+        "State the direct or indirect FCV link explicitly",
+        "Make indirect FCV links clear rather than implied",
+        "Rank priority_areas primarily by FCV materiality, then evidence strength, "
+        "then stage-appropriate actionability",
+        "existing commitments and architecture",
+        "new binding commitments, conditionality, or new institutional/delivery architecture",
+    ):
+        assert phrase in prompt
+
+
+def test_repair_prompt_mirrors_only_order_and_finalization_repairs():
+    prompt = normalize_whitespace(load_prompt("repair"))
+
+    for phrase in (
+        "repair the complete revision_summary ID tuple to exactly match the "
+        "priority_area ID tuple",
+        "narrowly revise only the affected recommended_action",
+        "stay within existing commitments and architecture",
+        "Do not alter descriptive/discussion text or ordinary fine-tuning",
+    ):
+        assert phrase in prompt
+
+
 def test_repair_prompt_gives_precise_stage_length_remediation():
     repair_prompt = normalize_whitespace(load_prompt("repair"))
 

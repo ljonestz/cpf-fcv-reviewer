@@ -332,6 +332,24 @@ def test_duplicate_priority_ids_and_summary_linkage_are_rejected_with_repairable
     )
 
 
+def test_mismatched_priority_order_emits_one_repairable_unknown_priority_area_issue():
+    reviewed = result(
+        summaries=(
+            RevisionSummaryItem(priority_area_id="pa-2", title="Second issue"),
+            RevisionSummaryItem(priority_area_id="pa-1", title="First issue"),
+        ),
+        areas=(area(), area(area_id="pa-2")),
+    )
+
+    issues = validate_review(reviewed, evidence_ids={"ev-1"}, prohibited_terms=set())
+
+    assert [
+        issue.message
+        for issue in issues
+        if issue.code == "unknown_priority_area"
+    ] == ["revision_summary priority_area_id order must exactly match priority_areas order."]
+
+
 def test_priority_area_unknown_evidence_is_rejected():
     reviewed = result(areas=(area(evidence_ids=("ev-2", "ev-1")),))
 
@@ -755,6 +773,43 @@ def test_finalization_rejects_wholesale_redesign():
     )
 
     assert issues[0].code == "stage_overreach"
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "Commit the WBG to a new delivery unit.",
+        "Make financing conditional on quarterly reporting.",
+        "Establish a new coordination unit.",
+    ],
+)
+def test_finalization_rejects_imperative_binding_or_architecture_overreach(action):
+    issues = validate_stage_behavior(
+        "finalization",
+        action,
+        RecommendationScale.FINE_TUNING,
+    )
+
+    assert [issue.code for issue in issues] == ["stage_overreach"]
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "The CPF discusses establishing a new delivery unit.",
+        "Discuss whether financing should be conditional on results.",
+        "Make financing available on a targeted basis.",
+        "Clarify and fine-tune the existing wording.",
+    ],
+)
+def test_finalization_allows_discussion_and_ordinary_fine_tuning(action):
+    issues = validate_stage_behavior(
+        "finalization",
+        action,
+        RecommendationScale.FINE_TUNING,
+    )
+
+    assert "stage_overreach" not in {issue.code for issue in issues}
 
 
 def test_repair_can_receive_exact_forbidden_phrases_without_source_content():

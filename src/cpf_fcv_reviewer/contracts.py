@@ -308,7 +308,12 @@ class PriorityArea(FrozenModel):
     priority_area_id: ReviewNarrative
     heading: ReviewNarrative
     assessment: ReviewNarrative
-    why_it_matters: ReviewNarrative
+    why_it_matters: ReviewNarrative = Field(
+        description=(
+            "Must explain an evidenced direct or indirect FCV causal pathway "
+            "for why this priority matters."
+        )
+    )
     recommended_action: ReviewNarrative
     target_locator: EvidenceLocator
     recommendation_scale: RecommendationScale

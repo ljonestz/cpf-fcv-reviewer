@@ -297,6 +297,15 @@ def test_priority_area_keeps_assessment_action_target_and_evidence_together():
     assert area.target_locator.document_title == "CPF.docx"
 
 
+def test_priority_area_why_it_matters_describes_an_evidenced_fcv_causal_pathway():
+    description = PriorityArea.model_json_schema()["properties"]["why_it_matters"][
+        "description"
+    ]
+
+    assert "evidenced" in description
+    assert "direct or indirect FCV causal pathway" in description
+
+
 @pytest.mark.parametrize(
     "field",
     ["priority_area_id", "heading", "assessment", "why_it_matters", "recommended_action"],

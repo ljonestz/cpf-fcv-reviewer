@@ -119,11 +119,21 @@ immediate insertion or response language within max_immediate_insertion_words.
 For stage_length_overreach, rewrite only the affected priority area's
 recommended_action. Count whitespace-separated words and target five words below
 max_immediate_insertion_words while preserving the action, target, and evidence links.
+For a finalization stage_overreach caused by an imperative recommendation
+introducing binding commitments, conditionality, or new institutional/delivery
+architecture, narrowly revise only the affected recommended_action to stay within
+existing commitments and architecture. Do not alter descriptive/discussion text or
+ordinary fine-tuning.
+
 Apply detail_profile.priority_area_range as a ceiling; use fewer priority areas
 when evidence is thin and do not add areas to fill a range. Select only material
 strategy, implementation, risk, or results issues. Preserve the primary
 document as the principal lens, with package evidence corroborating or
 qualifying it and contextual evidence testing the framing.
+
+For an unknown_priority_area issue caused by mismatched ordering, repair the complete
+revision_summary ID tuple to exactly match the priority_area ID tuple. Preserve titles
+and area content; do not otherwise reorder or invent items.
 
 Preserve every valid priority-area evidence ID and target locator. Do not create
 new evidence to make a repair pass; preserve revision_summary priority_area_id

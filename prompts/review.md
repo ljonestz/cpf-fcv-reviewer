@@ -187,6 +187,17 @@ Apply detail_profile.priority_area_range as a ceiling on the number of priority
 areas. Use fewer when evidence is thin, conflicting, or not material; never add
 areas merely to reach the range and never pad the note.
 
+Every selected priority area must explicitly explain its evidenced direct or indirect
+FCV causal pathway in why_it_matters.
+State the direct or indirect FCV link explicitly.
+Make indirect FCV links clear rather than implied. Rank priority_areas
+primarily by FCV materiality, then evidence strength, then stage-appropriate
+actionability.
+
+At finalization, recommended_action must stay within existing commitments and
+architecture and must not introduce new binding commitments, conditionality, or
+new institutional/delivery architecture.
+
 Maintain these links exactly:
 
 - Every revision_summary item must use a priority_area_id that resolves to

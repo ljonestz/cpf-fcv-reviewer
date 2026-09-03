@@ -45,6 +45,25 @@ FINALIZATION_OVERREACH_TERMS = (
     "rebuild the entire",
     "redesign the whole",
 )
+FINALIZATION_BINDING_OVERREACH_PATTERN = re.compile(
+    r"^\s*(?:"
+    r"(?:commit|bind)(?:\s+(?:the\s+)?(?:wbg|world bank|bank|government|"
+    r"implementing partners?))?\s+to\b|"
+    r"(?:require|mandate)\s+(?:the\s+)?(?:wbg|world bank|bank|government|"
+    r"implementing partners?)\s+to\b|"
+    r"make\s+.*\b(?:financing|funding|disbursement|support)\b"
+    r".*\bconditional\b|"
+    r"condition\s+.*\b(?:financing|funding|disbursement|support)\b"
+    r".*\bon\b|"
+    r"tie\s+(?:financing|funding|disbursement)\s+to\b|"
+    r"(?:establish|create|set\s+up|launch)\s+(?:a|an|the)\s+new\s+"
+    r"(?:delivery\s+(?:unit|mechanism|architecture|platform)|"
+    r"coordination\s+(?:unit|mechanism|body)|unit|office|fund|facility|"
+    r"mechanism|platform|institution|architecture|body)\b"
+    r")",
+    re.IGNORECASE,
+)
+
 SUMMARY_TITLE_LOCATOR_PATTERN = re.compile(
     r"\b(?:pages?|p\.?|pp\.?|sections?|paras?|paragraphs?)\s*"
     r"(?:no\.?\s*)?\d+(?:\.\d+)*(?:\s*[-–]\s*\d+(?:\.\d+)*)?\b",
@@ -315,6 +334,21 @@ def validate_review(
             )
         )
 
+    summary_priority_area_ids = tuple(
+        summary.priority_area_id for summary in result.revision_summary
+    )
+    priority_area_ids = tuple(
+        priority_area.priority_area_id for priority_area in result.priority_areas
+    )
+    if summary_priority_area_ids != priority_area_ids:
+        issues.append(
+            ValidationIssue(
+                "unknown_priority_area",
+                "revision_summary priority_area_id order must exactly match "
+                "priority_areas order.",
+            )
+        )
+
     for summary in result.revision_summary:
         if priority_area_counts.get(summary.priority_area_id, 0) != 1:
             issues.append(
@@ -528,6 +562,15 @@ def validate_stage_behavior(
             ValidationIssue(
                 "stage_overreach",
                 "Finalization permits targeted edits, not wholesale redesign.",
+            )
+        )
+    if review_stage == "finalization" and FINALIZATION_BINDING_OVERREACH_PATTERN.search(
+        action
+    ):
+        issues.append(
+            ValidationIssue(
+                "stage_overreach",
+                "Finalization actions must stay within existing commitments and architecture.",
             )
         )
     return tuple(issues)
