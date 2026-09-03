@@ -1,5 +1,19 @@
 # Project status
 
+## 2026-09-03 paid-run reliability release (`3ab6020`)
+
+- `main` and Render now include the minimal cost-control change: one default paid
+  recent-news attempt, followed by the existing curated institutional recovery path.
+- Final repair normalization now retains model-cleaned prohibited-policy narrative text
+  while preserving application-owned assessment structure and evidence references.
+- Verification passed: 1,252 provider-free tests; 147 final targeted/smoke tests; complete
+  external browser smoke with eight screenshots, restored two-turn assistant history, and
+  a valid DOCX; deployed health reports exact release `3ab6020`.
+- One explicitly authorized paid Guinea run remains the final controlled-pilot gate. It
+  must assess recent-news recovery, final repair, FCV linkage and prioritization of
+  recommendations, and export quality. No paid run was made for this release.
+- See `docs/validation/2026-09-03-paid-run-reliability-3ab6020.md`.
+
 Updated 2026-09-03. Controlled pilot hardening through post-review code commit
 `1fd53d7` is the latest provider-free verified local head and supersedes `9baae0c` for
 current local pilot acceptance. It closes five finalization phrasing bypasses and ensures
