@@ -889,3 +889,47 @@ def test_gateway_uses_crisis_group_without_reliefweb_appname():
     )
 
     assert [claim.publisher for claim in claims] == ["International Crisis Group"]
+
+
+def test_crisis_group_rejects_wrong_content_type_and_malformed_xml():
+    wrong_type = CrisisGroupAdapter(
+        BoundedInstitutionalClient(client=StubClient(lambda *_args: json_response({})))
+    )
+    with pytest.raises(InstitutionalClientError):
+        wrong_type.search(
+            ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC)
+        )
+
+    malformed = CrisisGroupAdapter(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: rss_response("<rss>"))
+        )
+    )
+    with pytest.raises(ValueError, match="response shape"):
+        malformed.search(
+            ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC)
+        )
+
+
+def test_gateway_keeps_crisis_group_claim_when_reliefweb_is_unavailable():
+    payload = """<rss version="2.0"><channel><item>
+      <title>Guinea political transition update</title>
+      <link>https://www.crisisgroup.org/africa/guinea/transition</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+    </item></channel></rss>"""
+
+    def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
+        if url == "https://www.crisisgroup.org/rss/23":
+            return rss_response(payload)
+        return StubResponse(status_code=403)
+
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=StubClient(handler)),
+        reliefweb_app_name="unapproved-app",
+    )
+
+    claims = gateway.search(
+        ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC)
+    )
+
+    assert [claim.publisher for claim in claims] == ["International Crisis Group"]
