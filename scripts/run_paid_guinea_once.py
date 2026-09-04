@@ -16,10 +16,10 @@ from playwright.sync_api import sync_playwright
 
 SITE = "https://cpf-fcv-review-prototype.onrender.com/"
 FCV_PATTERN = re.compile(
-    r"\\b(?:conflicts?|violence|violent|political|governance|government|elections?|coup|"
+    r"\b(?:conflicts?|violence|violent|political|governance|government|elections?|coup|"
     r"humanitarian|displacement|displaced|refugees?|protection|peace|peacebuilding|"
-    r"insecurity)\\b|\\bland (?:conflict|dispute|tenure)\\b|\\bsocial cohesion\\b|"
-    r"\\bsecurity (?:update|situation|incident|threat|forces?|sector|crisis|risk)\\b",
+    r"insecurity)\b|\bland (?:conflict|dispute|tenure)\b|\bsocial cohesion\b|"
+    r"\bsecurity (?:update|situation|incident|threat|forces?|sector|crisis|risk)\b",
     re.IGNORECASE,
 )
 THEMES = {
