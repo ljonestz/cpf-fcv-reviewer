@@ -33,4 +33,4 @@ services:
       - key: REGISTRY_BUNDLE_SHA256
         value: a849607cafa341ab98da05016d503665eb95a3da2ad039e0f06ae5fdb5dd7782
       - key: RELIEFWEB_APP_NAME
-        value: cpf-fcv-reviewer
+        sync: false
