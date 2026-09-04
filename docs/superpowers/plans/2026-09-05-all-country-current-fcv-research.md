@@ -1,6 +1,6 @@
 # All-Country Current FCV Research Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (\`- [ ]\`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the existing bounded current-context stage work consistently for every recognized country, favor trusted news, UN, humanitarian, and FCV think-tank reporting, and fail honestly to document-led review when no qualifying recent source is established.
 
@@ -698,7 +698,7 @@ Expected: only planned files; no secrets, raw documents, raw model output, asses
 
 - [ ] **Step 1: Write the record from observed output**
 
-Use this structure and replace bracketed values only with actual results:
+Use this structure. Convert the two instruction phrases in the Results list into the exact observed values before creating the record:
 
 ~~~markdown
 # All-country current FCV research provider-free validation - 2026-09-05
@@ -712,11 +712,11 @@ browser workflow. No assessment or provider-backed assistant call was made.
 
 ## Results
 
-- Focused country/research suite: [observed count] passed.
-- Complete provider-free suite: [observed count] passed.
+- Focused country/research suite: copy the exact passed count printed by Task 7, Step 1.
+- Complete provider-free suite: copy the exact passed count printed by Task 7, Step 3.
 - Python compilation, JavaScript syntax, and diff checks: passed.
 - External smoke runner: BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1.
-- Verified code commit: [full commit SHA].
+- Verified code commit: copy the full output of git rev-parse HEAD after the code commits.
 
 ## Operational gate
 
