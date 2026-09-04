@@ -11,6 +11,7 @@ import pytest
 
 from cpf_fcv_reviewer.curated_research import (
     BoundedInstitutionalClient,
+    CrisisGroupAdapter,
     CuratedResearchGateway,
     InstitutionalClientError,
     WORLDBANK_INDICATORS,
@@ -813,3 +814,78 @@ def test_gateway_does_not_swallow_programming_errors():
 
     with pytest.raises(RuntimeError, match="programming defect"):
         gateway.search(request())
+
+
+def rss_response(value: str) -> StubResponse:
+    return StubResponse(
+        headers={"content-type": "application/rss+xml; charset=utf-8"},
+        chunks=(value.encode("utf-8"),),
+    )
+
+
+def test_crisis_group_country_feed_returns_recent_dated_fcv_claim():
+    payload = """<?xml version="1.0" encoding="utf-8"?>
+    <rss version="2.0"><channel><item>
+      <title>Guinea's Call to Elections Exposes Military Bid to Cling to Power</title>
+      <link>https://www.crisisgroup.org/alr/africa/guinea/elections</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <guid>26736</guid>
+    </item></channel></rss>"""
+    transport = StubClient(lambda *_args: rss_response(payload))
+    adapter = CrisisGroupAdapter(BoundedInstitutionalClient(client=transport))
+
+    claims = adapter.search(
+        ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC)
+    )
+
+    assert len(claims) == 1
+    assert claims[0].publisher == "International Crisis Group"
+    assert claims[0].source_date == date(2025, 10, 3)
+    assert claims[0].source_url == (
+        "https://www.crisisgroup.org/alr/africa/guinea/elections"
+    )
+    assert transport.calls[0][1] == "https://www.crisisgroup.org/rss/23"
+
+
+def test_crisis_group_rejects_unknown_country_old_generic_and_malformed_items():
+    payload = """<rss version="2.0"><channel>
+      <item><title>Guinea economic outlook</title>
+        <link>https://www.crisisgroup.org/africa/guinea/outlook</link>
+        <pubDate>Friday, October 3, 2025 - 12:26</pubDate></item>
+      <item><title>Guinea conflict update</title>
+        <link>https://www.crisisgroup.org/africa/guinea/old</link>
+        <pubDate>Friday, October 3, 2020 - 12:26</pubDate></item>
+      <item><title>Guinea violence update</title>
+        <link>https://evil.example/guinea</link>
+        <pubDate>Friday, October 3, 2025 - 12:26</pubDate></item>
+      <item><title>Guinea political update</title>
+        <link>https://www.crisisgroup.org/africa/guinea/no-date</link></item>
+    </channel></rss>"""
+    transport = StubClient(lambda *_args: rss_response(payload))
+    adapter = CrisisGroupAdapter(BoundedInstitutionalClient(client=transport))
+
+    assert adapter.search(
+        ResearchRequest("Unknownland", date(2026, 9, 4), ResearchMode.HOLISTIC)
+    ) == ()
+    assert transport.calls == []
+    assert adapter.search(
+        ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC)
+    ) == ()
+
+
+def test_gateway_uses_crisis_group_without_reliefweb_appname():
+    payload = """<rss version="2.0"><channel><item>
+      <title>Guinea political transition update</title>
+      <link>https://www.crisisgroup.org/africa/guinea/transition</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+    </item></channel></rss>"""
+    transport = StubClient(lambda *_args: rss_response(payload))
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=transport), reliefweb_app_name=""
+    )
+
+    claims = gateway.search(
+        ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC)
+    )
+
+    assert [claim.publisher for claim in claims] == ["International Crisis Group"]
