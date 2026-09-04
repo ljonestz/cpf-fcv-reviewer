@@ -8,20 +8,19 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest DEPLOYED provider-free baseline: deployed code commit `a52505c` (1,177 tests).
-  This identifies the last deployed baseline, not the latest local implementation; no new
-  deployment is claimed here. Review-schema failure after one retry uses
-  a dedicated safe code with bounded, content-free attempt diagnostics. Provider-visible
-  schema and prompt guidance mirror the locally enforced narrative, assessment,
-  evidence-ID, and locator requirements. The implementation keeps the existing
-  architecture and dependencies and made no paid API call during implementation validation.
-- Last verified deployment: `a52505c74d72bc08d4f973436f8b8204c76b1d0b` on
-  2026-09-03. Render reported the exact commit live and `/health` returned `ok`. Its one
-  authorized Guinea assessment ended in `run_complete`; the result contract, 58 evidence
-  records, evidence references, metadata, HTML result, and 47,218-byte DOCX structure
-  passed validation. Current research was unavailable after bounded attempts, so the
-  result truthfully uses the `document_led` tier. Do not rerun the unchanged deployment.
-  This is a current-evidence limitation, not a document-extraction or schema defect.
+- Latest verified deployment:
+  `b40ee4e38366ecb47453fe299d888946657707b3` on 2026-09-04. Render reports
+  that exact commit live; `/health` returns `ok` and the root page returns HTTP 200.
+- Current-country recovery prioritizes substantively FCV-relevant public reporting.
+  Primary research permits named UN/humanitarian, Reuters/AP/BBC, and think-tank sources.
+  Deterministic Guinea recovery uses a bounded official International Crisis Group feed.
+  World Bank macro/demographic indicators are not used as current-FCV evidence.
+- ReliefWeb recovery is optional and requires a pre-approved application name. The
+  previous arbitrary default was removed after its HTTP 403 was confirmed.
+- Exactly one authorized paid Guinea assessment was completed on the preceding release.
+  It produced a valid document-led review and DOCX without current-context or indicator
+  evidence; no provider-backed assistant call or second assessment was made. The new
+  think-tank recovery then passed complete provider-free validation.
 
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core

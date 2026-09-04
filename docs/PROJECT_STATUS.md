@@ -1,5 +1,34 @@
 # Project status
 
+## 2026-09-04 current-FCV research release (`b40ee4e`)
+
+- Render reports exact commit `b40ee4e38366ecb47453fe299d888946657707b3` live;
+  `/health` is `ok` and the root page returns HTTP 200.
+- Primary research now recognizes the approved UN/humanitarian, Reuters/AP/BBC, and
+  named think-tank sources while retaining strict grounded URLs and explicit dates.
+- Curated recovery no longer uses World Bank macro/demographic indicators. Guinea has a
+  bounded, credential-free International Crisis Group country feed; one recent
+  FCV-relevant item is enough for the truthful reduced tier.
+- ReliefWeb has required pre-approved application names since 1 November 2025. The
+  unusable arbitrary default was removed; ReliefWeb remains optional until an approved
+  value is supplied.
+- Exactly one authorized paid Guinea assessment ran on the preceding deployed commit
+  `0b5315c`. It completed with 60 evidence records, 5 RRA rows, 4 FCV Strategy rows,
+  3 priorities with explicit FCV pathways, one repair, and a valid 46,228-byte DOCX.
+  It correctly remained document-led: no current claims were accepted, no indicator API
+  evidence appeared, and no unrelated present-day claim received a current citation.
+  No paid assistant call or retry was made.
+- The follow-up passed 343 focused tests, all 1,263 provider-free tests, syntax/diff
+  checks, independent review, and the complete external browser smoke including upload,
+  both result views, two assistant turns, four-message refresh restoration, mobile, and
+  DOCX.
+- The new Crisis Group deterministic mapping is Guinea-specific and was verified
+  provider-free after the paid cycle. No second paid assessment was submitted.
+- The public prototype still reports volatile storage. It remains a non-operational test
+  service and must not receive confidential material.
+
+See `docs/validation/2026-09-03-current-fcv-research-hardening.md`.
+
 ## 2026-09-03 paid-run reliability release (`3ab6020`)
 
 - `main` and Render now include the minimal cost-control change: one default paid
