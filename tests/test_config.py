@@ -16,7 +16,7 @@ def test_research_settings_have_bounded_defaults():
     assert config["RESEARCH_RETRY_BACKOFF_SECONDS"] == 1.0
     assert config["RESEARCH_RECOVERY_TIMEOUT_SECONDS"] == 8.0
     assert config["RESEARCH_RECOVERY_MAX_BYTES"] == 500000
-    assert config["RELIEFWEB_APP_NAME"] == "cpf-fcv-reviewer"
+    assert config["RELIEFWEB_APP_NAME"] == ""
 
 
 def test_research_settings_accept_overrides(monkeypatch):
