@@ -19,8 +19,12 @@ from .public_research import CurrentContextClaim
 from .research_controller import ResearchRequest
 
 
-_ALLOWED_HOSTS = frozenset(\n    {"api.worldbank.org", "api.reliefweb.int", "www.crisisgroup.org"}\n)
-_RELIEFWEB_RESULT_HOSTS = frozenset({"reliefweb.int", "api.reliefweb.int"})\n_CRISIS_GROUP_FEEDS = {"guinea": "https://www.crisisgroup.org/rss/23"}\n_FCV_TITLE_PATTERN = re.compile(
+_ALLOWED_HOSTS = frozenset(
+    {"api.worldbank.org", "api.reliefweb.int", "www.crisisgroup.org"}
+)
+_RELIEFWEB_RESULT_HOSTS = frozenset({"reliefweb.int", "api.reliefweb.int"})
+_CRISIS_GROUP_FEEDS = {"guinea": "https://www.crisisgroup.org/rss/23"}
+_FCV_TITLE_PATTERN = re.compile(
     r"\b(?:conflicts?|violence|violent|political|governance|government|elections?|coup|"
     r"humanitarian|displacement|displaced|refugees?|protection|peace|peacebuilding|"
     r"insecurity)\b|\bland (?:conflict|dispute|tenure)\b|\bsocial cohesion\b|"
@@ -382,7 +386,9 @@ class CuratedResearchGateway:
         reliefweb_app_name: str | None = None,
     ) -> None:
         self.client = client
-        self.crisis_group = CrisisGroupAdapter(client)\n        self.reliefweb = ReliefWebAdapter(client, reliefweb_app_name)\n
+        self.crisis_group = CrisisGroupAdapter(client)
+        self.reliefweb = ReliefWebAdapter(client, reliefweb_app_name)
+
     def search(
         self,
         request: ResearchRequest,
@@ -400,7 +406,14 @@ class CuratedResearchGateway:
                 raise ValueError("Recovery timeout must be a finite positive number.")
             deadline = self.client.monotonic() + float(timeout_seconds)
         candidates: list[CurrentContextClaim] = []
-        adapters = (\n            [self.crisis_group]\n            if self.crisis_group.supports(request.country)\n            else []\n        )\n        if self.reliefweb.app_name:\n            adapters.append(self.reliefweb)\n        adapter_failures: list[BaseException] = []
+        adapters = (
+            [self.crisis_group]
+            if self.crisis_group.supports(request.country)
+            else []
+        )
+        if self.reliefweb.app_name:
+            adapters.append(self.reliefweb)
+        adapter_failures: list[BaseException] = []
         for adapter in adapters:
             try:
                 if deadline is None:
