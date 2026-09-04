@@ -11,6 +11,7 @@ from threading import Lock
 from time import monotonic as default_monotonic
 from typing import Any
 from urllib.parse import urlencode, urlsplit
+from xml.etree import ElementTree
 
 import httpx
 
@@ -18,8 +19,11 @@ from .public_research import CurrentContextClaim
 from .research_controller import ResearchRequest
 
 
-_ALLOWED_HOSTS = frozenset({"api.worldbank.org", "api.reliefweb.int"})
+_ALLOWED_HOSTS = frozenset(
+    {"api.worldbank.org", "api.reliefweb.int", "www.crisisgroup.org"}
+)
 _RELIEFWEB_RESULT_HOSTS = frozenset({"reliefweb.int", "api.reliefweb.int"})
+_CRISIS_GROUP_FEEDS = {"guinea": "https://www.crisisgroup.org/rss/23"}
 _FCV_TITLE_PATTERN = re.compile(
     r"\b(?:conflicts?|violence|violent|political|governance|government|elections?|coup|"
     r"humanitarian|displacement|displaced|refugees?|protection|peace|peacebuilding|"
@@ -124,6 +128,46 @@ class BoundedInstitutionalClient:
             return json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError):
             raise InstitutionalClientError("Institutional response was not valid JSON.") from None
+
+    def get_bytes(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, object] | Sequence[tuple[str, object]] | None = None,
+        deadline: float | None = None,
+        content_types: frozenset[str],
+    ) -> bytes:
+        _validate_institutional_url(url)
+        timeout = self._timeout_for(deadline)
+        try:
+            with self._client.stream(
+                "GET",
+                url,
+                params=params,
+                timeout=timeout,
+                follow_redirects=False,
+            ) as response:
+                if not 200 <= response.status_code < 300:
+                    raise InstitutionalClientError(
+                        "Institutional response status was not acceptable."
+                    )
+                content_type = str(
+                    _header(response.headers, "content-type") or ""
+                ).split(";", 1)[0]
+                if content_type.strip().casefold() not in content_types:
+                    raise InstitutionalClientError(
+                        "Institutional response content type was not acceptable."
+                    )
+                _check_content_length(
+                    _header(response.headers, "content-length"), self.max_bytes
+                )
+                return _read_bounded_body(response, self.max_bytes)
+        except InstitutionalClientError:
+            raise
+        except (httpx.TimeoutException, TimeoutError):
+            raise TimeoutError("Institutional request timed out.") from None
+        except (httpx.HTTPError, OSError):
+            raise InstitutionalClientError("Institutional request failed.") from None
 
     def _timeout_for(self, deadline: float | None) -> httpx.Timeout:
         if deadline is None:
@@ -241,6 +285,46 @@ class WorldBankAdapter:
         return mapping
 
 
+class CrisisGroupAdapter:
+    def __init__(self, client: BoundedInstitutionalClient) -> None:
+        self.client = client
+
+    def supports(self, country: str) -> bool:
+        return _country_key(country) in _CRISIS_GROUP_FEEDS
+
+    def search(
+        self, request: ResearchRequest, *, deadline: float | None = None
+    ) -> tuple[CurrentContextClaim, ...]:
+        feed_url = _CRISIS_GROUP_FEEDS.get(_country_key(request.country))
+        if feed_url is None:
+            return ()
+        payload = self.client.get_bytes(
+            feed_url,
+            deadline=deadline,
+            content_types=frozenset(
+                {"application/rss+xml", "application/xml", "text/xml"}
+            ),
+        )
+        try:
+            root = ElementTree.fromstring(payload)
+        except ElementTree.ParseError:
+            raise _InstitutionalResponseShapeError(
+                "Institutional response shape was invalid."
+            ) from None
+
+        start_date = _subtract_years(request.review_date, 2)
+        claims: list[CurrentContextClaim] = []
+        for item in root.findall("./channel/item"):
+            claim = _crisis_group_claim(
+                item,
+                start_date=start_date,
+                end_date=request.review_date,
+            )
+            if claim is not None:
+                claims.append(claim)
+        return tuple(claims)
+
+
 class ReliefWebAdapter:
     def __init__(self, client: BoundedInstitutionalClient, app_name: str | None) -> None:
         self.client = client
@@ -302,6 +386,7 @@ class CuratedResearchGateway:
         reliefweb_app_name: str | None = None,
     ) -> None:
         self.client = client
+        self.crisis_group = CrisisGroupAdapter(client)
         self.reliefweb = ReliefWebAdapter(client, reliefweb_app_name)
 
     def search(
@@ -321,7 +406,13 @@ class CuratedResearchGateway:
                 raise ValueError("Recovery timeout must be a finite positive number.")
             deadline = self.client.monotonic() + float(timeout_seconds)
         candidates: list[CurrentContextClaim] = []
-        adapters = [self.reliefweb] if self.reliefweb.app_name else []
+        adapters = (
+            [self.crisis_group]
+            if self.crisis_group.supports(request.country)
+            else []
+        )
+        if self.reliefweb.app_name:
+            adapters.append(self.reliefweb)
         adapter_failures: list[BaseException] = []
         for adapter in adapters:
             try:
@@ -556,6 +647,72 @@ def _reliefweb_claim(
         context_kind="current_development",
         relationship="establishes",
         licensed_data_required=False,
+    )
+
+
+def _crisis_group_claim(
+    item: ElementTree.Element,
+    *,
+    start_date: date,
+    end_date: date,
+) -> CurrentContextClaim | None:
+    title = _nonblank_string(item.findtext("title"))
+    source_url = _nonblank_string(item.findtext("link"))
+    source_date = _crisis_group_date(item.findtext("pubDate"))
+    if (
+        title is None
+        or _FCV_TITLE_PATTERN.search(title) is None
+        or source_url is None
+        or not _is_crisis_group_result_url(source_url)
+        or source_date is None
+        or not start_date <= source_date <= end_date
+    ):
+        return None
+
+    digest = hashlib.sha256(
+        f"{source_url}|{source_date.isoformat()}".encode()
+    ).hexdigest()
+    return CurrentContextClaim(
+        claim_id=f"crisisgroup:{digest}",
+        text=f"{title}.",
+        publisher="International Crisis Group",
+        source_title=title,
+        source_url=source_url,
+        source_date=source_date,
+        source_type="think tank analysis",
+        relevance="Country-specific conflict and political analysis.",
+        context_kind="current_development",
+        relationship="establishes",
+        licensed_data_required=False,
+    )
+
+
+def _crisis_group_date(value: object) -> date | None:
+    text = _nonblank_string(value)
+    if text is None:
+        return None
+    try:
+        return datetime.strptime(text, "%A, %B %d, %Y - %H:%M").date()
+    except ValueError:
+        return None
+
+
+def _is_crisis_group_result_url(url: str) -> bool:
+    if _has_control_character(url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return False
+    return bool(
+        parsed.scheme.casefold() == "https"
+        and hostname == "www.crisisgroup.org"
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.fragment
+        and port in (None, 443)
     )
 
 

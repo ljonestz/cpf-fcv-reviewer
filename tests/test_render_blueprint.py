@@ -30,4 +30,4 @@ def test_render_blueprint_pins_current_strategy_registry_bundle():
 def test_render_blueprint_enables_named_reliefweb_recovery():
     blueprint = Path("render.yaml").read_text(encoding="utf-8")
 
-    assert "key: RELIEFWEB_APP_NAME\n        value: cpf-fcv-reviewer" in blueprint
+    assert "key: RELIEFWEB_APP_NAME\n        sync: false" in blueprint
