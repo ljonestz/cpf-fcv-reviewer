@@ -1222,7 +1222,7 @@ def test_web_search_error_content_fails_safely_without_logging(caplog, monkeypat
     monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
     caplog.set_level("DEBUG")
 
-    with pytest.raises(ValueError, match="no cited synthesis"):
+    with pytest.raises(ConnectionError, match="provider was unavailable"):
         public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
     assert not parse_called
@@ -2173,3 +2173,234 @@ def test_country_scope_rejects_longer_different_country_name():
         excerpt="Violence increased in Guinea-Bissau.",
     )
     assert not public_research._source_mentions_country(source, "Guinea")
+
+PUBLIC_DIAGNOSTIC_KEYS = {
+    "source_candidates",
+    "source_linked_excerpts",
+    "missing_publication_date",
+    "untrusted_host_publisher",
+    "country_mismatch",
+    "normalization_failure",
+}
+
+
+def _diagnostic_gateway(monkeypatch, response, parsed_output, *, metadata_client=None):
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return response
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            return SimpleNamespace(parsed_output=parsed_output)
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    return public_research.AnthropicPublicResearchGateway(
+        "key", "model", metadata_client=metadata_client
+    )
+
+
+def test_gateway_exposes_fixed_safe_diagnostics_for_accepted_source(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/guinea-update-2026-08-30/"
+    quote = "Guinea political violence disrupted local services."
+    normalized = _claim(
+        publisher="Reuters",
+        source_url=source_url,
+        source_title="Guinea update",
+        source_date=date(2026, 8, 30),
+        text=quote,
+        supporting_quote=quote,
+        publication_date_basis="canonical_url",
+    )
+    gateway = _diagnostic_gateway(
+        monkeypatch,
+        _cited_response(
+            source_url=source_url,
+            source_title="Guinea update",
+            page_age="2026-08-30",
+            cited_text=quote,
+        ),
+        public_research.ResearchClaimBatch(claims=(normalized,)),
+    )
+
+    claims = gateway.search("country: Guinea")
+
+    assert len(claims) == 1
+    assert claims[0].text == quote
+    assert claims[0].source_url == normalized.source_url.rstrip("/")
+    assert set(gateway.last_diagnostics) == PUBLIC_DIAGNOSTIC_KEYS
+    assert gateway.last_diagnostics == {
+        "source_candidates": 1,
+        "source_linked_excerpts": 1,
+        "missing_publication_date": 0,
+        "untrusted_host_publisher": 0,
+        "country_mismatch": 0,
+        "normalization_failure": 0,
+    }
+
+
+def test_gateway_diagnostics_count_country_mismatch_without_source_content(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/somalia-update-2026-08-30/"
+    quote = "Somalia political violence disrupted local services."
+    gateway = _diagnostic_gateway(
+        monkeypatch,
+        _cited_response(
+            source_url=source_url,
+            source_title="Somalia update",
+            page_age="2026-08-30",
+            cited_text=quote,
+        ),
+        None,
+    )
+
+    with pytest.raises(ValueError, match="no cited synthesis"):
+        gateway.search("country: Guinea")
+
+    assert gateway.last_diagnostics["source_candidates"] == 1
+    assert gateway.last_diagnostics["source_linked_excerpts"] == 1
+    assert gateway.last_diagnostics["country_mismatch"] == 1
+    assert all(type(value) is int and value >= 0 for value in gateway.last_diagnostics.values())
+    assert "Somalia" not in str(gateway.last_diagnostics)
+
+
+def test_gateway_diagnostics_count_missing_date_and_normalization_failure(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/guinea-undated/"
+    quote = "Guinea political violence disrupted local services."
+    gateway = _diagnostic_gateway(
+        monkeypatch,
+        _cited_response(
+            source_url=source_url,
+            source_title="Guinea undated update",
+            page_age="unknown",
+            cited_text=quote,
+        ),
+        None,
+        metadata_client=object(),
+    )
+
+    with pytest.raises(ValueError, match="no parsed output"):
+        gateway.search("country: Guinea")
+
+    assert gateway.last_diagnostics["missing_publication_date"] == 1
+    assert gateway.last_diagnostics["normalization_failure"] == 1
+
+def test_empty_web_search_result_is_successful_and_not_malformed(monkeypatch):
+    response = SimpleNamespace(
+        content=(
+            SimpleNamespace(type="web_search_tool_result", content=()),
+        ),
+        stop_reason="end_turn",
+    )
+    gateway = _diagnostic_gateway(monkeypatch, response, None)
+
+    assert gateway.search("country: Guinea") == ()
+    assert set(gateway.last_diagnostics.values()) == {0}
+
+
+def test_valid_source_survives_alongside_search_tool_error(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/guinea-update-2026-08-30/"
+    quote = "Guinea political violence disrupted local services."
+    valid_response = _cited_response(
+        source_url=source_url,
+        source_title="Guinea update",
+        page_age="2026-08-30",
+        cited_text=quote,
+    )
+    error_block = SimpleNamespace(
+        type="web_search_tool_result",
+        content=SimpleNamespace(
+            type="web_search_tool_result_error",
+            error_code="unavailable",
+            error_message="private provider detail",
+        ),
+    )
+    response = SimpleNamespace(
+        content=(error_block, *valid_response.content),
+        stop_reason="end_turn",
+    )
+    normalized = _claim(
+        publisher="Reuters",
+        source_url=source_url,
+        source_title="Guinea update",
+        source_date=date(2026, 8, 30),
+        text=quote,
+        supporting_quote=quote,
+    )
+    gateway = _diagnostic_gateway(
+        monkeypatch,
+        response,
+        public_research.ResearchClaimBatch(claims=(normalized,)),
+    )
+
+    claims = gateway.search("country: Guinea")
+
+    assert len(claims) == 1
+    assert gateway.last_diagnostics["source_candidates"] == 1
+    assert "private provider detail" not in str(gateway.last_diagnostics)
+
+def test_unknown_nonempty_search_item_is_malformed_not_empty(monkeypatch):
+    response = SimpleNamespace(
+        content=(
+            SimpleNamespace(
+                type="web_search_tool_result",
+                content=SimpleNamespace(type="unexpected_provider_item"),
+            ),
+        ),
+        stop_reason="end_turn",
+    )
+    gateway = _diagnostic_gateway(monkeypatch, response, None)
+
+    with pytest.raises(ValueError, match="malformed search results"):
+        gateway.search("country: Guinea")
+
+
+def test_missing_date_is_recorded_before_metadata_client_failure(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/guinea-undated/"
+    quote = "Guinea political violence disrupted local services."
+    response = _cited_response(
+        source_url=source_url,
+        source_title="Guinea undated update",
+        page_age="unknown",
+        cited_text=quote,
+    )
+
+    class BrokenMetadataClient:
+        def stream(self, *args, **kwargs):
+            raise RuntimeError("programming failure")
+
+    gateway = _diagnostic_gateway(
+        monkeypatch,
+        response,
+        None,
+        metadata_client=BrokenMetadataClient(),
+    )
+
+    with pytest.raises(RuntimeError, match="programming failure"):
+        gateway.search("country: Guinea")
+
+    assert gateway.last_diagnostics["missing_publication_date"] == 1
+
+
+def test_object_shaped_search_tool_error_is_unavailable(monkeypatch):
+    response = SimpleNamespace(
+        content=(
+            SimpleNamespace(
+                type="web_search_tool_result",
+                content=SimpleNamespace(
+                    type="web_search_tool_result_error",
+                    error_code="unavailable",
+                    error_message="private provider detail",
+                ),
+            ),
+        ),
+        stop_reason="end_turn",
+    )
+    gateway = _diagnostic_gateway(monkeypatch, response, None)
+
+    with pytest.raises(ConnectionError, match="provider was unavailable"):
+        gateway.search("country: Guinea")
+
+    assert set(gateway.last_diagnostics.values()) == {0}
+    assert "private provider detail" not in str(gateway.last_diagnostics)

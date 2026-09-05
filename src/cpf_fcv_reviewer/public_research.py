@@ -9,6 +9,7 @@ from datetime import date, datetime
 from html.parser import HTMLParser
 from ipaddress import ip_address
 from pathlib import Path
+from threading import local
 from typing import Literal, Protocol
 from urllib.parse import urlparse, urlunparse
 
@@ -60,6 +61,14 @@ SECONDARY_SEARCH_DOMAINS = (
     "africacenter.org",
 )
 SEARCH_ALLOWED_DOMAINS = PREFERRED_SEARCH_DOMAINS + SECONDARY_SEARCH_DOMAINS
+PUBLIC_RESEARCH_DIAGNOSTIC_KEYS = (
+    "source_candidates",
+    "source_linked_excerpts",
+    "missing_publication_date",
+    "untrusted_host_publisher",
+    "country_mismatch",
+    "normalization_failure",
+)
 
 
 def Anthropic(*args, **kwargs):
@@ -476,18 +485,36 @@ class AnthropicPublicResearchGateway:
         self._model_id = model_id
         self._metadata_client = metadata_client
         self._metadata_timeout_seconds = timeout_seconds
+        self._diagnostics = local()
+
+    @property
+    def last_diagnostics(self) -> dict[str, int]:
+        return dict(
+            getattr(
+                self._diagnostics,
+                "last",
+                {key: 0 for key in PUBLIC_RESEARCH_DIAGNOSTIC_KEYS},
+            )
+        )
 
     def search(self, prompt: str) -> tuple[CurrentContextClaim, ...]:
         from anthropic import APIConnectionError, APITimeoutError
 
+        diagnostics = {key: 0 for key in PUBLIC_RESEARCH_DIAGNOSTIC_KEYS}
         try:
-            return self._search(prompt)
+            return self._search(prompt, diagnostics)
         except APITimeoutError:
             raise TimeoutError("Anthropic research request timed out.") from None
         except APIConnectionError:
             raise ConnectionError("Anthropic research provider was unavailable.") from None
+        finally:
+            self._diagnostics.last = dict(diagnostics)
 
-    def _search(self, prompt: str) -> tuple[CurrentContextClaim, ...]:
+    def _search(
+        self,
+        prompt: str,
+        diagnostics: dict[str, int],
+    ) -> tuple[CurrentContextClaim, ...]:
         messages: list[dict[str, object]] = [{"role": "user", "content": prompt}]
         response = self._create_web_search_response(messages)
         content_blocks = list(_response_content(response))
@@ -500,12 +527,43 @@ class AnthropicPublicResearchGateway:
             response = self._create_web_search_response(messages, max_uses=1)
             content_blocks.extend(_response_content(response))
 
+        search_blocks = tuple(
+            block
+            for block in content_blocks
+            if _value(block, "type") == "web_search_tool_result"
+        )
+        search_items = tuple(
+            item for block in search_blocks for item in _web_search_result_items(block)
+        )
+        search_results = tuple(
+            item for item in search_items if _value(item, "type") == "web_search_result"
+        )
+        if not search_results and any(
+            _value(item, "type") == "web_search_tool_result_error"
+            for item in search_items
+        ):
+            raise ConnectionError("Anthropic research provider was unavailable.")
+        if search_blocks and not search_results:
+            if search_items:
+                raise ValueError(
+                    "Public research response contained malformed search results."
+                )
+            return ()
+
         selected_country = _country_from_prompt(prompt)
         artifact, grounded_segments = _extract_search_artifact(
-            tuple(content_blocks), selected_country=selected_country
+            tuple(content_blocks),
+            selected_country=selected_country,
+            diagnostics=diagnostics,
+        )
+        diagnostics["missing_publication_date"] = sum(
+            source.published_at is None for source in artifact.sources
         )
         artifact, grounded_segments = self._resolve_one_missing_source_date(
             artifact, grounded_segments
+        )
+        diagnostics["missing_publication_date"] = sum(
+            source.published_at is None for source in artifact.sources
         )
         try:
             normalization_response = self._client.messages.parse(
@@ -525,6 +583,7 @@ class AnthropicPublicResearchGateway:
                 output_format=ResearchClaimBatch,
             )
         except ValidationError:
+            diagnostics["normalization_failure"] += 1
             salvaged = _salvage_grounded_segments(
                 grounded_segments, selected_country=selected_country
             )
@@ -540,6 +599,7 @@ class AnthropicPublicResearchGateway:
             if valid_claims:
                 return valid_claims
 
+        diagnostics["normalization_failure"] += 1
         salvaged = _salvage_grounded_segments(
             grounded_segments, selected_country=selected_country
         )
@@ -901,7 +961,7 @@ def _web_search_result_items(block: object) -> tuple[object, ...]:
         return (nested,)
     if isinstance(nested, (list, tuple)):
         return tuple(nested)
-    return ()
+    return (nested,)
 
 
 def _citation_items(block: object) -> tuple[object, ...]:
@@ -968,7 +1028,9 @@ def _quote_is_from_source(quote: str | None, excerpt: str | None) -> bool:
 
 def _extract_search_artifact(
     content_blocks: tuple[object, ...],
-    *, selected_country: str | None = None,
+    *,
+    selected_country: str | None = None,
+    diagnostics: dict[str, int] | None = None,
 ) -> tuple[SearchArtifact, tuple[tuple[str, tuple[ResearchSource, ...]], ...]]:
     sources: dict[str, ResearchSource] = {}
     grounded_segments: list[tuple[str, tuple[ResearchSource, ...]]] = []
@@ -979,6 +1041,10 @@ def _extract_search_artifact(
         if block_type == "web_search_tool_result":
             saw_search_result = True
             for item in _web_search_result_items(block):
+                if _value(item, "type") != "web_search_result":
+                    continue
+                if diagnostics is not None:
+                    diagnostics["source_candidates"] += 1
                 title, url, published_at, date_basis = _source_metadata(item)
                 _merge_source(
                     sources,
@@ -1017,10 +1083,16 @@ def _extract_search_artifact(
                 )
                 if source is None:
                     continue
+                if diagnostics is not None:
+                    diagnostics["source_linked_excerpts"] += 1
+                    if source.publisher is None:
+                        diagnostics["untrusted_host_publisher"] += 1
                 if source.excerpt is None:
                     source = source.model_copy(update={"excerpt": cited_text})
                     sources[source.url] = source
                 if not _source_mentions_country(source, selected_country):
+                    if diagnostics is not None:
+                        diagnostics["country_mismatch"] += 1
                     continue
 
                 if source not in attached_sources:

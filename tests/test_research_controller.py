@@ -2,6 +2,7 @@ import logging
 from datetime import date, datetime
 from math import inf, nan
 from types import SimpleNamespace
+from typing import get_type_hints
 
 import httpx
 import pytest
@@ -1319,3 +1320,281 @@ def test_armed_forces_school_story_is_not_current_fcv_evidence():
     ).run(holistic_request(), lambda *_: None, allow_document_led=True)
 
     assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+
+DIAGNOSTIC_KEYS = {
+    "source_candidates",
+    "source_linked_excerpts",
+    "missing_publication_date",
+    "untrusted_host_publisher",
+    "country_mismatch",
+    "non_fcv_background",
+    "accepted_sources",
+    "normalization_failure",
+}
+
+
+def _diagnostic_event(events):
+    diagnostics = [data for kind, data in events if kind == "research_diagnostics"]
+    assert len(diagnostics) == 1
+    assert set(diagnostics[0]["counts"]) == DIAGNOSTIC_KEYS
+    assert all(
+        type(value) is int and value >= 0
+        for value in diagnostics[0]["counts"].values()
+    )
+    return diagnostics[0]
+
+
+def test_empty_success_emits_safe_zero_evidence_diagnostics():
+    gateway = ScriptedGateway(((),))
+    gateway.last_diagnostics = {
+        "source_candidates": 0,
+        "source_linked_excerpts": 0,
+        "missing_publication_date": 0,
+        "untrusted_host_publisher": 0,
+        "country_mismatch": 0,
+        "normalization_failure": 0,
+    }
+    events = []
+
+    result = controller(gateway, max_attempts=1).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    diagnostic = _diagnostic_event(events)
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert diagnostic["reason"] == "insufficient_coverage"
+    assert set(diagnostic["counts"].values()) == {0}
+    _assert_events_are_privacy_safe(events)
+
+
+def test_non_fcv_source_counts_as_accepted_source_and_background():
+    gateway = ScriptedGateway(
+        ((
+            current_fcv_claim("generic-diagnostic").model_copy(
+                update={
+                    "text": "Population, total: 14,100,000.",
+                    "supporting_quote": "Population, total: 14,100,000.",
+                }
+            ),
+        ),)
+    )
+    gateway.last_diagnostics = {
+        "source_candidates": 1,
+        "source_linked_excerpts": 1,
+        "missing_publication_date": 0,
+        "untrusted_host_publisher": 0,
+        "country_mismatch": 0,
+        "normalization_failure": 0,
+    }
+    events = []
+
+    controller(gateway, max_attempts=1).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    diagnostic = _diagnostic_event(events)
+    assert diagnostic["reason"] == "insufficient_coverage"
+    assert diagnostic["counts"]["accepted_sources"] == 1
+    assert diagnostic["counts"]["non_fcv_background"] == 1
+    assert diagnostic["counts"]["source_candidates"] == 1
+    _assert_events_are_privacy_safe(events)
+
+
+def test_provider_failure_diagnostics_use_allowlisted_reason_only():
+    gateway = ScriptedGateway((OSError("secret provider failure detail"),))
+    gateway.last_diagnostics = {}
+    events = []
+
+    controller(gateway, max_attempts=1).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    diagnostic = _diagnostic_event(events)
+    assert diagnostic["reason"] == "provider_failure"
+    assert "secret" not in str(diagnostic)
+    _assert_events_are_privacy_safe(events)
+
+
+def test_source_policy_rejection_counts_untrusted_host_publisher():
+    rejected = current_fcv_claim("untrusted").model_copy(
+        update={
+            "publisher": "Reuters",
+            "source_url": "https://example.com/untrusted",
+        }
+    )
+    events = []
+
+    controller(ScriptedGateway(((rejected,),)), max_attempts=1).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    diagnostic = _diagnostic_event(events)
+    assert diagnostic["reason"] == "source_rejected"
+    assert diagnostic["counts"]["untrusted_host_publisher"] == 1
+    _assert_events_are_privacy_safe(events)
+
+
+def test_zero_evidence_exception_also_emits_diagnostics():
+    events = []
+
+    with pytest.raises(InsufficientResearch):
+        controller(ScriptedGateway(((),)), max_attempts=1).run(
+            holistic_request(),
+            lambda kind, data: events.append((kind, data)),
+        )
+
+    assert _diagnostic_event(events)["reason"] == "insufficient_coverage"
+
+def test_diagnostic_helper_type_hints_resolve():
+    assert get_type_hints(ResearchController._merge_gateway_diagnostics)
+
+
+def test_real_gateway_country_mismatch_reaches_controller_diagnostics(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/somalia-update-2026-08-30/"
+    quote = "Somalia political violence disrupted local services."
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Somalia update",
+                                url=source_url,
+                                published_at="2026-08-30",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text=quote,
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Somalia update",
+                                url=source_url,
+                                cited_text=quote,
+                            ),
+                        ),
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            raise AssertionError("country-mismatched evidence must not be normalized")
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    events = []
+
+    result = controller(
+        public_research.AnthropicPublicResearchGateway("key", "model"),
+        max_attempts=1,
+    ).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    diagnostic = _diagnostic_event(events)
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert diagnostic["reason"] == "malformed_response"
+    assert diagnostic["counts"]["source_candidates"] == 1
+    assert diagnostic["counts"]["source_linked_excerpts"] == 1
+    assert diagnostic["counts"]["country_mismatch"] == 1
+    _assert_events_are_privacy_safe(events)
+
+
+def test_real_gateway_valid_source_survives_parallel_tool_error(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/benin-update-2026-07-01/"
+    quote = "Political violence disrupted local services in Benin."
+    normalized = current_fcv_claim("mixed-tool-result").model_copy(
+        update={
+            "source_url": source_url,
+            "source_title": "Benin update",
+            "source_date": date(2026, 7, 1),
+            "text": quote,
+            "supporting_quote": quote,
+        }
+    )
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=SimpleNamespace(
+                            type="web_search_tool_result_error",
+                            error_code="unavailable",
+                            error_message="private provider detail",
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title="Benin update",
+                                url=source_url,
+                                published_at="2026-07-01",
+                            ),
+                        ),
+                    ),
+                    SimpleNamespace(
+                        type="text",
+                        text=quote,
+                        citations=(
+                            SimpleNamespace(
+                                type="web_search_result_location",
+                                title="Benin update",
+                                url=source_url,
+                                cited_text=quote,
+                            ),
+                        ),
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    class FakeMessages:
+        def parse(self, **kwargs):
+            return SimpleNamespace(
+                parsed_output=public_research.ResearchClaimBatch(
+                    claims=(normalized,)
+                )
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    events = []
+    gateway = public_research.AnthropicPublicResearchGateway("key", "model")
+
+    result = controller(gateway, max_attempts=1).run(
+        holistic_request(),
+        lambda kind, data: events.append((kind, data)),
+        allow_document_led=True,
+    )
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert len(result.claims) == 1
+    assert gateway.last_diagnostics["source_candidates"] == 1
+    assert not [event for event in events if event[0] == "research_diagnostics"]
+    _assert_events_are_privacy_safe(events)

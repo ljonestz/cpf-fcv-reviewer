@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
@@ -39,6 +39,14 @@ _GENERIC_INDICATOR_PATTERN = re.compile(
     r"\b(?:gdp(?: per capita)?|life expectancy|population(?:,? total| growth| estimate)|"
     r"solar capacity)\b",
     re.IGNORECASE,
+)
+_GATEWAY_DIAGNOSTIC_KEYS = (
+    "source_candidates",
+    "source_linked_excerpts",
+    "missing_publication_date",
+    "untrusted_host_publisher",
+    "country_mismatch",
+    "normalization_failure",
 )
 
 logger = logging.getLogger(__name__)
@@ -210,6 +218,7 @@ class ResearchController:
         last_missing: tuple[str, ...] = ()
         last_failure: ResearchFailure | None = None
         budget_exhausted = False
+        diagnostics = {key: 0 for key in _GATEWAY_DIAGNOSTIC_KEYS}
 
         primary_attempts = 0
         for attempt in range(1, self.max_attempts + 1):
@@ -237,6 +246,8 @@ class ResearchController:
                     budget_exhausted = True
                     break
                 continue
+            finally:
+                self._merge_gateway_diagnostics(diagnostics, self.gateway)
 
             self._merge_claims(claims, accepted, accepted_urls, rejected)
 
@@ -339,10 +350,17 @@ class ResearchController:
                 emit=emit,
                 event_data={"missing_coverage": last_missing},
             )
+        reason = self._document_led_reason(
+            budget_exhausted=budget_exhausted,
+            last_failure=last_failure,
+            rejected=rejected,
+        )
         if allow_document_led and not accepted_claims:
-            reason = self._document_led_reason(
-                budget_exhausted=budget_exhausted,
-                last_failure=last_failure,
+            self._emit_diagnostics(
+                emit,
+                reason=reason,
+                diagnostics=diagnostics,
+                accepted=accepted,
                 rejected=rejected,
             )
             return self._finish(
@@ -359,6 +377,13 @@ class ResearchController:
                 emit=emit,
                 event_data={"reason": reason},
             )
+        self._emit_diagnostics(
+            emit,
+            reason=reason,
+            diagnostics=diagnostics,
+            accepted=accepted,
+            rejected=rejected,
+        )
         if budget_exhausted:
             raise ResearchTimeout("Research total budget was exhausted.")
         if last_failure is not None:
@@ -440,6 +465,49 @@ class ResearchController:
         else:
             emit("research_document_led", event_data)
         return result
+
+    @staticmethod
+    def _merge_gateway_diagnostics(
+        diagnostics: dict[str, int],
+        gateway: ResearchGateway,
+    ) -> None:
+        snapshot = getattr(gateway, "last_diagnostics", None)
+        if not isinstance(snapshot, Mapping):
+            return
+        for key in _GATEWAY_DIAGNOSTIC_KEYS:
+            value = snapshot.get(key)
+            if type(value) is int and value >= 0:
+                diagnostics[key] += value
+
+    @classmethod
+    def _emit_diagnostics(
+        cls,
+        emit: Emitter,
+        *,
+        reason: str,
+        diagnostics: dict[str, int],
+        accepted: dict[str, CurrentContextClaim],
+        rejected: dict[str, str],
+    ) -> None:
+        counts = dict(diagnostics)
+        counts["untrusted_host_publisher"] = max(
+            counts["untrusted_host_publisher"],
+            sum(
+                value == "permitted institutional public source is required"
+                for value in rejected.values()
+            ),
+        )
+        counts["non_fcv_background"] = sum(
+            not cls._is_substantive_fcv(claim) for claim in accepted.values()
+        )
+        counts["accepted_sources"] = len(
+            {
+                _normalize_source_url(claim.source_url or "")
+                for claim in accepted.values()
+                if _normalize_source_url(claim.source_url or "")
+            }
+        )
+        emit("research_diagnostics", {"reason": reason, "counts": counts})
 
     @staticmethod
     def _document_led_reason(
