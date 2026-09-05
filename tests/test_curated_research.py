@@ -937,6 +937,65 @@ def test_crisis_group_recovery_uses_summary_and_verified_country_feeds():
     assert claims[0].publication_date_basis == "provider_metadata"
 
 
+
+def test_crisis_group_uses_substantive_headline_when_summary_omits_country():
+    title = "Guinea's Call to Elections Exposes Military Bid to Cling to Power"
+    summary = (
+        "Crisis Group expert analyses the general's plans to secure victory in "
+        "presidential polls despite an earlier promise not to seek a mandate."
+    )
+    payload = f"""<rss><channel><item>
+      <title>{title}</title>
+      <link>https://www.crisisgroup.org/alr/africa/guinea/elections</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description><![CDATA[<p>{summary}</p>]]></description>
+    </item></channel></rss>"""
+    transport = StubClient(lambda *_args: rss_response(payload))
+
+    claims = CrisisGroupAdapter(
+        BoundedInstitutionalClient(client=transport)
+    ).search(ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC))
+
+    assert len(claims) == 1
+    assert claims[0].text == title
+    assert claims[0].supporting_quote == title
+    assert claims[0].publisher == "International Crisis Group"
+    assert claims[0].source_date == date(2025, 10, 3)
+
+
+def test_crisis_group_keeps_usable_summary_without_narrow_assertion_verb():
+    summary = "Violence and political tensions persist in Guinea."
+    payload = f"""<rss><channel><item>
+      <title>Guinea conflict update</title>
+      <link>https://www.crisisgroup.org/africa/guinea/conflict-update</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description><![CDATA[<p>{summary}</p>]]></description>
+    </item></channel></rss>"""
+
+    claims = CrisisGroupAdapter(
+        BoundedInstitutionalClient(client=StubClient(lambda *_args: rss_response(payload)))
+    ).search(ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC))
+
+    assert len(claims) == 1
+    assert claims[0].text == summary
+    assert claims[0].supporting_quote == summary
+
+
+def test_crisis_group_headline_fallback_rejects_compound_country_mismatch():
+    payload = """<rss><channel><item>
+      <title>Guinea-Bissau Elections Expose Military Tensions</title>
+      <link>https://www.crisisgroup.org/africa/guinea-bissau/elections</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description>Expert analysis of the transition.</description>
+    </item></channel></rss>"""
+
+    claims = CrisisGroupAdapter(
+        BoundedInstitutionalClient(client=StubClient(lambda *_args: rss_response(payload)))
+    ).search(ResearchRequest("Guinea", date(2026, 9, 4), ResearchMode.HOLISTIC))
+
+    assert claims == ()
+
+
 @pytest.mark.parametrize(
     ("country", "feed"),
     [

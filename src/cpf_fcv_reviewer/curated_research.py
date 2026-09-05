@@ -709,23 +709,36 @@ def _crisis_group_claim(
     source_url = _nonblank_string(item.findtext("link"))
     source_date = _crisis_group_date(item.findtext("pubDate"))
     summary = _bounded_report_text(item.findtext("description"))
-    text = summary or (f"{title}." if title is not None else None)
+    summary_is_usable = summary is not None and _source_mentions_country(
+        ResearchSource(
+            title=title or "",
+            url=source_url or "",
+            excerpt=summary or "",
+        ),
+        expected_country,
+    ) and _FCV_TITLE_PATTERN.search(summary) is not None
+    title_is_usable = (
+        title is not None
+        and _source_mentions_country(
+            ResearchSource(
+                title=title,
+                url=source_url or "",
+                excerpt=title,
+            ),
+            expected_country,
+        )
+        and _FCV_TITLE_PATTERN.search(title) is not None
+        and _FCV_ASSERTION_PATTERN.search(title) is not None
+    )
+    supporting_quote = (
+        summary if summary_is_usable else title if title_is_usable else None
+    )
     if (
         title is None
         or source_url is None
         or not _is_crisis_group_result_url(source_url)
         or source_date is None
-        or text is None
-        or not _source_mentions_country(
-            ResearchSource(
-                title=title,
-                url=source_url,
-                excerpt=text,
-            ),
-            expected_country,
-        )
-        or _FCV_TITLE_PATTERN.search(text) is None
-        or (summary is None and _FCV_ASSERTION_PATTERN.search(title) is None)
+        or supporting_quote is None
         or not start_date <= source_date <= end_date
     ):
         return None
@@ -735,12 +748,12 @@ def _crisis_group_claim(
     ).hexdigest()
     return CurrentContextClaim(
         claim_id=f"crisisgroup:{digest}",
-        text=text,
+        text=supporting_quote,
         publisher="International Crisis Group",
         source_title=title,
         source_url=source_url,
         source_date=source_date,
-        supporting_quote=text,
+        supporting_quote=supporting_quote,
         publication_date_basis="provider_metadata",
         source_type="think tank analysis",
         relevance="Country-specific conflict and political analysis.",
