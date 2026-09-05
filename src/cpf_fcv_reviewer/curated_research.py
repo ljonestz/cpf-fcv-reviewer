@@ -5,6 +5,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
+from html.parser import HTMLParser
 from math import isfinite
 from numbers import Real
 from threading import Lock
@@ -15,20 +16,55 @@ from xml.etree import ElementTree
 
 import httpx
 
-from .public_research import CurrentContextClaim
+from .public_research import (
+    MAX_SOURCE_EXCERPT_CHARACTERS,
+    CurrentContextClaim,
+    _is_public_http_url,
+    _publisher_for_source_url,
+)
 from .research_controller import ResearchRequest
 
 
 _ALLOWED_HOSTS = frozenset(
     {"api.worldbank.org", "api.reliefweb.int", "www.crisisgroup.org"}
 )
-_RELIEFWEB_RESULT_HOSTS = frozenset({"reliefweb.int", "api.reliefweb.int"})
-_CRISIS_GROUP_FEEDS = {"guinea": "https://www.crisisgroup.org/rss/23"}
+_CRISIS_GROUP_FEEDS = {
+    "brazil": "https://www.crisisgroup.org/rss/176",
+    "congo": "https://www.crisisgroup.org/rss/115",
+    "cote d'ivoire": "https://www.crisisgroup.org/rss/22",
+    "democratic republic of congo": "https://www.crisisgroup.org/rss/7",
+    "democratic republic of the congo": "https://www.crisisgroup.org/rss/7",
+    "guinea": "https://www.crisisgroup.org/rss/23",
+    "india": "https://www.crisisgroup.org/rss/123",
+    "indonesia": "https://www.crisisgroup.org/rss/44",
+    "kenya": "https://www.crisisgroup.org/rss/11",
+    "kosovo": "https://www.crisisgroup.org/rss/68",
+    "sao tome and principe": "https://www.crisisgroup.org/rss/154",
+    "são tomé and príncipe": "https://www.crisisgroup.org/rss/154",
+    "somalia": "https://www.crisisgroup.org/rss/12",
+    "türkiye": "https://www.crisisgroup.org/rss/58",
+    "turkey": "https://www.crisisgroup.org/rss/58",
+    "west bank and gaza": "https://www.crisisgroup.org/rss/91",
+}
+_RELIEFWEB_COUNTRIES = {
+    "democratic republic of congo": "Democratic Republic of the Congo",
+    "democratic republic of the congo": "Democratic Republic of the Congo",
+    "palestinian territories": "occupied Palestinian territory",
+    "west bank and gaza": "occupied Palestinian territory",
+    "west bank & gaza": "occupied Palestinian territory",
+    "são tomé and príncipe": "Sao Tome and Principe",
+    "sao tome and principe": "Sao Tome and Principe",
+}
 _FCV_TITLE_PATTERN = re.compile(
     r"\b(?:conflicts?|violence|violent|political|governance|government|elections?|coup|"
     r"humanitarian|displacement|displaced|refugees?|protection|peace|peacebuilding|"
     r"insecurity)\b|\bland (?:conflict|dispute|tenure)\b|\bsocial cohesion\b|"
     r"\bsecurity (?:update|situation|incident|threat|forces?|sector|crisis|risk)\b",
+    re.IGNORECASE,
+)
+_FCV_ASSERTION_PATTERN = re.compile(
+    r"\b(?:affects?|affected|causes?|caused|delays?|delayed|disrupts?|disrupted|exposes?|"
+    r"increases?|increased|worsens?|worsened|displaces?|displaced|threatens?|threatened)\b",
     re.IGNORECASE,
 )
 
@@ -339,7 +375,7 @@ class ReliefWebAdapter:
             raise ValueError("ReliefWeb app name is invalid.")
 
         start_date = _subtract_years(request.review_date, 2)
-        country = request.country.strip()
+        country = _reliefweb_country_name(request.country)
         params = [
             ("appname", self.app_name),
             ("preset", "minimal"),
@@ -348,16 +384,18 @@ class ReliefWebAdapter:
             ("filter[operator]", "AND"),
             ("filter[conditions][0][field]", "primary_country"),
             ("filter[conditions][0][value]", country),
-            ("filter[conditions][1][field]", "date.created"),
+            ("filter[conditions][1][field]", "date.original"),
             ("filter[conditions][1][value][from]", f"{start_date.isoformat()}T00:00:00+00:00"),
             ("filter[conditions][1][value][to]", f"{request.review_date.isoformat()}T23:59:59+00:00"),
-            ("filter[conditions][2][field]", "source"),
             ("fields[include][]", "title"),
             ("fields[include][]", "url"),
-            ("fields[include][]", "date.created"),
+            ("fields[include][]", "date.original"),
+            ("fields[include][]", "primary_country.name"),
             ("fields[include][]", "source.name"),
+            ("fields[include][]", "origin"),
+            ("fields[include][]", "body"),
             ("limit", "20"),
-            ("sort[]", "date.created:desc"),
+            ("sort[]", "date.original:desc"),
         ]
         payload = _get_json(
             self.client,
@@ -370,6 +408,7 @@ class ReliefWebAdapter:
         for row in payload["data"]:
             claim = _reliefweb_claim(
                 row,
+                expected_country=country,
                 start_date=start_date,
                 end_date=request.review_date,
             )
@@ -479,6 +518,8 @@ def _claim_stable_key(claim: CurrentContextClaim) -> tuple[object, ...]:
         claim.source_title,
         claim.source_url or "",
         claim.source_date.isoformat(),
+        claim.supporting_quote or "",
+        claim.publication_date_basis or "",
         claim.source_type,
         claim.relevance,
         claim.context_kind,
@@ -612,6 +653,7 @@ def _world_bank_claims(
 def _reliefweb_claim(
     row: object,
     *,
+    expected_country: str,
     start_date: date,
     end_date: date,
 ) -> CurrentContextClaim | None:
@@ -619,31 +661,43 @@ def _reliefweb_claim(
         return None
     fields = row["fields"]
     title = _nonblank_string(fields.get("title"))
-    if title is None or _FCV_TITLE_PATTERN.search(title) is None:
-        return None
-    source_url = _nonblank_string(fields.get("url"))
-    source_name = _reliefweb_source_name(fields.get("source"))
+    source_url = _nonblank_string(fields.get("origin"))
     source_date = _reliefweb_date(fields.get("date"))
+    summary = _bounded_report_text(fields.get("body"))
+    country_names = _reliefweb_country_names(fields.get("primary_country"))
+    source_names = _reliefweb_source_names(fields.get("source"))
+    publisher = (
+        _publisher_for_source_url(source_url)
+        if source_url is not None and _is_public_http_url(source_url)
+        else None
+    )
     if (
         title is None
         or source_url is None
-        or source_name is None
         or source_date is None
-        or not _is_reliefweb_result_url(source_url)
+        or summary is None
+        or _FCV_TITLE_PATTERN.search(summary) is None
+        or expected_country.casefold()
+        not in {country.casefold() for country in country_names}
+        or not source_names
+        or publisher is None
         or not start_date <= source_date <= end_date
     ):
         return None
 
     digest = hashlib.sha256(f"{source_url}|{source_date.isoformat()}".encode()).hexdigest()
+    attribution = ", ".join(source_names)
     return CurrentContextClaim(
         claim_id=f"reliefweb:{digest}",
-        text=f"{title}.",
-        publisher="ReliefWeb",
+        text=summary,
+        publisher=publisher,
         source_title=title,
         source_url=source_url,
         source_date=source_date,
+        supporting_quote=summary,
+        publication_date_basis="provider_metadata",
         source_type="institutional public report",
-        relevance=f"ReliefWeb report explicitly attributed to {source_name}.",
+        relevance=f"Original report attributed to {attribution}; distributed by ReliefWeb.",
         context_kind="current_development",
         relationship="establishes",
         licensed_data_required=False,
@@ -659,12 +713,16 @@ def _crisis_group_claim(
     title = _nonblank_string(item.findtext("title"))
     source_url = _nonblank_string(item.findtext("link"))
     source_date = _crisis_group_date(item.findtext("pubDate"))
+    summary = _bounded_report_text(item.findtext("description"))
+    text = summary or (f"{title}." if title is not None else None)
     if (
         title is None
-        or _FCV_TITLE_PATTERN.search(title) is None
         or source_url is None
         or not _is_crisis_group_result_url(source_url)
         or source_date is None
+        or text is None
+        or _FCV_TITLE_PATTERN.search(text) is None
+        or (summary is None and _FCV_ASSERTION_PATTERN.search(title) is None)
         or not start_date <= source_date <= end_date
     ):
         return None
@@ -674,11 +732,13 @@ def _crisis_group_claim(
     ).hexdigest()
     return CurrentContextClaim(
         claim_id=f"crisisgroup:{digest}",
-        text=f"{title}.",
+        text=text,
         publisher="International Crisis Group",
         source_title=title,
         source_url=source_url,
         source_date=source_date,
+        supporting_quote=text,
+        publication_date_basis="provider_metadata",
         source_type="think tank analysis",
         relevance="Country-specific conflict and political analysis.",
         context_kind="current_development",
@@ -747,10 +807,15 @@ def _world_bank_date(value: object) -> date | None:
         return None
 
 
+def _reliefweb_country_name(country: str) -> str:
+    normalized = _country_key(country)
+    return _RELIEFWEB_COUNTRIES.get(normalized, country.strip())
+
+
 def _reliefweb_date(value: object) -> date | None:
     if not isinstance(value, Mapping):
         return None
-    value = value.get("created")
+    value = value.get("original")
     if not isinstance(value, str) or not value.strip():
         return None
     text = value.strip().replace("Z", "+00:00")
@@ -763,35 +828,63 @@ def _reliefweb_date(value: object) -> date | None:
             return None
 
 
-def _reliefweb_source_name(value: object) -> str | None:
-    if isinstance(value, Mapping):
-        return _nonblank_string(value.get("name"))
-    if isinstance(value, list):
-        for item in value:
-            if isinstance(item, Mapping):
-                name = _nonblank_string(item.get("name"))
-                if name is not None:
-                    return name
-    return None
-
-
-def _is_reliefweb_result_url(url: str) -> bool:
-    if _has_control_character(url):
-        return False
-    try:
-        parsed = urlsplit(url)
-        hostname = parsed.hostname
-        port = parsed.port
-    except ValueError:
-        return False
-    return bool(
-        parsed.scheme.casefold() == "https"
-        and hostname in _RELIEFWEB_RESULT_HOSTS
-        and parsed.username is None
-        and parsed.password is None
-        and not parsed.fragment
-        and port in (None, 443)
+def _reliefweb_country_names(value: object) -> tuple[str, ...]:
+    items = value if isinstance(value, list) else [value]
+    return tuple(
+        name
+        for item in items
+        if isinstance(item, Mapping)
+        if (name := _nonblank_string(item.get("name"))) is not None
     )
+
+
+def _reliefweb_source_names(value: object) -> tuple[str, ...]:
+    items = value if isinstance(value, list) else [value]
+    names = (
+        name
+        for item in items
+        if isinstance(item, Mapping)
+        if (name := _nonblank_string(item.get("name"))) is not None
+    )
+    return tuple(dict.fromkeys(names))
+
+
+class _ReportTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._ignored_depth = 0
+
+    def handle_starttag(self, tag: str, _attrs: list[tuple[str, str | None]]) -> None:
+        if tag.casefold() in {"script", "style"}:
+            self._ignored_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.casefold() in {"script", "style"} and self._ignored_depth:
+            self._ignored_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._ignored_depth:
+            self.parts.append(data)
+
+
+def _bounded_report_text(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parser = _ReportTextParser()
+    parser.feed(value)
+    text = re.sub(r"\s+", " ", " ".join(parser.parts)).strip()
+    if not text:
+        return None
+    if len(text) <= MAX_SOURCE_EXCERPT_CHARACTERS:
+        return text
+    sentence_ends = tuple(
+        match.end()
+        for match in re.finditer(
+            r"[.!?](?=\s|$)", text[:MAX_SOURCE_EXCERPT_CHARACTERS]
+        )
+    )
+    return text[: sentence_ends[-1]].strip() if sentence_ends else None
 
 
 def _has_control_character(value: str) -> bool:
