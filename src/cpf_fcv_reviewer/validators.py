@@ -3,12 +3,13 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Mapping
 
 from .contracts import (
     AssessmentStatus,
     DiagnosticMode,
     DocumentRole,
+    EvidenceItem,
     FCVStrategicShift,
     RecommendationScale,
     ReviewResult,
@@ -120,7 +121,61 @@ STRATEGY_REGISTRY_EVIDENCE_IDS = {
     shift: f"registry-PUB-FCV-STRAT-{index:03d}"
     for index, shift in enumerate(FCVStrategicShift, start=1)
 }
-
+CURRENT_FCV_TOPIC_PATTERNS = {
+    "political": re.compile(
+        r"\b(?:political (?:transition|instability|crisis|tensions?|violence)|"
+        r"governance (?:crisis|failure|breakdown|risk)|elections?|coup|repression|"
+        r"military (?:rule|takeover)|legitimacy)\b",
+        re.IGNORECASE,
+    ),
+    "violence": re.compile(
+        r"\b(?:conflicts?|violence|violent|attacks?|fighting|unrest|militants?|"
+        r"clashes?|armed (?:groups?|conflict|actors?|attacks?|clashes?)|"
+        r"security (?:incidents?|crisis|deterioration|forces?|threats?))\b",
+        re.IGNORECASE,
+    ),
+    "land": re.compile(
+        r"\b(?:land (?:conflict|dispute|tenure|rights?|access|ownership|evictions?)|"
+        r"tenure|resource (?:conflict|competition|dispute))\b",
+        re.IGNORECASE,
+    ),
+    "displacement": re.compile(
+        r"\b(?:displacement|displaced|refugees?|"
+        r"humanitarian (?:crisis|needs?|emergency|access))\b",
+        re.IGNORECASE,
+    ),
+    "cohesion": re.compile(
+        r"\b(?:social cohesion|communal|intercommunal|ethnic|grievances?)\b",
+        re.IGNORECASE,
+    ),
+}
+CURRENT_FCV_DIRECTION_PATTERNS = {
+    "worsening": re.compile(
+        r"\b(?:increas(?:e|ed|es|ing)|worsen(?:ed|ing|s)?|intensif(?:y|ied|ies|ying)|"
+        r"escalat(?:e|ed|es|ing)|rose|rising|deteriorat(?:e|ed|es|ing)|"
+        r"disrupt(?:ed|s|ing))\b",
+        re.IGNORECASE,
+    ),
+    "improving": re.compile(
+        r"\b(?:decreas(?:e|ed|es|ing)|declin(?:e|ed|es|ing)|fell|falling|"
+        r"dropp(?:ed|ing)|improv(?:e|ed|es|ing)|eas(?:e|ed|es|ing)|"
+        r"reduc(?:e|ed|es|ing)|stabili[sz](?:e|ed|es|ing)|"
+        r"progress(?:ed|es|ing)?)\b",
+        re.IGNORECASE,
+    ),
+    "stable": re.compile(
+        r"\b(?:remain(?:ed|s)? stable|stable|unchanged|steady)\b",
+        re.IGNORECASE,
+    ),
+}
+NEGATED_DIRECTION_PATTERN = re.compile(
+    r"\b(?:(?:did|does|do|is|are|was|were|has|have|had)\s+not|"
+    r"(?:did|does|do|is|are|was|were|has|have|had)n['’]t)\s+"
+    r"(?:\w+\s+){0,2}(?:increas\w*|decreas\w*|improv\w*|worsen\w*|"
+    r"intensif\w*|escalat\w*|deteriorat\w*|stabili[sz]\w*|declin\w*|"
+    r"fall\w*|fell|rising?|rose|stable)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -250,6 +305,7 @@ def validate_review(
     *,
     evidence_ids: set[str],
     prohibited_terms: set[str],
+    evidence: Mapping[str, EvidenceItem] | None = None,
     incomplete_document_roles: set[DocumentRole] | frozenset[DocumentRole] = frozenset(),
     registry_entry_ids: set[str] | None = None,
 ) -> tuple[ValidationIssue, ...]:
@@ -410,6 +466,11 @@ def validate_review(
             priority_area.evidence_ids,
             evidence_ids,
         )
+        _append_current_context_support_issue(
+            issues,
+            priority_area,
+            evidence or {},
+        )
         _append_missing_registry_issue(
             issues,
             priority_area.priority_area_id,
@@ -510,6 +571,86 @@ def _append_incomplete_coverage_absence_issue(
             "evidence shows relevant but scattered or weakly operationalized content.",
         )
     )
+
+
+def _append_current_context_support_issue(
+    issues: list[ValidationIssue],
+    priority_area,
+    evidence: Mapping[str, EvidenceItem],
+) -> None:
+    current_items = [
+        evidence[evidence_id]
+        for evidence_id in priority_area.evidence_ids
+        if evidence_id in evidence
+        and evidence[evidence_id].evidence_type == "current_context"
+    ]
+    if not current_items:
+        return
+
+    priority_text = " ".join(
+        (
+            priority_area.heading,
+            priority_area.assessment,
+            priority_area.why_it_matters,
+        )
+    )
+    priority_topics = _current_fcv_topics(priority_text)
+    unsupported = []
+    for item in current_items:
+        evidence_topics = _current_fcv_topics(item.text)
+        shared_topics = evidence_topics & priority_topics
+        unsupported_direction = any(
+            priority_directions
+            and (
+                not (evidence_directions := _topic_directions(item.text, topic))
+                or evidence_directions.isdisjoint(priority_directions)
+            )
+            for topic in shared_topics
+            if (
+                priority_directions := _topic_directions(
+                    priority_area.assessment, topic
+                )
+            )
+        )
+        if not shared_topics or unsupported_direction:
+            unsupported.append(item.evidence_id)
+    if unsupported:
+        issues.append(
+            ValidationIssue(
+                "missing_current_context_support",
+                f"{priority_area.priority_area_id} cites current-context evidence that "
+                f"does not substantively support its present-day FCV claim: {unsupported}.",
+            )
+        )
+
+
+def _current_fcv_topics(text: str) -> set[str]:
+    return {
+        name
+        for name, pattern in CURRENT_FCV_TOPIC_PATTERNS.items()
+        if pattern.search(text)
+    }
+
+
+def _current_fcv_directions(text: str) -> set[str]:
+    unnegated = NEGATED_DIRECTION_PATTERN.sub("", text)
+    return {
+        name
+        for name, pattern in CURRENT_FCV_DIRECTION_PATTERNS.items()
+        if pattern.search(unnegated)
+    }
+
+
+def _topic_directions(text: str, topic: str) -> set[str]:
+    pattern = CURRENT_FCV_TOPIC_PATTERNS[topic]
+    return {
+        direction
+        for sentence in re.split(
+            r"[.!?;]|\b(?:while|whereas|but|although)\b", text, flags=re.IGNORECASE
+        )
+        if pattern.search(sentence)
+        for direction in _current_fcv_directions(sentence)
+    }
 
 
 def _append_unknown_evidence_issue(

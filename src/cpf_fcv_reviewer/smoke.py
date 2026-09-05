@@ -136,8 +136,9 @@ class SmokeResearchGateway:
         return CurrentContextClaim(
             claim_id=f"smoke-{index:03d}",
             text=(
-                f"{SMOKE_MARKER} Synthetic fixture {index} records {context_kind} "
-                f"context for {country}; it is not real evidence."
+                f"{SMOKE_MARKER} Synthetic fixture {index} records political violence "
+                f"and conflict conditions in {country} as {context_kind} context; "
+                "it is not real evidence."
             ),
             publisher=publisher,
             source_title=f"{SMOKE_MARKER} {publisher} local-QA fixture {index}",
@@ -290,12 +291,13 @@ class SmokeModelGateway:
                     priority_area_id="smoke-pa-1",
                     heading=f"{SMOKE_MARKER} Strengthen the delivery logic",
                     assessment=(
-                        f"{SMOKE_MARKER} The synthetic delivery logic remains implicit in "
-                        "the supplied primary evidence."
+                        f"{SMOKE_MARKER} Political violence creates a direct risk of "
+                        "service disruption, while the synthetic delivery logic remains "
+                        "implicit in the supplied primary evidence."
                     ),
                     why_it_matters=(
-                        f"{SMOKE_MARKER} This local-QA finding demonstrates evidence-linked "
-                        "review output."
+                        f"{SMOKE_MARKER} This direct FCV pathway demonstrates evidence-linked "
+                        "review output and why adaptive delivery matters."
                     ),
                     recommended_action=f"{SMOKE_MARKER} Clarify the delivery logic.",
                     target_locator=locator,

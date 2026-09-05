@@ -11,6 +11,7 @@ from cpf_fcv_reviewer.contracts import (
     DiagnosticMode,
     DocumentCoverage,
     DocumentRole,
+    EvidenceItem,
     EvidenceLocator,
     FCVStrategicShift,
     FCVStrategyAssessment,
@@ -545,6 +546,104 @@ def test_current_context_is_not_forced_when_it_does_not_support_the_priority():
     assert "missing_current_context_support" not in {issue.code for issue in issues}
 
 
+def current_evidence(text: str) -> EvidenceItem:
+    return EvidenceItem(
+        evidence_id="current-1",
+        evidence_type="current_context",
+        text=text,
+        confidence="high",
+        source_url="https://www.reuters.com/world/africa/example",
+    )
+
+
+def test_current_context_must_match_the_priority_fcv_topic():
+    evidence = current_evidence("Guinea's political transition remains contested.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Land tenure disputes are increasing local conflict.",
+                why_it_matters="Land conflict could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_current_context_must_not_reverse_the_supported_direction():
+    evidence = current_evidence("Political violence increased across Guinea in 2026.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence decreased and security improved.",
+                why_it_matters="The calmer security environment supports delivery.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_current_context_accepts_matching_present_day_support():
+    evidence = current_evidence("Guinea's political transition remains contested.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="The contested political transition creates governance uncertainty.",
+                why_it_matters="Political uncertainty may disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" not in {issue.code for issue in issues}
+
+
+def test_generic_indicator_cannot_support_current_fcv_assertion():
+    evidence = current_evidence("Guinea's population total reached 14 million in 2025.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence is increasing across Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
 def test_explicit_fc_strategy_claim_requires_registry_evidence():
     reviewed = result(
         areas=(
@@ -836,3 +935,142 @@ def test_registry_only_prohibited_phrase_is_rejected():
 
 def test_priority_question_validation_was_removed():
     assert not hasattr(validators, "validate_priority_questions")
+
+def test_directional_current_claim_requires_directional_source_support():
+    evidence = current_evidence("Political violence remains a concern in Guinea.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence is increasing across Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
+        "Political violence declined in Guinea.",
+        "Political violence fell in Guinea.",
+        "Political violence remained stable in Guinea.",
+        "Political violence did not increase in Guinea.",
+    ],
+)
+def test_increasing_claim_rejects_non_increasing_source_language(source_text):
+    evidence = current_evidence(source_text)
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence is increasing across Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+def test_recommendation_topic_cannot_backfill_unrelated_current_assessment():
+    evidence = current_evidence("Political violence increased in Guinea.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="The program has delivery constraints.",
+                why_it_matters="Implementation delays remain possible.",
+                recommended_action="Address political violence in delivery planning.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    ("source_text", "assessment"),
+    [
+        ("Political violence is not stable.", "Political violence is stable."),
+        ("Political violence did not deteriorate.", "Political violence is increasing."),
+        ("Political violence has not increased.", "Political violence is increasing."),
+        ("Political violence is not increasing.", "Political violence is increasing."),
+        (
+            "Political transition remained stable while violence increased.",
+            "Political transition is worsening.",
+        ),
+    ],
+)
+def test_current_direction_is_bound_to_unnegated_matching_clause(
+    source_text, assessment
+):
+    evidence = current_evidence(source_text)
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment=assessment,
+                why_it_matters="The present context could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
+        "Land area increased in Guinea.",
+        "Armed forces increased school construction in Guinea.",
+    ],
+)
+def test_incidental_fcv_words_do_not_support_present_day_fcv_claim(source_text):
+    evidence = current_evidence(source_text)
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Land conflict is increasing in Guinea.",
+                why_it_matters="Land disputes could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}

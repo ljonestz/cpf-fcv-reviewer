@@ -1048,10 +1048,12 @@ def test_runtime_validation_passes_incomplete_optional_roles(monkeypatch, make_v
         *,
         evidence_ids,
         prohibited_terms,
+        evidence=None,
         incomplete_document_roles=frozenset(),
         registry_entry_ids=None,
     ):
         captured["roles"] = incomplete_document_roles
+        captured["evidence"] = evidence
         captured["registry_entry_ids"] = registry_entry_ids
         return ()
 
@@ -1081,6 +1083,7 @@ def test_runtime_validation_passes_incomplete_optional_roles(monkeypatch, make_v
     validate(context)
 
     assert captured["roles"] == frozenset({DocumentRole.PACKAGE})
+    assert captured["evidence"] == evidence
     assert captured["registry_entry_ids"] == {
         "SYN-REF-001",
         "SYN-PUB-FCV-STRAT-001",

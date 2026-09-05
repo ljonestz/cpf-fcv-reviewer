@@ -1184,11 +1184,14 @@ def build_runtime_services(
         return context
 
     def review_validation_issues(context):
-        evidence_ids = {item.evidence_id for item in context["evidence_pack"].evidence}
+        evidence = {
+            item.evidence_id: item for item in context["evidence_pack"].evidence
+        }
         issues = list(
             validate_review(
                 context["result"],
-                evidence_ids=evidence_ids,
+                evidence_ids=set(evidence),
+                evidence=evidence,
                 prohibited_terms=prohibited_terms,
                 incomplete_document_roles=_incomplete_document_roles(context),
                 registry_entry_ids=registry_entry_ids,

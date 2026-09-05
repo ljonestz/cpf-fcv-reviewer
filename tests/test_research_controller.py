@@ -39,7 +39,7 @@ def claim(
         source_url = f"https://{source_host}/{claim_id}"
     return CurrentContextClaim(
         claim_id=claim_id,
-        text=f"Claim {claim_id} establishes a bounded context finding.",
+        text=f"Political violence disrupted local services in Benin ({claim_id}).",
         publisher=publisher,
         source_title=f"Source {claim_id}",
         source_url=source_url,
@@ -180,7 +180,7 @@ def test_thin_recent_public_evidence_returns_reduced_tier_with_limitation():
     ).run(holistic_request(), lambda *event: events.append(event))
 
     assert result.tier is CurrentEvidenceTier.REDUCED
-    assert "one recent observation across one distinct URL and one institutional publisher was established;" in result.limitation
+    assert "one recent observation across one distinct URL and one originating publisher was established;" in result.limitation
     reduced = [data for kind, data in events if kind == "research_reduced"]
     assert len(reduced) == 1
     assert set(reduced[0]) == {"missing_coverage"}
@@ -197,7 +197,7 @@ def test_recent_claims_distinguish_claim_count_from_unique_source_count():
         max_attempts=1,
     ).run(holistic_request(), lambda *_: None)
 
-    assert "2 recent observations across 2 distinct URLs and 2 institutional publishers were established;" in result.limitation
+    assert "2 recent observations across 2 distinct URLs and 2 originating publishers were established;" in result.limitation
     assert "Only 2 public sources" not in result.limitation
 
 
@@ -218,19 +218,17 @@ def test_duplicate_normalized_source_url_reduces_source_count_not_claim_count():
         holistic_request(),
     )
 
-    assert "2 recent observations across one distinct URL and 2 institutional publishers were established;" in limitation
+    assert "2 recent observations across one distinct URL and 2 originating publishers were established;" in limitation
 
 
 def test_reduced_limitation_names_missing_thematic_coverage():
     claims = (
-        claim("economic-one", context_kind="resilience_factor").model_copy(
-            update={"text": "Economic trends are changing."}
-        ),
+        claim("fcv-one", context_kind="resilience_factor"),
         claim(
-            "economic-two",
+            "fcv-two",
             publisher="United Nations",
             context_kind="implementation_condition",
-        ).model_copy(update={"text": "Economic conditions remain constrained."}),
+        ),
     )
     result = controller(ScriptedGateway((claims,)), max_attempts=1).run(
         holistic_request(), lambda *_: None
@@ -241,9 +239,13 @@ def test_reduced_limitation_names_missing_thematic_coverage():
 
 
 def test_retry_prompt_targets_missing_non_economic_themes_for_named_rra():
-    gateway = ScriptedGateway(((claim("c1", context_kind="current_development"),),))
+    non_fcv = claim("c1", context_kind="current_development").model_copy(
+        update={"text": "Economic conditions remain constrained."}
+    )
+    gateway = ScriptedGateway(((non_fcv,),))
 
-    controller(gateway, max_attempts=2).run(rra_request(), lambda *_: None)
+    with pytest.raises(InsufficientResearch):
+        controller(gateway, max_attempts=2).run(rra_request(), lambda *_: None)
 
     retry_prompt = gateway.prompts[1]
     assert "structural_dynamic" in retry_prompt
@@ -273,9 +275,13 @@ def test_retry_prompt_does_not_echo_hostile_diagnostic_title():
         diagnostic_date=date(2022, 3, 1),
         diagnostic_summary="The diagnostic identifies structural delivery constraints.",
     )
-    gateway = ScriptedGateway(((claim("c1", context_kind="current_development"),),))
+    non_fcv = claim("c1", context_kind="current_development").model_copy(
+        update={"text": "Economic conditions remain constrained."}
+    )
+    gateway = ScriptedGateway(((non_fcv,),))
 
-    controller(gateway, max_attempts=2).run(request, lambda *_: None)
+    with pytest.raises(InsufficientResearch):
+        controller(gateway, max_attempts=2).run(request, lambda *_: None)
 
     for prompt in (gateway.prompts[0], gateway.prompts[1]):
         assert "the named RRA or diagnostic" in prompt
@@ -302,7 +308,7 @@ def test_trailing_dns_dot_counts_as_the_canonical_source_url():
         holistic_request(),
     )
 
-    assert "2 recent observations across one distinct URL and 2 institutional publishers were established;" in limitation
+    assert "2 recent observations across one distinct URL and 2 originating publishers were established;" in limitation
 
 
 def test_one_recent_curated_fcv_report_completes_at_reduced_tier():
@@ -321,31 +327,33 @@ def test_one_recent_curated_fcv_report_completes_at_reduced_tier():
 
     assert result.tier is CurrentEvidenceTier.REDUCED
     assert result.claims == (recovery_claim,)
-    assert "one institutional publisher" in result.limitation
+    assert "one originating publisher" in result.limitation
 
 
-def test_generic_indicator_recovery_alone_remains_reduced():
+def test_generic_indicator_recovery_alone_is_document_led():
     indicator = claim("indicator").model_copy(
-        update={"source_type": "institutional public data"}
+        update={
+            "text": "Population, total: 14,100,000.",
+            "source_type": "institutional public data",
+        }
     )
 
     result = controller(
         ScriptedGateway(((),)),
         recovery_gateway=ScriptedRecoveryGateway((indicator,)),
         max_attempts=1,
-    ).run(holistic_request(), lambda *_: None)
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
 
-    assert result.tier is CurrentEvidenceTier.REDUCED
-    assert "one institutional publisher" in result.limitation
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert result.claims == ()
 
 
-def test_primary_and_recovery_claims_merge_and_deduplicate():
-    primary = sufficient_claims()[:1]
-    recovery = ScriptedRecoveryGateway((sufficient_claims()[0],) + sufficient_claims()[1:])
+def test_empty_primary_can_use_sufficient_recovery():
+    recovery = ScriptedRecoveryGateway(sufficient_claims())
     events = []
 
     result = controller(
-        ScriptedGateway((primary,)),
+        ScriptedGateway(((),)),
         recovery_gateway=recovery,
         max_attempts=1,
     ).run(holistic_request(), lambda *event: events.append(event))
@@ -369,7 +377,7 @@ def test_recovery_failure_does_not_discard_usable_primary_evidence():
     assert result.claims[0].claim_id == "primary"
 
 
-def test_recovery_is_bounded_and_late_claims_are_not_accepted():
+def test_usable_primary_skips_late_recovery():
     now = [0.0]
     primary = claim("primary")
 
@@ -378,12 +386,7 @@ def test_recovery_is_bounded_and_late_claims_are_not_accepted():
             now[0] += 0.25
             return (primary,)
 
-    def finish_after_deadline(timeout_seconds):
-        now[0] += timeout_seconds + 0.01
-
-    recovery = ScriptedRecoveryGateway(
-        sufficient_claims(), on_search=finish_after_deadline
-    )
+    recovery = ScriptedRecoveryGateway(sufficient_claims())
     result = controller(
         DelayedPrimaryGateway(),
         recovery_gateway=recovery,
@@ -392,7 +395,7 @@ def test_recovery_is_bounded_and_late_claims_are_not_accepted():
         monotonic=lambda: now[0],
     ).run(holistic_request(), lambda *_: None)
 
-    assert recovery.timeouts == [0.75]
+    assert recovery.timeouts == []
     assert result.tier is CurrentEvidenceTier.REDUCED
     assert result.claims == (primary,)
 
@@ -474,24 +477,19 @@ def test_late_all_rejected_recovery_raises_timeout():
     _assert_events_are_privacy_safe(events)
 
 
-def test_primary_recent_evidence_precedes_late_recovery_timeout():
-    now = [0.0]
+def test_primary_recent_evidence_prevents_recovery_timeout():
     events = []
     primary = claim("primary-recent")
+    recovery = ScriptedRecoveryGateway(TimeoutError("late recovery"))
 
-    def finish_after_deadline(timeout_seconds):
-        now[0] += timeout_seconds + 0.01
-
-    recovery = ScriptedRecoveryGateway((), on_search=finish_after_deadline)
     result = controller(
         ScriptedGateway(((primary,),)),
         recovery_gateway=recovery,
         max_attempts=1,
         total_budget_seconds=1.0,
-        monotonic=lambda: now[0],
     ).run(holistic_request(), lambda kind, data: events.append((kind, data)))
 
-    assert recovery.calls == 1
+    assert recovery.calls == 0
     assert result.tier is CurrentEvidenceTier.REDUCED
     assert result.claims == (primary,)
     _assert_events_are_privacy_safe(events)
@@ -621,7 +619,7 @@ def test_rejected_claims_cannot_enable_reduced_mode():
 def test_recovery_configuration_error_is_not_isolated():
     with pytest.raises(ResearchConfigurationError):
         controller(
-            ScriptedGateway(((claim("primary"),),)),
+            ScriptedGateway(((),)),
             recovery_gateway=ScriptedRecoveryGateway(ResearchConfigurationError()),
             max_attempts=1,
         ).run(holistic_request(), lambda *_: None)
@@ -630,7 +628,7 @@ def test_recovery_configuration_error_is_not_isolated():
 def test_recovery_programming_error_propagates_immediately():
     with pytest.raises(KeyError, match="missing"):
         controller(
-            ScriptedGateway(((claim("primary"),),)),
+            ScriptedGateway(((),)),
             recovery_gateway=ScriptedRecoveryGateway(KeyError("missing")),
             max_attempts=1,
         ).run(holistic_request(), lambda *_: None)
@@ -711,8 +709,11 @@ def test_jittered_backoff_is_capped_to_remaining_budget():
     assert sleeps == [0.25]
 
 
-def test_controller_uses_targeted_fallback_for_thin_result():
-    gateway = ScriptedGateway(((claim("c1"),), sufficient_claims()))
+def test_controller_retries_when_first_result_is_not_fcv_relevant():
+    non_fcv = claim("c1").model_copy(
+        update={"text": "Economic conditions remain constrained."}
+    )
+    gateway = ScriptedGateway(((non_fcv,), sufficient_claims()))
 
     result = controller(gateway).run(rra_request(), lambda *_: None)
 
@@ -1171,3 +1172,150 @@ def test_controller_rejects_invalid_budget_settings(value):
 def test_controller_rejects_invalid_backoff_settings(value):
     with pytest.raises(ValueError):
         controller(ScriptedGateway(()), retry_backoff_seconds=value)
+
+
+def current_fcv_claim(claim_id="current-fcv", source_date=date(2026, 7, 1)):
+    text = "Political violence disrupted local services in Benin."
+    return claim(
+        claim_id,
+        publisher="Reuters",
+        context_kind="current_development",
+        source_date=source_date,
+        source_url=f"https://www.reuters.com/world/africa/{claim_id}-2026-07-01/",
+    ).model_copy(update={
+        "text": text,
+        "supporting_quote": text,
+        "publication_date_basis": "canonical_url",
+        "source_type": "trusted news report",
+    })
+
+
+def test_one_primary_current_fcv_source_returns_reduced_without_recovery_chase():
+    primary = ScriptedGateway(((current_fcv_claim(),),))
+    recovery = ScriptedRecoveryGateway(())
+
+    result = controller(
+        primary, recovery_gateway=recovery, max_attempts=3
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert primary.calls == 1
+    assert recovery.calls == 0
+    assert "one distinct URL" in result.limitation
+    assert "one originating publisher" in result.limitation
+
+
+@pytest.mark.parametrize(
+    ("text", "source_type"),
+    [
+        ("Population, total: 14,100,000.", "institutional public data"),
+        ("GDP per capita increased to USD 1,500.", "trusted news report"),
+        ("Life expectancy at birth reached 62 years.", "public report"),
+        ("Solar capacity increased in Benin.", "trusted news report"),
+    ],
+)
+def test_generic_or_irrelevant_recent_observation_is_document_led(text, source_type):
+    generic = current_fcv_claim("generic").model_copy(update={
+        "text": text,
+        "supporting_quote": text,
+        "source_type": source_type,
+    })
+
+    result = controller(
+        ScriptedGateway(((generic,),)), max_attempts=1
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert result.claims == ()
+    assert "submitted documents" in result.limitation
+
+
+def test_rra_update_current_evidence_is_also_limited_to_24_months():
+    old_after_diagnostic = current_fcv_claim(
+        "old-after-rra", source_date=date(2023, 8, 1)
+    )
+
+    result = controller(
+        ScriptedGateway(((old_after_diagnostic,),)), max_attempts=1
+    ).run(rra_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+    assert result.claims == ()
+
+def test_armed_attack_reporting_is_substantive_current_fcv_evidence():
+    report = current_fcv_claim("armed-attack").model_copy(
+        update={
+            "text": "Armed groups attacked villages in Benin.",
+            "supporting_quote": "Armed groups attacked villages in Benin.",
+        }
+    )
+
+    result = controller(
+        ScriptedGateway(((report,),)), max_attempts=1
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+
+
+def test_population_story_with_incidental_government_reference_is_document_led():
+    report = current_fcv_claim("population-government").model_copy(
+        update={
+            "text": "Population growth rose while the government expanded schools.",
+            "supporting_quote": (
+                "Population growth rose while the government expanded schools."
+            ),
+        }
+    )
+
+    result = controller(
+        ScriptedGateway(((report,),)), max_attempts=1
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+
+def test_food_security_language_alone_is_not_current_fcv_evidence():
+    report = current_fcv_claim("food-security").model_copy(
+        update={
+            "text": "Food security improved after the latest harvest in Somalia.",
+            "supporting_quote": (
+                "Food security improved after the latest harvest in Somalia."
+            ),
+        }
+    )
+
+    result = controller(
+        ScriptedGateway(((report,),)), max_attempts=1
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Militants attacked villages in Benin.",
+        "Clashes killed civilians in Benin.",
+    ],
+)
+def test_common_conflict_reporting_is_substantive_current_fcv_evidence(text):
+    report = current_fcv_claim("common-conflict").model_copy(
+        update={"text": text, "supporting_quote": text}
+    )
+
+    result = controller(
+        ScriptedGateway(((report,),)), max_attempts=1
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.REDUCED
+
+
+def test_armed_forces_school_story_is_not_current_fcv_evidence():
+    text = "Armed forces increased school construction in Benin."
+    report = current_fcv_claim("armed-schools").model_copy(
+        update={"text": text, "supporting_quote": text}
+    )
+
+    result = controller(
+        ScriptedGateway(((report,),)), max_attempts=1
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -23,6 +24,22 @@ from .public_research import (
 
 # The gateway owns per-attempt network timeouts; this controller only bounds work between calls.
 
+_CURRENT_FCV_PATTERN = re.compile(
+    r"\b(?:conflicts?|violence|violent|elections?|coup|attacks?|fighting|"
+    r"militants?|clashes?|armed (?:groups?|conflict|actors?|attacks?|clashes?)|"
+    r"unrest|repression|political (?:transition|instability|crisis|tensions?)|"
+    r"governance (?:crisis|failure|breakdown|risk)|"
+    r"security (?:incidents?|crisis|deterioration|forces?|threats?)|"
+    r"military (?:rule|takeover|forces?|operations?)|"
+    r"displacement|displaced|refugees?|humanitarian (?:crisis|needs?|emergency|access)|"
+    r"land (?:conflict|dispute|tenure)|resource conflict|social cohesion|peacebuilding)\b",
+    re.IGNORECASE,
+)
+_GENERIC_INDICATOR_PATTERN = re.compile(
+    r"\b(?:gdp(?: per capita)?|life expectancy|population(?:,? total| growth| estimate)|"
+    r"solar capacity)\b",
+    re.IGNORECASE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -223,12 +240,13 @@ class ResearchController:
 
             self._merge_claims(claims, accepted, accepted_urls, rejected)
 
-            last_missing = self._missing_coverage(tuple(accepted.values()), request)
+            qualifying = self._qualifying_claims(tuple(accepted.values()), request)
+            last_missing = self._missing_coverage(qualifying, request)
             elapsed = self.monotonic() - started
             if not last_missing:
                 return self._finish(
                     started=started,
-                    claims=tuple(accepted.values()),
+                    claims=qualifying,
                     rejected=rejected,
                     attempts=primary_attempts,
                     tier=CurrentEvidenceTier.FULL,
@@ -236,6 +254,20 @@ class ResearchController:
                     route="research_primary" if attempt == 1 else "research_salvaged",
                     emit=emit,
                     event_data=self._event_data(attempt, accepted, rejected, elapsed),
+                )
+            if qualifying:
+                return self._finish(
+                    started=started,
+                    claims=qualifying,
+                    rejected=rejected,
+                    attempts=primary_attempts,
+                    tier=CurrentEvidenceTier.REDUCED,
+                    limitation=self._reduced_limitation(
+                        qualifying, last_missing, request
+                    ),
+                    route="research_reduced",
+                    emit=emit,
+                    event_data={"missing_coverage": last_missing},
                 )
             if attempt < self.max_attempts:
                 if not self._prepare_retry(attempt, started, last_missing, emit):
@@ -267,12 +299,13 @@ class ResearchController:
                     self.monotonic() - started >= self.total_budget_seconds
                 )
             if recovery_succeeded:
-                last_missing = self._missing_coverage(tuple(accepted.values()), request)
+                qualifying = self._qualifying_claims(tuple(accepted.values()), request)
+                last_missing = self._missing_coverage(qualifying, request)
                 emit("research_curated_recovery", {"accepted_count": len(accepted)})
                 if not last_missing:
                     return self._finish(
                         started=started,
-                        claims=tuple(accepted.values()),
+                        claims=qualifying,
                         rejected=rejected,
                         attempts=primary_attempts,
                         tier=CurrentEvidenceTier.FULL,
@@ -287,11 +320,9 @@ class ResearchController:
                         ),
                     )
 
-        if accepted:
-            accepted_claims = tuple(accepted.values())
+        accepted_claims = self._qualifying_claims(tuple(accepted.values()), request)
+        if accepted_claims:
             last_missing = self._missing_coverage(accepted_claims, request)
-        else:
-            accepted_claims = ()
         budget_exhausted = budget_exhausted or (
             self.monotonic() - started >= self.total_budget_seconds
         )
@@ -308,7 +339,7 @@ class ResearchController:
                 emit=emit,
                 event_data={"missing_coverage": last_missing},
             )
-        if allow_document_led and not accepted:
+        if allow_document_led and not accepted_claims:
             reason = self._document_led_reason(
                 budget_exhausted=budget_exhausted,
                 last_failure=last_failure,
@@ -429,6 +460,25 @@ class ResearchController:
             return "source_rejected"
         return "insufficient_coverage"
 
+    def _qualifying_claims(
+        self,
+        claims: tuple[CurrentContextClaim, ...],
+        request: ResearchRequest,
+    ) -> tuple[CurrentContextClaim, ...]:
+        return tuple(
+            claim
+            for claim in claims
+            if self._is_recent(claim, request) and self._is_substantive_fcv(claim)
+        )
+
+    @staticmethod
+    def _is_substantive_fcv(claim: CurrentContextClaim) -> bool:
+        grounded_text = claim.supporting_quote or claim.text
+        return bool(
+            _CURRENT_FCV_PATTERN.search(grounded_text)
+            and _GENERIC_INDICATOR_PATTERN.search(grounded_text) is None
+        )
+
     def _recent_claim_count(
         self,
         claims: tuple[CurrentContextClaim, ...],
@@ -473,9 +523,10 @@ class ResearchController:
         gaps = ", ".join(labels.get(item, item) for item in missing)
         return (
             f"{recent_count_word} recent {observation_word} across {source_count_word} "
-            f"distinct {url_word} and {publisher_count_word} institutional "
+            f"distinct {url_word} and {publisher_count_word} originating "
             f"{publisher_word} {verb} established; "
-            f"current-country coverage remains incomplete for {gaps}."
+            "this is sufficient for a reduced current update, while broader "
+            f"coverage remains unavailable for {gaps}."
         )
 
     def _prompt(
@@ -551,10 +602,13 @@ class ResearchController:
 
     @staticmethod
     def _is_recent(claim: CurrentContextClaim, request: ResearchRequest) -> bool:
-        if request.mode is ResearchMode.RRA_UPDATE:
-            return request.diagnostic_date < claim.source_date <= request.review_date
         window_start = _subtract_calendar_years(request.review_date, 2)
-        return window_start <= claim.source_date <= request.review_date
+        if not window_start <= claim.source_date <= request.review_date:
+            return False
+        return bool(
+            request.mode is not ResearchMode.RRA_UPDATE
+            or request.diagnostic_date < claim.source_date
+        )
 
     @staticmethod
     def _event_data(
