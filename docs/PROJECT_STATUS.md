@@ -1,5 +1,34 @@
 # Project status
 
+## 2026-09-05 Guinea paid follow-up and ICG headline correction (`1350202`)
+
+- Render reported merged commit `01dc9392801eb3849864cf69777b4337988436ee`
+  live; no-cost health and root checks returned HTTP 200.
+- The one authorized Guinea assessment for this release was submitted. It used zero
+  assistant calls and was not retried. Primary research reported the broad
+  `provider_failure` category with zero usable candidates, and curated recovery
+  accepted zero claims.
+- The run failed closed during diagnostic mapping after the one permitted correction:
+  `diagnostic_coverage_unavailable` caused by a second `ValidationError`. No result
+  or DOCX was produced. The safe evidence does not identify the provider-failure stage
+  or invalid map field, so no speculative provider change, third map call, or schema
+  relaxation was made.
+- Provider-free diagnosis found that the ICG adapter ignored a qualifying Guinea
+  political-transition headline whenever the RSS description existed but was generic.
+  The correction accepts the exact headline only when it independently passes country,
+  FCV-topic, assertion, URL, and date checks; it preserves valid qualifying summaries.
+- A live provider-free official-feed check retained one exact-source International
+  Crisis Group Guinea observation dated 2025-10-03. One such source can support the
+  reduced tier, truthfully disclosed as one URL and one publisher; generic indicators
+  remain unsuitable for unrelated current-FCV assertions.
+- Verification passed 212 focused tests, all 1,441 provider-free tests, compilation,
+  JavaScript syntax, diff checks, independent reviews, and the full external smoke
+  runner with upload, both result views, two assistant turns, refresh restoration,
+  mobile, and a valid 39,465-byte DOCX.
+- The paid allowance is exhausted. Commit `1350202` is not yet deployed or
+  provider-tested. See
+  `docs/validation/2026-09-05-guinea-selected-country-paid-followup.md`.
+
 ## 2026-09-05 selected-country current-FCV hardening (`6ac2d57`)
 
 - Each assessment sends one confirmed country to one bounded live-web research route.
