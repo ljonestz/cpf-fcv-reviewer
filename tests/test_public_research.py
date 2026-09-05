@@ -138,7 +138,7 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
                                 type="web_search_result",
                                 title="World Bank update",
                                 url=source_url,
-                                page_age="April 30, 2025",
+                                published_at="April 30, 2025",
                             ),
                         ),
                     ),
@@ -186,6 +186,7 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
                             source_title="World Bank update",
                             source_url=source_url,
                             source_date=date(2025, 4, 30),
+                            supporting_quote="Source excerpt for the first segment.",
                         ),
                     )
                 )
@@ -237,6 +238,8 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
                 "url": source_url,
                 "published_at": "2025-04-30",
                 "excerpt": "Source excerpt for the first segment.",
+                "publisher": "World Bank",
+                "publication_date_basis": "provider_metadata",
             }
         ],
     }
@@ -257,7 +260,7 @@ def test_unresolved_citation_blocks_are_excluded_from_payload_and_salvage(monkey
                                 type="web_search_result",
                                 title="Resolved update",
                                 url=source_url,
-                                page_age="2025-04-30",
+                                published_at="2025-04-30",
                             ),
                         ),
                     ),
@@ -306,7 +309,7 @@ def test_unresolved_citation_blocks_are_excluded_from_payload_and_salvage(monkey
     normalized_payload = json.loads(parse_calls[0]["messages"][0]["content"])
     assert normalized_payload["narrative"] == "Resolved narrative is grounded."
     assert all("Unsupported" not in claim.text for claim in result)
-    assert [claim.text for claim in result] == ["Resolved narrative is grounded."]
+    assert [claim.text for claim in result] == ["Resolved source excerpt."]
 
 
 def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_results(monkeypatch):
@@ -328,7 +331,7 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
                         type="web_search_result",
                         title="Continued World Bank update",
                         url=source_url,
-                        page_age="2025-04-30",
+                        published_at="2025-04-30",
                     ),
                 ),
             ),
@@ -369,6 +372,7 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
                             source_url=source_url,
                             source_title="Continued World Bank update",
                             source_date=date(2025, 4, 30),
+                            supporting_quote="Prior source excerpt, not assistant narrative.",
                         ),
                     )
                 )
@@ -404,6 +408,8 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
             "url": source_url,
             "published_at": "2025-04-30",
             "excerpt": "Prior source excerpt, not assistant narrative.",
+            "publisher": "World Bank",
+            "publication_date_basis": "provider_metadata",
         }
     ]
 
@@ -420,7 +426,7 @@ def test_anthropic_gateway_continues_mapping_pause_turn_once(monkeypatch):
                         "type": "web_search_result",
                         "title": "Mapping pause update",
                         "url": source_url,
-                        "page_age": "2025-04-30",
+                        "published_at": "2025-04-30",
                     }
                 ],
             }
@@ -460,6 +466,7 @@ def test_anthropic_gateway_continues_mapping_pause_turn_once(monkeypatch):
                             source_url=source_url,
                             source_title="Mapping pause update",
                             source_date=date(2025, 4, 30),
+                            supporting_quote="A provider source excerpt.",
                         ),
                     )
                 )
@@ -480,7 +487,7 @@ def test_anthropic_gateway_continues_mapping_pause_turn_once(monkeypatch):
     assert len(result) == 1
 
 
-def test_anthropic_gateway_does_not_salvage_mixed_sentence_cited_blocks(monkeypatch):
+def test_anthropic_gateway_salvages_only_exact_source_excerpt(monkeypatch):
     source_url = "https://www.worldbank.org/dated-update"
 
     class FakeBetaMessages:
@@ -494,7 +501,7 @@ def test_anthropic_gateway_does_not_salvage_mixed_sentence_cited_blocks(monkeypa
                                 type="web_search_result",
                                 title="Dated World Bank update",
                                 url=source_url,
-                                page_age="2025-04-30",
+                                published_at="2025-04-30",
                             ),
                         ),
                     ),
@@ -528,8 +535,8 @@ def test_anthropic_gateway_does_not_salvage_mixed_sentence_cited_blocks(monkeypa
     monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
     gateway = public_research.AnthropicPublicResearchGateway("test-key", "test-model")
 
-    with pytest.raises(ValueError, match="no parsed output"):
-        gateway.search("Use dated cited evidence.")
+    result = gateway.search("Use dated cited evidence.")
+    assert [claim.text for claim in result] == ["Source excerpt for the salvageable sentence."]
 
 
 def test_anthropic_gateway_rejects_undated_sources_during_salvage(monkeypatch):
@@ -966,6 +973,7 @@ def _cited_response(
     source_title: str,
     page_age: str,
     narrative: str = "The grounded narrative.",
+    cited_text: str = "A source excerpt that is not assistant text.",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         content=(
@@ -976,7 +984,7 @@ def _cited_response(
                         type="web_search_result",
                         title=source_title,
                         url=source_url,
-                        page_age=page_age,
+                        published_at=page_age,
                     ),
                 ),
             ),
@@ -989,7 +997,7 @@ def _cited_response(
                         title=source_title,
                         url=source_url,
                         encrypted_index="0",
-                        cited_text="A source excerpt that is not assistant text.",
+                        cited_text=cited_text,
                     ),
                 ),
             ),
@@ -1031,6 +1039,7 @@ def test_normalized_claims_match_url_and_use_retrieved_source_metadata(monkeypat
         source_title=source_title,
         source_date=source_date,
         publisher="World Bank",
+        supporting_quote="A source excerpt that is not assistant text.",
     )
     invalid_url = valid.model_copy(
         update={"claim_id": "invalid-url", "source_url": "https://www.worldbank.org/other"}
@@ -1083,6 +1092,9 @@ def test_uncited_retrieved_sources_are_unavailable_to_normalization(monkeypatch)
         source_url=source_a,
         source_title="Cited update",
         source_date=date(2025, 4, 30),
+        text="Cited source excerpt.",
+        supporting_quote="Cited source excerpt.",
+        publication_date_basis="provider_metadata",
     )
     claim_b = _claim(
         claim_id="uncited",
@@ -1102,13 +1114,13 @@ def test_uncited_retrieved_sources_are_unavailable_to_normalization(monkeypatch)
                                 type="web_search_result",
                                 title="Cited update",
                                 url=source_a,
-                                page_age="2025-04-30",
+                                published_at="2025-04-30",
                             ),
                             SimpleNamespace(
                                 type="web_search_result",
                                 title="Uncited update",
                                 url=source_b,
-                                page_age="2025-04-30",
+                                published_at="2025-04-30",
                             ),
                         ),
                     ),
@@ -1154,7 +1166,7 @@ def test_mapping_shaped_provider_blocks_are_extracted():
                     "type": "web_search_result",
                     "title": "Mapped update",
                     "url": "https://www.worldbank.org/mapped",
-                    "page_age": "2025-04-30",
+                    "published_at": "2025-04-30",
                 },
             },
             {
@@ -1250,7 +1262,7 @@ def test_invalid_normalized_claims_fall_back_to_block_level_salvage(monkeypatch)
     result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
     assert len(result) == 1
-    assert result[0].text == "The complete grounded block is the salvage unit."
+    assert result[0].text == "A source excerpt that is not assistant text."
     assert result[0].source_date == date(2025, 4, 30)
 
 
@@ -1258,7 +1270,10 @@ def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift(
     source = public_research.ResearchSource(
         title="Guinea transition update",
         url="https://www.reuters.com/world/africa/guinea-transition-update",
+        publisher="Reuters",
         published_at=date(2026, 8, 30),
+        publication_date_basis="provider_metadata",
+        excerpt="Guinea's political transition remains uncertain.",
     )
     artifact = public_research.SearchArtifact(
         narrative="Guinea's political transition remains uncertain.",
@@ -1270,6 +1285,8 @@ def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift(
         source_url=source.url,
         source_date=date(2026, 8, 29),
         text="Guinea's political transition remains uncertain.",
+        supporting_quote="Guinea's political transition remains uncertain.",
+        publication_date_basis="canonical_url",
     )
 
     retained = public_research._validate_normalized_claims((normalized,), artifact)
@@ -1281,6 +1298,8 @@ def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift(
                 "source_title": source.title,
                 "source_date": source.published_at,
                 "source_url": source.url,
+                "supporting_quote": normalized.supporting_quote,
+                "publication_date_basis": "provider_metadata",
             }
         ),
     )
@@ -1316,7 +1335,7 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
     result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
     assert len(result) == 1
-    assert result[0].text == "The grounded narrative."
+    assert result[0].text == "A source excerpt that is not assistant text."
     assert len(beta_calls) == 1
     assert len(parse_calls) == 1
 
@@ -1336,6 +1355,7 @@ def test_salvage_rejects_ambiguous_or_unpunctuated_cited_blocks(monkeypatch, nar
                 source_title="Ambiguous salvage update",
                 page_age="2025-04-30",
                 narrative=narrative,
+                cited_text=narrative,
             )
 
     class FakeMessages:
@@ -1844,3 +1864,277 @@ def test_extraction_fails_closed_instead_of_cutting_an_oversized_bundle():
 
     with pytest.raises(ValidationError, match="Serialized source bundle"):
         public_research._extract_search_artifact(blocks)
+
+
+@pytest.mark.parametrize(
+    ("item", "expected_date", "expected_basis"),
+    [
+        (
+            {
+                "title": "Synthetic Reuters report",
+                "url": "https://www.reuters.com/world/africa/headline-2024-01-15/",
+                "page_age": "1 day ago",
+            },
+            date(2024, 1, 15),
+            "canonical_url",
+        ),
+        (
+            {
+                "title": "Synthetic Reuters report",
+                "url": "https://www.reuters.com/world/africa/2026/08/30/story-id/",
+                "published_at": "2026-08-30T14:15:00Z",
+                "page_age": "today",
+            },
+            date(2026, 8, 30),
+            "provider_metadata",
+        ),
+        (
+            {
+                "title": "Synthetic AP report",
+                "url": "https://apnews.com/article/opaque-story-id",
+                "page_age": "1 day ago",
+            },
+            None,
+            None,
+        ),
+        (
+            {
+                "title": "Synthetic conflicting Reuters report",
+                "url": "https://www.reuters.com/world/africa/headline-2026-08-30/",
+                "published_at": "2026-08-29",
+            },
+            None,
+            "conflicting",
+        ),
+    ],
+)
+def test_source_dates_use_publication_provenance_not_page_age(
+    item, expected_date, expected_basis
+):
+    _, _, published_at, basis = public_research._source_metadata(item)
+
+    assert published_at == expected_date
+    assert basis == expected_basis
+
+
+@pytest.mark.parametrize(
+    ("result_date", "expected_date", "expected_basis"),
+    [
+        (None, date(2026, 8, 30), "source_excerpt"),
+        ("2026-08-29", None, "conflicting"),
+    ],
+)
+def test_publication_labelled_excerpt_resolves_or_conflicts(
+    result_date, expected_date, expected_basis
+):
+    url = "https://apnews.com/article/synthetic-publication-date"
+    result = {
+        "type": "web_search_result",
+        "title": "Synthetic Guinea update",
+        "url": url,
+    }
+    if result_date is not None:
+        result["published_at"] = result_date
+    artifact, _ = public_research._extract_search_artifact(
+        (
+            {"type": "web_search_tool_result", "content": result},
+            {
+                "type": "text",
+                "text": "Synthetic cited synthesis.",
+                "citations": [
+                    {
+                        "type": "web_search_result_location",
+                        "title": "Synthetic Guinea update",
+                        "url": url,
+                        "cited_text": (
+                            "Published: 2026-08-30 - Guinea's transition remains unsettled."
+                        ),
+                    }
+                ],
+            },
+        ),
+        selected_country="Guinea",
+    )
+
+    assert artifact.sources[0].published_at == expected_date
+    assert artifact.sources[0].publication_date_basis == expected_basis
+
+def test_normalized_claim_requires_quote_from_exact_country_source():
+    transition = public_research.ResearchSource(
+        title="Synthetic Guinea political transition report",
+        url="https://www.reuters.com/world/africa/guinea-transition-2026-08-30",
+        publisher="Reuters",
+        published_at=date(2026, 8, 30),
+        publication_date_basis="canonical_url",
+        excerpt="Guinea's transition timetable remains contested.",
+    )
+    land = public_research.ResearchSource(
+        title="Synthetic regional land report",
+        url="https://apnews.com/article/synthetic-land-report",
+        publisher="Associated Press",
+        published_at=date(2026, 8, 29),
+        publication_date_basis="provider_metadata",
+        excerpt="Land disputes increased in a different country.",
+    )
+    missing_excerpt = public_research.ResearchSource(
+        title="Synthetic Guinea report without excerpt",
+        url="https://www.bbc.com/news/articles/synthetic-no-excerpt",
+        publisher="BBC",
+        published_at=date(2026, 8, 28),
+        publication_date_basis="provider_metadata",
+    )
+    artifact = public_research.SearchArtifact(
+        narrative="Synthetic cited synthesis.", sources=(transition, land, missing_excerpt)
+    )
+    valid = _claim(
+        "valid",
+        source_url=transition.url,
+        supporting_quote="Guinea's transition timetable remains contested.",
+    )
+    swapped = _claim(
+        "swapped",
+        source_url=land.url,
+        supporting_quote="Guinea's transition timetable remains contested.",
+    )
+    fabricated = _claim(
+        "fabricated", source_url=transition.url, supporting_quote="Fabricated quote."
+    )
+    unknown = _claim(
+        "unknown",
+        source_url="https://www.reuters.com/world/unknown-2026-08-30/",
+        supporting_quote="Guinea's transition timetable remains contested.",
+    )
+    wrong_country = _claim(
+        "wrong-country", source_url=land.url, supporting_quote=land.excerpt
+    )
+    missing_quote = _claim("missing-quote", source_url=transition.url)
+    no_excerpt = _claim(
+        "no-excerpt",
+        source_url=missing_excerpt.url,
+        supporting_quote="Guinea claim not present in retrieved evidence.",
+    )
+
+    retained = public_research._validate_normalized_claims(
+        (valid, swapped, fabricated, unknown, wrong_country, missing_quote, no_excerpt),
+        artifact,
+        selected_country="Guinea",
+    )
+
+    assert [claim.claim_id for claim in retained] == ["valid"]
+    assert retained[0].text == transition.excerpt
+    assert retained[0].publisher == "Reuters"
+    assert retained[0].publication_date_basis == "canonical_url"
+
+
+def test_salvage_uses_source_excerpt_and_requires_country_connection():
+    source = public_research.ResearchSource(
+        title="Synthetic Guinea update",
+        url="https://www.reuters.com/world/africa/guinea-update-2026-08-30/",
+        publisher="Reuters",
+        published_at=date(2026, 8, 30),
+        publication_date_basis="canonical_url",
+        excerpt="Guinea's transition timetable remains contested.",
+    )
+
+    retained = public_research._salvage_grounded_segments(
+        (("Assistant narrative with a different claim.", (source,)),),
+        selected_country="Guinea",
+    )
+    rejected = public_research._salvage_grounded_segments(
+        (("Assistant narrative.", (source,)),), selected_country="Somalia"
+    )
+
+    assert retained[0].text == source.excerpt
+    assert retained[0].supporting_quote == source.excerpt
+    assert rejected == ()
+
+
+def test_bounded_article_metadata_reads_publication_fields_only():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text=(
+                '<meta property="article:published_time" content="2026-08-30T10:00:00Z">'
+                '<meta property="article:modified_time" content="2026-09-01T10:00:00Z">'
+            ),
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        resolved = public_research._fetch_article_publication_date(
+            "https://apnews.com/article/opaque-story-id", client
+        )
+        blocked = public_research._fetch_article_publication_date(
+            "http://apnews.com/article/opaque-story-id", client
+        )
+
+    assert resolved == date(2026, 8, 30)
+    assert blocked is None
+    assert len(requests) == 1
+
+
+def test_gateway_performs_at_most_one_metadata_get_for_opaque_sources(monkeypatch):
+    urls = (
+        "https://apnews.com/article/opaque-story-id",
+        "https://www.bbc.com/news/articles/opaque-story-id",
+    )
+    metadata_requests = []
+
+    def metadata_handler(request: httpx.Request) -> httpx.Response:
+        metadata_requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/xhtml+xml"},
+            text='<script type="application/ld+json">{"datePublished":"2026-08-30"}</script>',
+        )
+
+    class FakeBetaMessages:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                content=(
+                    SimpleNamespace(
+                        type="web_search_tool_result",
+                        content=tuple(
+                            SimpleNamespace(
+                                type="web_search_result",
+                                title=f"Guinea update {i}",
+                                url=url,
+                            )
+                            for i, url in enumerate(urls)
+                        ),
+                    ),
+                    *tuple(
+                        SimpleNamespace(
+                            type="text",
+                            text=f"Synthetic assistant narrative {i}.",
+                            citations=(
+                                SimpleNamespace(
+                                    type="web_search_result_location",
+                                    title=f"Guinea update {i}",
+                                    url=url,
+                                    cited_text=f"Guinea current condition {i} remains unsettled.",
+                                ),
+                            ),
+                        )
+                        for i, url in enumerate(urls)
+                    ),
+                ),
+                stop_reason="end_turn",
+            )
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=FakeBetaMessages()),
+        messages=SimpleNamespace(parse=lambda **kwargs: SimpleNamespace(parsed_output=None)),
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    with httpx.Client(transport=httpx.MockTransport(metadata_handler)) as metadata_client:
+        result = public_research.AnthropicPublicResearchGateway(
+            "key", "model", metadata_client=metadata_client
+        ).search("country: Guinea")
+
+    assert len(metadata_requests) == 1
+    assert [claim.source_url for claim in result] == [urls[0]]
+    assert result[0].publication_date_basis == "article_metadata"

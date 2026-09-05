@@ -969,9 +969,9 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
                         content=(
                             SimpleNamespace(
                                 type="web_search_result",
-                                title="Same update",
+                                title="Benin same update",
                                 url=source_url,
-                                page_age="2020-04-30",
+                                published_at="2020-04-30",
                             ),
                         ),
                     ),
@@ -981,10 +981,10 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
                         citations=(
                             SimpleNamespace(
                                 type="web_search_result_location",
-                                title="Same update",
+                                title="Benin same update",
                                 url=source_url,
                                 encrypted_index="0",
-                                cited_text="Source excerpt.",
+                                cited_text="Benin source excerpt.",
                             ),
                         ),
                     ),
@@ -1000,8 +1000,9 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
                     source_url="HTTPS://WWW.WORLDBANK.ORG:443/same/",
                 ).model_copy(
                     update={
-                        "source_title": "Same update",
+                        "source_title": "Benin same update",
                         "source_date": date(2020, 4, 30),
+                        "supporting_quote": "Benin source excerpt.",
                     }
                 ),
                 claim(
@@ -1009,8 +1010,9 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
                     source_url="https://www.worldbank.org/same",
                 ).model_copy(
                     update={
-                        "source_title": "Same update",
+                        "source_title": "Benin same update",
                         "source_date": date(2020, 4, 30),
+                        "supporting_quote": "Benin source excerpt.",
                     }
                 ),
             )
