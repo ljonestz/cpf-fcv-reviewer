@@ -1,5 +1,31 @@
 # Project status
 
+## 2026-09-05 selected-country current-FCV hardening (`6ac2d57`)
+
+- Each assessment sends one confirmed country to one bounded live-web research route.
+  The route is not limited by FCV classification and never loops over other countries.
+- Source selection now prefers trusted current reporting from ICG, Reuters/AP/BBC,
+  approved UN/humanitarian publishers, IRC, public ACLED analysis, and approved think
+  tanks. Optional mapped ICG and ReliefWeb recovery does not determine whether primary
+  research is available.
+- One recent substantive trusted finding can produce a reduced current update. Generic
+  macro or demographic indicators remain document-limited and cannot support unrelated
+  present-day FCV assertions.
+- Source-bound quotes, selected-country relevance, publisher, title, URL, publication
+  date, and date basis survive into review and repair. Deterministic checks reject known
+  topic, direction, country, geographic-scope, modal, and negation mismatches.
+- Evidence caps are applied after recency and substantive qualification, and terminal
+  tier/limitation language describes the retained observations, URLs, and publishers.
+- Provider-free validation passed all 1,438 tests, Python compilation, JavaScript syntax,
+  and `git diff --check`. Astra and three independent Luna reviews report PASS.
+- The complete synthetic browser runner passed upload, summary and detailed results, two
+  assistant turns, four restored messages after refresh, mobile, and DOCX. It reported
+  `BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1`; the DOCX was
+  39,464 bytes with 19 valid ZIP entries.
+- This checkpoint is not yet deployed and has not used the separately authorized paid
+  Guinea run. Live source selection and unrestricted semantic quality remain the final
+  deployed acceptance gate; a failed paid run must not be retried automatically.
+
 ## 2026-09-04 current-FCV research release (`b40ee4e`)
 
 - Render reports exact commit `b40ee4e38366ecb47453fe299d888946657707b3` live;

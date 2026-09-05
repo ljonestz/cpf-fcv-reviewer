@@ -11,12 +11,17 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Latest verified deployment:
   `b40ee4e38366ecb47453fe299d888946657707b3` on 2026-09-04. Render reports
   that exact commit live; `/health` returns `ok` and the root page returns HTTP 200.
-- Current-country recovery prioritizes substantively FCV-relevant public reporting.
-  Primary research permits named UN/humanitarian, Reuters/AP/BBC, and think-tank sources.
-  Deterministic Guinea recovery uses a bounded official International Crisis Group feed.
-  World Bank macro/demographic indicators are not used as current-FCV evidence.
-- ReliefWeb recovery is optional and requires a pre-approved application name. The
-  previous arbitrary default was removed after its HTTP 403 was confirmed.
+- Every assessment researches only its confirmed country through the same bounded,
+  country-agnostic route; it never fans out across other countries. Source selection
+  prioritizes recent substantive reporting from ICG, Reuters/AP/BBC, approved
+  UN/humanitarian publishers, IRC, public ACLED analysis, and approved think tanks.
+- One recent grounded, substantively FCV-relevant source is sufficient for a reduced
+  current update. Generic macro/demographic indicators cannot substitute for current-FCV
+  reporting or support unrelated political, violence, displacement, or land-conflict
+  claims. Observations, URLs, and publishers are counted separately.
+- Optional mapped ICG and ReliefWeb recovery complements rather than defines the generic
+  primary route. ReliefWeb requires a pre-approved application name. The previous
+  arbitrary default was removed after its HTTP 403 was confirmed.
 - Exactly one authorized paid Guinea assessment was completed on the preceding release.
   It produced a valid document-led review and DOCX without current-context or indicator
   evidence; no provider-backed assistant call or second assessment was made. The new
@@ -53,7 +58,8 @@ Starting an assessment opens a dedicated Project Screener-aligned holding view w
 
 - Operational production configuration requires SQLite persistence and fails closed without it. The public reference prototype can use volatile storage only when `ALLOW_VOLATILE_PROTOTYPE=true` is set explicitly.
 - A direct current RRA original takes precedence over derived copies; upload is the public-prototype fallback. Operational SharePoint and ITS access are out of scope. A future internal ITS implementation would use the existing source-adapter boundary with separately governed, permission-aware SharePoint access.
-- Public current-context research is public-web only. Do not use licensed sources, including ACLED.
+- Public current-context research is public-web only. Public editorial or analytical
+  reporting may be used, but licensed datasets and subscription-only ACLED content may not.
 - The public prototype uses approved non-confidential guardrails and fails closed when its required registry bundle is invalid or unavailable. Detailed internal policy content belongs on a separately governed internal track.
 - Output is English. French input support is limited.
 - The public prototype is non-production and has no production-use approval. Keeping it awake can support a bounded test run, but a restart still discards that run; ITS should use governed durable storage in its operational implementation.
