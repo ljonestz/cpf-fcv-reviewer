@@ -1,273 +1,95 @@
-# All-Country Current FCV Research Design
+# Selected-Country Live FCV Research Design
 
-## Goal
+## Purpose and scope
 
-Provide the same bounded current-context research capability for any recognized country
-or territory, with particular coverage of World Bank FCV and institutional-fragility
-contexts. The review should use a small number of recent, trusted, substantively relevant
-UN, humanitarian, news, or think-tank sources. It must remain document-led when no such
-source can be established.
+For each CPF/CEN review, research only its confirmed country. A Somalia CPF triggers Somalia research, not searches for all FCV countries. The application must offer this same capability for every supported country or territory, particularly low- and middle-income countries, regardless of FCV classification.
 
-"All-country support" means that the system can construct, run, validate, and disclose
-research for every recognized country without a country-specific code change. It does
-not mean that a recent relevant publication is guaranteed to exist for every country.
+Country catalogues and country matrices are offline development checks. They are never runtime loops or lists of countries to call during an assessment. Regional reporting may be used only where the retained excerpt concerns the selected country or an explicit spillover affecting it.
 
-## Current limitations
+This revision incorporates Astra's review and the user's clarification. The companion implementation plan supersedes the earlier recipe and defines the work and tests. No new live-quality acceptance is claimed.
 
-The current implementation does not meet that contract:
+## Practical source policy
 
-- The deterministic International Crisis Group recovery map contains only Guinea.
-- ReliefWeb recovery is disabled until a pre-approved application name is supplied.
-- Primary search names trusted publishers in the prompt but does not enforce them through
-  the provider's `allowed_domains` setting.
-- Primary-search metadata treats `page_age` as a publication date, although the provider
-  defines it as the page's last-update date.
-- ReliefWeb claims identify the aggregator as the publisher, so distinct underlying UN or
-  institutional publishers cannot be counted accurately.
+Prefer recent ICG-style conflict analysis and trusted media such as Reuters, AP and BBC. Use UN, humanitarian and other approved think-tank reporting as useful supplements. Consider the user's requested IRC and public ACLED summaries after verifying official publication domains and public access; licensed event data and authenticated datasets remain excluded.
 
-The Guinea-specific ICG feed remains useful evidence that the adapter pattern works, but
-it is supplementary coverage rather than a general solution.
+Aim for one to three useful sources and no more than six concise findings. One trusted source containing a relevant finding is sufficient for limited current context. No mandatory corroboration, publisher diversity, exhaustive thematic coverage or review of full institutional reports is required.
 
-## Selected approach
+World Bank analytical FCV reporting may qualify; GDP, population, life-expectancy and similar generic indicators cannot substitute for current FCV reporting. Publisher reputation alone does not establish relevance. A source labelled “news report” must still contain relevant substantive evidence.
 
-Use three complementary layers in one bounded research stage:
+Prefer the newest useful material. Keep a 24-month eligibility ceiling for current evidence in both holistic and RRA-update modes. Older developments since an RRA may be historical context, not proof of today's conditions. Time-sensitive assertions must respect the actual source date.
 
-1. A country-agnostic provider search restricted to approved domains.
-2. ReliefWeb as the global deterministic institutional fallback once an approved
-   application name is available.
-3. ICG country feeds as optional deterministic supplements where ICG publishes them.
+## Reusable country handling
 
-This reuses the existing gateway, claim-retention, sufficiency, and disclosure paths. It
-does not add a commercial search service, scraping framework, dependency, or new paid
-assistant phase.
+Reuse the existing country alias registry and canonicalizer. Fill missing territories/aliases and test representative LMICs outside FCV lists as well as the current public FCV/fragility lists. Classification does not enable or disable research.
 
-## Source policy
+Provider-specific identifiers must be verified separately from application display names. In particular, ReliefWeb country filters must use documented identifiers/names and returned country metadata must match the selected country. Missing optional feed coverage does not prevent primary research.
 
-The initial allowlist remains deliberately short:
+## Bounded live research
 
-- UN and humanitarian: ReliefWeb, OCHA, UNHCR, IOM, WFP, and UNDP.
-- Trusted news: Reuters, Associated Press, and BBC.
-- FCV analysis: International Crisis Group, ISS Africa, and the Africa Center for
-  Strategic Studies.
-- Existing approved multilateral and institutional analytical publishers when the item
-  is substantively relevant.
+Use one selected-country research stage with provider-enforced allowed domains and explicit preference for trusted media and conflict reporting. Keep the broader approved-source validation policy separate from the compact preferred search list.
 
-World Bank analytical reports may qualify when they address current FCV conditions.
-World Bank Indicators API observations and generic macroeconomic or demographic data do
-not qualify as current-FCV evidence.
+Maximum budget: one initial search request and at most one existing pause continuation, three search uses across both, and one existing normalization request. Set initial search uses to two and continuation to at most one. Retain at most three sources and six findings. Source excerpts are capped at 1,500 characters each, with a 6,000-character source bundle. Start with 2,000 output tokens per model request and test adequacy for the bounded output.
 
-The provider search must pass the corresponding domains through `allowed_domains` rather
-than relying on prompt compliance followed by rejection. Host and publisher validation
-continues after the response as a second boundary.
+Preserve the configured total deadline and pass remaining time through provider, metadata and recovery operations. Do not increase retries or add a model phase. These are ceilings, not quotas to exhaust.
 
-## Country handling
+Return reduced when one qualifying source is available and full coverage is absent. Do not invoke recovery merely to chase diversity or the former full-tier target. If already retrieved material satisfies full coverage, preserve full.
 
-Country handling is data-driven and shared by every source layer:
+## Source-specific grounding and publication dates
 
-- Normalize the confirmed country or territory through one checked-in alias table.
-- Store the canonical display name plus source-specific names or identifiers needed by
-  ReliefWeb and optional feed catalogues.
-- Cover spelling and institutional aliases such as DRC, Congo Republic, West Bank and
-  Gaza, Türkiye, Côte d'Ivoire, and São Tomé and Príncipe.
-- An absent source-specific identifier skips only that source. It never prevents primary
-  search, changes the country, or implies that FCV conditions are absent.
+Preserve source URL, originating publisher, title, cited excerpt, selected-country relevance, publication date and date basis together. Never flatten all narrative into a shared pool that allows any known URL to support any claim.
 
-The catalogue must cover all entries on the current World Bank Public FCV and
-Institutional Fragility lists, plus the application's existing general country set. List
-updates are data changes, not adapter changes.
+Use the existing normalization call to select findings and return source-bound supporting quotes. Validate quote containment against that exact source's excerpt, and bind retained factual text to the excerpt. Unknown URLs, invented quotes, swapped source attribution and missing supporting content cannot qualify.
 
-## Primary-search flow
+Publication date must come from verified publication metadata, an explicit publication-labelled date in the source excerpt, or a verified publisher URL convention. Support realistic dated article slugs and opaque URLs. Never use page_age, dateModified, retrieval time, a mentioned event date or model guesses as publication date.
 
-For every country:
+For an otherwise useful source without a date, permit one bounded HTTPS metadata request to that article within the three-source and time limits. Reuse httpx and stdlib parsers; enforce approved hosts, public URLs, no redirects, response content type and a 256 KiB streamed size cap. Parse recognized publication metadata only. Do not crawl links, fetch whole reports or bypass access controls.
 
-1. Build one bounded query covering political transition and governance, conflict and
-   violence, displacement and humanitarian conditions, security and peace, land and
-   resource conflict, social cohesion, and material resilience or implementation risks.
-2. Restrict the provider search to approved domains.
-3. Retain provider-grounded URL, title, publisher, and cited narrative.
-4. Normalize claims only from that grounded material.
-5. Reject any claim whose URL or publisher is not consistent with the source policy.
+If the date remains unavailable or conflicting, skip that source for current qualification and record a safe reason count. Other sources can succeed.
 
-Search-result `page_age` may be retained as diagnostic metadata but cannot establish the
-publication date. A primary claim may satisfy recency only when a date is grounded in:
+## Optional recovery
 
-- explicit structured publication metadata from the source;
-- an explicit date in the source-linked cited material; or
-- an unambiguous publication date in the canonical source URL.
+ICG country feeds supplement primary research where official feeds exist. Maintain a checked-in catalogue verified against the official RSS index; do not scrape it at assessment time. Preserve useful short descriptions/summaries and original dates. Validate country relevance, especially for shared regional feeds.
 
-If no reliable publication date is available, the item cannot satisfy the recent-evidence
-threshold. It must not be silently dated using page age, retrieval date, or model guess.
+ReliefWeb is an optional distributor. Enable its API only with an approved app name and verify its country-filter contract. Retrieve bounded summary/body material, original publication date, origin organization and URL. Creation date cannot replace original date.
 
-## ReliefWeb recovery
+Attribute ReliefWeb evidence to an approved originating publisher and retain ReliefWeb as distributor. The exception allowing an origin publisher on a ReliefWeb URL is application-owned and cannot be minted by model output. Multiple names on one jointly published report do not constitute independent corroboration.
 
-ReliefWeb is the general deterministic fallback because it supports dynamic country and
-date filters across its curated report catalogue.
+A generic report title is a lead, not evidence for its unobserved contents. A title can support only the narrow finding it explicitly states. If no usable summary/finding is available, skip it. Missing, empty or inaccessible optional feeds do not disable independent news research.
 
-- `RELIEFWEB_APP_NAME` remains blank by default and must contain a genuinely pre-approved
-  value in deployment configuration.
-- Query the canonical country dynamically; do not maintain per-country endpoint code.
-- Request the minimum fields needed for title, canonical URL, original publication date,
-  ReliefWeb creation date, and underlying source.
-- Use the original publication date for recency. The creation date is operational
-  metadata and cannot substitute for an absent original date.
-- Retain only underlying publishers on the approved source list.
-- Record the underlying organization as the publisher for diversity calculations while
-  preserving ReliefWeb as the distributor.
-- Keep the existing bounded timeout, response-size cap, HTTPS host allowlist, redirect
-  rejection, and safe provider-failure categories.
+ReliefWeb approval is a prerequisite for ReliefWeb itself, not for the whole application.
 
-One recent FCV-relevant report can establish the reduced tier. ReliefWeb availability or
-multiple URLs from one organization cannot manufacture publisher diversity or full-tier
-coverage.
+## Recommendation support and FCV priorities
 
-Obtaining an approved ReliefWeb application name is an operational prerequisite for this
-global deterministic layer. The implementation and provider-free fixtures can proceed
-before approval, but production readiness cannot be claimed without a successful live
-API probe using the approved value.
+Current citations must support the recommendation's actual present-day assertion: condition, direction, country and time. Political-transition reporting cannot automatically support land-conflict claims; demographic observations cannot prove violence.
 
-## ICG supplementary recovery
+Carry source-bound excerpts and provenance into existing review and repair calls. Add only the minimal internal support record needed to associate an evidence ID, supporting quote and asserted condition. Validate IDs, quote provenance and mechanically identifiable mismatches. Preserve expert-reviewed fixtures for cases requiring semantic judgment.
 
-ICG country feeds remain optional:
+A topic match or exact quote alone is not proof of entailment. Deterministic checks cannot guarantee unrestricted semantic correctness or optimal ranking. Prompt-string tests must not be presented as evidence that these properties are solved.
 
-- Replace the Guinea-only constant with a checked-in catalogue of official ICG country
-  feeds that are relevant to the supported country set.
-- Catalogue entries contain only canonical country keys and official HTTPS feed URLs.
-- Feed content must continue to pass bounded retrieval, content-type, XML, date, URL-host,
-  and FCV-relevance checks.
-- A missing feed or a feed with no recent item is normal and falls through to other
-  evidence or the document-led outcome.
+Every priority retains a clear direct or indirect FCV causal pathway. More materially FCV-related priorities rank first. Existing repair-call limits remain unchanged.
 
-The application must not scrape the ICG feed index at assessment time. Feed catalogue
-maintenance is an explicit, reviewable data update.
+## Outcomes and diagnostics
 
-## Claim provenance and publisher diversity
+- Full: already retrieved evidence meets existing broader coverage conditions.
+- Reduced: at least one recent trusted source contains a substantive country-relevant finding.
+- Document-led: no qualifying current finding survives the bounded process.
 
-The retained evidence needs to distinguish the organization responsible for the report
-from the service that distributed it. Use the smallest representation compatible with the
-existing claim contract:
+Describe observations, distinct URLs and originating publishers separately. Limited scope is not failure to meet mandatory corroboration. Never label generic indicators as sufficient current evidence.
 
-- `publisher`: the canonical originating organization used for diversity counts.
-- `source_url`: the public evidence URL.
-- `distributor`: optional, set to `ReliefWeb` only for ReliefWeb-hosted reports.
-- `source_date`: verified original publication date.
+Record only safe fixed-key counts and reason categories for candidates, source-linked excerpts, date failures, source-policy rejection, country mismatch, background/non-FCV content, normalization failure and accepted sources. Never store assessment IDs, raw provider output, document text or arbitrary error prose in validation records.
 
-Direct publisher-host matching remains the default. A narrow exception permits an
-approved underlying publisher on a ReliefWeb URL only when that publisher came from the
-structured ReliefWeb API source field. Model-supplied publisher labels cannot use this
-exception.
+## Verification and approval
 
-Reduced-tier disclosure reports observations, distinct URLs, and originating publishers
-separately. Distributor count is not presented as publisher diversity.
+Use realistic sanitized response replays and behavioral fixtures before implementation changes. Cover selected-country-only calls, broad offline country support, date formats, opaque URLs, source/claim swaps, generic data under misleading labels, irrelevant reporting, stale RRA-gap evidence, source attribution and exact request ceilings.
 
-## Substantive relevance and recommendation citations
+Then run focused tests, full provider-free suite, static checks and the actual smoke-browser runner using its --output option. Verify upload, result, detail, two assistant turns, four-message restoration, mobile and DOCX. Synthetic smoke is not country-quality acceptance.
 
-Current evidence may be cited only by a recommendation whose present-day assertion it
-supports. Relevance is evaluated against the retained title and grounded claim text, not
-publisher reputation alone.
+Astra reviews the implementation diff. Record actual outcomes and residual limitations in a dated safe validation record, then present the concrete PR before deployment or further paid approval. No second paid assessment is authorized by this design.
 
-At minimum, current claims are classified into political/governance, conflict/security,
-displacement/humanitarian, land/resource conflict, social cohesion, and implementation or
-resilience conditions. A recommendation citing current evidence must share a material
-theme or express a narrower causal link supported by that evidence.
+No-model public endpoint probes may establish accessibility and metadata behavior; they do not establish live model selection or synthesis quality. A later separately approved bounded assessment addresses those remaining uncertainties. Do not require a real country to have no recent news to test empty-result behavior.
 
-Generic GDP, population, life-expectancy, poverty, or other background indicators cannot
-establish political transition, violence, displacement, land conflict, social cohesion,
-or similar dynamics. They remain background data outside the current-FCV sufficiency
-calculation.
+## Non-goals and limits
 
-Existing requirements remain unchanged: each priority must state a clear direct or
-indirect FCV causal pathway, and priorities with more material FCV relevance rank first.
+No exhaustive monitoring, all-country runtime sweep, new commercial news service, repeated corroboration, licensed datasets, full-report ingestion, runtime feed-index scraping or extra model stage.
 
-## Terminal outcomes
-
-- `full`: existing multi-claim, multi-publisher, thematic, and recency requirements are
-  all met.
-- `reduced`: at least one recent trusted and substantively FCV-relevant source is retained,
-  but full coverage is incomplete.
-- `document_led`: no qualifying recent current source is established after the bounded
-  primary and deterministic paths.
-
-The system does not automatically widen the 24-month window, substitute generic
-indicators, or relabel unavailable research as sufficient. The limitation must identify
-whether the gap is recency, relevance, trusted-source availability, or publisher
-diversity without exposing provider content.
-
-## Error handling and cost control
-
-- Keep one default provider-backed research attempt and the existing total time budget.
-- Deterministic fallbacks do not call a model.
-- One successful source layer may survive failure in another; all enabled layers failing
-  retain the existing safe provider or timeout category.
-- Unsupported countries, missing optional ICG feeds, and zero qualifying results are
-  insufficiency outcomes rather than configuration failures.
-- A configured but rejected ReliefWeb application name is a provider/configuration failure
-  and must be distinguishable in safe diagnostics from a valid zero-result response.
-- No additional provider-backed assistant call is introduced.
-
-## Provider-free acceptance matrix
-
-Tests are written first and must cover:
-
-1. Every country and territory on the current World Bank Public FCV and Institutional
-   Fragility lists, plus representative non-FCV countries.
-2. Canonical names and aliases producing valid country-specific primary and ReliefWeb
-   requests without a code change.
-3. Provider-side domain restriction and post-response publisher/host enforcement.
-4. Rejection of `page_age` as publication evidence and acceptance of each permitted date
-   basis.
-5. ReliefWeb original-date precedence and rejection when only creation date is available.
-6. Underlying publisher attribution through ReliefWeb and accurate diversity wording.
-7. ICG catalogue availability, absence, malformed XML, stale items, unsafe URLs, and
-   bounded-response failures.
-8. One relevant trusted source producing reduced tier while generic indicators or
-   irrelevant reports remain document-led.
-9. Recommendation citation relevance and preservation of FCV pathway and ordering rules.
-10. Upload, result, detailed view, two assistant turns, refresh restoration, mobile layout,
-    and DOCX through the complete external smoke-browser runner.
-
-After targeted tests, the complete provider-free suite, Python compilation, JavaScript
-syntax, diff checks, and independent review must pass.
-
-## Deployment and paid-validation gates
-
-No second paid assessment is authorized by this design.
-
-Before requesting approval for another paid run:
-
-- all provider-free acceptance cases must pass;
-- the source catalogue must cover the current World Bank FCV and fragility lists;
-- an approved ReliefWeb application name must be configured and pass one provider-free
-  live API probe;
-- representative live, no-model probes must demonstrate at least one conflict setting,
-  one institutionally fragile setting, and one country without qualifying evidence;
-- the complete external smoke-browser runner must pass; and
-- the proposed deployment diff and safe validation record must be presented for approval.
-
-The eventual paid run should validate only behavior that provider-free evidence cannot:
-primary search selection, grounded date handling, substantive synthesis, recommendation
-citation fit, FCV prioritization, and rendered output quality. It must not be repeated to
-compensate for a known source-configuration defect.
-
-## Non-goals
-
-- Exhaustive news monitoring or event enumeration.
-- Licensed datasets such as ACLED.
-- Scraping arbitrary publisher pages.
-- A commercial news API or new dependency.
-- Automatic expansion of the source allowlist.
-- Claiming that every country will always have a recent qualifying report.
-
-## Acceptance criteria
-
-- The same research pipeline accepts any recognized country or territory without a
-  country-specific code change.
-- Every current claim has an approved originating publisher, trusted URL provenance, a
-  verified original publication date, and substantive FCV relevance.
-- One recent trusted FCV-relevant source may produce the reduced tier.
-- Generic indicators and unrelated reporting cannot satisfy current-FCV coverage or
-  support unrelated present-day assertions.
-- Publisher diversity counts originating publishers, not URLs or aggregators.
-- Missing evidence produces an accurate document-led result.
-- FCV recommendation pathways and materiality-first ordering remain enforced.
-- Full provider-free and browser-smoke validation passes before any request for a paid
-  run.
+The design cannot guarantee a recent accessible publication for every country. Where none qualifies, the review must disclose its document-led basis.
