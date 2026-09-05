@@ -201,6 +201,7 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
 
     response = gateway.search("Use this prompt exactly.")
 
+    assert len(beta_calls) == 1
     assert beta_calls[0]["messages"] == [
         {"role": "user", "content": "Use this prompt exactly."}
     ]
@@ -210,11 +211,23 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
     assert response[0].relationship == "establishes"
     assert beta_calls[0]["tools"][0]["name"] == "web_search"
     assert "concise cited synthesis" in beta_calls[0]["system"]
+    search_tool = beta_calls[0]["tools"][0]
+    assert search_tool["max_uses"] == 2
+    assert search_tool["allowed_domains"] == list(public_research.SEARCH_ALLOWED_DOMAINS)
+    assert set(public_research.PREFERRED_SEARCH_DOMAINS) <= set(
+        search_tool["allowed_domains"]
+    )
+    allowed_domains = set(search_tool["allowed_domains"])
+    assert {"un.org", "reliefweb.int", "icrc.org", "issafrica.org"} <= allowed_domains
+    assert {"worldbank.org", "imf.org", "oecd.org"}.isdisjoint(allowed_domains)
+    assert beta_calls[0]["max_tokens"] == 2_000
+
 
     assert len(parse_calls) == 1
     parse_call = parse_calls[0]
     assert parse_call["output_format"].__name__ == "ResearchClaimBatch"
     assert "tools" not in parse_call
+    assert parse_call["max_tokens"] == 2_000
     normalized_payload = json.loads(parse_call["messages"][0]["content"])
     assert normalized_payload == {
         "narrative": "The first cited narrative segment.\nThe second cited narrative segment.",
@@ -223,6 +236,7 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
                 "title": "World Bank update",
                 "url": source_url,
                 "published_at": "2025-04-30",
+                "excerpt": "Source excerpt for the first segment.",
             }
         ],
     }
@@ -375,6 +389,12 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
     ]
     assert len(parse_calls) == 1
     normalized_payload = json.loads(parse_calls[0]["messages"][0]["content"])
+    assert [call["tools"][0]["max_uses"] for call in beta_calls] == [2, 1]
+    assert all(
+        call["tools"][0]["allowed_domains"]
+        == list(public_research.SEARCH_ALLOWED_DOMAINS)
+        for call in beta_calls
+    )
     assert normalized_payload["narrative"] == (
         "The continued cited narrative uses the prior search result."
     )
@@ -383,6 +403,7 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
             "title": "Continued World Bank update",
             "url": source_url,
             "published_at": "2025-04-30",
+            "excerpt": "Prior source excerpt, not assistant narrative.",
         }
     ]
 
@@ -853,6 +874,92 @@ def _claim(claim_id: str = "claim-1", **overrides: object) -> CurrentContextClai
     return CurrentContextClaim(**fields)
 
 
+
+@pytest.mark.parametrize(
+    ("publisher", "source_url"),
+    [
+        ("International Rescue Committee", "https://www.rescue.org/press-release/update"),
+        ("ACLED", "https://acleddata.com/analysis/country-update"),
+    ],
+)
+def test_public_irc_and_acled_analysis_are_trusted(publisher, source_url):
+    claim = _claim(publisher=publisher, source_url=source_url)
+
+    retained, rejected = retain_public_claims((claim,))
+
+    assert retained == (claim,)
+    assert rejected == {}
+
+
+def test_acled_api_subdomain_is_not_a_public_analysis_source():
+    claim = _claim(publisher="ACLED", source_url="https://api.acleddata.com/events")
+
+    retained, _ = retain_public_claims((claim,))
+
+    assert retained == ()
+
+
+def test_research_contract_caps_sources_findings_and_bundle_size():
+    sources = tuple(
+        public_research.ResearchSource(
+            title=f"Source {index}",
+            url=f"https://www.reuters.com/source-{index}",
+            published_at=date(2026, 8, 1),
+        )
+        for index in range(4)
+    )
+
+    with pytest.raises(ValidationError):
+        public_research.SearchArtifact(narrative="Bounded.", sources=sources)
+    with pytest.raises(ValidationError):
+        public_research.SearchArtifact(narrative="x" * 6_001, sources=sources[:1])
+    with pytest.raises(ValidationError):
+        public_research.ResearchClaimBatch(
+            claims=tuple(_claim(f"claim-{index}") for index in range(7))
+        )
+
+
+def test_search_artifact_caps_complete_serialized_source_bundle():
+    source = public_research.ResearchSource(
+        title="A" * 500,
+        url="https://www.reuters.com/world/example-2026-08-01/",
+        published_at=date(2026, 8, 1),
+        excerpt="B" * 1_500,
+    )
+
+    with pytest.raises(ValidationError):
+        public_research.SearchArtifact(narrative="C" * 5_000, sources=(source,))
+
+
+def test_oversized_cited_excerpt_is_not_retained():
+    source_url = "https://www.reuters.com/world/example-2026-08-01/"
+    blocks = (
+        {
+            "type": "web_search_tool_result",
+            "content": {
+                "type": "web_search_result",
+                "title": "Country update",
+                "url": source_url,
+                "published_at": "2026-08-01",
+            },
+        },
+        {
+            "type": "text",
+            "text": "A cited finding.",
+            "citations": [
+                {
+                    "type": "web_search_result_location",
+                    "title": "Country update",
+                    "url": source_url,
+                    "cited_text": "x" * 1_501,
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(ValueError, match="no cited synthesis"):
+        public_research._extract_search_artifact(blocks)
+
 def _cited_response(
     *,
     source_url: str,
@@ -1180,10 +1287,13 @@ def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift(
 
 
 def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
+    beta_calls = []
+    parse_calls = []
     source_url = "https://www.worldbank.org/exception-fallback"
 
     class FakeBetaMessages:
         def create(self, **kwargs):
+            beta_calls.append(kwargs)
             return _cited_response(
                 source_url=source_url,
                 source_title="Exception fallback update",
@@ -1192,6 +1302,7 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     class FakeMessages:
         def parse(self, **kwargs):
+            parse_calls.append(kwargs)
             raise ValidationError.from_exception_data(
                 "ResearchClaimBatch",
                 [{"type": "missing", "loc": ("claims",), "input": {}}],
@@ -1206,6 +1317,8 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
 
     assert len(result) == 1
     assert result[0].text == "The grounded narrative."
+    assert len(beta_calls) == 1
+    assert len(parse_calls) == 1
 
 
 @pytest.mark.parametrize(
@@ -1344,8 +1457,11 @@ def test_anthropic_api_error_propagates_without_salvage(monkeypatch):
 def test_anthropic_transport_failures_normalize_at_gateway_boundary(
     monkeypatch, provider_error, expected
 ):
+    search_calls = []
+
     class FakeBetaMessages:
         def create(self, **kwargs):
+            search_calls.append(kwargs)
             raise provider_error
 
     fake_client = SimpleNamespace(
@@ -1356,6 +1472,8 @@ def test_anthropic_transport_failures_normalize_at_gateway_boundary(
 
     with pytest.raises(expected):
         public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+
+    assert len(search_calls) == 1
 
 
 def test_provider_runtime_error_propagates_without_salvage(monkeypatch):
@@ -1479,11 +1597,9 @@ def test_public_research_prompt_requests_plain_text_cited_synthesis():
     assert "strict JSON array only" not in prompt
 
     permitted_hierarchy = (
-        "World Bank",
-        "UN entities",
-        "OECD",
-        "IMF",
-        "regional development banks",
+        "public UN",
+        "IRC",
+        "ACLED analysis",
         "ICRC",
         "IOM",
         "ReliefWeb",
@@ -1583,11 +1699,12 @@ def test_public_research_prompt_requires_exact_modes_and_source_hierarchy():
         "focus on developments after its",
         "publication date",
         "Never call the output an RRA",
-        "Use only public sources from this permitted hierarchy",
-        "World Bank, UN entities, OECD, IMF",
-        "regional development banks",
-        "ICRC, IOM",
-        "ReliefWeb",
+        "Prefer recent International Crisis Group",
+        "selected country",
+        "One substantive trusted source",
+        "three sources and six short findings",
+        "publisher validation allowlist",
+        "generic development or indicator sources",
         "licensed event-level data",
     ):
         assert term in prompt
@@ -1696,3 +1813,34 @@ def test_rejects_deprecated_ipv6_site_local_source_url():
 
     assert retained == ()
     assert rejected == {"claim-1": "public source URL is required"}
+
+
+def test_extraction_fails_closed_instead_of_cutting_an_oversized_bundle():
+    title = "A" * 500
+    url = "https://www.reuters.com/world/example-2026-08-01/"
+    blocks = (
+        {
+            "type": "web_search_tool_result",
+            "content": {
+                "type": "web_search_result",
+                "title": title,
+                "url": url,
+                "published_at": "2026-08-01",
+            },
+        },
+        {
+            "type": "text",
+            "text": "C" * 5_000,
+            "citations": [
+                {
+                    "type": "web_search_result_location",
+                    "title": title,
+                    "url": url,
+                    "cited_text": "B" * 1_500,
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(ValidationError, match="Serialized source bundle"):
+        public_research._extract_search_artifact(blocks)

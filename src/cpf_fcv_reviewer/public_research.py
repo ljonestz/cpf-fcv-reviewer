@@ -11,7 +11,43 @@ from pathlib import Path
 from typing import Literal, Protocol
 from urllib.parse import urlparse, urlunparse
 
-from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
+
+
+MAX_SEARCH_OUTPUT_TOKENS = 2_000
+MAX_RETAINED_SOURCES = 3
+MAX_RETAINED_FINDINGS = 6
+MAX_SOURCE_EXCERPT_CHARACTERS = 1_500
+MAX_SOURCE_BUNDLE_CHARACTERS = 6_000
+PREFERRED_SEARCH_DOMAINS = (
+    "crisisgroup.org",
+    "reuters.com",
+    "apnews.com",
+    "bbc.com",
+    "bbc.co.uk",
+    "rescue.org",
+    "acleddata.com",
+)
+SECONDARY_SEARCH_DOMAINS = (
+    "un.org",
+    "unhcr.org",
+    "unocha.org",
+    "wfp.org",
+    "icrc.org",
+    "iom.int",
+    "reliefweb.int",
+    "issafrica.org",
+    "africacenter.org",
+)
+SEARCH_ALLOWED_DOMAINS = PREFERRED_SEARCH_DOMAINS + SECONDARY_SEARCH_DOMAINS
 
 
 def Anthropic(*args, **kwargs):
@@ -69,19 +105,27 @@ class ResearchSource(BaseModel):
     title: str
     url: str
     published_at: date | None = None
+    excerpt: str | None = Field(default=None, max_length=MAX_SOURCE_EXCERPT_CHARACTERS)
 
 
 class SearchArtifact(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    narrative: str
-    sources: tuple[ResearchSource, ...]
+    narrative: str = Field(max_length=MAX_SOURCE_BUNDLE_CHARACTERS)
+    sources: tuple[ResearchSource, ...] = Field(max_length=MAX_RETAINED_SOURCES)
+
+    @model_validator(mode="after")
+    def caps_complete_serialized_bundle(self) -> "SearchArtifact":
+        if len(self.model_dump_json()) > MAX_SOURCE_BUNDLE_CHARACTERS:
+            raise ValueError("Serialized source bundle exceeds the character limit.")
+        return self
+
 
 
 class ResearchClaimBatch(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    claims: tuple[CurrentContextClaim, ...]
+    claims: tuple[CurrentContextClaim, ...] = Field(max_length=MAX_RETAINED_FINDINGS)
 
 
 def retain_public_claims(
@@ -242,6 +286,12 @@ _INSTITUTIONAL_PUBLISHER_HOSTS = {
     "isdb": (("isdb.org",), "IsDB"),
     "international committee of the red cross": (("icrc.org",), "ICRC"),
     "icrc": (("icrc.org",), "ICRC"),
+    "international rescue committee": (
+        ("rescue.org",),
+        "International Rescue Committee",
+    ),
+    "irc": (("rescue.org",), "International Rescue Committee"),
+    "the irc": (("rescue.org",), "International Rescue Committee"),
     "international organization for migration": (("iom.int",), "IOM"),
     "iom": (("iom.int",), "IOM"),
     "reliefweb": (("reliefweb.int",), "ReliefWeb"),
@@ -251,12 +301,15 @@ _INSTITUTIONAL_PUBLISHER_HOSTS = {
     "bbc": (("bbc.com", "bbc.co.uk"), "BBC"),
     "international crisis group": (("crisisgroup.org",), "International Crisis Group"),
     "crisis group": (("crisisgroup.org",), "International Crisis Group"),
+    "armed conflict location & event data": (("acleddata.com",), "ACLED"),
+    "acled": (("acleddata.com",), "ACLED"),
     "iss africa": (("issafrica.org",), "ISS Africa"),
     "africa center for strategic studies": (
         ("africacenter.org",),
         "Africa Center for Strategic Studies",
     ),
 }
+# The full publisher map below remains the broader validation allowlist.
 
 _DISALLOWED_SOURCE_MARKERS = (
     "licensed",
@@ -292,6 +345,10 @@ def _is_permitted_public_source(claim: CurrentContextClaim) -> bool:
     source_url = _normalize_source_url(claim.source_url)
     if source_url is None:
         return False
+
+    if normalized_publisher in {"acled", "armed conflict location event data"}:
+        if _hostname(source_url) not in {"acleddata.com", "www.acleddata.com"}:
+            return False
 
     if _hostname(source_url) == "api.worldbank.org":
         return False
@@ -421,14 +478,14 @@ class AnthropicPublicResearchGateway:
                 *messages,
                 {"role": "assistant", "content": _value(response, "content", ())},
             ]
-            response = self._create_web_search_response(messages)
+            response = self._create_web_search_response(messages, max_uses=1)
             content_blocks.extend(_response_content(response))
 
         artifact, grounded_segments = _extract_search_artifact(tuple(content_blocks))
         try:
             normalization_response = self._client.messages.parse(
                 model=self._model_id,
-                max_tokens=5000,
+                max_tokens=MAX_SEARCH_OUTPUT_TOKENS,
                 system=(
                     "Normalize the cited research synthesis into the supplied output schema. "
                     "Use only the cited narrative and preserve its source metadata."
@@ -458,19 +515,23 @@ class AnthropicPublicResearchGateway:
             return salvaged
         raise ValueError("Anthropic response contained no parsed output.")
 
-    def _create_web_search_response(self, messages: list[dict[str, object]]):
+    def _create_web_search_response(
+        self, messages: list[dict[str, object]], *, max_uses: int = 2
+    ):
         return self._client.beta.messages.create(
             model=self._model_id,
-            max_tokens=5000,
+            max_tokens=MAX_SEARCH_OUTPUT_TOKENS,
             system=(
-                "Return a concise cited synthesis in plain text, not JSON. "
-                "Use source-linked claims and include publication dates when available."
+                "Return a concise cited synthesis in plain text, not JSON. Prefer current "
+                "ICG, Reuters, AP and BBC reporting; use UN, IRC, ACLED public analysis "
+                "and other approved reporting as supplements. Include publication dates."
             ),
             tools=[
                 {
                     "type": "web_search_20250305",
                     "name": "web_search",
-                    "max_uses": 5,
+                    "max_uses": max_uses,
+                    "allowed_domains": list(SEARCH_ALLOWED_DOMAINS),
                 }
             ],
             messages=messages,
@@ -641,11 +702,19 @@ def _extract_search_artifact(
             attached_sources: list[ResearchSource] = []
             for citation in citations:
                 title, url, _ = _source_metadata(citation)
+                cited_text = _as_nonblank_string(_value(citation, "cited_text"))
+                if cited_text is None or len(cited_text) > MAX_SOURCE_EXCERPT_CHARACTERS:
+                    continue
+
                 if url is None:
                     continue
                 source = sources.get(url)
                 if source is None or (title is not None and title != source.title):
                     continue
+                if source.excerpt is None:
+                    source = source.model_copy(update={"excerpt": cited_text})
+                    sources[source.url] = source
+
                 if source not in attached_sources:
                     attached_sources.append(source)
             if attached_sources:
@@ -654,12 +723,21 @@ def _extract_search_artifact(
     if not grounded_segments:
         raise ValueError("Public research response contained no cited synthesis.")
 
-    narrative = "\n".join(segment for segment, _ in grounded_segments)
     resolved_urls = {
         source.url for _, attached_sources in grounded_segments for source in attached_sources
     }
-    resolved_sources = tuple(source for url, source in sources.items() if url in resolved_urls)
-    return SearchArtifact(narrative=narrative, sources=resolved_sources), tuple(grounded_segments)
+    resolved_sources = tuple(
+        source for url, source in sources.items() if url in resolved_urls
+    )[:MAX_RETAINED_SOURCES]
+    retained_urls = {source.url for source in resolved_sources}
+    bounded_segments = tuple(
+        (text, tuple(source for source in attached if source.url in retained_urls))
+        for text, attached in grounded_segments
+        if any(source.url in retained_urls for source in attached)
+    )
+    narrative = "\n".join(segment for segment, _ in bounded_segments)
+    artifact = SearchArtifact(narrative=narrative, sources=resolved_sources)
+    return artifact, bounded_segments
 
 
 def _publisher_from_source(source: ResearchSource) -> str:
@@ -738,7 +816,7 @@ def _salvage_grounded_segments(
                 )
             )
 
-    retained, _ = retain_public_claims(tuple(claims))
+    retained, _ = retain_public_claims(tuple(claims[:MAX_RETAINED_FINDINGS]))
     return retained
 
 
