@@ -1,6 +1,6 @@
 import pytest
 
-from cpf_fcv_reviewer.country_detection import detect_country
+from cpf_fcv_reviewer.country_detection import COUNTRY_ALIASES, detect_country
 from cpf_fcv_reviewer.extraction import (
     ExtractedDocument,
     ExtractedSegment,
@@ -16,6 +16,100 @@ def document(text: str, name: str = "cpf.txt") -> ExtractedDocument:
         (),
     )
 
+
+
+FY27_PUBLIC_FCV_COUNTRIES = frozenset(
+    {
+        "Afghanistan",
+        "Burkina Faso",
+        "Cameroon",
+        "Central African Republic",
+        "Democratic Republic of the Congo",
+        "Ethiopia",
+        "Haiti",
+        "Iran",
+        "Iraq",
+        "Lebanon",
+        "Libya",
+        "Mali",
+        "Mozambique",
+        "Myanmar",
+        "Niger",
+        "Nigeria",
+        "Papua New Guinea",
+        "Somalia",
+        "South Sudan",
+        "Sudan",
+        "Syria",
+        "Ukraine",
+        "West Bank and Gaza",
+        "Yemen",
+    }
+)
+FY27_INSTITUTIONAL_FRAGILITY_COUNTRIES = frozenset(
+    {
+        "Afghanistan",
+        "Central African Republic",
+        "Chad",
+        "Comoros",
+        "Congo",
+        "Eritrea",
+        "Guinea-Bissau",
+        "Haiti",
+        "Kiribati",
+        "Malawi",
+        "Maldives",
+        "Marshall Islands",
+        "Micronesia",
+        "Mozambique",
+        "Myanmar",
+        "Papua New Guinea",
+        "São Tomé and Príncipe",
+        "Solomon Islands",
+        "Somalia",
+        "South Sudan",
+        "Sudan",
+        "Syria",
+        "Timor-Leste",
+        "Tuvalu",
+        "Yemen",
+    }
+)
+
+
+def test_current_public_fragility_lists_are_offline_coverage_inputs_not_gates():
+    # World Bank FY2027 lists, effective 2026-07-01. Every listed context uses
+    # the same primary selected-country research route as every other registry entry.
+    covered = set(COUNTRY_ALIASES)
+
+    assert FY27_PUBLIC_FCV_COUNTRIES <= covered
+    assert FY27_INSTITUTIONAL_FRAGILITY_COUNTRIES <= covered
+
+
+@pytest.mark.parametrize(
+    ("title", "country"),
+    [
+        ("Country Partnership Framework for Somalia for FY27", "Somalia"),
+        ("Country Partnership Framework for Guinea for FY27", "Guinea"),
+        ("Country Partnership Framework for DRC for FY27", "Democratic Republic of the Congo"),
+        ("Country Partnership Framework for Republic of Congo for FY27", "Congo"),
+        ("Country Partnership Framework for West Bank & Gaza for FY27", "West Bank and Gaza"),
+        ("Country Partnership Framework for Kosovo for FY27", "Kosovo"),
+        ("Country Partnership Framework for Turkey for FY27", "Türkiye"),
+        ("Country Partnership Framework for Ivory Coast for FY27", "Cote d'Ivoire"),
+        ("Country Partnership Framework for Sao Tome and Principe for FY27", "São Tomé and Príncipe"),
+        ("Country Partnership Framework for India for FY27", "India"),
+        ("Country Partnership Framework for Indonesia for FY27", "Indonesia"),
+        ("Country Partnership Framework for Viet Nam for FY27", "Vietnam"),
+        ("Country Partnership Framework for Kenya for FY27", "Kenya"),
+        ("Country Partnership Framework for Brazil for FY27", "Brazil"),
+    ],
+)
+def test_selected_country_matrix_canonicalizes_without_classification_gate(title, country):
+    result = detect_country(document(title))
+
+    assert result.country == country
+    assert result.confidence == "high"
 
 def test_detects_country_from_cpf_title():
     result = detect_country(
@@ -116,6 +210,26 @@ def test_supported_official_and_common_country_names_are_canonicalized(title, co
     assert result.country == country
     assert result.confidence == "high"
 
+
+@pytest.mark.parametrize(
+    ("title", "country"),
+    [
+        ("Country Partnership Framework for Kosovo for FY27", "Kosovo"),
+        (
+            "Country Engagement Note for West Bank and Gaza for FY27",
+            "West Bank and Gaza",
+        ),
+        (
+            "Country Partnership Framework for Palestinian Territories for FY27",
+            "West Bank and Gaza",
+        ),
+    ],
+)
+def test_supported_territories_are_canonicalized(title, country):
+    result = detect_country(document(title))
+
+    assert result.country == country
+    assert result.confidence == "high"
 
 @pytest.mark.parametrize(
     "title",

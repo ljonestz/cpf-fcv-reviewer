@@ -2702,7 +2702,7 @@ def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
     assert context["result"].metadata.repair_count == 1
 
 
-def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
+def _run_narrow_runtime(monkeypatch, package_text, *, controller=None, country="Benin"):
     captured = {}
 
     class ModelGateway:
@@ -2742,7 +2742,7 @@ def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
         {
             "assessment_id": "narrow-runtime-run",
             "payload": {
-                "country": "Benin", "review_stage": "finalization",
+                "country": country, "review_stage": "finalization",
                 "cpf": {"name": "benin-cpf.txt", "bytes": b"CPF text " * 20},
                 "package_documents": [{"name": "package.txt", "bytes": package_text}],
                 "context_documents": [], "review_focus": "", "detail_level": "standard",
@@ -2752,6 +2752,38 @@ def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
         lambda kind, data: None,
     )
     return context, captured["pack"]
+
+
+@pytest.mark.parametrize(
+    "country",
+    (
+        "Somalia",
+        "Guinea",
+        "Democratic Republic of the Congo",
+        "Congo",
+        "West Bank and Gaza",
+        "Kosovo",
+        "Türkiye",
+        "Cote d'Ivoire",
+        "São Tomé and Príncipe",
+        "India",
+        "Indonesia",
+        "Vietnam",
+        "Kenya",
+        "Brazil",
+    ),
+)
+def test_runtime_researches_only_the_selected_country(monkeypatch, country):
+    controller = _InjectedResearchController()
+
+    _run_narrow_runtime(
+        monkeypatch,
+        b"Package context without a diagnostic marker.",
+        controller=controller,
+        country=country,
+    )
+
+    assert [request.country for request in controller.requests] == [country]
 
 
 def test_runtime_researches_with_dated_rra_request_and_emitter(monkeypatch):
