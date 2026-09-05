@@ -9,7 +9,7 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Latest verified deployment:
-  `b40ee4e38366ecb47453fe299d888946657707b3` on 2026-09-04. Render reports
+  `01dc9392801eb3849864cf69777b4337988436ee` on 2026-09-05. Render reports
   that exact commit live; `/health` returns `ok` and the root page returns HTTP 200.
 - Every assessment researches only its confirmed country through the same bounded,
   country-agnostic route; it never fans out across other countries. Source selection
@@ -22,10 +22,12 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Optional mapped ICG and ReliefWeb recovery complements rather than defines the generic
   primary route. ReliefWeb requires a pre-approved application name. The previous
   arbitrary default was removed after its HTTP 403 was confirmed.
-- Exactly one authorized paid Guinea assessment was completed on the preceding release.
-  It produced a valid document-led review and DOCX without current-context or indicator
-  evidence; no provider-backed assistant call or second assessment was made. The new
-  think-tank recovery then passed complete provider-free validation.
+- The one authorized paid Guinea assessment for deployed `01dc939` used zero assistant
+  calls and was not retried. Primary and curated research accepted no claims, and the run
+  then failed closed during diagnostic mapping after its one correction; no result or
+  DOCX was produced. Provider-free follow-up commit `1350202` fixes the verified ICG
+  headline-selection defect and passes the complete local validation ladder, but is not
+  yet deployed or provider-tested.
 
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
