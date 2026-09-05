@@ -713,12 +713,16 @@ def _publication_date_from_url(url: str | None) -> date | None:
 def _publication_date_from_excerpt(excerpt: str | None) -> date | None:
     if excerpt is None:
         return None
-    match = re.search(
-        r"\b(?:published|publication date)\s*[:|-]\s*(20\d{2}-[01]\d-[0-3]\d)\b",
+    matches = re.findall(
+        r"\b(?:published|publication date)\s*[:|-]\s*"
+        r"(20\d{2}-[01]\d-[0-3]\d|[A-Za-z]{3,9} \d{1,2}, 20\d{2})\b",
         excerpt,
         re.IGNORECASE,
     )
-    return _parse_source_date(match.group(1)) if match is not None else None
+    dates = {
+        parsed for value in matches if (parsed := _parse_source_date(value)) is not None
+    }
+    return next(iter(dates)) if len(dates) == 1 else None
 
 
 def _json_publication_dates(value: object) -> tuple[str, ...]:
@@ -783,6 +787,7 @@ def _fetch_article_publication_date(url: str, client: object) -> date | None:
         or parsed.password is not None
         or parsed.port not in {None, 443}
         or not _host_matches(normalized_url, SEARCH_ALLOWED_DOMAINS)
+        or _hostname(normalized_url) == "api.acleddata.com"
     ):
         return None
     try:
@@ -801,9 +806,9 @@ def _fetch_article_publication_date(url: str, client: object) -> date | None:
                 return None
             body = bytearray()
             for chunk in response.iter_bytes():
-                body.extend(chunk)
-                if len(body) > MAX_ARTICLE_METADATA_BYTES:
+                if len(body) + len(chunk) > MAX_ARTICLE_METADATA_BYTES:
                     return None
+                body.extend(chunk)
     except (AttributeError, OSError, httpx.HTTPError, TimeoutError, ValueError):
         return None
     parser = _PublicationMetadataParser()
@@ -928,11 +933,29 @@ def _source_mentions_country(
     if selected_country is None:
         return True
     haystack = _normalize_text(f"{source.title} {source.excerpt or ''}")
-    return any(
+    selected_markers = _country_markers(selected_country)
+    if not any(
         re.search(rf"\b{re.escape(marker)}\b", haystack)
-        for marker in _country_markers(selected_country)
+        for marker in selected_markers
         if marker
-    )
+    ):
+        return False
+    normalized_selected = _normalize_text(selected_country)
+    for canonical, aliases in COUNTRY_ALIASES.items():
+        names = (canonical, *aliases)
+        normalized_names = tuple(_normalize_text(name) for name in names)
+        if normalized_selected in normalized_names:
+            continue
+        for other_marker in normalized_names:
+            if (
+                other_marker
+                and any(
+                    f" {marker} " in f" {other_marker} " for marker in selected_markers
+                )
+                and re.search(rf"\b{re.escape(other_marker)}\b", haystack)
+            ):
+                return False
+    return True
 
 
 def _quote_is_from_source(quote: str | None, excerpt: str | None) -> bool:

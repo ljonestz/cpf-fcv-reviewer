@@ -1959,6 +1959,14 @@ def test_publication_labelled_excerpt_resolves_or_conflicts(
     assert artifact.sources[0].published_at == expected_date
     assert artifact.sources[0].publication_date_basis == expected_basis
 
+
+@pytest.mark.parametrize("label", ["Published", "Publication date"])
+def test_publication_labelled_excerpt_accepts_display_date(label):
+    assert public_research._publication_date_from_excerpt(
+        f"{label}: August 30, 2026 - Guinea's transition remains unsettled."
+    ) == date(2026, 8, 30)
+
+
 def test_normalized_claim_requires_quote_from_exact_country_source():
     transition = public_research.ResearchSource(
         title="Synthetic Guinea political transition report",
@@ -2138,3 +2146,30 @@ def test_gateway_performs_at_most_one_metadata_get_for_opaque_sources(monkeypatc
     assert len(metadata_requests) == 1
     assert [claim.source_url for claim in result] == [urls[0]]
     assert result[0].publication_date_basis == "article_metadata"
+
+
+def test_article_metadata_does_not_fetch_acled_api():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text='<meta property="article:published_time" content="2026-08-30">',
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        assert public_research._fetch_article_publication_date(
+            "https://api.acleddata.com/events", client
+        ) is None
+    assert requests == []
+
+
+def test_country_scope_rejects_longer_different_country_name():
+    source = public_research.ResearchSource(
+        title="Guinea-Bissau conflict update",
+        url="https://www.reuters.com/world/africa/guinea-bissau-2026-08-30/",
+        excerpt="Violence increased in Guinea-Bissau.",
+    )
+    assert not public_research._source_mentions_country(source, "Guinea")
