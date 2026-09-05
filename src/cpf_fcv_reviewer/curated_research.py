@@ -19,8 +19,10 @@ import httpx
 from .public_research import (
     MAX_SOURCE_EXCERPT_CHARACTERS,
     CurrentContextClaim,
+    ResearchSource,
     _is_public_http_url,
     _publisher_for_source_url,
+    _source_mentions_country,
 )
 from .research_controller import ResearchRequest
 
@@ -353,6 +355,7 @@ class CrisisGroupAdapter:
         for item in root.findall("./channel/item"):
             claim = _crisis_group_claim(
                 item,
+                expected_country=request.country,
                 start_date=start_date,
                 end_date=request.review_date,
             )
@@ -707,6 +710,7 @@ def _reliefweb_claim(
 def _crisis_group_claim(
     item: ElementTree.Element,
     *,
+    expected_country: str,
     start_date: date,
     end_date: date,
 ) -> CurrentContextClaim | None:
@@ -721,6 +725,14 @@ def _crisis_group_claim(
         or not _is_crisis_group_result_url(source_url)
         or source_date is None
         or text is None
+        or not _source_mentions_country(
+            ResearchSource(
+                title=title,
+                url=source_url,
+                excerpt=text,
+            ),
+            expected_country,
+        )
         or _FCV_TITLE_PATTERN.search(text) is None
         or (summary is None and _FCV_ASSERTION_PATTERN.search(title) is None)
         or not start_date <= source_date <= end_date

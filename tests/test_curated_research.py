@@ -1039,3 +1039,17 @@ def test_reliefweb_recovery_rejects_created_date_wrong_country_and_unknown_origi
     )
 
     assert gateway.reliefweb.search(request()) == ()
+def test_crisis_group_rejects_regional_feed_item_about_another_country():
+    payload = """<rss><channel><item>
+      <title>Regional conflict update</title>
+      <link>https://www.crisisgroup.org/africa/congo/regional-update</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description>Violence displaced people in Somalia.</description>
+    </item></channel></rss>"""
+    adapter = CrisisGroupAdapter(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: rss_response(payload))
+        )
+    )
+
+    assert adapter.search(request("Congo")) == ()
