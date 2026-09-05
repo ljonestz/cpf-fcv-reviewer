@@ -1,763 +1,162 @@
-# All-Country Current FCV Research Implementation Plan
+# Selected-Country Live FCV Research Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use test-driven implementation task by task, following Ponytail: reuse existing code and add only what a failing behavior test requires. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Make the existing bounded current-context stage work consistently for every recognized country, favor trusted news, UN, humanitarian, and FCV think-tank reporting, and fail honestly to document-led review when no qualifying recent source is established.
+**Goal:** For one CPF/CEN review, obtain a small amount of recent trusted FCV reporting about its confirmed country and use it accurately in the review. The same pipeline must work for any supported country, particularly low- and middle-income countries.
 
-**Architecture:** Keep the existing research controller. Harden its country-agnostic provider search with API-enforced domains and grounded publication dates, then run the deterministic recovery gateway using a dynamic ReliefWeb query and optional checked-in ICG feeds. Reuse COUNTRY_ALIASES, CurrentContextClaim, existing source validation, sufficiency, prompts, and smoke runner; add no dependency and no new service or adapter abstraction.
+**Architecture:** One selected-country research stage, with trusted media and ICG-style reporting preferred, short source-specific excerpts preserved, and optional institutional recovery. One substantive recent source is sufficient for limited current context. Country catalogues and broad country test matrices are offline coverage checks, never runtime search loops.
 
-**Tech Stack:** Python 3.13, Pydantic, stdlib URL/date/XML handling, existing httpx client, pytest, Playwright smoke runner, Flask smoke mode.
+**Tech Stack:** Existing Python, Pydantic, httpx, pytest, Flask and Playwright; stdlib date, URL, JSON and HTML parsing. No new dependency, provider, crawler framework, model phase, or production country-classification system.
 
 ---
 
-## File map
+## Status and scope
 
-- Modify src/cpf_fcv_reviewer/country_detection.py: add the missing FY2027 territories and expose the existing canonicalizer.
-- Modify src/cpf_fcv_reviewer/public_research.py: enforce provider domains, ground publication dates without page_age, distinguish an optional ReliefWeb distributor, and retain the source-policy boundary.
-- Modify src/cpf_fcv_reviewer/curated_research.py: canonicalize country queries, use ReliefWeb original dates and originating publishers, and expand the static official ICG feed catalogue.
-- Modify src/cpf_fcv_reviewer/research_controller.py: preserve one-source reduced behavior while generic indicator data cannot produce a current-evidence tier.
-- Modify prompts/public_research.md and prompts/review.md: make FCV relevance, date, and citation-fit rules explicit without adding a model call.
-- Modify focused tests in tests/test_country_detection.py, tests/test_public_research.py, tests/test_curated_research.py, tests/test_research_controller.py, tests/test_adversarial.py, and the existing runner-contract test.
-- Add docs/validation/2026-09-05-all-country-current-fcv-provider-free.md only after the gates pass.
-- Update docs/PROJECT_STATUS.md with verified aggregate results and explicit remaining gates.
+Revised after Astra's review and the user's clarification. This replaces the earlier implementation recipe, including its invalid smoke command, invented test helper/file, title-only recovery, exact source-type indicator guard and mandatory ReliefWeb gate.
 
-Create a new implementation branch from updated main; keep PR #8 as the design record:
+This document is an implementation specification, not evidence that the fix passes or retrieves useful live news. Implementation, provider-free replay tests and full smoke validation remain outstanding. Deployment and a further paid assessment require separate approval after the evidence is presented.
 
-~~~powershell
-git fetch origin
-git switch main
-git pull --ff-only origin main
-git switch -c fix/all-country-current-fcv-research
-~~~
+A Somalia review searches Somalia. It does not search Guinea, every FCV country, or every country in the catalogue. A regional source is usable only for the excerpt that explicitly concerns Somalia or a documented spillover affecting Somalia.
 
-Expected: a clean feature branch based on the commit containing the merged design. Do not deploy or invoke an assessment, provider-backed research gateway, or assistant endpoint during Tasks 1-7.
+The practical target is one to three useful sources, with up to six short findings. This is not a requirement to find three sources, cover every theme, or corroborate one trusted report through other publishers. Prioritize the newest useful reporting; a 24-month eligibility ceiling is not a claim that a two-year-old report describes today's conditions.
 
-### Task 1: Cover every FY2027 FCV/fragility country through the existing country registry
+## Files and responsibilities
 
-**Files:**
-- Modify: tests/test_country_detection.py
-- Modify: src/cpf_fcv_reviewer/country_detection.py:28-241
+- `src/cpf_fcv_reviewer/country_detection.py`, `tests/test_country_detection.py`: shared aliases, missing supported territories, country normalization.
+- `src/cpf_fcv_reviewer/public_research.py`, `tests/test_public_research.py`: search restrictions, source-specific excerpts, date provenance, bounded metadata retrieval, normalization and safe rejection counts.
+- `src/cpf_fcv_reviewer/curated_research.py`, `tests/test_curated_research.py`: optional ICG/ReliefWeb recovery, useful summary content, origin attribution and source-specific country identifiers.
+- `src/cpf_fcv_reviewer/research_controller.py`, `tests/test_research_controller.py`: practical stop condition, recency, deadlines and disclosure.
+- `src/cpf_fcv_reviewer/contracts.py`, `src/cpf_fcv_reviewer/validators.py`, `tests/test_contracts.py`, `tests/test_validators.py`: narrowly scoped source-support contract where existing evidence IDs cannot express the link.
+- `prompts/public_research.md`, `prompts/review.md`, `prompts/repair.md`: preferred reporting, excerpt selection, recommendation support, preserved FCV pathways and ordering; version through existing repository conventions.
+- `src/cpf_fcv_reviewer/runtime.py`, `tests/test_runtime_wiring.py`: carry source provenance into review evidence without flattening or losing it.
+- `scripts/run_smoke_browser.py`, `tests/test_smoke_mode.py`: existing synthetic end-to-end flow; change only for demonstrated contract failures.
+- `docs/PROJECT_STATUS.md` and a new dated record under `docs/validation/`: actual safe aggregate results and limitations.
 
-- [ ] **Step 1: Write the failing FY2027 coverage and alias tests**
+Work on a `codex/` feature branch in an isolated local worktree based on the reviewed design branch or updated main. A documentation merge is not a prerequisite for starting implementation. Inspect local/remote state and preserve unrelated work first. Use apply_patch; if Windows Application Control blocks it, use the authorized GitHub contents workflow on the feature branch and fast-forward locally. Never use shell file-write workarounds.
 
-Add these constants and tests:
+## Task 1: Prove selected-country scope and broad input coverage
 
-~~~python
-FY27_PUBLIC_FCV = {
-    "Afghanistan", "Burkina Faso", "Cameroon", "Central African Republic",
-    "Democratic Republic of the Congo", "Ethiopia", "Haiti", "Iran", "Iraq",
-    "Lebanon", "Libya", "Mali", "Mozambique", "Myanmar", "Niger", "Nigeria",
-    "Papua New Guinea", "Somalia", "South Sudan", "Sudan", "Syria", "Ukraine",
-    "West Bank and Gaza", "Yemen",
-}
+- [ ] Add parameterized tests using the existing country registry and its aliases, including Somalia, Guinea, DRC, Republic of Congo, West Bank and Gaza, Kosovo, Türkiye, Côte d'Ivoire and São Tomé and Príncipe. Include LMIC examples outside FCV classifications, such as India, Indonesia, Vietnam, Kenya and Brazil. Classification membership must not control whether research runs.
+- [ ] For each input, use fake gateways and assert the request contains only that canonical country. For Somalia, assert one research-controller invocation, no loop over registry entries, and no calls for unrelated countries. Regional report fixtures must bind their retained excerpt to the selected country.
+- [ ] Run the new tests and confirm failures identify missing aliases or request behavior, rather than missing invented helpers.
+- [ ] Reuse the existing canonicalizer; expose it only if needed by other modules. Add missing names/aliases without duplicating the registry. Keep display names separate from provider-specific IDs or names.
+- [ ] Add an offline source-coverage table showing primary search available for every supported country, optional ICG feed availability, and ReliefWeb mapping availability. Include all entries in the current publicly available FCV/fragility lists as regression cases, with provenance date. Those lists are test inputs, not application eligibility rules.
+- [ ] Run country/runtime tests; commit only the scoped change.
 
-FY27_INSTITUTIONAL_FRAGILITY = {
-    "Afghanistan", "Central African Republic", "Chad", "Comoros", "Congo",
-    "Eritrea", "Guinea-Bissau", "Haiti", "Kiribati", "Malawi", "Maldives",
-    "Marshall Islands", "Micronesia", "Mozambique", "Myanmar", "Papua New Guinea",
-    "Sao Tome and Principe", "Solomon Islands", "Somalia", "South Sudan", "Sudan",
-    "Syria", "Timor-Leste", "Tuvalu", "Yemen",
-}
+## Task 2: Prefer useful reporting and bound actual cost
 
-def test_country_registry_covers_current_fy27_fcv_and_fragility_lists():
-    for name in FY27_PUBLIC_FCV | FY27_INSTITUTIONAL_FRAGILITY:
-        assert canonical_country(name) in COUNTRY_ALIASES
+- [ ] Capture real request arguments through existing fake clients. Assert a selected-country query, explicit `allowed_domains`, and a preference for ICG, Reuters, AP and BBC reporting. UN and other approved think-tank/humanitarian reporting are supplementary choices, not mandatory searches.
+- [ ] Keep one broad validation allowlist, but use an explicit compact preferred search-domain list. Preserve existing approved analytical publishers as secondary options within the same bounded research stage. Do not start with generic development indicators or require every theme.
+- [ ] Include IRC and public ACLED analysis in the source-policy implementation after verifying their official public publication domains and accessible reporting routes. The user authorized considering their summaries; this does not authorize licensed event data, authenticated endpoints or bulk datasets. Verify host/publisher matching for each new public source.
+- [ ] Make these ceilings explicit and test them: one research attempt; one initial search request plus at most one existing pause continuation; at most three search uses across both; one existing normalization request; at most three retained source records and six findings. Initial search uses should be limited to two, leaving at most one for continuation. Keep existing configured total time budget and propagate remaining time to every operation.
+- [ ] Cap source excerpts at 1,500 characters each and the selected-country source bundle at 6,000 characters. Cap synthesis/normalization output to the amount needed for six findings (start at 2,000 output tokens per request). Fail or disclose truncation when a bound prevents a usable finding; never silently cut a sentence into stronger evidence.
+- [ ] Add request-count tests for ordinary success, pause continuation, malformed normalization, primary failure and optional recovery. No SDK retries, extra assistant phase or country fan-out.
+- [ ] Run red tests, implement the narrow request/prompt changes, run green tests and commit.
 
+These are maximums, not targets to exhaust. Search metadata and trusted excerpts remain untrusted content: they supply facts, never instructions.
 
-@pytest.mark.parametrize(
-    ("alias", "expected"),
-    [
-        ("DRC", "Democratic Republic of the Congo"),
-        ("Congo, Rep.", "Congo"),
-        ("West Bank and Gaza (territory)", "West Bank and Gaza"),
-        ("Palestine", "West Bank and Gaza"),
-        ("Türkiye", "Türkiye"),
-        ("Côte d'Ivoire", "Cote d'Ivoire"),
-        ("São Tomé and Príncipe", "Sao Tomé and Príncipe"),
-        ("Kosovo", "Kosovo"),
-    ],
-)
-def test_research_country_aliases_are_canonical(alias, expected):
-    assert canonical_country(alias) == expected
-~~~
+## Task 3: Preserve source-specific evidence and establish publication dates
 
-Import COUNTRY_ALIASES and canonical_country from the module. The FY2027 sets are test evidence, not production classifications; generated reviews must not infer or state FCV status from them.
+- [ ] Add sanitized replay fixtures shaped like complete provider responses: web-search results, text blocks, citations and stop reasons. Use synthetic content with realistic structure, and label it synthetic. Reuse approved public fixtures where available; never retrieve rejected private model output.
+- [ ] Cover Reuters-style `headline-2026-08-30/` URLs, `/2026/08/30/` paths, opaque AP/BBC URLs, ISO timestamps, explicit source publication dates, conflicting dates, missing dates and a fresh page_age on an old article. A title or date rewritten by normalization must not erase valid grounded metadata.
+- [ ] Preserve each source's URL, canonical publisher, title, cited excerpt(s), publication date and date basis. Do not send only a concatenated narrative plus an unrelated URL list to normalization.
+- [ ] Add a `supporting_quote` to normalized research claims if the existing contract cannot carry it. Verify normalized whitespace quote containment against the excerpt for that exact source URL. Bind the retained factual text to that quote/excerpt; do not accept an arbitrary model paraphrase just because the URL exists elsewhere in the bundle.
+- [ ] Test swapped sources: a Reuters political-transition excerpt cannot support a land-conflict finding taken from another source; an excerpt with no selected-country connection cannot qualify. Test fabricated quotes, unknown URLs and missing excerpts.
+- [ ] Resolve dates from verified source publication metadata or an explicit publication-labelled date in the source excerpt. Accept a canonical URL date only where the publisher's URL convention is verified; distinguish date-like IDs, mixed separators and dates merely mentioned in headlines. Never use page_age, retrieval time, event date or model guess as publication time.
+- [ ] For an otherwise useful source with an opaque URL and no date in the cited material, perform at most one bounded HTTPS metadata request to that article, within the three-source and total deadline caps. Reuse httpx; allow only approved publisher hosts, reject redirects and credentials/private addresses, validate content type, stream-cap the response at 256 KiB, and parse only recognized article publication metadata (for example JSON-LD datePublished or article:published_time). Ignore dateModified. Do not fetch a full report or crawl links.
+- [ ] If metadata retrieval is blocked, paywalled, malformed, conflicting or undated, skip that source for current-evidence qualification and record only a safe reason count. Other sources may still succeed.
+- [ ] Make the same provenance checks apply to the salvage path. A source-linked assistant narrative alone is not a verbatim source excerpt.
+- [ ] Run red replay tests, implement the smallest helpers inside the existing research module, rerun the replay suite and commit.
 
-- [ ] **Step 2: Run the tests and confirm the missing coverage**
+Quote containment establishes provenance, not semantic entailment. The next task must address what the evidence actually says.
 
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_country_detection.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-country-red"
-~~~
+## Task 4: Make optional recovery useful and truthful
 
-Expected: FAIL because canonical_country is not public and West Bank and Gaza/Kosovo are absent.
+- [ ] Add recovery fixtures for a specific dated finding, a generic title with a useful summary, a generic title without content, an old report newly uploaded to ReliefWeb, unknown origin, multi-origin report, wrong country, empty response, malformed feed, timeout and denied app name.
+- [ ] For ICG, retain a bounded RSS description/summary when available, strip markup with stdlib handling and preserve its source URL/date. A title may qualify only for the narrow factual proposition it explicitly states; “Somalia humanitarian update” is a lead, not a finding.
+- [ ] Expand the checked-in ICG feed catalogue using the verified official RSS index from the design review. Confirm each country/feed pairing, including combined regional feeds; do not invent feed IDs or scrape the index during assessment. Missing or inaccessible feeds are normal optional-source outcomes.
+- [ ] For ReliefWeb, verify the API's country-filter contract and use structured country IDs or exact documented names, not the assumption that the application's canonical name always matches. Include DRC/Congo, Palestine and small-island fixtures. Query selected-country reports only; validate returned country fields.
+- [ ] Request original publication date, source organization, title, URL and a bounded useful body/summary. Filter by original date; creation date cannot substitute. Remove any empty/invalid source filter found in the existing query.
+- [ ] Set publisher to the approved originating organization and optional distributor to ReliefWeb. Multiple organizations on one report must not manufacture independent corroboration; use one deterministically selected approved origin for the current single-publisher contract and disclose joint attribution if needed.
+- [ ] Keep the ReliefWeb host exception application-owned: provider normalization cannot mint distributor provenance. Strip model-supplied distributor values before validation; test this using a forged publisher/distributor on an unrelated host.
+- [ ] Preserve existing network/security/time/size bounds and deterministic deduplication. No new model call for recovery. Retained content must state a finding; if its relevance cannot be established within the bounds, leave it as an unused lead.
+- [ ] Run red recovery tests, implement, run green tests and commit.
 
-- [ ] **Step 3: Make the smallest registry change**
+ReliefWeb requires an approved app name only to enable ReliefWeb. Its absence cannot disable primary news search, ICG, other approved sources, or readiness of the independent route.
 
-Add these entries alphabetically:
+## Task 5: Enforce practical sufficiency, recency and recommendation support
 
-~~~python
-"Kosovo": (),
-"West Bank and Gaza": (
-    "West Bank and Gaza (territory)",
-    "Palestine",
-    "Palestinian Territories",
-),
-~~~
+- [ ] Add behavioral controller fixtures showing one recent relevant trusted finding produces reduced; generic GDP/population/life-expectancy data produce document_led even when labelled “news report”; irrelevant recent reporting cannot qualify; several URLs from one publisher remain one publisher.
+- [ ] Derive topic/relevance from the grounded excerpt rather than source_type or publisher reputation alone. Use a small explicit set of material themes (political/governance, conflict/security, displacement/humanitarian, land/resource conflict, social cohesion, implementation/resilience). In the existing normalization call, require an excerpt-backed topic and selected-country relevance. Treat uncertain cases conservatively. Do not build a scoring framework or pretend keyword overlap proves support.
+- [ ] For deterministic recovery, require a specific FCV finding in the retained title/summary, not just a keyword in a publication label. Add negative fixtures such as energy transition, population growth, generic protection announcements and report titles with no asserted condition.
+- [ ] Apply the same current-evidence recency ceiling in holistic and RRA-update modes. Material since an old RRA may be historical context, but a 2023 report cannot count as a current update in September 2026. Prefer the newest useful reporting; preserve date and qualify time-sensitive assertions accordingly.
+- [ ] Return reduced immediately when primary research provides one qualifying source but full coverage is absent. Do not run recovery or another provider search solely to chase diversity. If already retrieved sources satisfy full coverage, preserve full.
+- [ ] Keep observations, URLs and originating publishers distinct in limitation text. Describe limited scope without implying a one-source update failed a mandatory corroboration requirement.
+- [ ] Preserve source excerpts/provenance through build_evidence into the existing review-generation and repair payloads. Add an internal support record for each current citation only if necessary: evidence ID, supporting quote and the present-day assertion it supports. Validate IDs, quote provenance and known topic incompatibilities. Do not expose this internal verification record in reader-facing prose.
+- [ ] In the existing review and repair calls, require the quoted finding to support the asserted condition, direction, geography and time. Do not infer land conflict from a political-transition report or worsening violence from generic population data. Require every priority's direct/indirect FCV pathway and materiality-first ordering as before.
+- [ ] Add complete result fixtures for supported and unsupported current citations, including a valid quote attached to an unrelated assertion, reversed direction, wrong country, stale date and a claim broader than its excerpt. Assert the relevant existing validation/repair path rejects mechanically identifiable mismatches without increasing its call ceiling.
+- [ ] Document the residual limit: deterministic checks cannot prove unrestricted natural-language entailment or optimal priority ordering. Use a small expert-reviewed fixture rubric and later approved live output review for those judgments. Prompt-string assertions and synthetic model stubs are not semantic validation.
+- [ ] Run red tests, implement only demonstrated gaps, rerun the focused controller/contract/runtime/validator tests and commit.
 
-Extend the existing aliases with Congo, Rep.; Congo, Dem. Rep.; Iran, Islamic Rep.; Micronesia, Fed. Sts.; and Yemen, Rep. Export existing behavior without duplicating it:
+Do not make up a “semantic validator” that always passes because topic words overlap. If a fixture exposes a mismatch beyond deterministic enforcement, explicitly identify it as a model-quality acceptance case rather than claiming the test proves it solved.
 
-~~~python
-def canonical_country(value: str) -> str | None:
-    return _canonical_country(value)
-~~~
+## Task 6: Add safe diagnosis for any remaining zero-evidence outcome
 
-- [ ] **Step 4: Run the focused tests**
+- [ ] Replay zero-result and rejected-result responses and assert safe aggregate counters for: source candidates, source-linked excerpts, missing publication date, untrusted host/publisher, country mismatch, non-FCV/background content, accepted sources and normalization failure.
+- [ ] Preserve existing safe event/log patterns. Never log source prose, raw model response, document text, assessment identifier or arbitrary exception text. Counters must be fixed-key integers and reasons allowlisted.
+- [ ] Distinguish empty successful responses from unavailable sources/timeouts. A surviving source succeeds despite another optional route failing.
+- [ ] Test the controller's final accepted counts and reason categories end to end with replayed provider responses; do not test parsers in isolation only.
+- [ ] Commit after the focused red/green cycle.
 
-Run Step 2 again. Expected: all country-detection tests PASS.
+These counters address the previous inability to identify which acceptance gate removed every primary claim without storing sensitive provider output.
 
-- [ ] **Step 5: Commit**
+## Task 7: Complete the provider-free ladder and exact smoke runner
+
+Run focused tests first with a fresh temporary base directory. Use the existing Python environment; do not install dependencies merely to satisfy a planned command.
 
 ~~~powershell
-git add -- src/cpf_fcv_reviewer/country_detection.py tests/test_country_detection.py
-git diff --cached --check
-git commit -m "fix: cover current FCV country aliases"
+C:\WBG\Python313\python.exe -m pytest tests/test_country_detection.py tests/test_public_research.py tests/test_curated_research.py tests/test_research_controller.py tests/test_runtime_wiring.py tests/test_contracts.py tests/test_validators.py tests/test_adversarial.py tests/test_prompt_guardrails.py tests/test_smoke_mode.py -q -p no:cacheprovider
 ~~~
 
-### Task 2: Enforce trusted provider domains and verified publication dates
-
-**Files:**
-- Modify: tests/test_public_research.py
-- Modify: src/cpf_fcv_reviewer/public_research.py:190-318,461-746
-- Modify: prompts/public_research.md
-
-- [ ] **Step 1: Write failing domain and date-provenance tests**
-
-Use the existing fake clients to capture the web-search tool dictionary, then assert:
-
-~~~python
-tool = captured["tools"][0]
-assert tool["allowed_domains"] == list(public_research.TRUSTED_SEARCH_DOMAINS)
-assert {
-    "reuters.com", "apnews.com", "bbc.com", "unhcr.org", "iom.int",
-    "wfp.org", "undp.org", "crisisgroup.org", "issafrica.org",
-} <= set(tool["allowed_domains"])
-~~~
-
-Add the date regressions:
-
-~~~python
-def test_page_age_never_becomes_publication_date():
-    title, url, publication_date = public_research._source_metadata({
-        "title": "Guinea update",
-        "url": "https://www.reuters.com/world/africa/guinea-update",
-        "page_age": "2026-08-30",
-    })
-    assert title == "Guinea update"
-    assert url == "https://www.reuters.com/world/africa/guinea-update"
-    assert publication_date is None
-
-
-@pytest.mark.parametrize(
-    ("item", "expected"),
-    [
-        ({"published_at": "2026-08-30"}, date(2026, 8, 30)),
-        ({"cited_text": "Published August 30, 2026."}, date(2026, 8, 30)),
-        ({"url": "https://www.reuters.com/world/africa/update/2026-08-30/"}, date(2026, 8, 30)),
-    ],
-)
-def test_only_permitted_grounded_date_bases_are_accepted(item, expected):
-    assert public_research._grounded_publication_date(item) == expected
-~~~
-
-- [ ] **Step 2: Verify red**
+- [ ] Confirm the focused suite passes and all model/network dependencies are stubbed in provider-free tests.
+- [ ] Run the complete suite once after the final code change:
 
 ~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_public_research.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-public-red"
-~~~
-
-Expected: FAIL because allowed_domains is absent and page_age is promoted.
-
-- [ ] **Step 3: Derive one provider domain tuple from the existing allowlist**
-
-After _INSTITUTIONAL_PUBLISHER_HOSTS add:
-
-~~~python
-TRUSTED_SEARCH_DOMAINS = tuple(
-    sorted({
-        host
-        for hosts, _publisher in _INSTITUTIONAL_PUBLISHER_HOSTS.values()
-        for host in hosts
-    })
-)
-~~~
-
-This prevents provider-side and post-response policy drift.
-
-- [ ] **Step 4: Add the tuple to the existing web-search tool**
-
-~~~python
-{
-    "type": "web_search_20250305",
-    "name": "web_search",
-    "max_uses": 5,
-    "allowed_domains": list(TRUSTED_SEARCH_DOMAINS),
-}
-~~~
-
-Do not increase max_uses or add another request.
-
-- [ ] **Step 5: Replace page_age dating with three explicit bases**
-
-Beside _parse_source_date add:
-
-~~~python
-_LABELED_DATE = re.compile(
-    r"\b(?:published|publication date|dated)\s*:?[ \t]+"
-    r"(?P<date>\d{4}-\d{2}-\d{2}|[A-Z][a-z]+ \d{1,2}, \d{4})\b",
-    re.IGNORECASE,
-)
-_URL_DATE = re.compile(r"/(\d{4})[-/](\d{2})[-/](\d{2})(?:/|$)")
-
-
-def _grounded_publication_date(item: object) -> date | None:
-    for field in ("published_at", "published_date", "publication_date", "date"):
-        parsed = _parse_source_date(_value(item, field))
-        if parsed is not None:
-            return parsed
-    cited_text = _as_nonblank_string(_value(item, "cited_text"))
-    if cited_text:
-        match = _LABELED_DATE.search(cited_text)
-        if match:
-            parsed = _parse_source_date(match.group("date"))
-            if parsed is not None:
-                return parsed
-    url = _normalize_source_url(_value(item, "url"))
-    match = _URL_DATE.search(urlparse(url).path) if url else None
-    if match:
-        try:
-            return date(*(int(part) for part in match.groups()))
-        except ValueError:
-            return None
-    return None
-~~~
-
-Make _source_metadata call this helper. While processing citation blocks, merge the citation date into the already grounded result before attaching it. Preserve exact canonical URL/title matching and fail closed when no verified date exists.
-
-- [ ] **Step 6: Tighten the existing prompt without expanding scope**
-
-Append:
-
-~~~text
-Search only the configured trusted domains. Prioritize recent country-specific reporting on political or governance transition, conflict or violence, displacement or humanitarian conditions, peace and security, land or resource conflict, social cohesion, and material implementation or resilience risks. Do not use page age, retrieval date, or an inferred date as publication evidence. Generic GDP, population, life-expectancy, poverty, or similar indicators are background data and are not current FCV evidence.
-~~~
-
-- [ ] **Step 7: Run tests and commit**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_public_research.py tests/test_adversarial.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-public-green"
-git add -- src/cpf_fcv_reviewer/public_research.py prompts/public_research.md tests/test_public_research.py
-git diff --cached --check
-git commit -m "fix: constrain and date current FCV search"
-~~~
-
-Expected: focused tests PASS and the diff check is silent.
-
-### Task 3: Attribute ReliefWeb reports to their originating publisher and original date
-
-**Files:**
-- Modify: tests/test_public_research.py
-- Modify: tests/test_curated_research.py
-- Modify: src/cpf_fcv_reviewer/public_research.py:23-55,190-318,672-744
-- Modify: src/cpf_fcv_reviewer/curated_research.py:328-384,624-656,750-779
-
-- [ ] **Step 1: Write failing provenance tests**
-
-Change the success fixture:
-
-~~~python
-"date": {
-    "original": "2026-07-28T00:00:00+00:00",
-    "created": "2026-08-01T00:00:00+00:00",
-},
-"source": [{"name": "UN OCHA"}],
-~~~
-
-Assert:
-
-~~~python
-assert claim.publisher == "OCHA"
-assert claim.distributor == "ReliefWeb"
-assert claim.source_date == date(2026, 7, 28)
-~~~
-
-Add tests proving creation-only rows and unknown source organizations are rejected. Add a normalization test proving a model claim cannot invent distributor metadata:
-
-~~~python
-source = public_research.ResearchSource(
-    title="Report",
-    url="https://reliefweb.int/report/example",
-    published_at=date(2026, 8, 1),
-)
-claim = _claim(
-    publisher="OCHA", source_url=source.url, source_date=source.published_at
-).model_copy(update={"distributor": "ReliefWeb"})
-retained = public_research._validate_normalized_claims(
-    (claim,), public_research.SearchArtifact(narrative="Grounded.", sources=(source,))
-)
-assert retained == ()
-~~~
-
-- [ ] **Step 2: Verify red**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_curated_research.py tests/test_public_research.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-reliefweb-red"
-~~~
-
-Expected: FAIL because claims have no distributor, use date.created, and name ReliefWeb as publisher.
-
-- [ ] **Step 3: Add one optional provenance field**
-
-In CurrentContextClaim add the backwards-compatible default:
-
-~~~python
-distributor: Literal["ReliefWeb"] | None = None
-~~~
-
-Add "un ocha" as an OCHA alias in _INSTITUTIONAL_PUBLISHER_HOSTS and add:
-
-~~~python
-def canonical_institutional_publisher(value: str) -> str | None:
-    entry = _INSTITUTIONAL_PUBLISHER_HOSTS.get(_normalize_text(value))
-    return entry[1] if entry is not None else None
-~~~
-
-In _is_permitted_public_source, keep normal direct-host validation first, then add the narrow curated exception:
-
-~~~python
-if allowed_hosts and _host_matches(source_url, allowed_hosts):
-    return True
-return bool(
-    claim.distributor == "ReliefWeb"
-    and _host_matches(source_url, ("reliefweb.int",))
-    and canonical_institutional_publisher(claim.publisher) == claim.publisher
-)
-~~~
-
-In _validate_normalized_claims and _salvage_grounded_segments force distributor=None. Provider normalization cannot create this application-owned exception.
-
-- [ ] **Step 4: Query and parse the original date**
-
-Canonicalize with canonical_country(request.country); return an empty tuple for an unrecognized value. Change ReliefWeb request fields:
-
-~~~python
-("filter[conditions][1][field]", "date.original"),
-("fields[include][]", "date.original"),
-("fields[include][]", "date.created"),
-("sort[]", "date.original:desc"),
-~~~
-
-Replace _reliefweb_date:
-
-~~~python
-def _reliefweb_original_date(value: object) -> date | None:
-    if not isinstance(value, Mapping):
-        return None
-    raw = value.get("original")
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    text = raw.strip().replace("Z", "+00:00")
-    try:
-        return datetime.fromisoformat(text).date()
-    except ValueError:
-        try:
-            return date.fromisoformat(text)
-        except ValueError:
-            return None
-~~~
-
-In _reliefweb_claim canonicalize source.name. Reject unknown sources and ReliefWeb-as-origin, then build:
-
-~~~python
-publisher = canonical_institutional_publisher(source_name)
-if publisher is None or publisher == "ReliefWeb":
-    return None
-
-return CurrentContextClaim(
-    claim_id=f"reliefweb:{digest}",
-    text=f"{title}.",
-    publisher=publisher,
-    source_title=title,
-    source_url=source_url,
-    distributor="ReliefWeb",
-    source_date=source_date,
-    source_type="institutional public report",
-    relevance=f"ReliefWeb report attributed to {publisher}.",
-    context_kind="current_development",
-    relationship="establishes",
-    licensed_data_required=False,
-)
-~~~
-
-- [ ] **Step 5: Preserve deterministic ordering**
-
-Add claim.distributor or "" to _claim_stable_key immediately after source_url.
-
-- [ ] **Step 6: Run tests and commit**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_public_research.py tests/test_curated_research.py tests/test_research_controller.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-reliefweb-green"
-git add -- src/cpf_fcv_reviewer/public_research.py src/cpf_fcv_reviewer/curated_research.py tests/test_public_research.py tests/test_curated_research.py tests/test_research_controller.py
-git diff --cached --check
-git commit -m "fix: preserve ReliefWeb source provenance"
-~~~
-
-Expected: PASS; diversity counts use originating organizations.
-
-### Task 4: Replace the Guinea-only ICG map with an audited optional catalogue
-
-**Files:**
-- Modify: tests/test_curated_research.py
-- Modify: src/cpf_fcv_reviewer/curated_research.py:26,287-325
-
-- [ ] **Step 1: Write failing catalogue tests**
-
-~~~python
-@pytest.mark.parametrize(
-    "country",
-    [
-        "Afghanistan", "Burkina Faso", "Central African Republic",
-        "Democratic Republic of the Congo", "Guinea", "Haiti", "Iran", "Iraq",
-        "Lebanon", "Libya", "Mali", "Myanmar", "Nigeria", "Somalia", "South Sudan",
-        "Sudan", "Syria", "Ukraine", "West Bank and Gaza", "Yemen",
-    ],
-)
-def test_icg_catalogue_has_official_feed_for_supported_conflict_country(country):
-    feed = curated_research._CRISIS_GROUP_FEEDS[country]
-    assert re.fullmatch(r"https://www\.crisisgroup\.org/rss/\d+", feed)
-~~~
-
-Also assert Kiribati returns empty without a request. Retain malformed XML, stale item, unsafe URL, response-size, and timeout tests.
-
-- [ ] **Step 2: Verify red**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_curated_research.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-icg-red"
-~~~
-
-Expected: FAIL except Guinea.
-
-- [ ] **Step 3: Check in the official FY2027-relevant catalogue**
-
-Replace the lowercase map with these official RSS-index values verified 2026-09-05:
-
-~~~python
-_CRISIS_GROUP_FEEDS = {
-    "Afghanistan": "https://www.crisisgroup.org/rss/36",
-    "Burkina Faso": "https://www.crisisgroup.org/rss/21",
-    "Burundi": "https://www.crisisgroup.org/rss/3",
-    "Cameroon": "https://www.crisisgroup.org/rss/4",
-    "Central African Republic": "https://www.crisisgroup.org/rss/5",
-    "Chad": "https://www.crisisgroup.org/rss/6",
-    "Comoros": "https://www.crisisgroup.org/rss/174",
-    "Congo": "https://www.crisisgroup.org/rss/115",
-    "Democratic Republic of the Congo": "https://www.crisisgroup.org/rss/7",
-    "Eritrea": "https://www.crisisgroup.org/rss/10",
-    "Ethiopia": "https://www.crisisgroup.org/rss/116",
-    "Guinea": "https://www.crisisgroup.org/rss/23",
-    "Guinea-Bissau": "https://www.crisisgroup.org/rss/24",
-    "Haiti": "https://www.crisisgroup.org/rss/80",
-    "Iran": "https://www.crisisgroup.org/rss/85",
-    "Iraq": "https://www.crisisgroup.org/rss/87",
-    "Lebanon": "https://www.crisisgroup.org/rss/82",
-    "Libya": "https://www.crisisgroup.org/rss/95",
-    "Malawi": "https://www.crisisgroup.org/rss/161",
-    "Maldives": "https://www.crisisgroup.org/rss/160",
-    "Mali": "https://www.crisisgroup.org/rss/26",
-    "Mozambique": "https://www.crisisgroup.org/rss/118",
-    "Myanmar": "https://www.crisisgroup.org/rss/45",
-    "Niger": "https://www.crisisgroup.org/rss/27",
-    "Nigeria": "https://www.crisisgroup.org/rss/28",
-    "Papua New Guinea": "https://www.crisisgroup.org/rss/126",
-    "Sao Tomé and Príncipe": "https://www.crisisgroup.org/rss/154",
-    "Solomon Islands": "https://www.crisisgroup.org/rss/152",
-    "Somalia": "https://www.crisisgroup.org/rss/12",
-    "South Sudan": "https://www.crisisgroup.org/rss/13",
-    "Sudan": "https://www.crisisgroup.org/rss/14",
-    "Syria": "https://www.crisisgroup.org/rss/83",
-    "Timor-Leste": "https://www.crisisgroup.org/rss/49",
-    "Ukraine": "https://www.crisisgroup.org/rss/72",
-    "West Bank and Gaza": "https://www.crisisgroup.org/rss/91",
-    "Yemen": "https://www.crisisgroup.org/rss/90",
-}
-~~~
-
-Use canonical_country once in supports/search and exact canonical keys. Do not scrape at assessment time.
-
-- [ ] **Step 4: Run tests and commit**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_country_detection.py tests/test_curated_research.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-icg-green"
-git add -- src/cpf_fcv_reviewer/curated_research.py tests/test_curated_research.py
-git diff --cached --check
-git commit -m "feat: expand official ICG country feeds"
-~~~
-
-### Task 5: Make one relevant source sufficient and generic indicators insufficient
-
-**Files:**
-- Modify: tests/test_public_research.py
-- Modify: tests/test_research_controller.py
-- Modify: tests/test_adversarial.py
-- Modify: src/cpf_fcv_reviewer/public_research.py:87-116
-- Modify: prompts/review.md:120-132,185-196
-
-- [ ] **Step 1: Change the generic-indicator regression to document-led**
-
-~~~python
-def test_generic_indicator_recovery_alone_is_document_led():
-    indicator = claim("indicator").model_copy(
-        update={
-            "source_type": "institutional public data",
-            "source_title": "Population, total",
-            "text": "Population, total: 14,754,785.",
-            "relevance": "World Bank indicator observation.",
-        }
-    )
-    result = controller(
-        ScriptedGateway(((),)),
-        recovery_gateway=ScriptedRecoveryGateway((indicator,)),
-        max_attempts=1,
-    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
-    assert result.tier is CurrentEvidenceTier.DOCUMENT_LED
-    assert result.claims == ()
-~~~
-
-Keep the one-report case but use publisher OCHA, distributor ReliefWeb, and tier REDUCED. Add a two-URL/one-publisher limitation assertion and assert the wording does not call URLs institutional sources.
-
-- [ ] **Step 2: Add prompt regressions**
-
-~~~python
-def test_review_prompt_rejects_generic_indicators_as_current_fcv_proof():
-    prompt = load_review_prompt()
-    assert "GDP, population, life expectancy, poverty" in prompt
-    assert "must not substantiate political transition, violence, displacement, land conflict" in prompt
-    assert "direct or indirect FCV causal pathway" in prompt
-    assert "more materially FCV-related priorities first" in prompt
-~~~
-
-- [ ] **Step 3: Verify red**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_research_controller.py tests/test_public_research.py tests/test_adversarial.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-tier-red"
-~~~
-
-Expected: the indicator is retained/reduced or prompt assertions fail.
-
-- [ ] **Step 4: Reject only the known generic-data class at the common boundary**
-
-~~~python
-def _is_generic_indicator_data(claim: CurrentContextClaim) -> bool:
-    return _normalize_text(claim.source_type) == "institutional public data"
-~~~
-
-In retain_public_claims before permitted-source validation:
-
-~~~python
-elif _is_generic_indicator_data(claim):
-    rejected[claim.claim_id] = "generic indicator data is not current FCV evidence"
-~~~
-
-This removes generic indicators from sufficiency and recommendation evidence without rejecting analytical World Bank FCV reports. No thematic classifier or score is needed. The controller's existing allow_document_led and not accepted branch then works unchanged.
-
-- [ ] **Step 5: Strengthen the review prompt in place**
-
-~~~text
-GDP, population, life expectancy, poverty, and other generic indicators are background context only. They must not substantiate political transition, violence, displacement, land conflict, social cohesion, or similar present-day dynamics. Cite a current-context item only when its title and claim materially support the recommendation's specific present-day assertion. Every priority must state a direct or indirect FCV causal pathway, and more materially FCV-related priorities must appear first.
-~~~
-
-- [ ] **Step 6: Run tests and commit**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_public_research.py tests/test_research_controller.py tests/test_adversarial.py tests/test_validators.py tests/test_prompt_guardrails.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-tier-green"
-git add -- src/cpf_fcv_reviewer/public_research.py prompts/review.md tests/test_public_research.py tests/test_research_controller.py tests/test_adversarial.py
-git diff --cached --check
-git commit -m "fix: require substantive current FCV evidence"
-~~~
-
-Expected: one relevant report yields reduced; generic indicator-only input yields document_led; pathway/order tests PASS.
-
-### Task 6: Keep the external runner title mode-tolerant
-
-**Files:**
-- Modify: the existing runner-contract test found with rg
-- Modify only if needed: scripts/run_smoke_browser.py
-
-- [ ] **Step 1: Locate and test the existing assertion**
-
-~~~powershell
-rg -n "Guinea CPF|Guinea CEN|FCV review" tests scripts/run_smoke_browser.py
-~~~
-
-The contract must accept:
-
-~~~python
-assert_title("Guinea CPF / CEN FCV review")
-assert_title("Guinea CPF FCV review")
-assert_title("Guinea CEN FCV review")
-with pytest.raises(AssertionError):
-    assert_title("Guinea project review")
-~~~
-
-The implementation may use:
-
-~~~python
-re.compile(r"^Guinea (?:CPF|CEN|CPF / CEN) FCV review$")
-~~~
-
-If current main already fully covers this, make no code change and no commit.
-
-- [ ] **Step 2: Run the exact existing contract file**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_external_qa_runner.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-runner-title"
-~~~
-
-If rg shows a different file name, run that file instead. Expected: PASS.
-
-- [ ] **Step 3: Commit only if coverage was missing**
-
-~~~powershell
-git add -- scripts/run_smoke_browser.py tests
-git diff --cached --check
-git commit -m "test: allow mode-controlled review titles"
-~~~
-
-### Task 7: Run the complete provider-free acceptance ladder
-
-**Files:**
-- No production changes expected.
-- Smoke artifacts remain under gitignored output/playwright.
-
-- [ ] **Step 1: Run the focused matrix**
-
-~~~powershell
-C:\WBG\Python313\python.exe -m pytest tests/test_country_detection.py tests/test_public_research.py tests/test_curated_research.py tests/test_research_controller.py tests/test_adversarial.py tests/test_prompt_guardrails.py tests/test_validators.py -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-all-country-focused"
-~~~
-
-Expected: PASS, zero provider calls.
-
-- [ ] **Step 2: Run static checks**
-
-~~~powershell
+C:\WBG\Python313\python.exe -m pytest -q -p no:cacheprovider
 C:\WBG\Python313\python.exe -m compileall -q src tests scripts
-node --check src/cpf_fcv_reviewer/static/app.js
-git diff --check origin/main...HEAD
+git diff --check
 ~~~
 
-Expected: exit 0. If Ruff is already available in .venv, run .\.venv\Scripts\python.exe -m ruff check .; otherwise record unavailable and do not install it.
-
-- [ ] **Step 3: Run the full provider-free suite once**
+- [ ] Run JavaScript syntax checking with the available Node executable and Ruff only if already installed. Record unavailable checks accurately.
+- [ ] Inspect the actual smoke-mode app factory/config and launch the existing Flask smoke service locally with provider credentials unused. Confirm smoke mode before upload.
+- [ ] Execute the actual runner interface:
 
 ~~~powershell
-C:\WBG\Python313\python.exe -m pytest -q -p no:cacheprovider --basetemp "$env:LOCALAPPDATA\Temp\cpf-fcv-all-country-full"
+C:\WBG\Python313\python.exe scripts/run_smoke_browser.py --base-url http://127.0.0.1:58422 --output output/playwright/2026-09-05-all-country-current-fcv-smoke
 ~~~
 
-Expected: PASS. Do not repeat a green full suite without a code change.
+Use a unique suffix if the output folder already exists. The verified runner accepts --output, not --output-dir, and its synthetic country is Benin. Do not invent test_external_qa_runner.py or assert_title.
 
-- [ ] **Step 4: Run the complete external smoke-browser runner**
+- [ ] Verify upload, result, detailed view, two assistant turns, four restored messages after refresh, mobile, DOCX integrity and no page/console errors. Expected runner marker: BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1.
+- [ ] Inspect the existing mode-controlled title assertion; keep CPF, CEN and CPF / CEN compatibility using the actual selected country. Change it only if a regression demonstrates failure. Inspect screenshots and stop the local server.
+- [ ] Review the full diff, dependency list, call counts and sanitized artifacts. No unrelated changes or assessment identifier may enter Git.
 
-Start the documented local smoke server, then:
+Expected test outcomes are targets, not observed results. Record actual counts and failures.
 
-~~~powershell
-C:\WBG\Python313\python.exe scripts/run_smoke_browser.py --base-url http://127.0.0.1:5000 --output-dir output/playwright/2026-09-05-all-country-current-fcv-smoke
-~~~
+## Task 8: Review, record and present the concrete implementation
 
-Expected:
+- [ ] Have Astra review the implemented diff against this corrected plan, especially source/date provenance, selected-country scope, semantic limits and actual request ceilings.
+- [ ] Resolve evidence-backed findings and rerun only affected checks; repeat the full suite after material code changes.
+- [ ] Add a new dated safe validation record with exact code commit, actual test counts, smoke results, offline country coverage, call ceilings, source routes tested and remaining live uncertainties. Update PROJECT_STATUS without rewriting historical records.
+- [ ] Push the feature branch and open/update its PR with the concrete final behavior and validation. Inspect staged diff and confirm no IDs, credentials, raw documents or raw model content.
+- [ ] Present provider-free evidence before deployment or paid approval. Optional no-model source probes may verify official public endpoints, bounded metadata extraction and publication fields; fixtures must cover valid zero-result behavior without requiring a real country to have no news.
+- [ ] Keep ReliefWeb disabled until its own approved app name and live API probe are available. This does not block acceptance of independent trusted-news/ICG routes.
+- [ ] Do not submit another paid assessment or provider-backed assistant call in this implementation cycle. A separately approved later run tests remaining live selection, synthesis and recommendation-quality uncertainty, not defects already detectable offline.
 
-~~~text
-BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1
-~~~
+## Acceptance and remaining limits
 
-Verify upload, result, detailed view, two assistant turns, four restored messages after refresh, 390-pixel mobile layout, DOCX, and zero console/page errors. Stop the server. These are synthetic artifacts, not a country-quality run.
+Ready for implementation means the workflow, contracts, failing cases, budget and verification path are explicit. Ready for deployment requires the implemented diff and provider-free evidence. Actual live retrieval and semantic review quality remain unproven until separately approved live validation.
 
-- [ ] **Step 5: Inspect the narrow diff**
+Required behavior: one selected country per assessment; reusable coverage across supported LMICs; a small trusted source set; one useful recent source sufficient; no indicator substitution; actual source findings preserved; citations bounded by their support; clear FCV pathways and materiality-first ordering; truthful source/date/diversity disclosure; bounded cost; complete provider-free and browser acceptance.
 
-~~~powershell
-git status --short --branch
-git diff --stat origin/main...HEAD
-git diff origin/main...HEAD -- src/cpf_fcv_reviewer prompts tests scripts docs
-~~~
-
-Expected: only planned files; no secrets, raw documents, raw model output, assessment IDs, run-state files, or unrelated changes.
-
-### Task 8: Record safe evidence and stop at the operational gate
-
-**Files:**
-- Create: docs/validation/2026-09-05-all-country-current-fcv-provider-free.md
-- Modify: docs/PROJECT_STATUS.md
-
-- [ ] **Step 1: Write the record from observed output**
-
-Use this structure. Convert the two instruction phrases in the Results list into the exact observed values before creating the record:
-
-~~~markdown
-# All-country current FCV research provider-free validation - 2026-09-05
-
-## Scope
-
-This provider-free cycle validates country-agnostic trusted-domain search configuration,
-grounded publication-date handling, dynamic ReliefWeb parsing, official optional ICG feed
-selection, substantive current-FCV sufficiency, publisher diversity, and the complete smoke
-browser workflow. No assessment or provider-backed assistant call was made.
-
-## Results
-
-- Focused country/research suite: copy the exact passed count printed by Task 7, Step 1.
-- Complete provider-free suite: copy the exact passed count printed by Task 7, Step 3.
-- Python compilation, JavaScript syntax, and diff checks: passed.
-- External smoke runner: BROWSER_QA_PASS screenshots=8 assistant_messages_restored=4 docx=1.
-- Verified code commit: copy the full output of git rev-parse HEAD after the code commits.
-
-## Operational gate
-
-ReliefWeb production readiness remains blocked until a genuinely pre-approved application
-name is configured and a single no-model API probe succeeds. No deployment and no paid
-assessment were performed. No assessment identifier is recorded.
-~~~
-
-Do not invent counts or SHA. If a gate fails, record the failure.
-
-- [ ] **Step 2: Update status narrowly**
-
-Record the verified result and these remaining actions:
-
-~~~text
-- Obtain/configure a genuinely pre-approved ReliefWeb application name.
-- Run bounded live no-model ReliefWeb probes for a conflict country, an institutionally fragile country, and a valid zero-result country.
-- Present the diff, provider-free evidence, and probe results for explicit deployment/paid-run approval.
-~~~
-
-Do not claim production readiness while the approved app name is missing.
-
-- [ ] **Step 3: Commit documentation**
-
-~~~powershell
-git add -- docs/PROJECT_STATUS.md docs/validation/2026-09-05-all-country-current-fcv-provider-free.md
-git diff --cached --check
-git commit -m "docs: record all-country provider-free validation"
-~~~
-
-- [ ] **Step 4: Request review, then push and open the implementation PR**
-
-Use superpowers:requesting-code-review and resolve evidence-backed findings. Push the implementation branch and open a PR. The PR body must state no deployment, no paid assessment, no provider-backed assistant call, the open ReliefWeb app-name gate, focused/full/smoke results, and no assessment ID.
-
-- [ ] **Step 5: Stop before deployment or paid validation**
-
-Do not deploy, submit an assessment, call the production assistant, or treat arbitrary ReliefWeb app names as valid. Present provider-free evidence and request explicit approval only after the approved ReliefWeb credential and no-model probes are available.
-
-## Plan self-review
-
-- Spec coverage: Tasks 1-5 cover country normalization, trusted domains, grounded dates, ReliefWeb provenance, ICG supplements, one-source reduced tier, indicator exclusion, citation fit, pathways, and ordering. Tasks 6-8 cover runner compatibility, full provider-free validation, safe records, and deployment/paid gates.
-- Simplicity: no new dependency, commercial API, runtime feed scraping, thematic classifier, adapter abstraction, extra model call, or production FCV classification logic.
-- Type consistency: CurrentContextClaim.distributor is optional with None default; only trusted ReliefWeb adapter output sets it. Existing constructors remain valid. Country and publisher canonicalization are shared.
-- Operational limitation: fixture implementation can complete, but ReliefWeb production readiness cannot pass until an approved app name exists. This is an explicit stop condition, not a reason to weaken validation.
+No guarantee is made that a current publication exists, is accessible, or can be dated for every country. When none qualifies, return an honest document-led review.
