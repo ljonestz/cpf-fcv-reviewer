@@ -869,6 +869,8 @@ def _current_claims():
             claim_id="claim-1", text="Exact current finding.", publisher="World Bank",
             source_title="Finding", source_url="https://www.worldbank.org/finding",
             source_date=date(2026, 7, 1), source_type="report", relevance="Relevant.",
+            supporting_quote="Exact current finding.",
+            publication_date_basis="provider_metadata",
             context_kind="structural_dynamic", relationship="establishes",
             licensed_data_required=False,
         ),
@@ -876,6 +878,8 @@ def _current_claims():
             claim_id="claim-2", text="Exact other finding.", publisher="Other source",
             source_title="Other finding", source_url="https://other.example.org/finding",
             source_date=date(2026, 7, 2), source_type="briefing", relevance="Relevant.",
+            supporting_quote="Exact other finding.",
+            publication_date_basis="article_metadata",
             context_kind="current_development", relationship="corroborates",
             licensed_data_required=False,
         ),
@@ -2849,12 +2853,45 @@ def test_runtime_appends_current_research_exactly_before_review(monkeypatch):
 
     current = [item for item in pack.evidence if item.evidence_type == "current_context"]
     actual = [
-        (item.evidence_id, item.text, item.source_url, item.confidence)
+        (
+            item.evidence_id,
+            item.text,
+            item.source_url,
+            item.source_title,
+            item.source_publisher,
+            item.source_date,
+            item.supporting_quote,
+            item.source_relevance,
+            item.publication_date_basis,
+            item.confidence,
+        )
         for item in current
     ]
     assert actual == [
-        ("current-001", "Exact current finding.", "https://www.worldbank.org/finding", "high"),
-        ("current-002", "Exact other finding.", "https://other.example.org/finding", "medium"),
+        (
+            "current-001",
+            "Exact current finding.",
+            "https://www.worldbank.org/finding",
+            "Finding",
+            "World Bank",
+            date(2026, 7, 1),
+            "Exact current finding.",
+            "Relevant.",
+            "provider_metadata",
+            "high",
+        ),
+        (
+            "current-002",
+            "Exact other finding.",
+            "https://other.example.org/finding",
+            "Other finding",
+            "Other source",
+            date(2026, 7, 2),
+            "Exact other finding.",
+            "Relevant.",
+            "article_metadata",
+            "medium",
+        ),
     ]
 
 

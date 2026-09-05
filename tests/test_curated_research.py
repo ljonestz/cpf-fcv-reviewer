@@ -1063,3 +1063,77 @@ def test_reliefweb_maps_cote_divoire_to_provider_country_name():
     ).reliefweb
 
     assert adapter.search(request("Cote d'Ivoire")) == ()
+
+def test_curated_gateway_preserves_candidates_for_controller_qualification():
+    items = "".join(
+        (
+            "<item>"
+            f"<title>Somalia violence update {index}</title>"
+            f"<link>https://www.crisisgroup.org/africa/somalia/update-{index}</link>"
+            "<pubDate>Friday, August 1, 2026 - 12:00</pubDate>"
+            f"<description>Political violence increased in Somalia district {index}.</description>"
+            "</item>"
+        )
+        for index in range(8)
+    )
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(
+                lambda *_args: rss_response(f"<rss><channel>{items}</channel></rss>")
+            )
+        )
+    )
+
+    claims = gateway.search(request("Somalia"))
+
+    assert len(claims) == 8
+
+
+def test_reliefweb_copy_url_is_not_treated_as_originating_publisher():
+    payload = {
+        "data": [
+            {
+                "fields": {
+                    "title": "Guinea conflict update",
+                    "origin": "https://reliefweb.int/report/guinea/conflict-update",
+                    "date": {"created": "2026-08-01"},
+                    "body": "Political violence increased in Guinea.",
+                    "primary_country": [{"name": "Guinea"}],
+                    "source": [{"name": "United Nations"}],
+                }
+            }
+        ]
+    }
+
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: json_response(payload))
+        ),
+        reliefweb_app_name="app",
+    )
+
+    assert gateway.reliefweb.search(request()) == ()
+
+
+def test_gateway_keeps_later_finding_from_same_source():
+    payload = """<rss version="2.0"><channel>
+    <item><title>Guinea conflict increased locally</title>
+      <link>https://www.crisisgroup.org/africa/guinea/update</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate></item>
+    <item><title>Guinea political violence increased</title>
+      <link>https://www.crisisgroup.org/africa/guinea/update</link>
+      <pubDate>Saturday, October 4, 2025 - 12:26</pubDate></item>
+    </channel></rss>"""
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: rss_response(payload))
+        )
+    )
+
+    claims = gateway.search(request("Guinea"))
+
+    assert len(claims) == 2
+    assert {claim.source_date for claim in claims} == {
+        date(2025, 10, 3),
+        date(2025, 10, 4),
+    }

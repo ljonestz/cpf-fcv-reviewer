@@ -237,7 +237,10 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
                 "title": "World Bank update",
                 "url": source_url,
                 "published_at": "2025-04-30",
-                "excerpt": "Source excerpt for the first segment.",
+                "excerpt": (
+                    "Source excerpt for the first segment. [excerpt] "
+                    "Source excerpt for the second segment."
+                ),
                 "publisher": "World Bank",
                 "publication_date_basis": "provider_metadata",
             }
@@ -2045,11 +2048,11 @@ def test_salvage_uses_source_excerpt_and_requires_country_connection():
     )
 
     retained = public_research._salvage_grounded_segments(
-        (("Assistant narrative with a different claim.", (source,)),),
+        ((source.excerpt, (source,)),),
         selected_country="Guinea",
     )
     rejected = public_research._salvage_grounded_segments(
-        (("Assistant narrative.", (source,)),), selected_country="Somalia"
+        ((source.excerpt, (source,)),), selected_country="Somalia"
     )
 
     assert retained[0].text == source.excerpt
@@ -2404,3 +2407,352 @@ def test_object_shaped_search_tool_error_is_unavailable(monkeypatch):
 
     assert set(gateway.last_diagnostics.values()) == {0}
     assert "private provider detail" not in str(gateway.last_diagnostics)
+
+
+def test_selected_country_must_appear_in_excerpt_not_only_regional_title():
+    source = public_research.ResearchSource(
+        title="Somalia and Kenya regional security update",
+        url="https://www.reuters.com/world/africa/regional-update-2026-08-30/",
+        published_at=date(2026, 8, 30),
+        excerpt="Violence increased in Kenya.",
+    )
+
+    assert not public_research._source_mentions_country(source, "Somalia")
+
+
+def test_salvage_uses_final_conflicting_date_record_for_same_url():
+    url = "https://apnews.com/article/synthetic-conflict-date"
+    title = "Somalia political update"
+    quote = "Political violence in Somalia increased."
+    blocks = (
+        {
+            "type": "web_search_tool_result",
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "title": title,
+                    "url": url,
+                    "published_at": "2026-08-30",
+                }
+            ],
+        },
+        {
+            "type": "text",
+            "text": quote,
+            "citations": [
+                {
+                    "type": "web_search_result_location",
+                    "title": title,
+                    "url": url,
+                    "cited_text": quote,
+                }
+            ],
+        },
+        {
+            "type": "text",
+            "text": quote,
+            "citations": [
+                {
+                    "type": "web_search_result_location",
+                    "title": title,
+                    "url": url,
+                    "published_at": "2026-08-29",
+                    "cited_text": quote,
+                }
+            ],
+        },
+    )
+
+    artifact, segments = public_research._extract_search_artifact(
+        blocks, selected_country="Somalia"
+    )
+
+    assert artifact.sources[0].publication_date_basis == "conflicting"
+    assert public_research._salvage_grounded_segments(
+        segments, selected_country="Somalia"
+    ) == ()
+
+
+def test_same_url_preserves_later_useful_excerpt_within_source_bound():
+    url = "https://www.reuters.com/world/africa/somalia-update-2026-08-30/"
+    title = "Somalia current update"
+    blocks = [
+        {
+            "type": "web_search_tool_result",
+            "content": [{"type": "web_search_result", "title": title, "url": url}],
+        }
+    ]
+    for quote in (
+        "The population estimate for Somalia was revised.",
+        "Political violence increased in Somalia.",
+    ):
+        blocks.append(
+            {
+                "type": "text",
+                "text": quote,
+                "citations": [
+                    {
+                        "type": "web_search_result_location",
+                        "title": title,
+                        "url": url,
+                        "cited_text": quote,
+                    }
+                ],
+            }
+        )
+
+    artifact, _ = public_research._extract_search_artifact(
+        tuple(blocks), selected_country="Somalia"
+    )
+
+    assert "Political violence increased in Somalia." in artifact.sources[0].excerpt
+
+
+def test_primary_reliefweb_copy_without_originating_publisher_is_not_accepted():
+    quote = "Political violence increased in Somalia."
+    source = public_research.ResearchSource(
+        title="Somalia situation report",
+        url="https://reliefweb.int/report/somalia/situation-report",
+        publisher="ReliefWeb",
+        published_at=date(2026, 8, 30),
+        excerpt=quote,
+    )
+    claim = _claim(
+        publisher="ReliefWeb",
+        source_url=source.url,
+        source_title=source.title,
+        source_date=source.published_at,
+        text=quote,
+        supporting_quote=quote,
+    )
+
+    accepted = public_research._validate_normalized_claims(
+        (claim,),
+        public_research.SearchArtifact(narrative=quote, sources=(source,)),
+        selected_country="Somalia",
+    )
+
+    assert accepted == ()
+
+
+def test_gateway_stops_before_operation_after_attempt_deadline(monkeypatch):
+    now = [0.0]
+    url = "https://www.reuters.com/world/africa/somalia-update-2026-08-30/"
+    quote = "Political violence increased in Somalia."
+    response = _cited_response(
+        source_url=url,
+        source_title="Somalia update",
+        page_age="2026-08-30",
+        cited_text=quote,
+    )
+
+    class BetaMessages:
+        def create(self, **kwargs):
+            assert kwargs["timeout"] == 90.0
+            now[0] = 91.0
+            return response
+
+    class Messages:
+        def parse(self, **kwargs):
+            raise AssertionError("normalization must not start after the deadline")
+
+    fake_client = SimpleNamespace(
+        beta=SimpleNamespace(messages=BetaMessages()),
+        messages=Messages(),
+    )
+    monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
+    gateway = public_research.AnthropicPublicResearchGateway(
+        "key",
+        "model",
+        timeout_seconds=90.0,
+        monotonic=lambda: now[0],
+    )
+
+    with pytest.raises(TimeoutError, match="deadline"):
+        gateway.search("country: Somalia")
+
+
+def test_metadata_client_construction_failure_skips_undated_source(monkeypatch):
+    source_url = "https://www.reuters.com/world/africa/guinea-undated/"
+    quote = "Political violence increased in Guinea."
+    response = _cited_response(
+        source_url=source_url,
+        source_title="Guinea undated update",
+        page_age="unknown",
+        cited_text=quote,
+    )
+
+    class BrokenClient:
+        def __init__(self, **kwargs):
+            raise OSError("invalid certificate path")
+
+    gateway = _diagnostic_gateway(monkeypatch, response, None)
+    monkeypatch.setattr(public_research.httpx, "Client", BrokenClient)
+
+    with pytest.raises(ValueError, match="no parsed output"):
+        gateway.search("country: Guinea")
+    assert gateway.last_diagnostics["missing_publication_date"] == 1
+
+
+def test_salvage_keeps_each_sentence_from_merged_same_url_excerpts():
+    url = "https://www.reuters.com/world/africa/somalia-update-2026-08-30/"
+    quotes = (
+        "Population estimate for Somalia rose.",
+        "Political violence increased in Somalia.",
+    )
+    blocks = []
+    for quote in quotes:
+        blocks.extend(
+            (
+                {
+                    "type": "web_search_tool_result",
+                    "content": [
+                        {
+                            "type": "web_search_result",
+                            "title": "Somalia update",
+                            "url": url,
+                            "page_age": "2026-08-30",
+                        }
+                    ],
+                },
+                {
+                    "type": "text",
+                    "text": quote,
+                    "citations": [
+                        {
+                            "type": "web_search_result_location",
+                            "title": "Somalia update",
+                            "url": url,
+                            "cited_text": quote,
+                        }
+                    ],
+                },
+            )
+        )
+
+    _, segments = public_research._extract_search_artifact(
+        tuple(blocks), selected_country="Somalia"
+    )
+    claims = public_research._salvage_grounded_segments(
+        segments, selected_country="Somalia"
+    )
+
+    assert tuple(claim.supporting_quote for claim in claims) == quotes
+
+
+def test_normalized_claim_country_must_be_in_exact_quote_not_other_excerpt():
+    url = "https://www.reuters.com/world/africa/regional-update"
+    source = public_research.ResearchSource(
+        title="Somalia and Kenya update",
+        url=url,
+        publisher="Reuters",
+        published_at=date(2026, 8, 30),
+        excerpt=(
+            "Somalia held local consultations. […] "
+            "Political violence increased in Kenya."
+        ),
+    )
+    quote = "Political violence increased in Kenya."
+    claim = _claim(
+        publisher="Reuters",
+        source_url=url,
+        source_title=source.title,
+        source_date=source.published_at,
+        text=quote,
+        supporting_quote=quote,
+    )
+
+    accepted = public_research._validate_normalized_claims(
+        (claim,),
+        public_research.SearchArtifact(narrative=source.excerpt, sources=(source,)),
+        selected_country="Somalia",
+    )
+
+    assert accepted == ()
+
+
+def test_article_metadata_stream_stops_at_shared_attempt_deadline():
+    now = [0.0]
+    chunks = [0]
+
+    class Response:
+        status_code = 200
+        headers = {"content-type": "text/html"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def iter_bytes(self):
+            for value in (b"<html>", b"<meta>", b"</html>"):
+                now[0] += 0.6
+                chunks[0] += 1
+                yield value
+
+    class Client:
+        def stream(self, *_args, **_kwargs):
+            return Response()
+
+    result = public_research._fetch_article_publication_date(
+        "https://www.reuters.com/world/africa/guinea-update",
+        Client(),
+        timeout=1.0,
+        deadline=1.0,
+        monotonic=lambda: now[0],
+    )
+
+    assert result is None
+    assert chunks[0] == 2
+
+
+def test_overflow_source_remains_available_for_local_qualification():
+    sources = tuple(
+        {
+            "type": "web_search_result",
+            "title": f"Somalia update {index}",
+            "url": f"https://www.reuters.com/world/africa/somalia-{index}/",
+            "published_at": "2026-08-30",
+        }
+        for index in range(4)
+    )
+    blocks = [
+        {
+            "type": "web_search_tool_result",
+            "content": list(sources),
+        }
+    ]
+    for index, source in enumerate(sources):
+        quote = (
+            "Political violence increased in Somalia."
+            if index == 3
+            else f"Somalia population estimate {index} was revised."
+        )
+        blocks.append(
+            {
+                "type": "text",
+                "text": quote,
+                "citations": [
+                    {
+                        "type": "web_search_result_location",
+                        "title": source["title"],
+                        "url": source["url"],
+                        "published_at": source["published_at"],
+                        "cited_text": quote,
+                    }
+                ],
+            }
+        )
+
+    artifact, segments = public_research._extract_search_artifact(
+        tuple(blocks), selected_country="Somalia"
+    )
+    claims = public_research._salvage_grounded_segments(
+        segments, selected_country="Somalia"
+    )
+
+    assert len(artifact.sources) == public_research.MAX_RETAINED_SOURCES
+    assert len(segments) == 4
+    assert len(claims) == 4
+    assert claims[-1].supporting_quote == "Political violence increased in Somalia."

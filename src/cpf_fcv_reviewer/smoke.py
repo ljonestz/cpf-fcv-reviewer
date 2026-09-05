@@ -133,17 +133,19 @@ class SmokeResearchGateway:
     ):
         from .public_research import CurrentContextClaim
 
+        text = (
+            f"{SMOKE_MARKER} Synthetic fixture {index} reports increased political "
+            f"violence and conflict conditions in {country} as {context_kind} context; "
+            "it is not real evidence."
+        )
         return CurrentContextClaim(
             claim_id=f"smoke-{index:03d}",
-            text=(
-                f"{SMOKE_MARKER} Synthetic fixture {index} records political violence "
-                f"and conflict conditions in {country} as {context_kind} context; "
-                "it is not real evidence."
-            ),
+            text=text,
             publisher=publisher,
             source_title=f"{SMOKE_MARKER} {publisher} local-QA fixture {index}",
-            source_url=f"https://{host}/synthetic-smoke/{slug}/claim-{index}",
+            source_url=f"https://{host}/synthetic-smoke/{slug}/claim-{min(index, 3)}",
             source_date=source_date,
+            supporting_quote=text,
             source_type="public synthetic smoke fixture",
             relevance="Synthetic local-QA fixture only; not a production research source.",
             context_kind=context_kind,

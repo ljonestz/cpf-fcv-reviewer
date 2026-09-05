@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import get_args
 
 import pytest
@@ -552,6 +552,10 @@ def current_evidence(text: str) -> EvidenceItem:
         evidence_type="current_context",
         text=text,
         confidence="high",
+        source_title="Current FCV update",
+        source_publisher="Reuters",
+        source_date=date(2026, 8, 30),
+        supporting_quote=text,
         source_url="https://www.reuters.com/world/africa/example",
     )
 
@@ -1073,4 +1077,441 @@ def test_incidental_fcv_words_do_not_support_present_day_fcv_claim(source_text):
         prohibited_terms=set(),
     )
 
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_directional_current_assertion_requires_current_context_citation():
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1",),
+                assessment="Political violence is increasing across Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        evidence={},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_political_transition_does_not_support_increasing_political_violence():
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence is increasing across Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={
+            "current-1": current_evidence(
+                "Political transition deteriorated in Guinea."
+            )
+        },
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_directional_current_assertion_in_why_it_matters_is_checked():
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="The delivery logic needs clarification.",
+                why_it_matters="Political violence is increasing in Guinea.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={
+            "current-1": current_evidence(
+                "Political violence remained stable in Guinea."
+            )
+        },
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
+        "Political violence increased in Somalia.",
+        "Political violence increased in West Africa.",
+    ],
+)
+def test_country_specific_current_claim_requires_country_specific_source(source_text):
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence is increasing across Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": current_evidence(source_text)},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    ("priority_country", "evidence_text"),
+    [
+        ("Guinea", "Political violence increased in Guinea-Bissau."),
+        ("Sudan", "Political violence increased in South Sudan."),
+    ],
+)
+def test_compound_country_name_does_not_support_parent_name(
+    priority_country, evidence_text
+):
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment=f"Political violence increased in {priority_country}.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": current_evidence(evidence_text)},
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_direction_does_not_leak_across_joined_fcv_clauses():
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political transition deteriorated in Guinea.",
+                why_it_matters="Instability could disrupt implementation.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={
+            "current-1": current_evidence(
+                "Political transition remained stable and violence increased in Guinea."
+            )
+        },
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_current_support_uses_exact_quote_not_broader_claim_text():
+    evidence = current_evidence(
+        "Political violence increased across every region of Guinea."
+    ).model_copy(
+        update={"supporting_quote": "Political violence increased in Conakry, Guinea."}
+    )
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence increased across every region of Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_modal_consequence_does_not_hide_current_fcv_assertion():
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1",),
+                assessment=(
+                    "Political violence is increasing in Guinea and could disrupt "
+                    "implementation."
+                ),
+                why_it_matters="Delivery must be conflict-sensitive.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed, evidence_ids={"ev-1"}, evidence={}, prohibited_terms=set()
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+
+def test_shared_subject_modal_clause_does_not_hide_current_fcv_assertion():
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1",),
+                assessment=(
+                    "Political violence may disrupt implementation and is increasing "
+                    "in Guinea."
+                ),
+                why_it_matters="Delivery must be conflict-sensitive.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed, evidence_ids={"ev-1"}, evidence={}, prohibited_terms=set()
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    "assessment",
+    [
+        "Political violence increased across Guinea.",
+        "Political violence increased all over Guinea.",
+        "Political violence increased everywhere in Guinea.",
+        "Political violence increased in every region of Guinea.",
+    ],
+)
+def test_countrywide_current_claim_rejects_city_only_support(assessment):
+    evidence = current_evidence("Political violence increased in Conakry, Guinea.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment=assessment,
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_countrywide_current_claim_accepts_matching_countrywide_support():
+    evidence = current_evidence("Political violence increased throughout Guinea.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence increased across Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" not in {issue.code for issue in issues}
+
+
+
+def test_complementary_current_sources_may_cover_distinct_priority_topics():
+    political = current_evidence("Political transition deteriorated in Guinea.")
+    land = current_evidence("Land conflict increased in Guinea.").model_copy(
+        update={
+            "evidence_id": "current-2",
+            "source_url": "https://www.reuters.com/world/africa/land-example",
+        }
+    )
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1", "current-2"),
+                assessment=(
+                    "Political transition deteriorated and land conflict increased in Guinea."
+                ),
+                why_it_matters="These dynamics could disrupt implementation.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1", "current-2"},
+        evidence={"current-1": political, "current-2": land},
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" not in {issue.code for issue in issues}
+
+
+def test_recommended_action_current_assertion_requires_matching_support():
+    evidence = current_evidence("Political violence declined in Guinea.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="The program has delivery constraints.",
+                why_it_matters="Delivery must be conflict-sensitive.",
+                recommended_action="Political violence is increasing in Guinea.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_modal_source_language_cannot_prove_asserted_current_trend():
+    evidence = current_evidence("Political violence could increase in Guinea.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1", "current-1"),
+                assessment="Political violence is increasing in Guinea.",
+                why_it_matters="Violence could disrupt implementation.",
+            ),
+        )
+    )
+
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1", "current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+@pytest.mark.parametrize(
+    ("recommended_action", "source_text"),
+    [
+        (
+            "Political violence is increasing in Guinea.",
+            "Political violence increased in Somalia.",
+        ),
+        (
+            "Political violence increased across Guinea.",
+            "Political violence increased in Conakry, Guinea.",
+        ),
+    ],
+)
+def test_recommended_action_current_assertion_matches_country_and_scope(
+    recommended_action, source_text
+):
+    evidence = current_evidence(source_text)
+    reviewed = result(
+        areas=(area(evidence_ids=("current-1",), recommended_action=recommended_action),)
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_nondirectional_present_fcv_claim_is_not_hidden_by_directional_claim():
+    political = current_evidence("Political violence increased in Guinea.")
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("current-1",),
+                assessment=(
+                    "Political violence is increasing in Guinea and land conflict "
+                    "affects land access in Guinea."
+                ),
+                why_it_matters="Delivery must be conflict-sensitive.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"current-1"},
+        evidence={"current-1": political},
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_modal_consequence_does_not_consume_because_factual_clause():
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("ev-1",),
+                assessment=(
+                    "Political violence could disrupt implementation because land "
+                    "conflict is worsening in Guinea."
+                ),
+                why_it_matters="Delivery must be conflict-sensitive.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"ev-1"},
+        evidence={},
+        prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_negated_present_condition_cannot_support_positive_assertion():
+    evidence = current_evidence(
+        "Land conflict does not affect land access in Guinea."
+    )
+    reviewed = result(
+        areas=(
+            area(
+                evidence_ids=("current-1",),
+                assessment="Land conflict affects land access in Guinea.",
+                why_it_matters="Delivery must be conflict-sensitive.",
+            ),
+        )
+    )
+    issues = validate_review(
+        reviewed,
+        evidence_ids={"current-1"},
+        evidence={"current-1": evidence},
+        prohibited_terms=set(),
+    )
     assert "missing_current_context_support" in {issue.code for issue in issues}

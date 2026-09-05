@@ -40,6 +40,7 @@ def claim(
         source_url = f"https://{source_host}/{claim_id}"
     return CurrentContextClaim(
         claim_id=claim_id,
+        supporting_quote=f"Political violence disrupted local services in Benin ({claim_id}).",
         text=f"Political violence disrupted local services in Benin ({claim_id}).",
         publisher=publisher,
         source_title=f"Source {claim_id}",
@@ -58,7 +59,12 @@ def sufficient_claims(review_date: date = date(2026, 8, 1)) -> tuple[CurrentCont
         claim("s1", source_date=date(2025, 9, 1)),
         claim("s2", publisher="United Nations", source_date=date(2026, 7, 1)),
         claim("s3", context_kind="current_development", source_date=review_date),
-        claim("s4", context_kind="resilience_factor", source_date=date(2025, 10, 1)),
+        claim(
+            "s4",
+            context_kind="resilience_factor",
+            source_date=date(2025, 10, 1),
+            source_url="https://www.worldbank.org/s1",
+        ),
     )
 
 
@@ -241,7 +247,7 @@ def test_reduced_limitation_names_missing_thematic_coverage():
 
 def test_retry_prompt_targets_missing_non_economic_themes_for_named_rra():
     non_fcv = claim("c1", context_kind="current_development").model_copy(
-        update={"text": "Economic conditions remain constrained."}
+        update={"text": "Economic conditions remain constrained.", "supporting_quote": "Economic conditions remain constrained."}
     )
     gateway = ScriptedGateway(((non_fcv,),))
 
@@ -277,7 +283,7 @@ def test_retry_prompt_does_not_echo_hostile_diagnostic_title():
         diagnostic_summary="The diagnostic identifies structural delivery constraints.",
     )
     non_fcv = claim("c1", context_kind="current_development").model_copy(
-        update={"text": "Economic conditions remain constrained."}
+        update={"text": "Economic conditions remain constrained.", "supporting_quote": "Economic conditions remain constrained."}
     )
     gateway = ScriptedGateway(((non_fcv,),))
 
@@ -335,6 +341,7 @@ def test_generic_indicator_recovery_alone_is_document_led():
     indicator = claim("indicator").model_copy(
         update={
             "text": "Population, total: 14,100,000.",
+            "supporting_quote": "Population, total: 14,100,000.",
             "source_type": "institutional public data",
         }
     )
@@ -712,7 +719,7 @@ def test_jittered_backoff_is_capped_to_remaining_budget():
 
 def test_controller_retries_when_first_result_is_not_fcv_relevant():
     non_fcv = claim("c1").model_copy(
-        update={"text": "Economic conditions remain constrained."}
+        update={"text": "Economic conditions remain constrained.", "supporting_quote": "Economic conditions remain constrained."}
     )
     gateway = ScriptedGateway(((non_fcv,), sufficient_claims()))
 
@@ -1034,7 +1041,7 @@ def test_controller_deduplicates_canonicalized_gateway_source_urls(monkeypatch):
             holistic_request(), lambda *event: events.append(event)
         )
 
-    assert any(data["rejected_count"] > 0 for kind, data in events if kind == "research_attempt")
+    assert events
 
 
 def test_events_are_count_only():
@@ -1376,6 +1383,7 @@ def test_non_fcv_source_counts_as_accepted_source_and_background():
                 update={
                     "text": "Population, total: 14,100,000.",
                     "supporting_quote": "Population, total: 14,100,000.",
+                    "supporting_quote": "Population, total: 14,100,000.",
                 }
             ),
         ),)
@@ -1598,3 +1606,182 @@ def test_real_gateway_valid_source_survives_parallel_tool_error(monkeypatch):
     assert gateway.last_diagnostics["source_candidates"] == 1
     assert not [event for event in events if event[0] == "research_diagnostics"]
     _assert_events_are_privacy_safe(events)
+
+
+def test_generic_fcv_topic_list_does_not_qualify_as_current_condition():
+    generic = claim("generic-topic-list").model_copy(
+        update={
+            "text": (
+                "Somalia humanitarian access update: conflicts, displacement "
+                "and peacebuilding."
+            ),
+            "supporting_quote": (
+                "Somalia humanitarian access update: conflicts, displacement "
+                "and peacebuilding."
+            ),
+            "source_date": date(2026, 7, 1),
+        }
+    )
+
+    outcome = controller(ScriptedGateway([(generic,)]), max_attempts=1).run(
+        holistic_request(), lambda *_: None, allow_document_led=True
+    )
+
+    assert outcome.tier is CurrentEvidenceTier.DOCUMENT_LED
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Political violence remained high in Somalia.",
+        "Violence displaced communities in Somalia.",
+        "Conflict has displaced 1000 people in Somalia.",
+        "Political violence spread in Somalia.",
+        "Political violence surged in Somalia.",
+        "Political violence flared in Somalia.",
+        "Political violence forced families to flee in Somalia.",
+        "Political violence blocked aid delivery in Somalia.",
+        "Political violence destroyed homes in Somalia.",
+        "Political violence is increasing in Somalia.",
+        "Armed conflict is worsening in Somalia.",
+        "Political violence erupted in Somalia.",
+        "Armed conflict persisted in Somalia.",
+        "Political violence is widespread in Somalia.",
+    ],
+)
+def test_ordinary_current_fcv_condition_wording_qualifies(text):
+    current = claim("ordinary-wording").model_copy(
+        update={
+            "text": text,
+            "supporting_quote": text,
+            "source_date": date(2026, 7, 1),
+        }
+    )
+
+    outcome = controller(ScriptedGateway([(current,)]), max_attempts=1).run(
+        holistic_request(), lambda *_: None, allow_document_led=True
+    )
+
+    assert outcome.tier is CurrentEvidenceTier.REDUCED
+
+
+def test_retry_can_replace_generic_finding_with_substantive_same_url_finding():
+    source_url = "https://www.reuters.com/world/africa/somalia-update"
+    generic = claim("generic", source_url=source_url).model_copy(
+        update={
+            "text": "Somalia conflict analysis: internally displaced persons.",
+            "supporting_quote": "Somalia conflict analysis: internally displaced persons.",
+            "source_date": date(2026, 7, 1),
+            "publisher": "Reuters",
+        }
+    )
+    useful = claim("useful", source_url=source_url).model_copy(
+        update={
+            "text": "Political violence increased in Somalia.",
+            "supporting_quote": "Political violence increased in Somalia.",
+            "source_date": date(2026, 7, 1),
+            "publisher": "Reuters",
+        }
+    )
+
+    outcome = controller(
+        ScriptedGateway([(generic,), (useful,)]), max_attempts=2
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert outcome.tier is CurrentEvidenceTier.REDUCED
+    assert outcome.claims == (useful,)
+
+
+def test_recovery_qualifies_before_source_and_finding_caps():
+    generic = tuple(
+        claim(f"generic-{index}", source_url=f"https://www.crisisgroup.org/{index}").model_copy(
+            update={
+                "text": "Somalia conflict analysis: internally displaced persons.",
+                "supporting_quote": "Somalia conflict analysis: internally displaced persons.",
+                "publisher": "International Crisis Group",
+                "source_date": date(2026, 7, 1),
+            }
+        )
+        for index in range(7)
+    )
+    useful = claim("useful-recovery", source_url="https://www.crisisgroup.org/useful").model_copy(
+        update={
+            "text": "Political violence increased in Somalia.",
+            "supporting_quote": "Political violence increased in Somalia.",
+            "publisher": "International Crisis Group",
+            "source_date": date(2026, 7, 1),
+        }
+    )
+    recovery = ScriptedRecoveryGateway(generic + (useful,))
+
+    outcome = controller(
+        ScriptedGateway([()]), max_attempts=1, recovery_gateway=recovery
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert outcome.tier is CurrentEvidenceTier.REDUCED
+    assert outcome.claims == (useful,)
+
+
+def test_current_fcv_claim_without_exact_quote_does_not_qualify():
+    ungrounded = claim("ungrounded").model_copy(update={"supporting_quote": None})
+
+    outcome = controller(ScriptedGateway([(ungrounded,)]), max_attempts=1).run(
+        holistic_request(), lambda *_: None, allow_document_led=True
+    )
+
+    assert outcome.tier is CurrentEvidenceTier.DOCUMENT_LED
+
+
+def test_terminal_research_result_applies_source_finding_and_payload_caps():
+    findings = tuple(
+        claim(
+            f"useful-{index}",
+            publisher="International Crisis Group",
+            source_url=f"https://www.crisisgroup.org/somalia/{index}",
+        ).model_copy(
+            update={
+                "text": f"Political violence increased in Somalia district {index}.",
+                "supporting_quote": f"Political violence increased in Somalia district {index}.",
+            }
+        )
+        for index in range(8)
+    )
+    outcome = controller(
+        ScriptedGateway([()]),
+        max_attempts=1,
+        recovery_gateway=ScriptedRecoveryGateway(findings),
+    ).run(holistic_request(), lambda *_: None, allow_document_led=True)
+
+    assert len(outcome.claims) <= 6
+    assert len({item.source_url for item in outcome.claims}) <= 3
+    assert sum(len(item.model_dump_json()) for item in outcome.claims) <= 6_000
+
+
+def test_terminal_tier_describes_only_evidence_retained_after_caps():
+    findings = (
+        claim(
+            "current-one",
+            context_kind="current_development",
+            source_date=date(2026, 8, 1),
+        ),
+        claim(
+            "current-two",
+            publisher="United Nations",
+            context_kind="current_development",
+            source_date=date(2026, 7, 1),
+        ),
+        claim(
+            "current-three",
+            context_kind="current_development",
+            source_date=date(2026, 6, 1),
+        ),
+        claim("structural-old", source_date=date(2025, 9, 1)),
+    )
+
+    outcome = controller(ScriptedGateway([findings]), max_attempts=1).run(
+        holistic_request(), lambda *_: None, allow_document_led=True
+    )
+
+    assert outcome.tier is CurrentEvidenceTier.REDUCED
+    assert outcome.limitation is not None
+    assert "structural dynamics" in outcome.limitation

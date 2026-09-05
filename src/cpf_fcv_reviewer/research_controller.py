@@ -17,6 +17,9 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .contracts import CurrentEvidenceTier
 from .public_research import (
+    MAX_RETAINED_FINDINGS,
+    MAX_RETAINED_SOURCES,
+    MAX_SOURCE_BUNDLE_CHARACTERS,
     CurrentContextClaim,
     load_research_prompt,
     retain_public_claims,
@@ -38,6 +41,18 @@ _CURRENT_FCV_PATTERN = re.compile(
 _GENERIC_INDICATOR_PATTERN = re.compile(
     r"\b(?:gdp(?: per capita)?|life expectancy|population(?:,? total| growth| estimate)|"
     r"solar capacity)\b",
+    re.IGNORECASE,
+)
+_FCV_CONDITION_PATTERN = re.compile(
+    r"\b(?:affect(?:s|ed|ing)?|caus(?:e|es|ed|ing)|delay(?:s|ed|ing)?|"
+    r"disrupt(?:s|ed|ing)?|expos(?:e|es|ed|ing)|increas(?:e|es|ed|ing)|"
+    r"worsen(?:s|ed|ing)?|(?:conflict|violence|fighting|attacks?)\s+"
+    r"(?:(?:has|have|had)\s+)?displaced|(?:was|were|are|have been) displaced|"
+    r"threatens?|threatened|escalates?|escalated|deteriorates?|deteriorated|"
+    r"declin(?:e|es|ed|ing)|fell|rose|remains?|remained high|continued|intensified|"
+    r"erupt(?:s|ed|ing)?|persist(?:s|ed|ing)?|broke out|spread|surged|flared|"
+    r"forc(?:e|es|ed|ing)|block(?:s|ed|ing)?|destroy(?:s|ed|ing)?|"
+    r"(?:is|are|was|were) widespread|killed|injured|attacked|fled)\b",
     re.IGNORECASE,
 )
 _GATEWAY_DIAGNOSTIC_KEYS = (
@@ -213,7 +228,6 @@ class ResearchController:
             raise ValueError("allow_document_led must be a boolean.")
         started = self.monotonic()
         accepted: dict[str, CurrentContextClaim] = {}
-        accepted_urls: set[str] = set()
         rejected: dict[str, str] = {}
         last_missing: tuple[str, ...] = ()
         last_failure: ResearchFailure | None = None
@@ -249,7 +263,7 @@ class ResearchController:
             finally:
                 self._merge_gateway_diagnostics(diagnostics, self.gateway)
 
-            self._merge_claims(claims, accepted, accepted_urls, rejected)
+            self._merge_claims(claims, accepted, rejected)
 
             qualifying = self._qualifying_claims(tuple(accepted.values()), request)
             last_missing = self._missing_coverage(qualifying, request)
@@ -303,7 +317,7 @@ class ResearchController:
             else:
                 if recovery_succeeded:
                     self._merge_claims(
-                        recovery_claims, accepted, accepted_urls, rejected
+                        recovery_claims, accepted, rejected
                     )
             finally:
                 budget_exhausted = budget_exhausted or (
@@ -418,21 +432,16 @@ class ResearchController:
     def _merge_claims(
         claims: tuple[CurrentContextClaim, ...],
         accepted: dict[str, CurrentContextClaim],
-        accepted_urls: set[str],
         rejected: dict[str, str],
     ) -> None:
         retained, source_rejections = retain_public_claims(tuple(claims))
         rejected.update(source_rejections)
         for item in retained:
             claim_key = item.claim_id.casefold()
-            url_key = _normalize_source_url(item.source_url or "")
             if claim_key in accepted:
                 rejected[f"duplicate_id:{item.claim_id}"] = "duplicate claim ID"
-            elif url_key in accepted_urls:
-                rejected["duplicate_url"] = "duplicate source URL"
             else:
                 accepted[claim_key] = item
-                accepted_urls.add(url_key)
 
     def _finish(
         self,
@@ -533,17 +542,38 @@ class ResearchController:
         claims: tuple[CurrentContextClaim, ...],
         request: ResearchRequest,
     ) -> tuple[CurrentContextClaim, ...]:
-        return tuple(
-            claim
-            for claim in claims
-            if self._is_recent(claim, request) and self._is_substantive_fcv(claim)
+        qualifying = sorted(
+            (
+                claim
+                for claim in claims
+                if self._is_recent(claim, request)
+                and self._is_substantive_fcv(claim)
+            ),
+            key=lambda claim: (-claim.source_date.toordinal(), claim.claim_id),
         )
+        retained: list[CurrentContextClaim] = []
+        source_urls: set[str] = set()
+        bundle_characters = 0
+        for claim in qualifying:
+            source_url = _normalize_source_url(claim.source_url or "")
+            if source_url not in source_urls and len(source_urls) >= MAX_RETAINED_SOURCES:
+                continue
+            claim_characters = len(claim.model_dump_json())
+            if bundle_characters + claim_characters > MAX_SOURCE_BUNDLE_CHARACTERS:
+                continue
+            retained.append(claim)
+            source_urls.add(source_url)
+            bundle_characters += claim_characters
+            if len(retained) >= MAX_RETAINED_FINDINGS:
+                break
+        return tuple(retained)
 
     @staticmethod
     def _is_substantive_fcv(claim: CurrentContextClaim) -> bool:
-        grounded_text = claim.supporting_quote or claim.text
+        grounded_text = claim.supporting_quote or ""
         return bool(
             _CURRENT_FCV_PATTERN.search(grounded_text)
+            and _FCV_CONDITION_PATTERN.search(grounded_text)
             and _GENERIC_INDICATOR_PATTERN.search(grounded_text) is None
         )
 

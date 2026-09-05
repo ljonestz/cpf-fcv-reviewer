@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
@@ -153,6 +153,18 @@ class EvidenceItem(FrozenModel):
     text: str
     locator: EvidenceLocator | None = None
     confidence: Literal["high", "medium", "low"]
+    source_title: str | None = None
+    source_publisher: str | None = None
+    source_date: date | None = None
+    supporting_quote: str | None = Field(default=None, max_length=1500)
+    source_relevance: str | None = Field(default=None, max_length=1000)
+    publication_date_basis: Literal[
+        "provider_metadata",
+        "canonical_url",
+        "source_excerpt",
+        "article_metadata",
+        "conflicting",
+    ] | None = None
     source_url: str | None = None
     document_role: DocumentRole | None = None
 

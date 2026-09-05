@@ -5,6 +5,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
+from .country_detection import COUNTRY_ALIASES
 from .contracts import (
     AssessmentStatus,
     DiagnosticMode,
@@ -153,7 +154,7 @@ CURRENT_FCV_DIRECTION_PATTERNS = {
     "worsening": re.compile(
         r"\b(?:increas(?:e|ed|es|ing)|worsen(?:ed|ing|s)?|intensif(?:y|ied|ies|ying)|"
         r"escalat(?:e|ed|es|ing)|rose|rising|deteriorat(?:e|ed|es|ing)|"
-        r"disrupt(?:ed|s|ing))\b",
+        r"erupt(?:s|ed|ing)?|broke out)\b",
         re.IGNORECASE,
     ),
     "improving": re.compile(
@@ -167,16 +168,32 @@ CURRENT_FCV_DIRECTION_PATTERNS = {
         r"\b(?:remain(?:ed|s)? stable|stable|unchanged|steady)\b",
         re.IGNORECASE,
     ),
+    "ongoing": re.compile(
+        r"\b(?:affect(?:s|ed|ing)?|persist(?:s|ed|ing)?|continued|ongoing|"
+        r"(?:is|are|was|were) widespread)\b",
+        re.IGNORECASE,
+    ),
+
 }
 NEGATED_DIRECTION_PATTERN = re.compile(
     r"\b(?:(?:did|does|do|is|are|was|were|has|have|had)\s+not|"
     r"(?:did|does|do|is|are|was|were|has|have|had)n['’]t)\s+"
-    r"(?:\w+\s+){0,2}(?:increas\w*|decreas\w*|improv\w*|worsen\w*|"
+    r"(?:\w+\s+){0,2}(?:affect\w*|increas\w*|decreas\w*|improv\w*|worsen\w*|"
     r"intensif\w*|escalat\w*|deteriorat\w*|stabili[sz]\w*|declin\w*|"
     r"fall\w*|fell|rising?|rose|stable)\b",
     re.IGNORECASE,
 )
 
+CURRENT_FCV_SCOPE_PATTERN = re.compile(
+    r"\b(?:nationwide|countrywide|across (?:all|every|the country))\b",
+    re.IGNORECASE,
+)
+
+MODAL_CLAUSE_PATTERN = re.compile(
+    r"\b(?:could|may|might|can)\b.*?(?:\band\b\s*|"
+    r"(?=\b(?:because|but|while|whereas|although)\b|[.!?;,]|$))",
+    re.IGNORECASE,
+)
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -584,7 +601,25 @@ def _append_current_context_support_issue(
         if evidence_id in evidence
         and evidence[evidence_id].evidence_type == "current_context"
     ]
-    if not current_items:
+    assertion_texts = (
+        priority_area.assessment,
+        priority_area.why_it_matters,
+        priority_area.recommended_action,
+    )
+    asserted_texts = tuple(
+        text
+        for text in assertion_texts
+        if any(
+            _asserted_topic_directions(text, topic) for topic in _current_fcv_topics(text)
+        )
+    )
+    asserted_topics = {
+        topic
+        for text in asserted_texts
+        for topic in _current_fcv_topics(text)
+        if _asserted_topic_directions(text, topic)
+    }
+    if not current_items and not asserted_topics:
         return
 
     priority_text = " ".join(
@@ -594,27 +629,56 @@ def _append_current_context_support_issue(
             priority_area.why_it_matters,
         )
     )
-    priority_topics = _current_fcv_topics(priority_text)
+    priority_topics = asserted_topics or _current_fcv_topics(priority_text)
+    assertion_scope = " ".join(asserted_texts) or priority_text
+    priority_countries = _mentioned_countries(assertion_scope)
+    priority_scope = _has_countrywide_scope(assertion_scope)
+    covered_topics: set[str] = set()
     unsupported = []
     for item in current_items:
-        evidence_topics = _current_fcv_topics(item.text)
-        shared_topics = evidence_topics & priority_topics
-        unsupported_direction = any(
-            priority_directions
-            and (
-                not (evidence_directions := _topic_directions(item.text, topic))
-                or evidence_directions.isdisjoint(priority_directions)
-            )
-            for topic in shared_topics
-            if (
-                priority_directions := _topic_directions(
-                    priority_area.assessment, topic
-                )
-            )
-        )
-        if not shared_topics or unsupported_direction:
+        evidence_text = item.supporting_quote or ""
+        if not (
+            item.source_title
+            and item.source_publisher
+            and item.source_date is not None
+            and item.source_url
+            and evidence_text
+        ):
             unsupported.append(item.evidence_id)
-    if unsupported:
+            continue
+        evidence_topics = _current_fcv_topics(evidence_text)
+        shared_topics = priority_topics & evidence_topics
+        if not priority_topics or not shared_topics:
+            unsupported.append(item.evidence_id)
+            continue
+        evidence_countries = _mentioned_countries(evidence_text)
+        if (
+            priority_countries
+            and not priority_countries.issubset(evidence_countries)
+        ):
+            unsupported.append(item.evidence_id)
+            continue
+        if priority_scope and not _has_countrywide_scope(evidence_text):
+            unsupported.append(item.evidence_id)
+            continue
+        supported_topics = {
+            topic
+            for topic in shared_topics
+            if not (priority_directions := _priority_topic_directions(priority_area, topic))
+            or (
+                (evidence_directions := _asserted_topic_directions(evidence_text, topic))
+                and not evidence_directions.isdisjoint(priority_directions)
+            )
+        }
+        if not supported_topics:
+            unsupported.append(item.evidence_id)
+            continue
+        covered_topics.update(supported_topics)
+    if (
+        not current_items
+        or unsupported
+        or not priority_topics.issubset(covered_topics)
+    ):
         issues.append(
             ValidationIssue(
                 "missing_current_context_support",
@@ -646,11 +710,66 @@ def _topic_directions(text: str, topic: str) -> set[str]:
     return {
         direction
         for sentence in re.split(
-            r"[.!?;]|\b(?:while|whereas|but|although)\b", text, flags=re.IGNORECASE
+            r"[.!?;,]|\b(?:and|because|while|whereas|but|although)\b", text, flags=re.IGNORECASE
         )
         if pattern.search(sentence)
         for direction in _current_fcv_directions(sentence)
     }
+
+
+def _asserted_topic_directions(text: str, topic: str) -> set[str]:
+    unmodal = MODAL_CLAUSE_PATTERN.sub("", text)
+    return _topic_directions(unmodal, topic)
+
+
+def _priority_topic_directions(priority_area, topic: str) -> set[str]:
+    return {
+        direction
+        for text in (priority_area.assessment, priority_area.why_it_matters, priority_area.recommended_action)
+        for direction in _asserted_topic_directions(text, topic)
+    }
+
+
+
+def _has_countrywide_scope(text: str) -> bool:
+    if CURRENT_FCV_SCOPE_PATTERN.search(text):
+        return True
+    normalized = " ".join(text.casefold().split())
+    return any(
+        re.search(
+            rf"\b(?:(?:across|throughout|all over)\s+(?:the\s+)?{re.escape(marker)}|"
+            rf"everywhere\s+in\s+(?:the\s+)?{re.escape(marker)}|in\s+every\s+"
+            rf"(?:region|part|area)\s+of\s+(?:the\s+)?{re.escape(marker)})\b",
+            normalized,
+        )
+        for canonical, aliases in COUNTRY_ALIASES.items()
+        for name in (canonical, *aliases)
+        if (marker := " ".join(name.casefold().split()))
+    )
+
+
+def _mentioned_countries(text: str) -> set[str]:
+    normalized = " ".join(text.casefold().split())
+    markers = sorted(
+        (
+            (" ".join(name.casefold().split()), canonical)
+            for canonical, aliases in COUNTRY_ALIASES.items()
+            for name in (canonical, *aliases)
+            if name.strip()
+        ),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+    occupied: list[tuple[int, int]] = []
+    mentioned: set[str] = set()
+    for marker, canonical in markers:
+        for match in re.finditer(rf"\b{re.escape(marker)}\b", normalized):
+            span = match.span()
+            if any(span[0] < end and start < span[1] for start, end in occupied):
+                continue
+            occupied.append(span)
+            mentioned.add(canonical)
+    return mentioned
 
 
 def _append_unknown_evidence_issue(

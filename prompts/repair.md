@@ -1,4 +1,4 @@
-Version: 3.0.1
+Version: 3.0.2
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -61,6 +61,9 @@ Only for missing_current_context_support or missing_registry_support, link only
 IDs listed in repair_support_evidence_ids to the affected priority area. These are
 existing supplied evidence IDs, not new evidence or authorization to create content.
 Do not place those IDs in narrative prose.
+For current-context support, use repair_support_evidence to verify the present-day claim
+against its bounded source date and exact supporting quote. Do not broaden the claim
+beyond that quote or treat the distributor as the originating publisher.
 
 Preserve these safety boundaries while repairing: do not determine policy
 applicability, compliance, clearance, eligibility, official classification,

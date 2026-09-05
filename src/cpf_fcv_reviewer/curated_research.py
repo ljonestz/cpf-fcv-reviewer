@@ -482,22 +482,11 @@ class CuratedResearchGateway:
             raise InstitutionalClientError("Curated institutional research failed.")
 
         by_id: dict[str, CurrentContextClaim] = {}
-        by_source_url: dict[str, CurrentContextClaim] = {}
-        # The lexicographically smallest complete claim key is the deterministic winner.
+        # Keep distinct findings from one article; the controller qualifies before capping.
         for claim in sorted(candidates, key=_claim_stable_key):
-            if claim.claim_id in by_id:
-                continue
-            if claim.source_url is not None and claim.source_url in by_source_url:
-                continue
-            by_id[claim.claim_id] = claim
-            if claim.source_url is not None:
-                by_source_url[claim.source_url] = claim
-        return tuple(
-            sorted(
-                by_id.values(),
-                key=_claim_stable_key,
-            )
-        )
+            if claim.claim_id not in by_id:
+                by_id[claim.claim_id] = claim
+        return tuple(sorted(by_id.values(), key=_claim_stable_key))
 
 
 def _get_json(
@@ -685,6 +674,7 @@ def _reliefweb_claim(
         not in {country.casefold() for country in country_names}
         or not source_names
         or publisher is None
+        or publisher == "ReliefWeb"
         or not start_date <= source_date <= end_date
     ):
         return None

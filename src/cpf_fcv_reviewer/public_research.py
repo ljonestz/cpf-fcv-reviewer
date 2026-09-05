@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 from ipaddress import ip_address
 from pathlib import Path
 from threading import local
+from time import monotonic as default_monotonic
 from typing import Literal, Protocol
 from urllib.parse import urlparse, urlunparse
 
@@ -476,6 +477,7 @@ class AnthropicPublicResearchGateway:
         *,
         timeout_seconds: float = 60.0,
         metadata_client: object | None = None,
+        monotonic=default_monotonic,
     ) -> None:
         self._client = Anthropic(
             api_key=api_key,
@@ -485,6 +487,9 @@ class AnthropicPublicResearchGateway:
         self._model_id = model_id
         self._metadata_client = metadata_client
         self._metadata_timeout_seconds = timeout_seconds
+        if not callable(monotonic):
+            raise ValueError("monotonic must be callable.")
+        self._monotonic = monotonic
         self._diagnostics = local()
 
     @property
@@ -502,7 +507,8 @@ class AnthropicPublicResearchGateway:
 
         diagnostics = {key: 0 for key in PUBLIC_RESEARCH_DIAGNOSTIC_KEYS}
         try:
-            return self._search(prompt, diagnostics)
+            deadline = self._monotonic() + self._metadata_timeout_seconds
+            return self._search(prompt, diagnostics, deadline=deadline)
         except APITimeoutError:
             raise TimeoutError("Anthropic research request timed out.") from None
         except APIConnectionError:
@@ -514,9 +520,11 @@ class AnthropicPublicResearchGateway:
         self,
         prompt: str,
         diagnostics: dict[str, int],
+        *,
+        deadline: float,
     ) -> tuple[CurrentContextClaim, ...]:
         messages: list[dict[str, object]] = [{"role": "user", "content": prompt}]
-        response = self._create_web_search_response(messages)
+        response = self._create_web_search_response(messages, deadline=deadline)
         content_blocks = list(_response_content(response))
 
         if _value(response, "stop_reason") == "pause_turn":
@@ -524,7 +532,9 @@ class AnthropicPublicResearchGateway:
                 *messages,
                 {"role": "assistant", "content": _value(response, "content", ())},
             ]
-            response = self._create_web_search_response(messages, max_uses=1)
+            response = self._create_web_search_response(
+                messages, max_uses=1, deadline=deadline
+            )
             content_blocks.extend(_response_content(response))
 
         search_blocks = tuple(
@@ -560,7 +570,7 @@ class AnthropicPublicResearchGateway:
             source.published_at is None for source in artifact.sources
         )
         artifact, grounded_segments = self._resolve_one_missing_source_date(
-            artifact, grounded_segments
+            artifact, grounded_segments, deadline=deadline
         )
         diagnostics["missing_publication_date"] = sum(
             source.published_at is None for source in artifact.sources
@@ -581,6 +591,7 @@ class AnthropicPublicResearchGateway:
                     }
                 ],
                 output_format=ResearchClaimBatch,
+                timeout=self._remaining_timeout(deadline),
             )
         except ValidationError:
             diagnostics["normalization_failure"] += 1
@@ -597,7 +608,19 @@ class AnthropicPublicResearchGateway:
                 parsed_output.claims, artifact, selected_country=selected_country
             )
             if valid_claims:
-                return valid_claims
+                artifact_urls = {source.url for source in artifact.sources}
+                overflow_segments = tuple(
+                    (text, attached)
+                    for text, attached in grounded_segments
+                    if any(source.url not in artifact_urls for source in attached)
+                )
+                overflow_claims = _salvage_grounded_segments(
+                    overflow_segments, selected_country=selected_country
+                )
+                retained, _ = retain_public_claims(
+                    (*valid_claims, *overflow_claims)
+                )
+                return retained
 
         diagnostics["normalization_failure"] += 1
         salvaged = _salvage_grounded_segments(
@@ -611,6 +634,8 @@ class AnthropicPublicResearchGateway:
         self,
         artifact: SearchArtifact,
         grounded_segments: tuple[tuple[str, tuple[ResearchSource, ...]], ...],
+        *,
+        deadline: float,
     ) -> tuple[SearchArtifact, tuple[tuple[str, tuple[ResearchSource, ...]], ...]]:
         source = next(
             (
@@ -618,19 +643,34 @@ class AnthropicPublicResearchGateway:
                 for candidate in artifact.sources
                 if candidate.published_at is None
                 and candidate.publication_date_basis != "conflicting"
+                and candidate.publisher != "ReliefWeb"
             ),
             None,
         )
         if source is None:
             return artifact, grounded_segments
         if self._metadata_client is None:
-            with httpx.Client(
-                timeout=self._metadata_timeout_seconds, follow_redirects=False
-            ) as metadata_client:
-                published_at = _fetch_article_publication_date(source.url, metadata_client)
+            try:
+                with httpx.Client(
+                    timeout=self._remaining_timeout(deadline),
+                    follow_redirects=False,
+                ) as metadata_client:
+                    published_at = _fetch_article_publication_date(
+                        source.url,
+                        metadata_client,
+                        timeout=self._remaining_timeout(deadline),
+                        deadline=deadline,
+                        monotonic=self._monotonic,
+                    )
+            except (OSError, httpx.HTTPError, ValueError):
+                published_at = None
         else:
             published_at = _fetch_article_publication_date(
-                source.url, self._metadata_client
+                source.url,
+                self._metadata_client,
+                timeout=self._remaining_timeout(deadline),
+                deadline=deadline,
+                monotonic=self._monotonic,
             )
         if published_at is None:
             return artifact, grounded_segments
@@ -655,7 +695,11 @@ class AnthropicPublicResearchGateway:
         )
 
     def _create_web_search_response(
-        self, messages: list[dict[str, object]], *, max_uses: int = 2
+        self,
+        messages: list[dict[str, object]],
+        *,
+        max_uses: int = 2,
+        deadline: float,
     ):
         return self._client.beta.messages.create(
             model=self._model_id,
@@ -675,7 +719,15 @@ class AnthropicPublicResearchGateway:
             ],
             messages=messages,
             betas=["web-search-2025-03-05"],
+            timeout=self._remaining_timeout(deadline),
         )
+
+
+    def _remaining_timeout(self, deadline: float) -> float:
+        remaining = deadline - self._monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Public research attempt deadline expired.")
+        return min(self._metadata_timeout_seconds, remaining)
 
 
 def _response_content(response: object) -> tuple[object, ...]:
@@ -836,7 +888,14 @@ class _PublicationMetadataParser(HTMLParser):
             return
 
 
-def _fetch_article_publication_date(url: str, client: object) -> date | None:
+def _fetch_article_publication_date(
+    url: str,
+    client: object,
+    *,
+    timeout=None,
+    deadline: float | None = None,
+    monotonic=default_monotonic,
+) -> date | None:
     normalized_url = _normalize_source_url(url)
     if normalized_url is None:
         return None
@@ -851,9 +910,10 @@ def _fetch_article_publication_date(url: str, client: object) -> date | None:
     ):
         return None
     try:
-        with client.stream(
-            "GET", normalized_url, follow_redirects=False
-        ) as response:
+        request_kwargs = {"follow_redirects": False}
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        with client.stream("GET", normalized_url, **request_kwargs) as response:
             if not 200 <= response.status_code < 300:
                 return None
             content_type = response.headers.get("content-type", "").split(";", 1)[0]
@@ -867,6 +927,8 @@ def _fetch_article_publication_date(url: str, client: object) -> date | None:
             body = bytearray()
             for chunk in response.iter_bytes():
                 if len(body) + len(chunk) > MAX_ARTICLE_METADATA_BYTES:
+                    return None
+                if deadline is not None and monotonic() >= deadline:
                     return None
                 body.extend(chunk)
     except (AttributeError, OSError, httpx.HTTPError, TimeoutError, ValueError):
@@ -992,7 +1054,11 @@ def _source_mentions_country(
 ) -> bool:
     if selected_country is None:
         return True
-    haystack = _normalize_text(f"{source.title} {source.excerpt or ''}")
+    haystack = _normalize_text(
+        source.excerpt
+        if source.excerpt is not None
+        else source.title
+    )
     selected_markers = _country_markers(selected_country)
     if not any(
         re.search(rf"\b{re.escape(marker)}\b", haystack)
@@ -1018,6 +1084,17 @@ def _source_mentions_country(
     return True
 
 
+def _text_mentions_country(text: str | None, selected_country: str | None) -> bool:
+    return _source_mentions_country(
+        ResearchSource(
+            title="",
+            url="https://example.invalid",
+            excerpt=text,
+        ),
+        selected_country,
+    )
+
+
 def _quote_is_from_source(quote: str | None, excerpt: str | None) -> bool:
     if quote is None or excerpt is None:
         return False
@@ -1034,6 +1111,7 @@ def _extract_search_artifact(
 ) -> tuple[SearchArtifact, tuple[tuple[str, tuple[ResearchSource, ...]], ...]]:
     sources: dict[str, ResearchSource] = {}
     grounded_segments: list[tuple[str, tuple[ResearchSource, ...]]] = []
+    narrative_segments: list[tuple[str, str]] = []
     saw_search_result = False
 
     for block in content_blocks:
@@ -1058,7 +1136,6 @@ def _extract_search_artifact(
             citations = _citation_items(block)
             if not text or not citations:
                 continue
-            attached_sources: list[ResearchSource] = []
             for citation in citations:
                 title, url, cited_date, cited_date_basis = _source_metadata(citation)
                 cited_text = _as_nonblank_string(_value(citation, "cited_text"))
@@ -1087,18 +1164,20 @@ def _extract_search_artifact(
                     diagnostics["source_linked_excerpts"] += 1
                     if source.publisher is None:
                         diagnostics["untrusted_host_publisher"] += 1
-                if source.excerpt is None:
-                    source = source.model_copy(update={"excerpt": cited_text})
+                excerpts = tuple(part for part in (source.excerpt, cited_text) if part)
+                combined_excerpt = " [excerpt] ".join(dict.fromkeys(excerpts))
+                if len(combined_excerpt) <= MAX_SOURCE_EXCERPT_CHARACTERS:
+                    source = source.model_copy(
+                        update={"excerpt": combined_excerpt}
+                    )
                     sources[source.url] = source
                 if not _source_mentions_country(source, selected_country):
                     if diagnostics is not None:
                         diagnostics["country_mismatch"] += 1
                     continue
 
-                if source not in attached_sources:
-                    attached_sources.append(source)
-            if attached_sources:
-                grounded_segments.append((text, tuple(attached_sources)))
+                grounded_segments.append((cited_text, (source,)))
+                narrative_segments.append((text, source.url))
 
     if not grounded_segments:
         raise ValueError("Public research response contained no cited synthesis.")
@@ -1111,11 +1190,20 @@ def _extract_search_artifact(
     )[:MAX_RETAINED_SOURCES]
     retained_urls = {source.url for source in resolved_sources}
     bounded_segments = tuple(
-        (text, tuple(source for source in attached if source.url in retained_urls))
+        (
+            text,
+            tuple(
+                sources[source.url]
+                for source in attached
+            ),
+        )
         for text, attached in grounded_segments
-        if any(source.url in retained_urls for source in attached)
     )
-    narrative = "\n".join(segment for segment, _ in bounded_segments)
+    narrative = "\n".join(
+        dict.fromkeys(
+            text for text, url in narrative_segments if url in retained_urls
+        )
+    )
     artifact = SearchArtifact(narrative=narrative, sources=resolved_sources)
     return artifact, bounded_segments
 
@@ -1141,8 +1229,9 @@ def _validate_normalized_claims(
         supporting_quote = _as_nonblank_string(claim.supporting_quote)
         if (
             source.published_at is None
+            or source.publisher == "ReliefWeb"
             or not _quote_is_from_source(supporting_quote, source.excerpt)
-            or not _source_mentions_country(source, selected_country)
+            or not _text_mentions_country(supporting_quote, selected_country)
         ):
             continue
         matched_claims.append(
@@ -1169,14 +1258,15 @@ def _salvage_grounded_segments(
 ) -> tuple[CurrentContextClaim, ...]:
     claims: list[CurrentContextClaim] = []
     seen: set[tuple[str, str]] = set()
-    for _, sources in grounded_segments:
+    for cited_text, sources in grounded_segments:
         for source in sources:
-            supporting_quote = source.excerpt
+            supporting_quote = cited_text.strip()
             if (
                 source.published_at is None
+                or source.publisher == "ReliefWeb"
                 or supporting_quote is None
                 or not _is_unambiguous_single_sentence(supporting_quote)
-                or not _source_mentions_country(source, selected_country)
+                or not _text_mentions_country(supporting_quote, selected_country)
             ):
                 continue
             key = (supporting_quote, source.url)
@@ -1210,7 +1300,7 @@ def _salvage_grounded_segments(
                 )
             )
 
-    retained, _ = retain_public_claims(tuple(claims[:MAX_RETAINED_FINDINGS]))
+    retained, _ = retain_public_claims(tuple(claims))
     return retained
 
 
