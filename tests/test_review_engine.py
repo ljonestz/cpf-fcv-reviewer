@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import FrozenInstanceError
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 from anthropic import transform_schema
@@ -860,6 +860,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         "validation_issues": issues,
         "forbidden_phrases": ("forbidden",),
         "repair_support_evidence_ids": {"current_context": [], "registry_language": []},
+        "repair_support_evidence": [],
         "diagnostic_mode": "rra_alignment",
         "review_stage": "concept_review",
         "stage_profile": {
@@ -1773,7 +1774,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.1")
+    assert call["system"].startswith("Version: 3.0.2")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
@@ -1859,3 +1860,40 @@ def test_prohibited_policy_repair_keeps_cleaned_strategy_narrative():
     )
 
     assert repaired.fcv_strategy_assessments[0] == cleaned
+
+def test_repair_receives_bounded_current_source_support_records():
+    meta = metadata()
+    gateway = FakeGateway(draft_for(meta))
+    current = EvidenceItem(
+        evidence_id="current-002",
+        evidence_type="current_context",
+        text="Political violence increased in Guinea.",
+        confidence="high",
+        source_url="https://www.reuters.com/world/africa/guinea-update-2026-08-30/",
+        source_title="Guinea update",
+        source_publisher="Reuters",
+        source_date=date(2026, 8, 30),
+        supporting_quote="Political violence increased in Guinea.",
+        source_relevance="Selected-country FCV relevance.",
+        publication_date_basis="provider_metadata",
+    )
+
+    ReviewEngine(gateway).repair(
+        result_for(meta),
+        [{"code": "missing_current_context_support", "message": "Repair support."}],
+        evidence_ids={"current-002"},
+        evidence={"current-002": current},
+    )
+
+    assert gateway.calls[0][1]["repair_support_evidence"] == [
+        {
+            "evidence_id": "current-002",
+            "publisher": "Reuters",
+            "source_title": "Guinea update",
+            "source_date": "2026-08-30",
+            "source_url": current.source_url,
+            "supporting_quote": "Political violence increased in Guinea.",
+            "source_relevance": "Selected-country FCV relevance.",
+            "publication_date_basis": "provider_metadata",
+        },
+    ]

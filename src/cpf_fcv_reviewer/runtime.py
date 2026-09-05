@@ -990,6 +990,12 @@ def build_runtime_services(
                     evidence_type="current_context",
                     text=claim.text,
                     source_url=claim.source_url,
+                    source_title=claim.source_title,
+                    source_publisher=claim.publisher,
+                    source_date=claim.source_date,
+                    supporting_quote=claim.supporting_quote,
+                    source_relevance=claim.relevance,
+                    publication_date_basis=claim.publication_date_basis,
                     confidence=(
                         "high"
                         if _is_explicit_authoritative_claim(claim)
@@ -1184,11 +1190,14 @@ def build_runtime_services(
         return context
 
     def review_validation_issues(context):
-        evidence_ids = {item.evidence_id for item in context["evidence_pack"].evidence}
+        evidence = {
+            item.evidence_id: item for item in context["evidence_pack"].evidence
+        }
         issues = list(
             validate_review(
                 context["result"],
-                evidence_ids=evidence_ids,
+                evidence_ids=set(evidence),
+                evidence=evidence,
                 prohibited_terms=prohibited_terms,
                 incomplete_document_roles=_incomplete_document_roles(context),
                 registry_entry_ids=registry_entry_ids,
@@ -1331,10 +1340,13 @@ def build_runtime_services(
     def repair(context, issues):
         if "result" not in context:
             return context
-        evidence_ids = (
-            {item.evidence_id for item in context["evidence_pack"].evidence}
+        evidence_by_id = (
+            {item.evidence_id: item for item in context["evidence_pack"].evidence}
             if "evidence_pack" in context
             else None
+        )
+        evidence_ids = (
+            set(evidence_by_id) if evidence_by_id is not None else None
         )
 
         def repair_once(current_issues):
@@ -1346,6 +1358,7 @@ def build_runtime_services(
                     prohibited_terms,
                 ),
                 evidence_ids=evidence_ids,
+                evidence=evidence_by_id,
             )
             context["result"] = _preserve_research_limitation(context)
             return review_validation_issues(context)

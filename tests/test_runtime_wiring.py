@@ -869,6 +869,8 @@ def _current_claims():
             claim_id="claim-1", text="Exact current finding.", publisher="World Bank",
             source_title="Finding", source_url="https://www.worldbank.org/finding",
             source_date=date(2026, 7, 1), source_type="report", relevance="Relevant.",
+            supporting_quote="Exact current finding.",
+            publication_date_basis="provider_metadata",
             context_kind="structural_dynamic", relationship="establishes",
             licensed_data_required=False,
         ),
@@ -876,6 +878,8 @@ def _current_claims():
             claim_id="claim-2", text="Exact other finding.", publisher="Other source",
             source_title="Other finding", source_url="https://other.example.org/finding",
             source_date=date(2026, 7, 2), source_type="briefing", relevance="Relevant.",
+            supporting_quote="Exact other finding.",
+            publication_date_basis="article_metadata",
             context_kind="current_development", relationship="corroborates",
             licensed_data_required=False,
         ),
@@ -1048,10 +1052,12 @@ def test_runtime_validation_passes_incomplete_optional_roles(monkeypatch, make_v
         *,
         evidence_ids,
         prohibited_terms,
+        evidence=None,
         incomplete_document_roles=frozenset(),
         registry_entry_ids=None,
     ):
         captured["roles"] = incomplete_document_roles
+        captured["evidence"] = evidence
         captured["registry_entry_ids"] = registry_entry_ids
         return ()
 
@@ -1081,6 +1087,7 @@ def test_runtime_validation_passes_incomplete_optional_roles(monkeypatch, make_v
     validate(context)
 
     assert captured["roles"] == frozenset({DocumentRole.PACKAGE})
+    assert captured["evidence"] == evidence
     assert captured["registry_entry_ids"] == {
         "SYN-REF-001",
         "SYN-PUB-FCV-STRAT-001",
@@ -2702,7 +2709,7 @@ def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
     assert context["result"].metadata.repair_count == 1
 
 
-def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
+def _run_narrow_runtime(monkeypatch, package_text, *, controller=None, country="Benin"):
     captured = {}
 
     class ModelGateway:
@@ -2742,7 +2749,7 @@ def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
         {
             "assessment_id": "narrow-runtime-run",
             "payload": {
-                "country": "Benin", "review_stage": "finalization",
+                "country": country, "review_stage": "finalization",
                 "cpf": {"name": "benin-cpf.txt", "bytes": b"CPF text " * 20},
                 "package_documents": [{"name": "package.txt", "bytes": package_text}],
                 "context_documents": [], "review_focus": "", "detail_level": "standard",
@@ -2752,6 +2759,38 @@ def _run_narrow_runtime(monkeypatch, package_text, *, controller=None):
         lambda kind, data: None,
     )
     return context, captured["pack"]
+
+
+@pytest.mark.parametrize(
+    "country",
+    (
+        "Somalia",
+        "Guinea",
+        "Democratic Republic of the Congo",
+        "Congo",
+        "West Bank and Gaza",
+        "Kosovo",
+        "Türkiye",
+        "Cote d'Ivoire",
+        "São Tomé and Príncipe",
+        "India",
+        "Indonesia",
+        "Vietnam",
+        "Kenya",
+        "Brazil",
+    ),
+)
+def test_runtime_researches_only_the_selected_country(monkeypatch, country):
+    controller = _InjectedResearchController()
+
+    _run_narrow_runtime(
+        monkeypatch,
+        b"Package context without a diagnostic marker.",
+        controller=controller,
+        country=country,
+    )
+
+    assert [request.country for request in controller.requests] == [country]
 
 
 def test_runtime_researches_with_dated_rra_request_and_emitter(monkeypatch):
@@ -2814,12 +2853,45 @@ def test_runtime_appends_current_research_exactly_before_review(monkeypatch):
 
     current = [item for item in pack.evidence if item.evidence_type == "current_context"]
     actual = [
-        (item.evidence_id, item.text, item.source_url, item.confidence)
+        (
+            item.evidence_id,
+            item.text,
+            item.source_url,
+            item.source_title,
+            item.source_publisher,
+            item.source_date,
+            item.supporting_quote,
+            item.source_relevance,
+            item.publication_date_basis,
+            item.confidence,
+        )
         for item in current
     ]
     assert actual == [
-        ("current-001", "Exact current finding.", "https://www.worldbank.org/finding", "high"),
-        ("current-002", "Exact other finding.", "https://other.example.org/finding", "medium"),
+        (
+            "current-001",
+            "Exact current finding.",
+            "https://www.worldbank.org/finding",
+            "Finding",
+            "World Bank",
+            date(2026, 7, 1),
+            "Exact current finding.",
+            "Relevant.",
+            "provider_metadata",
+            "high",
+        ),
+        (
+            "current-002",
+            "Exact other finding.",
+            "https://other.example.org/finding",
+            "Other finding",
+            "Other source",
+            date(2026, 7, 2),
+            "Exact other finding.",
+            "Relevant.",
+            "article_metadata",
+            "medium",
+        ),
     ]
 
 

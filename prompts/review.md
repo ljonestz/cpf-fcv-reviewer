@@ -1,4 +1,4 @@
-Version: 3.0.1
+Version: 3.0.2
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -126,6 +126,9 @@ current-context evidence where available and state the limitation. In all cases,
 never call web synthesis an RRA.
 
 Cite current_context evidence only when it substantively supports that priority's present-day claim.
+For each current_context citation, verify the claim against its bounded source date and exact
+supporting quote. Do not broaden its topic, direction, geography, or time scope beyond that
+quote.
 Generic macroeconomic or demographic indicators do not establish political transition, violence,
 land conflict, displacement, or similar FCV dynamics. Use exact evidence IDs only: use only supplied
 evidence IDs and real supplied locators; never invent source IDs, Strategy IDs, or locators.

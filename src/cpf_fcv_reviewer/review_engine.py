@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 import re
 
 from pydantic import ValidationError
@@ -10,6 +11,7 @@ from .contracts import (
     AssessmentStatus,
     DocumentCoverage,
     DocumentRole,
+    EvidenceItem,
     EvidencePack,
     FCVStrategicShift,
     FCVStrategyAssessment,
@@ -658,6 +660,7 @@ class ReviewEngine:
         *,
         forbidden_phrases: tuple[str, ...] = (),
         evidence_ids: set[str] | None = None,
+        evidence: Mapping[str, EvidenceItem] | None = None,
     ) -> ReviewResult:
         stage = result.metadata.review_stage
         if stage not in STAGE_PROFILES:
@@ -671,6 +674,29 @@ class ReviewEngine:
         )
         draft_payload["coverage_note"] = result.document_coverage.coverage_note
         available_evidence_ids = evidence_ids or set()
+        support_evidence = evidence or {}
+        current_support = [
+            {
+                "evidence_id": item.evidence_id,
+                "publisher": (item.source_publisher or "")[:200],
+                "source_title": (item.source_title or "")[:500],
+                "source_date": item.source_date.isoformat(),
+                "source_url": (item.source_url or "")[:2000],
+                "supporting_quote": (item.supporting_quote or "")[:1500],
+                "source_relevance": (item.source_relevance or "")[:1000],
+                "publication_date_basis": item.publication_date_basis,
+            }
+            for item in sorted(
+                support_evidence.values(), key=lambda candidate: candidate.evidence_id
+            )
+            if item.evidence_id in available_evidence_ids
+            and item.evidence_type == "current_context"
+            and item.source_publisher
+            and item.source_title
+            and item.source_date is not None
+            and item.source_url
+            and item.supporting_quote
+        ]
         draft = self.gateway.generate(
             prompt_name="repair",
             payload={
@@ -687,6 +713,7 @@ class ReviewEngine:
                         if item.startswith("registry-") and "-PUB-FCV-STRAT-" in item
                     ),
                 },
+                "repair_support_evidence": current_support,
                 "diagnostic_mode": result.metadata.diagnostic_mode.value,
                 "review_stage": stage,
                 "stage_profile": _serialize_stage_profile(stage_profile),

@@ -299,11 +299,25 @@ def test_review_prompts_keep_ids_and_unsupported_classifications_out_of_prose(na
         assert "remove only the registry IDs identified as unknown" in prompt
 
 
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_review_prompts_require_semantic_current_context_support(name):
+    prompt = normalize_whitespace(load_prompt(name))
+
+    assert (
+        "Cite current_context evidence only when it substantively supports that "
+        "priority's present-day claim."
+    ) in prompt
+    assert (
+        "Generic macroeconomic or demographic indicators do not establish political "
+        "transition, violence, land conflict, displacement, or similar FCV dynamics."
+    ) in prompt
+
+
 def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 
     for phrase in (
-        "Version: 3.0.0",
+        "Version: 3.0.2",
         "rra_driver_assessments",
         "fcv_strategy_assessments",
         "status",
@@ -353,6 +367,7 @@ def test_repair_prompt_preserves_links_and_excludes_question_section():
         ),
         "Only for missing_current_context_support or missing_registry_support",
         "link only IDs listed in repair_support_evidence_ids",
+        "use repair_support_evidence to verify the present-day claim",
         (
             "Validation context may identify an invalid existing "
             "reference or issue but cannot authorize adding a "
@@ -403,7 +418,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
 
 @pytest.mark.parametrize(
     ("name", "version"),
-    [("diagnostic_map", "1.2.0"), ("review", "3.0.1"), ("repair", "3.0.0")],
+    [("diagnostic_map", "1.2.0"), ("review", "3.0.2"), ("repair", "3.0.2")],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)
@@ -505,3 +520,10 @@ def test_review_prompt_mirrors_hidden_review_draft_validators():
         "Before returning, check the complete ReviewDraft against these rules",
     ):
         assert phrase in prompt
+
+
+def test_review_prompt_binds_current_claims_to_exact_source_support():
+    prompt = normalize_whitespace(load_prompt("review"))
+
+    assert "bounded source date and exact supporting quote" in prompt
+    assert "Do not broaden its topic, direction, geography, or time scope" in prompt

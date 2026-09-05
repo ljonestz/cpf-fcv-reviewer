@@ -678,50 +678,18 @@ def test_reliefweb_is_skipped_without_trimmed_app_name():
     assert transport.calls == []
 
 
-def test_reliefweb_uses_v2_appname_country_date_and_minimum_fields():
+def test_reliefweb_trims_approved_app_name():
     def handler(_method: str, url: str, kwargs: dict[str, object]) -> StubResponse:
         assert url == "https://api.reliefweb.int/v2/reports"
-        params = kwargs["params"]
-        assert isinstance(params, list)
-        assert ("appname", "approved.example") in params
-        assert ("query[value]", "Benin") in params
-        assert ("filter[conditions][0][field]", "primary_country") in params
-        assert ("filter[conditions][0][value]", "Benin") in params
-        assert ("filter[conditions][1][field]", "date.created") in params
-        assert ("fields[include][]", "title") in params
-        assert ("fields[include][]", "url") in params
-        assert ("fields[include][]", "date.created") in params
-        assert ("fields[include][]", "source.name") in params
-        return json_response(
-            {
-                "data": [
-                    {
-                        "fields": {
-                            "title": "Benin humanitarian update",
-                            "url": "https://reliefweb.int/report/benin/update",
-                            "date": {"created": "2026-08-01T00:00:00+00:00"},
-                            "source": [{"name": "UN OCHA"}],
-                            "body": "do not ingest this body",
-                        }
-                    }
-                ]
-            }
-        )
+        assert ("appname", "approved.example") in kwargs["params"]
+        return json_response({"data": []})
 
-    transport = StubClient(handler)
     gateway = CuratedResearchGateway(
-        BoundedInstitutionalClient(client=transport), reliefweb_app_name="  approved.example "
+        BoundedInstitutionalClient(client=StubClient(handler)),
+        reliefweb_app_name="  approved.example ",
     )
 
-    claims = gateway.reliefweb.search(request())
-
-    assert len(claims) == 1
-    claim = claims[0]
-    assert claim.publisher == "ReliefWeb"
-    assert claim.source_title == "Benin humanitarian update"
-    assert claim.source_date == date(2026, 8, 1)
-    assert "do not ingest" not in claim.text
-    assert urlsplit(claim.source_url or "").hostname in {"reliefweb.int", "api.reliefweb.int"}
+    assert gateway.reliefweb.search(request()) == ()
 
 
 def test_reliefweb_skips_rows_without_explicit_valid_fields():
@@ -749,10 +717,17 @@ def test_reliefweb_skips_rows_without_explicit_valid_fields():
     assert gateway.reliefweb.search(request()) == ()
 
 
-def test_gateway_uses_only_reliefweb_for_curated_recovery():
+def test_gateway_uses_reliefweb_without_world_bank_indicators():
     def handler(_method: str, url: str, _kwargs: dict[str, object]) -> StubResponse:
         assert "worldbank.org" not in url
-        return json_response({"data": [{"fields": {"title": "Benin conflict update", "url": "https://reliefweb.int/rw", "date": {"created": "2026-08-01"}, "source": [{"name": "UN OCHA"}]}}]})
+        return json_response({"data": [{"fields": {
+            "title": "Benin conflict update",
+            "origin": "https://www.unocha.org/benin",
+            "date": {"original": "2026-08-01"},
+            "primary_country": {"name": "Benin"},
+            "source": [{"name": "OCHA"}],
+            "body": "Violence displaced families in Benin.",
+        }}]})
 
     transport = StubClient(handler)
     gateway = CuratedResearchGateway(
@@ -762,16 +737,27 @@ def test_gateway_uses_only_reliefweb_for_curated_recovery():
     claims = gateway.search(request())
 
     assert len(claims) == 1
-    assert claims[0].publisher == "ReliefWeb"
+    assert claims[0].publisher == "OCHA"
     assert all("worldbank.org" not in call[1] for call in transport.calls)
 
 
 def test_reliefweb_rejects_generic_non_fcv_reports():
     def handler(_method: str, _url: str, _kwargs: dict[str, object]) -> StubResponse:
+        common = {
+            "date": {"original": "2026-08-01"},
+            "primary_country": {"name": "Benin"},
+            "source": [{"name": "OCHA"}],
+        }
         return json_response({"data": [
-            {"fields": {"title": "Benin annual population estimate", "url": "https://reliefweb.int/generic", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}},
-            {"fields": {"title": "Benin energy transition update", "url": "https://reliefweb.int/energy", "date": {"created": "2026-08-01"}, "source": [{"name": "UN"}]}},
-            {"fields": {"title": "Benin political transition update", "url": "https://reliefweb.int/fcv", "date": {"created": "2026-08-02"}, "source": [{"name": "UN OCHA"}]}},
+            {"fields": {**common, "title": "Population estimate",
+                        "origin": "https://www.unocha.org/population",
+                        "body": "The population estimate was revised."}},
+            {"fields": {**common, "title": "Energy update",
+                        "origin": "https://www.unocha.org/energy",
+                        "body": "Solar capacity increased."}},
+            {"fields": {**common, "title": "Political transition",
+                        "origin": "https://www.unocha.org/fcv",
+                        "body": "Political violence disrupted local services in Benin."}},
         ]})
 
     gateway = CuratedResearchGateway(
@@ -780,7 +766,7 @@ def test_reliefweb_rejects_generic_non_fcv_reports():
 
     claims = gateway.search(request())
 
-    assert [claim.source_title for claim in claims] == ["Benin political transition update"]
+    assert [claim.source_title for claim in claims] == ["Political transition"]
 
 
 def test_gateway_raises_provider_failure_when_all_enabled_adapters_fail():
@@ -875,7 +861,7 @@ def test_crisis_group_rejects_unknown_country_old_generic_and_malformed_items():
 
 def test_gateway_uses_crisis_group_without_reliefweb_appname():
     payload = """<rss version="2.0"><channel><item>
-      <title>Guinea political transition update</title>
+      <title>Guinea military leaders delayed political transition</title>
       <link>https://www.crisisgroup.org/africa/guinea/transition</link>
       <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
     </item></channel></rss>"""
@@ -913,7 +899,7 @@ def test_crisis_group_rejects_wrong_content_type_and_malformed_xml():
 
 def test_gateway_keeps_crisis_group_claim_when_reliefweb_is_unavailable():
     payload = """<rss version="2.0"><channel><item>
-      <title>Guinea political transition update</title>
+      <title>Guinea military leaders delayed political transition</title>
       <link>https://www.crisisgroup.org/africa/guinea/transition</link>
       <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
     </item></channel></rss>"""
@@ -933,3 +919,221 @@ def test_gateway_keeps_crisis_group_claim_when_reliefweb_is_unavailable():
     )
 
     assert [claim.publisher for claim in claims] == ["International Crisis Group"]
+def test_crisis_group_recovery_uses_summary_and_verified_country_feeds():
+    payload = """<rss><channel><item>
+      <title>Somalia humanitarian update</title>
+      <link>https://www.crisisgroup.org/africa/somalia/update</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description><![CDATA[<p>Armed conflict displaced communities in Somalia.</p>]]></description>
+    </item></channel></rss>"""
+    transport = StubClient(lambda *_args: rss_response(payload))
+    claims = CrisisGroupAdapter(
+        BoundedInstitutionalClient(client=transport)
+    ).search(ResearchRequest("Somalia", date(2026, 9, 4), ResearchMode.HOLISTIC))
+
+    assert transport.calls[0][1] == "https://www.crisisgroup.org/rss/12"
+    assert claims[0].text == "Armed conflict displaced communities in Somalia."
+    assert claims[0].supporting_quote == claims[0].text
+    assert claims[0].publication_date_basis == "provider_metadata"
+
+
+@pytest.mark.parametrize(
+    ("country", "feed"),
+    [
+        ("Democratic Republic of the Congo", "7"),
+        ("Congo", "115"),
+        ("West Bank and Gaza", "91"),
+        ("Kosovo", "68"),
+        ("Türkiye", "58"),
+        ("Cote d'Ivoire", "22"),
+        ("Sao Tome and Principe", "154"),
+        ("India", "123"),
+        ("Indonesia", "44"),
+        ("Kenya", "11"),
+        ("Brazil", "176"),
+    ],
+)
+def test_crisis_group_recovery_uses_checked_in_feed_catalogue(country, feed):
+    transport = StubClient(lambda *_args: rss_response("<rss><channel/></rss>"))
+    assert CrisisGroupAdapter(
+        BoundedInstitutionalClient(client=transport)
+    ).search(request(country)) == ()
+    assert transport.calls[0][1] == f"https://www.crisisgroup.org/rss/{feed}"
+
+
+def test_reliefweb_recovery_uses_original_report_provenance_and_exact_country():
+    def handler(_method: str, _url: str, kwargs: dict[str, object]) -> StubResponse:
+        params = kwargs["params"]
+        assert ("filter[conditions][0][value]", "occupied Palestinian territory") in params
+        assert ("filter[conditions][1][field]", "date.original") in params
+        assert ("fields[include][]", "origin") in params
+        assert ("fields[include][]", "body") in params
+        assert ("fields[include][]", "primary_country.name") in params
+        assert not any(value == "date.created" for _, value in params)
+        assert not any(key.endswith("[2][field]") for key, _ in params)
+        return json_response({"data": [{"fields": {
+            "title": "Humanitarian update",
+            "url": "https://reliefweb.int/report/occupied-palestinian-territory/update",
+            "origin": "https://www.unocha.org/news/displacement-update",
+            "date": {"original": "2026-08-01", "created": "2026-09-01"},
+            "primary_country": {"name": "occupied Palestinian territory"},
+            "source": [{"name": "OCHA"}, {"name": "Partner"}],
+            "body": "<p>Violence displaced communities in the occupied Palestinian territory.</p>",
+        }}]})
+
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=StubClient(handler)), reliefweb_app_name="app"
+    )
+    claims = gateway.reliefweb.search(request("West Bank and Gaza"))
+
+    assert len(claims) == 1
+    assert claims[0].publisher == "OCHA"
+    assert claims[0].source_url == "https://www.unocha.org/news/displacement-update"
+    assert claims[0].source_date == date(2026, 8, 1)
+    assert claims[0].text == (
+        "Violence displaced communities in the occupied Palestinian territory."
+    )
+    assert claims[0].supporting_quote == claims[0].text
+    assert claims[0].publication_date_basis == "provider_metadata"
+
+
+def test_reliefweb_recovery_rejects_created_date_wrong_country_and_unknown_origin():
+    rows = [
+        {"fields": {
+            "title": "Old conflict report",
+            "origin": "https://www.unocha.org/old",
+            "date": {"original": "2023-08-01", "created": "2026-08-01"},
+            "primary_country": {"name": "Benin"},
+            "source": [{"name": "OCHA"}],
+            "body": "Violence displaced communities in Benin.",
+        }},
+        {"fields": {
+            "title": "Wrong-country conflict report",
+            "origin": "https://www.unocha.org/togo",
+            "date": {"original": "2026-08-01"},
+            "primary_country": {"name": "Togo"},
+            "source": [{"name": "OCHA"}],
+            "body": "Violence displaced communities in Togo.",
+        }},
+        {"fields": {
+            "title": "Unknown-origin conflict report",
+            "origin": "https://unknown.example/benin",
+            "date": {"original": "2026-08-01"},
+            "primary_country": {"name": "Benin"},
+            "source": [{"name": "Unknown"}],
+            "body": "Violence displaced communities in Benin.",
+        }},
+        {"fields": {
+            "title": "Generic report",
+            "origin": "https://www.unocha.org/generic",
+            "date": {"original": "2026-08-01"},
+            "primary_country": {"name": "Benin"},
+            "source": [{"name": "OCHA"}],
+        }},
+    ]
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: json_response({"data": rows}))
+        ),
+        reliefweb_app_name="app",
+    )
+
+    assert gateway.reliefweb.search(request()) == ()
+def test_crisis_group_rejects_regional_feed_item_about_another_country():
+    payload = """<rss><channel><item>
+      <title>Regional conflict update</title>
+      <link>https://www.crisisgroup.org/africa/congo/regional-update</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description>Violence displaced people in Somalia.</description>
+    </item></channel></rss>"""
+    adapter = CrisisGroupAdapter(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: rss_response(payload))
+        )
+    )
+
+    assert adapter.search(request("Congo")) == ()
+def test_reliefweb_maps_cote_divoire_to_provider_country_name():
+    def handler(_method: str, _url: str, kwargs: dict[str, object]) -> StubResponse:
+        assert ("filter[conditions][0][value]", "Côte d'Ivoire") in kwargs["params"]
+        return json_response({"data": []})
+
+    adapter = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=StubClient(handler)), reliefweb_app_name="app"
+    ).reliefweb
+
+    assert adapter.search(request("Cote d'Ivoire")) == ()
+
+def test_curated_gateway_preserves_candidates_for_controller_qualification():
+    items = "".join(
+        (
+            "<item>"
+            f"<title>Somalia violence update {index}</title>"
+            f"<link>https://www.crisisgroup.org/africa/somalia/update-{index}</link>"
+            "<pubDate>Friday, August 1, 2026 - 12:00</pubDate>"
+            f"<description>Political violence increased in Somalia district {index}.</description>"
+            "</item>"
+        )
+        for index in range(8)
+    )
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(
+                lambda *_args: rss_response(f"<rss><channel>{items}</channel></rss>")
+            )
+        )
+    )
+
+    claims = gateway.search(request("Somalia"))
+
+    assert len(claims) == 8
+
+
+def test_reliefweb_copy_url_is_not_treated_as_originating_publisher():
+    payload = {
+        "data": [
+            {
+                "fields": {
+                    "title": "Guinea conflict update",
+                    "origin": "https://reliefweb.int/report/guinea/conflict-update",
+                    "date": {"created": "2026-08-01"},
+                    "body": "Political violence increased in Guinea.",
+                    "primary_country": [{"name": "Guinea"}],
+                    "source": [{"name": "United Nations"}],
+                }
+            }
+        ]
+    }
+
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: json_response(payload))
+        ),
+        reliefweb_app_name="app",
+    )
+
+    assert gateway.reliefweb.search(request()) == ()
+
+
+def test_gateway_keeps_later_finding_from_same_source():
+    payload = """<rss version="2.0"><channel>
+    <item><title>Guinea conflict increased locally</title>
+      <link>https://www.crisisgroup.org/africa/guinea/update</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate></item>
+    <item><title>Guinea political violence increased</title>
+      <link>https://www.crisisgroup.org/africa/guinea/update</link>
+      <pubDate>Saturday, October 4, 2025 - 12:26</pubDate></item>
+    </channel></rss>"""
+    gateway = CuratedResearchGateway(
+        BoundedInstitutionalClient(
+            client=StubClient(lambda *_args: rss_response(payload))
+        )
+    )
+
+    claims = gateway.search(request("Guinea"))
+
+    assert len(claims) == 2
+    assert {claim.source_date for claim in claims} == {
+        date(2025, 10, 3),
+        date(2025, 10, 4),
+    }

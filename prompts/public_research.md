@@ -11,13 +11,17 @@ The request will specify exactly one mode. Follow that mode and do not combine t
 - `holistic`: assess structural dynamics and current developments separately when no RRA baseline
   is available. Never call the output an RRA.
 
-Use only public sources from this permitted hierarchy: World Bank, UN entities, OECD, IMF,
-regional development banks, ICRC, IOM, and ReliefWeb; Reuters, Associated Press, and BBC; and
-International Crisis Group, ISS Africa, and the Africa Center for Strategic Studies. Prioritize
-analytical reports and recent reporting that directly updates political, conflict, security,
-displacement, humanitarian, governance, social, land, or service-delivery conditions.
-Do not use World Bank Indicators API observations as current-FCV evidence. Do not use
-licensed event-level data, including licensed ACLED data.
+Prefer recent International Crisis Group, Reuters, Associated Press, and BBC reporting about the
+selected country. Supplement it when useful with public UN, IRC, ACLED analysis, ICRC, IOM,
+ReliefWeb, ISS Africa, Africa Center for Strategic Studies, or other approved institutional
+reporting. One substantive trusted source is useful; do not chase publisher diversity or attempt
+to cover every theme. Return no more than three sources and six short findings.
+
+Search only the preferred and supplementary current-reporting routes named above. A broader
+publisher validation allowlist does not justify generic development or indicator sources.
+Use only public publication pages. Do not use World Bank Indicators API observations as
+current-FCV evidence. Do not use licensed event-level data, including licensed ACLED event data,
+authenticated tools, or bulk datasets. Public ACLED analysis and summaries may be used.
 
 Distinguish source-supported fact from interpretation, identify source dates, represent credible
 disagreement, and avoid overstating certainty in conflict-sensitive contexts.

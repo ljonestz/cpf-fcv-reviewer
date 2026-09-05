@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import re
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
@@ -16,6 +17,9 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .contracts import CurrentEvidenceTier
 from .public_research import (
+    MAX_RETAINED_FINDINGS,
+    MAX_RETAINED_SOURCES,
+    MAX_SOURCE_BUNDLE_CHARACTERS,
     CurrentContextClaim,
     load_research_prompt,
     retain_public_claims,
@@ -23,6 +27,42 @@ from .public_research import (
 
 # The gateway owns per-attempt network timeouts; this controller only bounds work between calls.
 
+_CURRENT_FCV_PATTERN = re.compile(
+    r"\b(?:conflicts?|violence|violent|elections?|coup|attacks?|fighting|"
+    r"militants?|clashes?|armed (?:groups?|conflict|actors?|attacks?|clashes?)|"
+    r"unrest|repression|political (?:transition|instability|crisis|tensions?)|"
+    r"governance (?:crisis|failure|breakdown|risk)|"
+    r"security (?:incidents?|crisis|deterioration|forces?|threats?)|"
+    r"military (?:rule|takeover|forces?|operations?)|"
+    r"displacement|displaced|refugees?|humanitarian (?:crisis|needs?|emergency|access)|"
+    r"land (?:conflict|dispute|tenure)|resource conflict|social cohesion|peacebuilding)\b",
+    re.IGNORECASE,
+)
+_GENERIC_INDICATOR_PATTERN = re.compile(
+    r"\b(?:gdp(?: per capita)?|life expectancy|population(?:,? total| growth| estimate)|"
+    r"solar capacity)\b",
+    re.IGNORECASE,
+)
+_FCV_CONDITION_PATTERN = re.compile(
+    r"\b(?:affect(?:s|ed|ing)?|caus(?:e|es|ed|ing)|delay(?:s|ed|ing)?|"
+    r"disrupt(?:s|ed|ing)?|expos(?:e|es|ed|ing)|increas(?:e|es|ed|ing)|"
+    r"worsen(?:s|ed|ing)?|(?:conflict|violence|fighting|attacks?)\s+"
+    r"(?:(?:has|have|had)\s+)?displaced|(?:was|were|are|have been) displaced|"
+    r"threatens?|threatened|escalates?|escalated|deteriorates?|deteriorated|"
+    r"declin(?:e|es|ed|ing)|fell|rose|remains?|remained high|continued|intensified|"
+    r"erupt(?:s|ed|ing)?|persist(?:s|ed|ing)?|broke out|spread|surged|flared|"
+    r"forc(?:e|es|ed|ing)|block(?:s|ed|ing)?|destroy(?:s|ed|ing)?|"
+    r"(?:is|are|was|were) widespread|killed|injured|attacked|fled)\b",
+    re.IGNORECASE,
+)
+_GATEWAY_DIAGNOSTIC_KEYS = (
+    "source_candidates",
+    "source_linked_excerpts",
+    "missing_publication_date",
+    "untrusted_host_publisher",
+    "country_mismatch",
+    "normalization_failure",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -188,11 +228,11 @@ class ResearchController:
             raise ValueError("allow_document_led must be a boolean.")
         started = self.monotonic()
         accepted: dict[str, CurrentContextClaim] = {}
-        accepted_urls: set[str] = set()
         rejected: dict[str, str] = {}
         last_missing: tuple[str, ...] = ()
         last_failure: ResearchFailure | None = None
         budget_exhausted = False
+        diagnostics = {key: 0 for key in _GATEWAY_DIAGNOSTIC_KEYS}
 
         primary_attempts = 0
         for attempt in range(1, self.max_attempts + 1):
@@ -220,15 +260,18 @@ class ResearchController:
                     budget_exhausted = True
                     break
                 continue
+            finally:
+                self._merge_gateway_diagnostics(diagnostics, self.gateway)
 
-            self._merge_claims(claims, accepted, accepted_urls, rejected)
+            self._merge_claims(claims, accepted, rejected)
 
-            last_missing = self._missing_coverage(tuple(accepted.values()), request)
+            qualifying = self._qualifying_claims(tuple(accepted.values()), request)
+            last_missing = self._missing_coverage(qualifying, request)
             elapsed = self.monotonic() - started
             if not last_missing:
                 return self._finish(
                     started=started,
-                    claims=tuple(accepted.values()),
+                    claims=qualifying,
                     rejected=rejected,
                     attempts=primary_attempts,
                     tier=CurrentEvidenceTier.FULL,
@@ -236,6 +279,20 @@ class ResearchController:
                     route="research_primary" if attempt == 1 else "research_salvaged",
                     emit=emit,
                     event_data=self._event_data(attempt, accepted, rejected, elapsed),
+                )
+            if qualifying:
+                return self._finish(
+                    started=started,
+                    claims=qualifying,
+                    rejected=rejected,
+                    attempts=primary_attempts,
+                    tier=CurrentEvidenceTier.REDUCED,
+                    limitation=self._reduced_limitation(
+                        qualifying, last_missing, request
+                    ),
+                    route="research_reduced",
+                    emit=emit,
+                    event_data={"missing_coverage": last_missing},
                 )
             if attempt < self.max_attempts:
                 if not self._prepare_retry(attempt, started, last_missing, emit):
@@ -260,19 +317,20 @@ class ResearchController:
             else:
                 if recovery_succeeded:
                     self._merge_claims(
-                        recovery_claims, accepted, accepted_urls, rejected
+                        recovery_claims, accepted, rejected
                     )
             finally:
                 budget_exhausted = budget_exhausted or (
                     self.monotonic() - started >= self.total_budget_seconds
                 )
             if recovery_succeeded:
-                last_missing = self._missing_coverage(tuple(accepted.values()), request)
+                qualifying = self._qualifying_claims(tuple(accepted.values()), request)
+                last_missing = self._missing_coverage(qualifying, request)
                 emit("research_curated_recovery", {"accepted_count": len(accepted)})
                 if not last_missing:
                     return self._finish(
                         started=started,
-                        claims=tuple(accepted.values()),
+                        claims=qualifying,
                         rejected=rejected,
                         attempts=primary_attempts,
                         tier=CurrentEvidenceTier.FULL,
@@ -287,11 +345,9 @@ class ResearchController:
                         ),
                     )
 
-        if accepted:
-            accepted_claims = tuple(accepted.values())
+        accepted_claims = self._qualifying_claims(tuple(accepted.values()), request)
+        if accepted_claims:
             last_missing = self._missing_coverage(accepted_claims, request)
-        else:
-            accepted_claims = ()
         budget_exhausted = budget_exhausted or (
             self.monotonic() - started >= self.total_budget_seconds
         )
@@ -308,10 +364,17 @@ class ResearchController:
                 emit=emit,
                 event_data={"missing_coverage": last_missing},
             )
-        if allow_document_led and not accepted:
-            reason = self._document_led_reason(
-                budget_exhausted=budget_exhausted,
-                last_failure=last_failure,
+        reason = self._document_led_reason(
+            budget_exhausted=budget_exhausted,
+            last_failure=last_failure,
+            rejected=rejected,
+        )
+        if allow_document_led and not accepted_claims:
+            self._emit_diagnostics(
+                emit,
+                reason=reason,
+                diagnostics=diagnostics,
+                accepted=accepted,
                 rejected=rejected,
             )
             return self._finish(
@@ -328,6 +391,13 @@ class ResearchController:
                 emit=emit,
                 event_data={"reason": reason},
             )
+        self._emit_diagnostics(
+            emit,
+            reason=reason,
+            diagnostics=diagnostics,
+            accepted=accepted,
+            rejected=rejected,
+        )
         if budget_exhausted:
             raise ResearchTimeout("Research total budget was exhausted.")
         if last_failure is not None:
@@ -362,21 +432,16 @@ class ResearchController:
     def _merge_claims(
         claims: tuple[CurrentContextClaim, ...],
         accepted: dict[str, CurrentContextClaim],
-        accepted_urls: set[str],
         rejected: dict[str, str],
     ) -> None:
         retained, source_rejections = retain_public_claims(tuple(claims))
         rejected.update(source_rejections)
         for item in retained:
             claim_key = item.claim_id.casefold()
-            url_key = _normalize_source_url(item.source_url or "")
             if claim_key in accepted:
                 rejected[f"duplicate_id:{item.claim_id}"] = "duplicate claim ID"
-            elif url_key in accepted_urls:
-                rejected["duplicate_url"] = "duplicate source URL"
             else:
                 accepted[claim_key] = item
-                accepted_urls.add(url_key)
 
     def _finish(
         self,
@@ -411,6 +476,49 @@ class ResearchController:
         return result
 
     @staticmethod
+    def _merge_gateway_diagnostics(
+        diagnostics: dict[str, int],
+        gateway: ResearchGateway,
+    ) -> None:
+        snapshot = getattr(gateway, "last_diagnostics", None)
+        if not isinstance(snapshot, Mapping):
+            return
+        for key in _GATEWAY_DIAGNOSTIC_KEYS:
+            value = snapshot.get(key)
+            if type(value) is int and value >= 0:
+                diagnostics[key] += value
+
+    @classmethod
+    def _emit_diagnostics(
+        cls,
+        emit: Emitter,
+        *,
+        reason: str,
+        diagnostics: dict[str, int],
+        accepted: dict[str, CurrentContextClaim],
+        rejected: dict[str, str],
+    ) -> None:
+        counts = dict(diagnostics)
+        counts["untrusted_host_publisher"] = max(
+            counts["untrusted_host_publisher"],
+            sum(
+                value == "permitted institutional public source is required"
+                for value in rejected.values()
+            ),
+        )
+        counts["non_fcv_background"] = sum(
+            not cls._is_substantive_fcv(claim) for claim in accepted.values()
+        )
+        counts["accepted_sources"] = len(
+            {
+                _normalize_source_url(claim.source_url or "")
+                for claim in accepted.values()
+                if _normalize_source_url(claim.source_url or "")
+            }
+        )
+        emit("research_diagnostics", {"reason": reason, "counts": counts})
+
+    @staticmethod
     def _document_led_reason(
         *,
         budget_exhausted: bool,
@@ -428,6 +536,46 @@ class ResearchController:
         if isinstance(last_failure, ResearchSourceRejected) or rejected:
             return "source_rejected"
         return "insufficient_coverage"
+
+    def _qualifying_claims(
+        self,
+        claims: tuple[CurrentContextClaim, ...],
+        request: ResearchRequest,
+    ) -> tuple[CurrentContextClaim, ...]:
+        qualifying = sorted(
+            (
+                claim
+                for claim in claims
+                if self._is_recent(claim, request)
+                and self._is_substantive_fcv(claim)
+            ),
+            key=lambda claim: (-claim.source_date.toordinal(), claim.claim_id),
+        )
+        retained: list[CurrentContextClaim] = []
+        source_urls: set[str] = set()
+        bundle_characters = 0
+        for claim in qualifying:
+            source_url = _normalize_source_url(claim.source_url or "")
+            if source_url not in source_urls and len(source_urls) >= MAX_RETAINED_SOURCES:
+                continue
+            claim_characters = len(claim.model_dump_json())
+            if bundle_characters + claim_characters > MAX_SOURCE_BUNDLE_CHARACTERS:
+                continue
+            retained.append(claim)
+            source_urls.add(source_url)
+            bundle_characters += claim_characters
+            if len(retained) >= MAX_RETAINED_FINDINGS:
+                break
+        return tuple(retained)
+
+    @staticmethod
+    def _is_substantive_fcv(claim: CurrentContextClaim) -> bool:
+        grounded_text = claim.supporting_quote or ""
+        return bool(
+            _CURRENT_FCV_PATTERN.search(grounded_text)
+            and _FCV_CONDITION_PATTERN.search(grounded_text)
+            and _GENERIC_INDICATOR_PATTERN.search(grounded_text) is None
+        )
 
     def _recent_claim_count(
         self,
@@ -473,9 +621,10 @@ class ResearchController:
         gaps = ", ".join(labels.get(item, item) for item in missing)
         return (
             f"{recent_count_word} recent {observation_word} across {source_count_word} "
-            f"distinct {url_word} and {publisher_count_word} institutional "
+            f"distinct {url_word} and {publisher_count_word} originating "
             f"{publisher_word} {verb} established; "
-            f"current-country coverage remains incomplete for {gaps}."
+            "this is sufficient for a reduced current update, while broader "
+            f"coverage remains unavailable for {gaps}."
         )
 
     def _prompt(
@@ -551,10 +700,13 @@ class ResearchController:
 
     @staticmethod
     def _is_recent(claim: CurrentContextClaim, request: ResearchRequest) -> bool:
-        if request.mode is ResearchMode.RRA_UPDATE:
-            return request.diagnostic_date < claim.source_date <= request.review_date
         window_start = _subtract_calendar_years(request.review_date, 2)
-        return window_start <= claim.source_date <= request.review_date
+        if not window_start <= claim.source_date <= request.review_date:
+            return False
+        return bool(
+            request.mode is not ResearchMode.RRA_UPDATE
+            or request.diagnostic_date < claim.source_date
+        )
 
     @staticmethod
     def _event_data(
