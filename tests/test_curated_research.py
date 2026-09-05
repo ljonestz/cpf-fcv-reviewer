@@ -1053,3 +1053,13 @@ def test_crisis_group_rejects_regional_feed_item_about_another_country():
     )
 
     assert adapter.search(request("Congo")) == ()
+def test_reliefweb_maps_cote_divoire_to_provider_country_name():
+    def handler(_method: str, _url: str, kwargs: dict[str, object]) -> StubResponse:
+        assert ("filter[conditions][0][value]", "Côte d'Ivoire") in kwargs["params"]
+        return json_response({"data": []})
+
+    adapter = CuratedResearchGateway(
+        BoundedInstitutionalClient(client=StubClient(handler)), reliefweb_app_name="app"
+    ).reliefweb
+
+    assert adapter.search(request("Cote d'Ivoire")) == ()

@@ -49,6 +49,7 @@ _CRISIS_GROUP_FEEDS = {
     "west bank and gaza": "https://www.crisisgroup.org/rss/91",
 }
 _RELIEFWEB_COUNTRIES = {
+    "cote d'ivoire": "C\u00f4te d'Ivoire",
     "democratic republic of congo": "Democratic Republic of the Congo",
     "democratic republic of the congo": "Democratic Republic of the Congo",
     "palestinian territories": "occupied Palestinian territory",
