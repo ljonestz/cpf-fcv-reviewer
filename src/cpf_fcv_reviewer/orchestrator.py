@@ -61,34 +61,31 @@ class ReviewOrchestrator:
                 emit("step_start", {"step": name})
                 context = step(context)
                 if name == "validate" and context.get("validation_issues"):
-                    all_issues = list(context["validation_issues"])
-                    fatal_issues = [
-                        issue
-                        for issue in all_issues
-                        if not (
+                    def is_advisory(issue):
+                        return (
                             isinstance(issue, dict)
                             and issue.get("severity") == "advisory"
                         )
-                    ]
-                    advisory_issues = [
-                        issue
-                        for issue in all_issues
-                        if isinstance(issue, dict)
-                        and issue.get("severity") == "advisory"
-                    ]
+
+                    def codes_of(issues):
+                        return list(
+                            dict.fromkeys(
+                                issue["code"]
+                                for issue in issues
+                                if isinstance(issue, dict)
+                                and isinstance(issue.get("code"), str)
+                            )
+                        )
+
+                    all_issues = list(context["validation_issues"])
+                    fatal_issues = [i for i in all_issues if not is_advisory(i)]
+                    advisory_issues = [i for i in all_issues if is_advisory(i)]
                     if advisory_issues:
                         emit(
                             "advisory_notice",
                             {
                                 "issue_count": len(advisory_issues),
-                                "codes": list(
-                                    dict.fromkeys(
-                                        issue["code"]
-                                        for issue in advisory_issues
-                                        if isinstance(issue, dict)
-                                        and isinstance(issue.get("code"), str)
-                                    )
-                                ),
+                                "codes": codes_of(advisory_issues),
                             },
                         )
                     if fatal_issues:
@@ -98,39 +95,22 @@ class ReviewOrchestrator:
                             "repair_start",
                             {
                                 "issue_count": len(fatal_issues),
-                                "codes": list(
-                                    dict.fromkeys(
-                                        issue["code"]
-                                        for issue in fatal_issues
-                                        if isinstance(issue, dict)
-                                        and isinstance(issue.get("code"), str)
-                                    )
-                                ),
+                                "codes": codes_of(fatal_issues),
                             },
                         )
                         context = self.repair(context, fatal_issues)
                         repaired = True
                         remaining_fatal = [
-                            issue
-                            for issue in context.get("validation_issues", [])
-                            if not (
-                                isinstance(issue, dict)
-                                and issue.get("severity") == "advisory"
-                            )
+                            i
+                            for i in context.get("validation_issues", [])
+                            if not is_advisory(i)
                         ]
                         if remaining_fatal:
                             emit(
                                 "repair_failed",
                                 {
                                     "issue_count": len(remaining_fatal),
-                                    "codes": list(
-                                        dict.fromkeys(
-                                            issue["code"]
-                                            for issue in remaining_fatal
-                                            if isinstance(issue, dict)
-                                            and isinstance(issue.get("code"), str)
-                                        )
-                                    ),
+                                    "codes": codes_of(remaining_fatal),
                                 },
                             )
                             raise ValueError("Validation failed after the only repair.")
