@@ -30,6 +30,23 @@ from .research_controller import ResearchRequest
 _ALLOWED_HOSTS = frozenset(
     {"api.worldbank.org", "api.reliefweb.int", "www.crisisgroup.org"}
 )
+def _curated_verification(
+    *, source_date, supporting_quote: str | None
+) -> str:
+    """Grade a curated institutional claim.
+
+    Curated claims are constructed only when a publication date resolved, and their
+    supporting quote (when present) is taken directly from the mapped source feed, so a
+    dated claim with a quote is machine-verifiable ("verified"); a dated claim without a
+    quote is "partially_verified".
+    """
+    if source_date is None:
+        return "unverified"
+    if supporting_quote and supporting_quote.strip():
+        return "verified"
+    return "partially_verified"
+
+
 _CRISIS_GROUP_FEEDS = {
     "brazil": "https://www.crisisgroup.org/rss/176",
     "congo": "https://www.crisisgroup.org/rss/115",
@@ -638,6 +655,7 @@ def _world_bank_claims(
                 context_kind=context_kind,
                 relationship="establishes",
                 licensed_data_required=False,
+                verification=_curated_verification(source_date=observation_date, supporting_quote=None),
             )
         )
     return tuple(claims)
@@ -695,6 +713,7 @@ def _reliefweb_claim(
         context_kind="current_development",
         relationship="establishes",
         licensed_data_required=False,
+        verification=_curated_verification(source_date=source_date, supporting_quote=summary),
     )
 
 
@@ -747,6 +766,7 @@ def _crisis_group_claim(
         context_kind="current_development",
         relationship="establishes",
         licensed_data_required=False,
+        verification=_curated_verification(source_date=source_date, supporting_quote=text),
     )
 
 
