@@ -2217,6 +2217,30 @@ def test_country_scope_keeps_plain_selected_country():
     assert public_research._source_mentions_country(source, "Guinea")
 
 
+def test_source_metadata_reads_page_age_date():
+    # Anthropic's real web_search_result carries the date in `page_age`.
+    item = SimpleNamespace(
+        type="web_search_result",
+        title="Guinea transition update",
+        url="https://africacenter.org/guinea",
+        page_age="April 30, 2025",
+    )
+    _title, _url, published_at, basis = public_research._source_metadata(item)
+    assert published_at == date(2025, 4, 30)
+    assert basis == "provider_metadata"
+
+
+def test_source_metadata_still_reads_published_at_field():
+    item = SimpleNamespace(
+        type="web_search_result",
+        title="x",
+        url="https://africacenter.org/y",
+        published_at="2025-04-30",
+    )
+    _title, _url, published_at, _basis = public_research._source_metadata(item)
+    assert published_at == date(2025, 4, 30)
+
+
 PUBLIC_DIAGNOSTIC_KEYS = {
     "source_candidates",
     "source_linked_excerpts",

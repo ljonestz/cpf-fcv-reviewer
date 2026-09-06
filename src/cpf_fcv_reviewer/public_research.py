@@ -1040,9 +1040,14 @@ def _source_metadata(
 ) -> tuple[str | None, str | None, date | None, PUBLICATION_DATE_BASIS | None]:
     title = _as_nonblank_string(_value(item, "title"))
     url = _normalize_source_url(_value(item, "url"))
+    # Anthropic's web_search_result carries the date in `page_age` (e.g.
+    # "April 30, 2025"); `published_at`/`published_date`/`publication_date` are
+    # kept for other providers and mocked results. Reading only the latter meant
+    # real search results were always dateless, so every current-context claim
+    # was rejected by the publication-date gate (accepted_sources: 0).
     explicit_dates = {
         parsed
-        for field in ("published_at", "published_date", "publication_date")
+        for field in ("published_at", "published_date", "publication_date", "page_age")
         if (parsed := _parse_source_date(_value(item, field))) is not None
     }
     url_date = _publication_date_from_url(url)
