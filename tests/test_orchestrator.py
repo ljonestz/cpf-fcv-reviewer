@@ -167,3 +167,97 @@ def test_orchestrator_removes_private_emitter_after_failure():
         ).run(context, lambda *_: None)
 
     assert "_emit" not in context
+
+
+def test_advisory_only_issues_do_not_fail_the_run():
+    from cpf_fcv_reviewer.orchestrator import ReviewOrchestrator
+
+    events = []
+
+    def emit(name, data):
+        events.append((name, data))
+
+    def validate(context):
+        context["validation_issues"] = [
+            {
+                "code": "missing_current_context_support",
+                "message": "advisory",
+                "severity": "advisory",
+            }
+        ]
+        return context
+
+    def repair(context, issues):
+        raise AssertionError("repair must not run for advisory-only issues")
+
+    orchestrator = ReviewOrchestrator(
+        steps=(("validate", validate),),
+        repair=repair,
+    )
+    orchestrator.run({}, emit)
+    names = [name for name, _ in events]
+    assert "run_complete" in names
+    assert "run_failed" not in names
+    assert "repair_start" not in names
+
+
+def test_fatal_issue_still_repairs_and_can_fail():
+    from cpf_fcv_reviewer.orchestrator import ReviewOrchestrator
+
+    events = []
+
+    def emit(name, data):
+        events.append((name, data))
+
+    def validate(context):
+        context["validation_issues"] = [
+            {"code": "stage_overreach", "message": "fatal", "severity": "fatal"}
+        ]
+        return context
+
+    def repair(context, issues):
+        context["validation_issues"] = [
+            {"code": "stage_overreach", "message": "fatal", "severity": "fatal"}
+        ]
+        return context
+
+    orchestrator = ReviewOrchestrator(
+        steps=(("validate", validate),),
+        repair=repair,
+    )
+    try:
+        orchestrator.run({}, emit)
+    except ValueError:
+        pass
+    names = [name for name, _ in events]
+    assert "repair_start" in names
+    assert "run_failed" in names
+
+
+def test_repair_receives_only_fatal_issues():
+    from cpf_fcv_reviewer.orchestrator import ReviewOrchestrator
+
+    received = []
+
+    def emit(name, data):
+        pass
+
+    def validate(context):
+        context["validation_issues"] = [
+            {"code": "stage_overreach", "message": "f", "severity": "fatal"},
+            {"code": "missing_current_context_support", "message": "a", "severity": "advisory"},
+        ]
+        return context
+
+    def repair(context, issues):
+        received.extend(issues)
+        context["validation_issues"] = []
+        return context
+
+    orchestrator = ReviewOrchestrator(
+        steps=(("validate", validate),),
+        repair=repair,
+    )
+    orchestrator.run({}, emit)
+    codes = [i["code"] for i in received]
+    assert codes == ["stage_overreach"]
