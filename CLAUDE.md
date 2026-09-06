@@ -65,6 +65,33 @@ Use **Download full detailed note** for an active review, or `GET /api/reviews/<
 - `docs/validation/`: dated historical validation evidence.
 - `docs/superpowers/specs/` and `plans/`: historical designs and implementation plans.
 
+## Current-context (live-news) pipeline — status (2026-09-06)
+
+Three root-cause bugs that blocked live current-context for 6–7 sessions are now fixed, deployed
+(`main` @ `bf1f14b`), and verified on live Render runs (PRs #11/#12/#13):
+- web_search `allowed_domains` included crawler-blocked wires (Reuters/AP/BBC) → HTTP 400 every run;
+  now excluded (kept as publishers) + self-heal retry (`public_research.py`).
+- `_source_mentions_country` over-rejected sources naming a country **and** a compound neighbour
+  (Guinea + Guinea-Bissau); now strips compound names then requires a standalone reference.
+- `_source_metadata` read `published_at`, but Anthropic's `web_search_result` dates live in **`page_age`**;
+  now reads `page_age` so real sources are dated.
+- New WARNING log `research_provider_exception` (`research_controller._classify_exception`) makes
+  research failures diagnosable from Render logs.
+
+**Still open:** a review cannot complete with zero accepted current-context claims
+(`missing_current_context_support` → `review_failed`). Next step is **Option B** (trusted synthesis with
+soft-flags + graceful degradation, not delete-and-fail): `docs/handover/2026-09-06-option-b-current-context-synthesis.md`.
+Evidence and the exact fixes: `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`.
+
+**Test assets (local only, not in repo):** real Guinea CPF/RRA source docs at
+`C:\Users\wb559324\OneDrive - WBG\Claude_Outputs\cpf_screener\GuineaCPFRRA\guineacpf.pdf` and
+`guinearra.pdf` (do not open the dated sub-folders' sensitive handoff files); synthetic Benin fixture
+`tests/fixtures/synthetic_en.txt`. Trigger a real run via `POST /api/reviews` (multipart `cpf`,
+`country`, `review_stage`, `context_documents`) then stream `GET /api/reviews/<id>/events`. On the WBG
+machine, local httpx to onrender.com / api.anthropic.com must merge the WBG root CA (`SSL_CERT_FILE`)
+with certifi or TLS fails. Render MCP: service `srv-d9tju52jobas73d6jvk0`, workspace
+`tea-d6de2tsr85hc73bqdi0g`.
+
 ## End-of-session update
 
 After material changes, update `docs/PROJECT_STATUS.md` with the verified commit, tests, deployment state, limitations, and next actions. Add a new dated validation record for a meaningful release validation; do not rewrite historical results. Stop and record only a safe error category if a policy, registry, input-sensitivity, or unexpected-output concern arises.

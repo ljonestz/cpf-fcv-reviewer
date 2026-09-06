@@ -8,9 +8,14 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified deployment:
-  `b40ee4e38366ecb47453fe299d888946657707b3` on 2026-09-04. Render reports
-  that exact commit live; `/health` returns `ok` and the root page returns HTTP 200.
+- Latest verified deployment: `bf1f14b` on 2026-09-06 (`/health` 200, clean startup). This deploy
+  fixed three long-standing live-news (current-context) bugs — the web_search `allowed_domains` 400,
+  a country/compound-neighbour over-rejection, and reading the publication date from Anthropic's
+  `page_age` field. Live search now returns trusted, dated sources. However, a review still cannot
+  **complete** when zero current-context claims are accepted (`missing_current_context_support` →
+  `review_failed`); the next step is "Option B" (trusted synthesis + graceful degradation). See
+  `docs/PROJECT_STATUS.md`, `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`,
+  and `docs/handover/2026-09-06-option-b-current-context-synthesis.md`.
 - Every assessment researches only its confirmed country through the same bounded,
   country-agnostic route; it never fans out across other countries. Source selection
   prioritizes recent substantive reporting from ICG, Reuters/AP/BBC, approved
