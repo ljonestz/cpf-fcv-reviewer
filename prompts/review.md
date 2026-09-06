@@ -247,3 +247,19 @@ omit metadata, and include all required ReviewDraft fields:
 overall_read, alignment_readout, strategy_readout, revision_summary,
 priority_areas, rra_driver_assessments, fcv_strategy_assessments,
 institutional_referral_ids, limitations, and coverage_note.
+
+## Current-context evidence: confidence tiers
+
+Current-context evidence carries a `verification` grade. Treat it as an AI-generated synthesis
+from trusted sources that the reader must verify before use:
+
+- `verified` — you may use it to support an FCV Strategy rating and to justify a priority
+  recommendation.
+- `partially verified` — you may cite it as corroboration, but it must not be the sole basis of
+  a rating change or a recommendation.
+- `unverified` — you may use it only as context-only narrative framing of present-day conditions.
+  It must not, on its own, change a rating or generate a recommendation.
+
+Never present current-context claims as established fact. When a present-day FCV assertion rests
+only on partially verified or unverified evidence, phrase it as reported/indicative and keep it
+context only.
