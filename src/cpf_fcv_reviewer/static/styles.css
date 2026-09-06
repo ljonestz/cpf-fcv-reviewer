@@ -389,3 +389,38 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .evidence-group { border-top: 1px solid var(--rule); }
 .evidence-group summary, .traceability-panel summary,
 .coverage-panel > summary, .evidence-status-panel > summary, .basis-limitations-panel > summary { padding: 14px 0; }
+
+/* Current-context verification banner and confidence chips */
+.current-context-banner {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  border-left: 3px solid #e2c477;
+  border-radius: 0 5px 5px 0;
+  background: #fff9e8;
+  color: #76520b;
+  font-size: .84rem;
+}
+.current-context-chip {
+  display: inline-block;
+  margin: 4px 0 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: .84rem;
+  font-weight: 700;
+}
+.current-context-chip--verified {
+  border-color: #9fceb3;
+  background: #e8f5ed;
+  color: #1d5d3c;
+}
+.current-context-chip--partially_verified {
+  border-color: #e2c477;
+  background: #fff7df;
+  color: #76520b;
+}
+.current-context-chip--unverified {
+  border-color: #d9aaaa;
+  background: #fbebeb;
+  color: #7f3030;
+}

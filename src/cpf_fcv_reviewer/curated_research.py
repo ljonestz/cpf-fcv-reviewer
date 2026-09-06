@@ -30,8 +30,10 @@ from .research_controller import ResearchRequest
 _ALLOWED_HOSTS = frozenset(
     {"api.worldbank.org", "api.reliefweb.int", "www.crisisgroup.org"}
 )
+
+
 def _curated_verification(
-    *, source_date, supporting_quote: str | None
+    *, source_date: date | None, supporting_quote: str | None
 ) -> str:
     """Grade a curated institutional claim.
 
