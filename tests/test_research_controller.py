@@ -55,16 +55,18 @@ def claim(
 
 
 def sufficient_claims(review_date: date = date(2026, 8, 1)) -> tuple[CurrentContextClaim, ...]:
+    # Claims are marked verified so _missing_coverage counts them toward tier elevation.
+    # Unverified claims are excluded from coverage counting after the Task 3 recency cap.
     return (
-        claim("s1", source_date=date(2025, 9, 1)),
-        claim("s2", publisher="United Nations", source_date=date(2026, 7, 1)),
-        claim("s3", context_kind="current_development", source_date=review_date),
+        claim("s1", source_date=date(2025, 9, 1)).model_copy(update={"verification": "verified"}),
+        claim("s2", publisher="United Nations", source_date=date(2026, 7, 1)).model_copy(update={"verification": "verified"}),
+        claim("s3", context_kind="current_development", source_date=review_date).model_copy(update={"verification": "verified"}),
         claim(
             "s4",
             context_kind="resilience_factor",
             source_date=date(2025, 10, 1),
             source_url="https://www.worldbank.org/s1",
-        ),
+        ).model_copy(update={"verification": "verified"}),
     )
 
 
@@ -1785,3 +1787,12 @@ def test_terminal_tier_describes_only_evidence_retained_after_caps():
     assert outcome.tier is CurrentEvidenceTier.REDUCED
     assert outcome.limitation is not None
     assert "structural dynamics" in outcome.limitation
+
+
+def test_recency_cap_downgrades_non_recent_claim():
+    from cpf_fcv_reviewer.research_controller import _cap_verification_by_recency
+
+    assert _cap_verification_by_recency("verified", is_recent=True) == "verified"
+    assert _cap_verification_by_recency("verified", is_recent=False) == "unverified"
+    assert _cap_verification_by_recency("partially_verified", is_recent=False) == "unverified"
+    assert _cap_verification_by_recency("unverified", is_recent=True) == "unverified"

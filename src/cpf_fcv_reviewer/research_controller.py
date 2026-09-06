@@ -542,10 +542,21 @@ class ResearchController:
         claims: tuple[CurrentContextClaim, ...],
         request: ResearchRequest,
     ) -> tuple[CurrentContextClaim, ...]:
+        graded = tuple(
+            claim.model_copy(
+                update={
+                    "verification": _cap_verification_by_recency(
+                        claim.verification,
+                        is_recent=self._is_recent(claim, request),
+                    )
+                }
+            )
+            for claim in claims
+        )
         qualifying = sorted(
             (
                 claim
-                for claim in claims
+                for claim in graded
                 if self._is_recent(claim, request)
                 and self._is_substantive_fcv(claim)
             ),
@@ -679,6 +690,9 @@ class ResearchController:
         claims: tuple[CurrentContextClaim, ...],
         request: ResearchRequest,
     ) -> tuple[str, ...]:
+        claims = tuple(
+            claim for claim in claims if claim.verification != "unverified"
+        )
         missing: list[str] = []
         if len(claims) < self.minimum_claims:
             missing.append("claims")
@@ -803,6 +817,12 @@ def _normalize_source_url(url: str) -> str:
     netloc = hostname if not port or default_port else f"{hostname}:{port}"
     path = parsed.path.rstrip("/")
     return urlunsplit((scheme, netloc, path, parsed.query, ""))
+
+
+def _cap_verification_by_recency(verification: str, *, is_recent: bool) -> str:
+    if not is_recent:
+        return "unverified"
+    return verification
 
 
 def _subtract_calendar_years(value: date, years: int) -> date:
