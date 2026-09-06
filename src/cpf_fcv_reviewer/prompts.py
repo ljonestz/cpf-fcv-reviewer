@@ -4,7 +4,9 @@ from hashlib import sha256
 from pathlib import Path
 
 PROMPT_ROOT = Path(__file__).parents[2] / "prompts"
-PROMPT_NAMES = frozenset({"diagnostic_map", "review", "repair", "follow_on"})
+PROMPT_NAMES = frozenset(
+    {"diagnostic_map", "review", "repair", "follow_on", "fcv_readout"}
+)
 
 
 def load_prompt(name: str) -> str:

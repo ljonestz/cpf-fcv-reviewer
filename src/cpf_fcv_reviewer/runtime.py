@@ -1353,6 +1353,7 @@ def build_runtime_services(
                     # No external current sources were established. Fall back to a
                     # bounded, knowledge-based readout so the review still has current
                     # context (clearly caveated). Best-effort: never fail the run.
+                    readout_error = None
                     try:
                         readout = generate_fcv_readout(
                             model_gateway,
@@ -1364,8 +1365,9 @@ def build_runtime_services(
                                 else None
                             ),
                         )
-                    except Exception:  # noqa: BLE001 - readout is best-effort
+                    except Exception as exc:  # noqa: BLE001 - readout is best-effort
                         readout = None
+                        readout_error = type(exc).__name__
                     if readout is not None:
                         context["fcv_readout"] = readout
                         context["_emit"](
@@ -1373,7 +1375,9 @@ def build_runtime_services(
                             {"theme_count": len(readout.key_themes)},
                         )
                     else:
-                        context["_emit"]("fcv_readout_unavailable", {})
+                        context["_emit"](
+                            "fcv_readout_unavailable", {"error": readout_error}
+                        )
             if name == "build_evidence":
                 return build_uploaded_evidence(context)
             if name == "map":
