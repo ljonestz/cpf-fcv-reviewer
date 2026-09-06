@@ -1164,7 +1164,11 @@ def test_uncited_retrieved_sources_are_unavailable_to_normalization(monkeypatch)
 
     result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
-    assert result == (claim_a,)
+    # claim_a is retained; grade-and-keep sets verification to verified
+    # (dated source + cited_text becomes excerpt so exact-quote check passes)
+    assert len(result) == 1
+    assert result[0].claim_id == "cited"
+    assert result[0].verification == "verified"
 
 
 def test_mapping_shaped_provider_blocks_are_extracted():
@@ -1310,6 +1314,7 @@ def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift(
                 "source_url": source.url,
                 "supporting_quote": normalized.supporting_quote,
                 "publication_date_basis": "provider_metadata",
+                "verification": "verified",
             }
         ),
     )
@@ -2038,7 +2043,13 @@ def test_normalized_claim_requires_quote_from_exact_country_source():
         selected_country="Guinea",
     )
 
-    assert [claim.claim_id for claim in retained] == ["valid"]
+    assert [claim.claim_id for claim in retained] == ["valid", "swapped", "no-excerpt"]
+    grades = {claim.claim_id: claim.verification for claim in retained}
+    assert grades == {
+        "valid": "verified",
+        "swapped": "partially_verified",
+        "no-excerpt": "partially_verified",
+    }
     assert retained[0].text == transition.excerpt
     assert retained[0].publisher == "Reuters"
     assert retained[0].publication_date_basis == "canonical_url"
