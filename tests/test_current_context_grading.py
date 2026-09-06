@@ -41,3 +41,10 @@ def test_undated_source_with_paraphrased_quote_grades_unverified():
 def test_missing_quote_grades_unverified_when_undated():
     source = _source(published=None, excerpt="Armed clashes displaced thousands.")
     assert _grade_claim(source, None) == "unverified"
+
+
+def test_dated_source_with_no_quote_grades_partial():
+    from datetime import date
+
+    source = _source(published=date(2025, 4, 30), excerpt="Armed clashes displaced thousands.")
+    assert _grade_claim(source, None) == "partially_verified"

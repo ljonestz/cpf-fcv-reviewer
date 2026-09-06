@@ -1208,7 +1208,7 @@ def _quote_is_from_source(quote: str | None, excerpt: str | None) -> bool:
 
 
 def _grade_claim(
-    source: "ResearchSource", supporting_quote: str | None
+    source: ResearchSource, supporting_quote: str | None
 ) -> Literal["verified", "partially_verified", "unverified"]:
     """Grade a floor-passing claim by how strongly it is machine-verifiable.
 
