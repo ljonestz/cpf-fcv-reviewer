@@ -1349,12 +1349,12 @@ def _validate_normalized_claims(
             continue
         supporting_quote = _as_nonblank_string(claim.supporting_quote)
         if (
-            source.published_at is None
-            or source.publisher == "ReliefWeb"
-            or not _quote_is_from_source(supporting_quote, source.excerpt)
+            source.publisher == "ReliefWeb"
+            or not supporting_quote
             or not _text_mentions_country(supporting_quote, selected_country)
         ):
             continue
+        grade = _grade_claim(source, supporting_quote)
         matched_claims.append(
             claim.model_copy(
                 update={
@@ -1362,9 +1362,10 @@ def _validate_normalized_claims(
                     "publisher": _publisher_from_source(source),
                     "source_title": source.title,
                     "source_url": source.url,
-                    "source_date": source.published_at,
+                    "source_date": source.published_at or date(1900, 1, 1),
                     "supporting_quote": supporting_quote,
                     "publication_date_basis": source.publication_date_basis,
+                    "verification": grade,
                 }
             )
         )
@@ -1383,9 +1384,8 @@ def _salvage_grounded_segments(
         for source in sources:
             supporting_quote = cited_text.strip()
             if (
-                source.published_at is None
-                or source.publisher == "ReliefWeb"
-                or supporting_quote is None
+                source.publisher == "ReliefWeb"
+                or not supporting_quote
                 or not _is_unambiguous_single_sentence(supporting_quote)
                 or not _text_mentions_country(supporting_quote, selected_country)
             ):
@@ -1394,9 +1394,12 @@ def _salvage_grounded_segments(
             if key in seen:
                 continue
             seen.add(key)
+            grade = _grade_claim(source, supporting_quote)
             digest_input = json.dumps(
                 {
-                    "source_date": source.published_at.isoformat(),
+                    "source_date": source.published_at.isoformat()
+                    if source.published_at is not None
+                    else "undated",
                     "source_title": source.title,
                     "source_url": source.url,
                     "text": supporting_quote,
@@ -1410,7 +1413,7 @@ def _salvage_grounded_segments(
                     publisher=_publisher_from_source(source),
                     source_title=source.title,
                     source_url=source.url,
-                    source_date=source.published_at,
+                    source_date=source.published_at or date(1900, 1, 1),
                     supporting_quote=supporting_quote,
                     publication_date_basis=source.publication_date_basis,
                     source_type="public institutional source",
@@ -1418,6 +1421,7 @@ def _salvage_grounded_segments(
                     context_kind="current_development",
                     relationship="establishes",
                     licensed_data_required=False,
+                    verification=grade,
                 )
             )
 
