@@ -681,3 +681,12 @@ def test_task3_result_disclosures_and_statuses_use_focused_visual_contracts():
         assert class_name in css
     assert "status-${status.replaceAll(\"_\", \"-\")}" in javascript
     assert "#results.output-card" in css
+
+
+def test_app_js_renders_current_context_verification_banner():
+    from pathlib import Path
+
+    app_js = Path("src/cpf_fcv_reviewer/static/app.js").read_text(encoding="utf-8")
+    assert "AI-generated from trusted sources" in app_js
+    assert "verify before use" in app_js.casefold()
+    assert "partially verified" in app_js.casefold()
