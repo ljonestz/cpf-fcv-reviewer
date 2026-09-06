@@ -64,6 +64,12 @@ _GATEWAY_DIAGNOSTIC_KEYS = (
     "normalization_failure",
 )
 
+AMBIGUOUS_COUNTRY_QUALIFIERS = {
+    "guinea": "Guinea (Conakry) — not Guinea-Bissau, not Equatorial Guinea, not Papua New Guinea",
+    "congo": "Republic of the Congo (Brazzaville) — not the Democratic Republic of the Congo",
+    "niger": "Niger (Niamey) — not Nigeria",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -648,6 +654,15 @@ class ResearchController:
             load_research_prompt().strip(),
             f"research_mode: {request.mode.value}",
             f"country: {request.country.strip()}",
+            *(
+                [f"country_disambiguation: {qualifier}"]
+                if (
+                    qualifier := AMBIGUOUS_COUNTRY_QUALIFIERS.get(
+                        " ".join(request.country.casefold().split())
+                    )
+                )
+                else []
+            ),
             f"review_date: {request.review_date.isoformat()}",
         ]
         if request.mode is ResearchMode.RRA_UPDATE:

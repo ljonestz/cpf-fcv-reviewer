@@ -1796,3 +1796,40 @@ def test_recency_cap_downgrades_non_recent_claim():
     assert _cap_verification_by_recency("verified", is_recent=False) == "unverified"
     assert _cap_verification_by_recency("partially_verified", is_recent=False) == "unverified"
     assert _cap_verification_by_recency("unverified", is_recent=True) == "unverified"
+
+
+def test_prompt_disambiguates_ambiguous_country():
+    from datetime import date
+    from cpf_fcv_reviewer.research_controller import (
+        ResearchController,
+        ResearchRequest,
+        ResearchMode,
+    )
+
+    controller = ResearchController(gateway=object())
+    request = ResearchRequest(
+        country="Guinea",
+        review_date=date(2026, 9, 1),
+        mode=ResearchMode.HOLISTIC,
+    )
+    prompt = controller._prompt(request, attempt=1, missing=())
+    assert "not Guinea-Bissau" in prompt
+    assert "not Equatorial Guinea" in prompt
+
+
+def test_prompt_leaves_unambiguous_country_unqualified():
+    from datetime import date
+    from cpf_fcv_reviewer.research_controller import (
+        ResearchController,
+        ResearchRequest,
+        ResearchMode,
+    )
+
+    controller = ResearchController(gateway=object())
+    request = ResearchRequest(
+        country="Kenya",
+        review_date=date(2026, 9, 1),
+        mode=ResearchMode.HOLISTIC,
+    )
+    prompt = controller._prompt(request, attempt=1, missing=())
+    assert "not " not in prompt.split("country:")[1].splitlines()[0]
