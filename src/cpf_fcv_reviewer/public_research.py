@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from collections import Counter
 from collections.abc import Mapping
@@ -27,6 +28,8 @@ from pydantic import (
 
 from .country_detection import COUNTRY_ALIASES
 
+
+logger = logging.getLogger(__name__)
 
 MAX_SEARCH_OUTPUT_TOKENS = 2_000
 MAX_ARTICLE_METADATA_BYTES = 256 * 1_024
@@ -61,7 +64,20 @@ SECONDARY_SEARCH_DOMAINS = (
     "issafrica.org",
     "africacenter.org",
 )
-SEARCH_ALLOWED_DOMAINS = PREFERRED_SEARCH_DOMAINS + SECONDARY_SEARCH_DOMAINS
+# News wires whose sites block Anthropic's web-search crawler. Anthropic rejects
+# the ENTIRE web_search request with HTTP 400 if any of these appears in
+# allowed_domains (confirmed live: "The following domains are not accessible to
+# our user agent: [...]"). They remain approved *publishers* (see
+# _INSTITUTIONAL_PUBLISHER_HOSTS) and reachable via the app-fetched curated
+# fallback; they are only excluded from the crawler allow-list sent to the API.
+CRAWLER_BLOCKED_SEARCH_DOMAINS = frozenset(
+    {"apnews.com", "bbc.co.uk", "bbc.com", "reuters.com"}
+)
+SEARCH_ALLOWED_DOMAINS = tuple(
+    domain
+    for domain in (*PREFERRED_SEARCH_DOMAINS, *SECONDARY_SEARCH_DOMAINS)
+    if domain not in CRAWLER_BLOCKED_SEARCH_DOMAINS
+)
 PUBLIC_RESEARCH_DIAGNOSTIC_KEYS = (
     "source_candidates",
     "source_linked_excerpts",
@@ -76,6 +92,35 @@ def Anthropic(*args, **kwargs):
     from anthropic import Anthropic as AnthropicClient
 
     return AnthropicClient(*args, **kwargs)
+
+
+_INACCESSIBLE_DOMAINS_PATTERN = re.compile(
+    r"not accessible[^\[]*\[([^\]]*)\]", re.IGNORECASE
+)
+
+
+def _inaccessible_search_domains(exc: object) -> frozenset[str]:
+    """Return the domains an Anthropic web_search 400 flagged as inaccessible.
+
+    The error reads: "The following domains are not accessible to our user
+    agent: ['reuters.com', 'bbc.com']." Returns an empty set for any other error.
+    """
+    message = ""
+    body = getattr(exc, "body", None)
+    if isinstance(body, Mapping):
+        error = body.get("error")
+        if isinstance(error, Mapping):
+            message = str(error.get("message") or "")
+    if not message:
+        message = str(exc)
+    match = _INACCESSIBLE_DOMAINS_PATTERN.search(message)
+    if match is None:
+        return frozenset()
+    return frozenset(
+        token.strip().strip("'\"").casefold()
+        for token in match.group(1).split(",")
+        if token.strip().strip("'\"")
+    )
 
 
 class CurrentContextClaim(BaseModel):
@@ -701,6 +746,46 @@ class AnthropicPublicResearchGateway:
         max_uses: int = 2,
         deadline: float,
     ):
+        allowed_domains = list(SEARCH_ALLOWED_DOMAINS)
+        try:
+            return self._web_search_create(
+                messages,
+                max_uses=max_uses,
+                deadline=deadline,
+                allowed_domains=allowed_domains,
+            )
+        except Exception as exc:  # noqa: BLE001 - inspect before deciding to re-raise
+            blocked = _inaccessible_search_domains(exc)
+            if not blocked:
+                raise
+            remaining = [
+                domain
+                for domain in allowed_domains
+                if domain.casefold() not in blocked
+            ]
+            if not remaining or len(remaining) == len(allowed_domains):
+                # Nothing we can drop (the rejected domains were not in our list);
+                # retrying would not change the outcome.
+                raise
+            logger.warning(
+                "web_search: Anthropic rejected allowed_domains %s; retrying without them",
+                sorted(blocked),
+            )
+            return self._web_search_create(
+                messages,
+                max_uses=max_uses,
+                deadline=deadline,
+                allowed_domains=remaining,
+            )
+
+    def _web_search_create(
+        self,
+        messages: list[dict[str, object]],
+        *,
+        max_uses: int,
+        deadline: float,
+        allowed_domains: list[str],
+    ):
         return self._client.beta.messages.create(
             model=self._model_id,
             max_tokens=MAX_SEARCH_OUTPUT_TOKENS,
@@ -714,7 +799,7 @@ class AnthropicPublicResearchGateway:
                     "type": "web_search_20250305",
                     "name": "web_search",
                     "max_uses": max_uses,
-                    "allowed_domains": list(SEARCH_ALLOWED_DOMAINS),
+                    "allowed_domains": list(allowed_domains),
                 }
             ],
             messages=messages,
@@ -1059,29 +1144,35 @@ def _source_mentions_country(
         if source.excerpt is not None
         else source.title
     )
-    selected_markers = _country_markers(selected_country)
-    if not any(
-        re.search(rf"\b{re.escape(marker)}\b", haystack)
-        for marker in selected_markers
-        if marker
-    ):
-        return False
+    selected_markers = tuple(
+        marker for marker in _country_markers(selected_country) if marker
+    )
     normalized_selected = _normalize_text(selected_country)
+    # Remove longer compound country names that merely CONTAIN a selected marker
+    # (e.g. "guinea bissau", "equatorial guinea", "papua new guinea") before the
+    # match test. A source about a neighbour alone then correctly fails, while a
+    # source that mentions BOTH the neighbour and the selected country still
+    # matches on its standalone reference -- common in West-African reporting
+    # where an article about Guinea also references Guinea-Bissau, Mali, etc.
+    disambiguated = haystack
     for canonical, aliases in COUNTRY_ALIASES.items():
-        names = (canonical, *aliases)
-        normalized_names = tuple(_normalize_text(name) for name in names)
+        normalized_names = tuple(
+            _normalize_text(name) for name in (canonical, *aliases)
+        )
         if normalized_selected in normalized_names:
             continue
-        for other_marker in normalized_names:
-            if (
-                other_marker
-                and any(
-                    f" {marker} " in f" {other_marker} " for marker in selected_markers
-                )
-                and re.search(rf"\b{re.escape(other_marker)}\b", haystack)
+        for other_name in normalized_names:
+            if other_name and any(
+                re.search(rf"\b{re.escape(marker)}\b", other_name)
+                for marker in selected_markers
             ):
-                return False
-    return True
+                disambiguated = re.sub(
+                    rf"\b{re.escape(other_name)}\b", " ", disambiguated
+                )
+    return any(
+        re.search(rf"\b{re.escape(marker)}\b", disambiguated)
+        for marker in selected_markers
+    )
 
 
 def _text_mentions_country(text: str | None, selected_country: str | None) -> bool:

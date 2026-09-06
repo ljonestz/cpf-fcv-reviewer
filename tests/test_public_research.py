@@ -215,10 +215,11 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
     search_tool = beta_calls[0]["tools"][0]
     assert search_tool["max_uses"] == 2
     assert search_tool["allowed_domains"] == list(public_research.SEARCH_ALLOWED_DOMAINS)
-    assert set(public_research.PREFERRED_SEARCH_DOMAINS) <= set(
-        search_tool["allowed_domains"]
-    )
     allowed_domains = set(search_tool["allowed_domains"])
+    # Reachable preferred sources are sent; crawler-blocked wires are excluded so
+    # Anthropic does not reject the whole request with a 400.
+    assert {"crisisgroup.org", "rescue.org", "acleddata.com"} <= allowed_domains
+    assert public_research.CRAWLER_BLOCKED_SEARCH_DOMAINS.isdisjoint(allowed_domains)
     assert {"un.org", "reliefweb.int", "icrc.org", "issafrica.org"} <= allowed_domains
     assert {"worldbank.org", "imf.org", "oecd.org"}.isdisjoint(allowed_domains)
     assert beta_calls[0]["max_tokens"] == 2_000
@@ -2176,6 +2177,44 @@ def test_country_scope_rejects_longer_different_country_name():
         excerpt="Violence increased in Guinea-Bissau.",
     )
     assert not public_research._source_mentions_country(source, "Guinea")
+
+
+def test_country_scope_keeps_source_mentioning_selected_and_neighbour():
+    # West-African reporting frequently references neighbours; a genuine Guinea
+    # source must not be discarded merely because it also mentions Guinea-Bissau.
+    source = public_research.ResearchSource(
+        title="Guinea transition update",
+        url="https://africacenter.org/guinea-transition",
+        excerpt=(
+            "Guinea's junta delayed elections again, while neighbouring "
+            "Guinea-Bissau and Mali faced their own instability."
+        ),
+    )
+    assert public_research._source_mentions_country(source, "Guinea")
+
+
+def test_country_scope_rejects_neighbour_only_variants():
+    for excerpt in (
+        "Violence increased in Guinea-Bissau.",
+        "Equatorial Guinea announced new oil revenues.",
+        "Papua New Guinea reported tribal clashes.",
+    ):
+        source = public_research.ResearchSource(
+            title="",
+            url="https://example.invalid",
+            excerpt=excerpt,
+        )
+        assert not public_research._source_mentions_country(source, "Guinea")
+
+
+def test_country_scope_keeps_plain_selected_country():
+    source = public_research.ResearchSource(
+        title="",
+        url="https://example.invalid",
+        excerpt="Guinea's security forces clashed with protesters in Conakry.",
+    )
+    assert public_research._source_mentions_country(source, "Guinea")
+
 
 PUBLIC_DIAGNOSTIC_KEYS = {
     "source_candidates",

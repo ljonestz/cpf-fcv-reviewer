@@ -754,6 +754,15 @@ class ResearchController:
             raise exc
         if isinstance(exc, ResearchFailure):
             return exc
+        # Surface the real provider error (swallowed until now) so live-web
+        # research failures are diagnosable from logs instead of only appearing
+        # as an opaque terminal "provider_failure".
+        logger.warning(
+            "research_provider_exception error_type=%s status_code=%s detail=%s",
+            type(exc).__name__,
+            getattr(exc, "status_code", None),
+            str(exc)[:400],
+        )
         if getattr(exc, "status_code", None) in {401, 403}:
             return ResearchConfigurationError("Public research configuration failed.")
         if isinstance(exc, TimeoutError):
