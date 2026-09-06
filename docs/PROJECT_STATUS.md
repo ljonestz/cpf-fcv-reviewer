@@ -1,5 +1,20 @@
 # Project status
 
+## 2026-09-07 FCV model-readout fallback DEPLOYED; confirming paid run PENDING (`main` @ `ec8d3e3`)
+
+When external current-source research comes back empty (Guinea returns only neighbour-country
+hits from the narrow institutional `allowed_domains`), the app now falls back to a bounded,
+knowledge-based Claude readout of current FCV conditions, injected into the review as
+context-only and clearly caveated ("AI-generated; no external current sources; verify before
+use"), plus a provenance limitation. PRs #17 (feature) + #18 (fix). A paid readout run
+(`f31e3c6`) exposed a one-line defect — `load_prompt` rejected the new `fcv_readout` name
+(not in `PROMPT_NAMES`) → `fcv_readout_unavailable`; #18 fixes it (provider-free verified,
+full suite 1477 passed). The confirming paid Guinea run was NOT executed (one-run
+authorization was consumed); ready-to-run instructions + expected outcome are in
+`docs/validation/2026-09-07-fcv-readout-fallback.md`. Recommended higher-value follow-up:
+broaden the search (one unrestricted `web_search` retry filtered by the existing publisher
+allowlist) so real wire reporting surfaces instead of relying on the readout.
+
 ## 2026-09-06 Option B DEPLOYED + paid Guinea acceptance run PASSED (`main` @ `4dd0f69`)
 
 PR #15 merged to `main` and manually deployed to Render (`srv-d9tju52jobas73d6jvk0`,
