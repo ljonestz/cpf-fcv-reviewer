@@ -510,7 +510,7 @@ def _claim_stable_key(claim: CurrentContextClaim) -> tuple[object, ...]:
         claim.publisher,
         claim.source_title,
         claim.source_url or "",
-        claim.source_date.isoformat(),
+        claim.source_date.isoformat() if claim.source_date is not None else "",
         claim.supporting_quote or "",
         claim.publication_date_basis or "",
         claim.source_type,

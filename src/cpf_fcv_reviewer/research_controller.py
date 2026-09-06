@@ -700,6 +700,8 @@ class ResearchController:
 
     @staticmethod
     def _is_recent(claim: CurrentContextClaim, request: ResearchRequest) -> bool:
+        if claim.source_date is None:
+            return False
         window_start = _subtract_calendar_years(request.review_date, 2)
         if not window_start <= claim.source_date <= request.review_date:
             return False

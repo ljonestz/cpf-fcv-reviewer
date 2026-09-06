@@ -50,20 +50,9 @@ def test_dated_source_with_no_quote_grades_partial():
     assert _grade_claim(source, None) == "partially_verified"
 
 
-def test_salvage_keeps_undated_source_as_unverified():
-    from datetime import date
-    from cpf_fcv_reviewer.public_research import (
-        ResearchSource,
-        _salvage_grounded_segments,
-    )
+def test_salvage_undated_source_has_null_source_date():
+    from cpf_fcv_reviewer.public_research import ResearchSource, _salvage_grounded_segments
 
-    dated = ResearchSource(
-        title="Guinea update",
-        url="https://www.crisisgroup.org/guinea-a",
-        publisher="International Crisis Group",
-        published_at=date(2025, 4, 30),
-        excerpt="Armed clashes displaced thousands in Guinea.",
-    )
     undated = ResearchSource(
         title="Guinea update B",
         url="https://www.crisisgroup.org/guinea-b",
@@ -71,12 +60,10 @@ def test_salvage_keeps_undated_source_as_unverified():
         published_at=None,
         excerpt="Security incidents were reported across Guinea.",
     )
-    segments = (
-        ("Armed clashes displaced thousands in Guinea.", (dated,)),
-        ("Security incidents were reported across Guinea.", (undated,)),
+    claims = _salvage_grounded_segments(
+        (("Security incidents were reported across Guinea.", (undated,)),),
+        selected_country="Guinea",
     )
-    claims = _salvage_grounded_segments(segments, selected_country="Guinea")
-    grades = {claim.source_url: claim.verification for claim in claims}
-    # Both are kept; the undated one is graded rather than deleted.
-    assert grades["https://www.crisisgroup.org/guinea-a"] == "verified"
-    assert grades["https://www.crisisgroup.org/guinea-b"] == "partially_verified"
+    assert len(claims) == 1
+    assert claims[0].source_date is None
+    assert claims[0].verification == "partially_verified"

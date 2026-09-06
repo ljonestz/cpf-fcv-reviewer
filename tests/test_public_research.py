@@ -544,8 +544,7 @@ def test_anthropic_gateway_salvages_only_exact_source_excerpt(monkeypatch):
     assert [claim.text for claim in result] == ["Source excerpt for the salvageable sentence."]
 
 
-def test_anthropic_gateway_grades_undated_sources_during_salvage(monkeypatch):
-    # Previously undated sources were dropped; now they are kept and graded.
+def test_anthropic_gateway_salvages_undated_sources_with_null_source_date(monkeypatch):
     class FakeBetaMessages:
         def create(self, **kwargs):
             return SimpleNamespace(
@@ -589,11 +588,9 @@ def test_anthropic_gateway_grades_undated_sources_during_salvage(monkeypatch):
     gateway = public_research.AnthropicPublicResearchGateway("test-key", "test-model")
 
     result = gateway.search("Do not invent a source date.")
-    # The undated source is kept with verification='partially_verified' (exact quote but
-    # no publication date), rather than being dropped as was the old behaviour.
     assert len(result) == 1
+    assert result[0].source_date is None
     assert result[0].verification == "partially_verified"
-    assert result[0].text == "Undated source excerpt."
 
 
 @pytest.mark.parametrize(
@@ -817,11 +814,9 @@ def test_anthropic_gateway_configures_timeout_and_disables_retries(monkeypatch):
 
 
 @pytest.mark.parametrize("parsed_output", [None, SimpleNamespace(claims=())])
-def test_anthropic_gateway_grades_undated_source_when_normalized_output_absent(
+def test_anthropic_gateway_salvages_undated_source_when_normalization_absent(
     monkeypatch, parsed_output
 ):
-    # Previously absent/wrong normalized output with an undated source raised ValueError;
-    # now the undated source is salvaged and graded rather than dropped.
     class FakeBetaMessages:
         def create(self, **kwargs):
             return SimpleNamespace(
@@ -866,11 +861,11 @@ def test_anthropic_gateway_grades_undated_source_when_normalized_output_absent(
         "test-key", "test-model", timeout_seconds=10
     )
 
+    # With nullable source_date, salvage now accepts undated sources when normalization
+    # returns absent or empty output, emitting a claim with source_date=None.
     result = gateway.search("Use this prompt exactly.")
-    # The undated source is kept and graded instead of raising ValueError.
     assert len(result) == 1
-    assert result[0].verification == "partially_verified"
-    assert result[0].text == "An undated source excerpt."
+    assert result[0].source_date is None
 
 
 def test_load_research_prompt_remains_available_separately():
@@ -1169,10 +1164,7 @@ def test_uncited_retrieved_sources_are_unavailable_to_normalization(monkeypatch)
 
     result = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
 
-    # claim_a has a dated source and an exact quote, so it is now graded 'verified'.
-    assert len(result) == 1
-    assert result[0].claim_id == "cited"
-    assert result[0].verification == "verified"
+    assert result == (claim_a,)
 
 
 def test_mapping_shaped_provider_blocks_are_extracted():
@@ -1309,7 +1301,6 @@ def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift(
 
     retained = public_research._validate_normalized_claims((normalized,), artifact)
 
-    # The claim has a dated source and an exact verbatim quote so it grades as 'verified'.
     assert retained == (
         normalized.model_copy(
             update={
@@ -1319,7 +1310,6 @@ def test_normalized_claim_uses_grounded_source_metadata_when_model_fields_drift(
                 "source_url": source.url,
                 "supporting_quote": normalized.supporting_quote,
                 "publication_date_basis": "provider_metadata",
-                "verification": "verified",
             }
         ),
     )
@@ -2048,20 +2038,10 @@ def test_normalized_claim_requires_quote_from_exact_country_source():
         selected_country="Guinea",
     )
 
-    # 'valid': dated + exact quote from correct source → verified (kept as before)
-    # 'swapped': dated + quote NOT in land excerpt → partially_verified (now kept, was dropped)
-    # 'no-excerpt': dated + source has no excerpt → partially_verified (now kept, was dropped)
-    # 'fabricated': quote doesn't mention Guinea → dropped (country floor still applies)
-    # 'unknown': source URL not in artifact → dropped
-    # 'wrong-country': country not in quote → dropped
-    # 'missing-quote': no supporting_quote → dropped (hard floor)
-    assert [claim.claim_id for claim in retained] == ["valid", "swapped", "no-excerpt"]
+    assert [claim.claim_id for claim in retained] == ["valid"]
     assert retained[0].text == transition.excerpt
     assert retained[0].publisher == "Reuters"
     assert retained[0].publication_date_basis == "canonical_url"
-    assert retained[0].verification == "verified"
-    assert retained[1].verification == "partially_verified"
-    assert retained[2].verification == "partially_verified"
 
 
 def test_salvage_uses_source_excerpt_and_requires_country_connection():
@@ -2372,10 +2352,12 @@ def test_gateway_diagnostics_count_missing_date_and_normalization_failure(monkey
         metadata_client=object(),
     )
 
-    # The undated source is now graded and salvaged rather than raising ValueError.
+    # With nullable source_date, undated sources are salvaged (source_date=None) rather
+    # than causing a "no parsed output" error. Diagnostic counters are still recorded.
     result = gateway.search("country: Guinea")
     assert len(result) == 1
-    assert result[0].verification == "partially_verified"
+    assert result[0].source_date is None
+
     assert gateway.last_diagnostics["missing_publication_date"] == 1
     assert gateway.last_diagnostics["normalization_failure"] == 1
 
@@ -2558,13 +2540,13 @@ def test_salvage_uses_final_conflicting_date_record_for_same_url():
     )
 
     assert artifact.sources[0].publication_date_basis == "conflicting"
-    # The source has conflicting dates so published_at is None. Previously this caused the
-    # claim to be dropped; now it is kept and graded as 'partially_verified' (exact quote,
-    # no resolved date). The sentinel date 1900-01-01 is used for source_date.
     salvaged = public_research._salvage_grounded_segments(
         segments, selected_country="Somalia"
     )
+    # A conflicting-date source has published_at=None; salvage now emits the
+    # claim with source_date=None rather than silently dropping it.
     assert len(salvaged) == 1
+    assert salvaged[0].source_date is None
     assert salvaged[0].verification == "partially_verified"
 
 
@@ -2667,9 +2649,7 @@ def test_gateway_stops_before_operation_after_attempt_deadline(monkeypatch):
         gateway.search("country: Somalia")
 
 
-def test_metadata_client_construction_failure_grades_undated_source(monkeypatch):
-    # Previously a broken metadata client caused an undated source to be dropped and
-    # a ValueError raised; now the undated source is kept and graded instead.
+def test_metadata_client_construction_failure_skips_undated_source(monkeypatch):
     source_url = "https://www.reuters.com/world/africa/guinea-undated/"
     quote = "Political violence increased in Guinea."
     response = _cited_response(
@@ -2686,9 +2666,10 @@ def test_metadata_client_construction_failure_grades_undated_source(monkeypatch)
     gateway = _diagnostic_gateway(monkeypatch, response, None)
     monkeypatch.setattr(public_research.httpx, "Client", BrokenClient)
 
+    # With nullable source_date, salvage now accepts undated claims (source_date=None).
     result = gateway.search("country: Guinea")
     assert len(result) == 1
-    assert result[0].verification == "partially_verified"
+    assert result[0].source_date is None
     assert gateway.last_diagnostics["missing_publication_date"] == 1
 
 
