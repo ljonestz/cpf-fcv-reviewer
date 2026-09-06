@@ -1,5 +1,32 @@
 # Project status
 
+## 2026-09-06 live-news pipeline fixed + deployed; review still gated on current-context (`bf1f14b`)
+
+- **Three root-cause bugs in the current-context (live-news) pipeline found, fixed, merged (PRs #11,
+  #12, #13), deployed to Render, and verified on live runs.** All were hidden for 6–7 sessions because
+  every test mocks the provider and the real errors were swallowed. Full detail:
+  `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`.
+  1. web_search sent Reuters/AP/BBC in `allowed_domains`; those block Anthropic's crawler → HTTP 400 on
+     every run. Fixed by excluding crawler-blocked wires (kept as publishers) + self-heal retry. Live:
+     `source_candidates: 20`.
+  2. `_source_mentions_country` rejected sources naming both the country and a compound neighbour
+     (Guinea + Guinea-Bissau). Fixed by strip-compound-then-require-standalone. Live: Benin mismatch 12–14 → 2.
+  3. `_source_metadata` read `published_at`; Anthropic's `web_search_result` uses **`page_age`** (verified
+     against the web-search docs). Fixed by reading `page_age`. Live: real Guinea `missing_publication_date: 0`.
+  - PR #12 (`MAX_NORMALIZATION_OUTPUT_TOKENS=8000`) was a mis-diagnosis caught by verification; harmless,
+    left in. New WARNING log `research_provider_exception` now makes research failures diagnosable in Render.
+- **Verified live:** Benin synthetic reached `research_reduced` (claims accepted); real Guinea CPF+RRA
+  dated all sources but returned 0 accepted (search returns mostly Guinea-Bissau; the few Guinea claims
+  fail normalization). **Both still end `review_failed`.**
+- **Remaining (handed to a fresh session — Option B):** the app cannot complete a review with zero
+  accepted current-context claims (`missing_current_context_support` is repairable but unfixable without
+  evidence → `review_failed`). Next step is to make current-context behave like a trusted-source-guided
+  LLM synthesis with soft-flags + graceful degradation instead of a delete-and-fail gauntlet. See
+  `docs/handover/2026-09-06-option-b-current-context-synthesis.md`.
+- **Test assets:** real Guinea CPF/RRA at
+  `C:\Users\wb559324\OneDrive - WBG\Claude_Outputs\cpf_screener\GuineaCPFRRA\{guineacpf,guinearra}.pdf`;
+  synthetic Benin fixture `tests/fixtures/synthetic_en.txt`.
+
 ## 2026-09-05 selected-country current-FCV hardening (`6ac2d57`)
 
 - Each assessment sends one confirmed country to one bounded live-web research route.
