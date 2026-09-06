@@ -32,6 +32,13 @@ from .country_detection import COUNTRY_ALIASES
 logger = logging.getLogger(__name__)
 
 MAX_SEARCH_OUTPUT_TOKENS = 2_000
+# The normalization step must emit up to MAX_RETAINED_FINDINGS (6) full claims, each
+# with a supporting quote up to MAX_SOURCE_EXCERPT_CHARACTERS (1500 chars). At the
+# search budget (2000) that structured output truncates, messages.parse() returns no
+# valid output ("Anthropic response contained no parsed output"), and research falls
+# back to document-led with no current-context claims. Confirmed live on Render
+# (research_provider_exception ValueError). Give normalization its own larger budget.
+MAX_NORMALIZATION_OUTPUT_TOKENS = 8_000
 MAX_ARTICLE_METADATA_BYTES = 256 * 1_024
 PUBLICATION_DATE_BASIS = Literal[
     "provider_metadata",
@@ -623,7 +630,7 @@ class AnthropicPublicResearchGateway:
         try:
             normalization_response = self._client.messages.parse(
                 model=self._model_id,
-                max_tokens=MAX_SEARCH_OUTPUT_TOKENS,
+                max_tokens=MAX_NORMALIZATION_OUTPUT_TOKENS,
                 system=(
                     "Normalize the cited research synthesis into the supplied output schema. "
                     "Use only the cited source excerpts, copy the exact supporting quote, "
