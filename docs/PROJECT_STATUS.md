@@ -1,5 +1,19 @@
 # Project status
 
+## 2026-09-06 Option B DEPLOYED + paid Guinea acceptance run PASSED (`main` @ `4dd0f69`)
+
+PR #15 merged to `main` and manually deployed to Render (`srv-d9tju52jobas73d6jvk0`,
+`release: 4dd0f69`). One authorized paid Guinea CPF+RRA run reached **`run_complete`** (a
+first for Guinea) with a valid 46 KB DOCX — the previously-blocking
+`missing_current_context_support` → `review_failed` is resolved: at `validate` the app
+emitted `advisory_notice` for the two current-context issues (non-fatal) and repaired only
+the separate genuine fatal issue (`unknown_institutional_referral`). The run correctly
+degraded to `document_led` with honest current-context limitations. The grade-and-keep /
+confidence-chip path was NOT exercised live (the Guinea search returned only Guinea-Bissau
+content, all floored on country-match) — it remains covered by the 1468-test suite. Full
+record: `docs/validation/2026-09-06-option-b-paid-guinea-acceptance.md`. Follow-up:
+strengthen Guinea search-side disambiguation so genuine Guinea reporting surfaces.
+
 ## 2026-09-06 Option B: current-context claim grading implemented + provider-free verified (`feat/option-b-current-context`)
 
 **What changed.** The current-context (live-news) path no longer deletes claims that fail
