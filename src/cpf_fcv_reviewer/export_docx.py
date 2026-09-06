@@ -294,6 +294,18 @@ def _evidence_type_label(item: EvidenceItem) -> str:
     }.get(item.evidence_type, "Source")
 
 
+def current_context_chip_label(verification: str) -> str:
+    return {
+        "verified": "Verified",
+        "partially_verified": "Partially verified — verify before use",
+        "unverified": "Unverified — verify before use",
+    }.get(verification, "Unverified — verify before use")
+
+
+def current_context_banner_text() -> str:
+    return "AI-generated from trusted sources — verify before use."
+
+
 def locator_text(item: EvidenceItem) -> str:
     parts = []
     if item.evidence_type == "current_context":
@@ -304,6 +316,8 @@ def locator_text(item: EvidenceItem) -> str:
         parts.append(item.source_url)
     if not parts:
         parts.append(_evidence_type_label(item))
+    if item.evidence_type == "current_context":
+        parts.append(current_context_chip_label(item.verification))
     return " | ".join(parts)
 
 
@@ -525,8 +539,12 @@ def _add_evidence_register(
         document.add_paragraph("No evidence citations were recorded for the visible findings.")
         return
 
+    current_context_banner_emitted = False
     for number, (evidence_id, used_for) in enumerate(references.items(), start=1):
         item = evidence[evidence_id]
+        if item.evidence_type == "current_context" and not current_context_banner_emitted:
+            document.add_paragraph(current_context_banner_text())
+            current_context_banner_emitted = True
         _add_labelled_paragraph(document, "Evidence reference", str(number))
         _add_labelled_paragraph(document, "Used for", "; ".join(dict.fromkeys(used_for)))
         _add_labelled_paragraph(document, "Source", locator_text(item))

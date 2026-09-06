@@ -898,13 +898,11 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
 
 
 def test_repair_accepts_evidence_support_issues_and_passes_them_to_gateway():
+    # missing_current_context_support is advisory-only and never reaches repair
+    # in production; only missing_registry_support (a fatal code) can appear here.
     meta = metadata()
     gateway = FakeGateway(draft_for(meta))
     issues = [
-        {
-            "code": "missing_current_context_support",
-            "message": "Current-context evidence is not linked.",
-        },
         {
             "code": "missing_registry_support",
             "message": "Registry evidence is not linked.",
@@ -1878,9 +1876,11 @@ def test_repair_receives_bounded_current_source_support_records():
         publication_date_basis="provider_metadata",
     )
 
+    # missing_current_context_support is advisory-only; use a valid fatal code to
+    # exercise the repair path that assembles current-context support evidence.
     ReviewEngine(gateway).repair(
         result_for(meta),
-        [{"code": "missing_current_context_support", "message": "Repair support."}],
+        [{"code": "missing_registry_support", "message": "Repair support."}],
         evidence_ids={"current-002"},
         evidence={"current-002": current},
     )

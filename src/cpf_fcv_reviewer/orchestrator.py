@@ -61,42 +61,59 @@ class ReviewOrchestrator:
                 emit("step_start", {"step": name})
                 context = step(context)
                 if name == "validate" and context.get("validation_issues"):
-                    if repaired:
-                        raise ValueError("Validation failed after the only repair.")
-                    issues = list(context["validation_issues"])
-                    emit(
-                        "repair_start",
-                        {
-                            "issue_count": len(issues),
-                            "codes": list(
-                                dict.fromkeys(
-                                    issue["code"]
-                                    for issue in issues
-                                    if isinstance(issue, dict)
-                                    and isinstance(issue.get("code"), str)
-                                )
-                            ),
-                        },
-                    )
-                    context = self.repair(context, issues)
-                    repaired = True
-                    if context.get("validation_issues"):
-                        remaining_issues = context["validation_issues"]
+                    def is_advisory(issue):
+                        return (
+                            isinstance(issue, dict)
+                            and issue.get("severity") == "advisory"
+                        )
+
+                    def codes_of(issues):
+                        return list(
+                            dict.fromkeys(
+                                issue["code"]
+                                for issue in issues
+                                if isinstance(issue, dict)
+                                and isinstance(issue.get("code"), str)
+                            )
+                        )
+
+                    all_issues = list(context["validation_issues"])
+                    fatal_issues = [i for i in all_issues if not is_advisory(i)]
+                    advisory_issues = [i for i in all_issues if is_advisory(i)]
+                    if advisory_issues:
                         emit(
-                            "repair_failed",
+                            "advisory_notice",
                             {
-                                "issue_count": len(remaining_issues),
-                                "codes": list(
-                                    dict.fromkeys(
-                                        issue["code"]
-                                        for issue in remaining_issues
-                                        if isinstance(issue, dict)
-                                        and isinstance(issue.get("code"), str)
-                                    )
-                                ),
+                                "issue_count": len(advisory_issues),
+                                "codes": codes_of(advisory_issues),
                             },
                         )
-                        raise ValueError("Validation failed after the only repair.")
+                    if fatal_issues:
+                        if repaired:
+                            raise ValueError("Validation failed after the only repair.")
+                        emit(
+                            "repair_start",
+                            {
+                                "issue_count": len(fatal_issues),
+                                "codes": codes_of(fatal_issues),
+                            },
+                        )
+                        context = self.repair(context, fatal_issues)
+                        repaired = True
+                        remaining_fatal = [
+                            i
+                            for i in context.get("validation_issues", [])
+                            if not is_advisory(i)
+                        ]
+                        if remaining_fatal:
+                            emit(
+                                "repair_failed",
+                                {
+                                    "issue_count": len(remaining_fatal),
+                                    "codes": codes_of(remaining_fatal),
+                                },
+                            )
+                            raise ValueError("Validation failed after the only repair.")
                 emit("step_complete", {"step": name})
             emit("run_complete", {"repair_count": int(repaired)})
             return context

@@ -22,10 +22,13 @@ from .extraction import PackageCoverageUnavailable
 from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 
+# "missing_current_context_support" is intentionally excluded: it is raised with
+# severity="advisory" and is therefore filtered out by the orchestrator before repair
+# is ever called.  Advisory issues are surfaced to the caller via "advisory_notice"
+# events; they never reach _validate_repair_issues().
 REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
     {
         "limited_mode_overclaim",
-        "missing_current_context_support",
         "unknown_priority_area",
         "unknown_evidence",
         "raw_evidence_id_in_narrative",

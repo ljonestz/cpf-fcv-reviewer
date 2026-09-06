@@ -565,6 +565,21 @@ function evidenceTypeLabel(evidenceType) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+const CURRENT_CONTEXT_VERIFICATION_LABEL = {
+  verified: "Verified",
+  partially_verified: "Partially verified — verify before use",
+  unverified: "Unverified — verify before use",
+};
+
+function currentContextChip(verification) {
+  const label =
+    CURRENT_CONTEXT_VERIFICATION_LABEL[verification] ||
+    CURRENT_CONTEXT_VERIFICATION_LABEL.unverified;
+  const chip = text("span", label);
+  chip.className = "current-context-chip current-context-chip--" + (verification || "unverified");
+  return chip;
+}
+
 function evidenceSourceLabel(item) {
   const location = locatorLabel(item.locator);
   if (location) return location;
@@ -594,12 +609,21 @@ function renderTraceabilityForEvidence(result, evidenceIds) {
   summary.setAttribute?.("aria-label", "Traceability - Evidence and document locations");
   const details = renderDisclosure("Traceability", "evidence-group traceability-panel");
   details.replaceChildren(summary, text("p", "Evidence and document locations", "traceability-caption"));
+  const hasCurrentContext = resolvedItems.some((item) => item.evidence_type === "current_context");
+  if (hasCurrentContext) {
+    const banner = text("p", "AI-generated from trusted sources — verify before use");
+    banner.className = "current-context-banner";
+    details.append(banner);
+  }
   for (const item of resolvedItems) {
     const excerpt = item.locator && item.locator.excerpt || item.text;
     details.append(
       text("p", evidenceSourceLabel(item), "evidence-locator"),
       text("p", excerpt, "evidence-excerpt"),
     );
+    if (item.evidence_type === "current_context") {
+      details.append(currentContextChip(item.verification));
+    }
   }
   return details;
 }

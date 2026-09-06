@@ -772,3 +772,35 @@ def test_review_draft_schema_exposes_local_validation_requirements():
         "evidence_ids"
     ]["items"]
     assert "non-whitespace" in priority_evidence_items["description"]
+
+
+def test_current_context_evidence_carries_verification():
+    from datetime import date
+    from cpf_fcv_reviewer.contracts import EvidenceItem
+
+    item = EvidenceItem(
+        evidence_id="current-001",
+        evidence_type="current_context",
+        text="Armed clashes displaced thousands.",
+        confidence="medium",
+        source_url="https://www.crisisgroup.org/guinea",
+        source_title="Guinea update",
+        source_publisher="International Crisis Group",
+        source_date=date(2025, 4, 30),
+        supporting_quote="Armed clashes displaced thousands.",
+        verification="verified",
+    )
+    assert item.verification == "verified"
+
+
+def test_verification_defaults_to_unverified():
+    from cpf_fcv_reviewer.contracts import EvidenceItem
+
+    item = EvidenceItem(
+        evidence_id="current-002",
+        evidence_type="current_context",
+        text="Security incidents reported.",
+        confidence="low",
+        source_url="https://www.crisisgroup.org/guinea-b",
+    )
+    assert item.verification == "unverified"

@@ -64,6 +64,12 @@ _GATEWAY_DIAGNOSTIC_KEYS = (
     "normalization_failure",
 )
 
+AMBIGUOUS_COUNTRY_QUALIFIERS = {
+    "guinea": "Guinea (Conakry) — not Guinea-Bissau, not Equatorial Guinea, not Papua New Guinea",
+    "congo": "Republic of the Congo (Brazzaville) — not the Democratic Republic of the Congo",
+    "niger": "Niger (Niamey) — not Nigeria",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -542,10 +548,21 @@ class ResearchController:
         claims: tuple[CurrentContextClaim, ...],
         request: ResearchRequest,
     ) -> tuple[CurrentContextClaim, ...]:
+        graded = tuple(
+            claim.model_copy(
+                update={
+                    "verification": _cap_verification_by_recency(
+                        claim.verification,
+                        is_recent=self._is_recent(claim, request),
+                    )
+                }
+            )
+            for claim in claims
+        )
         qualifying = sorted(
             (
                 claim
-                for claim in claims
+                for claim in graded
                 if self._is_recent(claim, request)
                 and self._is_substantive_fcv(claim)
             ),
@@ -637,6 +654,15 @@ class ResearchController:
             load_research_prompt().strip(),
             f"research_mode: {request.mode.value}",
             f"country: {request.country.strip()}",
+            *(
+                [f"country_disambiguation: {qualifier}"]
+                if (
+                    qualifier := AMBIGUOUS_COUNTRY_QUALIFIERS.get(
+                        " ".join(request.country.casefold().split())
+                    )
+                )
+                else []
+            ),
             f"review_date: {request.review_date.isoformat()}",
         ]
         if request.mode is ResearchMode.RRA_UPDATE:
@@ -679,6 +705,9 @@ class ResearchController:
         claims: tuple[CurrentContextClaim, ...],
         request: ResearchRequest,
     ) -> tuple[str, ...]:
+        claims = tuple(
+            claim for claim in claims if claim.verification != "unverified"
+        )
         missing: list[str] = []
         if len(claims) < self.minimum_claims:
             missing.append("claims")
@@ -700,6 +729,8 @@ class ResearchController:
 
     @staticmethod
     def _is_recent(claim: CurrentContextClaim, request: ResearchRequest) -> bool:
+        if claim.source_date is None:
+            return False
         window_start = _subtract_calendar_years(request.review_date, 2)
         if not window_start <= claim.source_date <= request.review_date:
             return False
@@ -801,6 +832,12 @@ def _normalize_source_url(url: str) -> str:
     netloc = hostname if not port or default_port else f"{hostname}:{port}"
     path = parsed.path.rstrip("/")
     return urlunsplit((scheme, netloc, path, parsed.query, ""))
+
+
+def _cap_verification_by_recency(verification: str, *, is_recent: bool) -> str:
+    if not is_recent:
+        return "unverified"
+    return verification
 
 
 def _subtract_calendar_years(value: date, years: int) -> date:

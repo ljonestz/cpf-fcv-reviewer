@@ -701,3 +701,11 @@ def test_background_run_persists_traceable_evidence(make_valid_result):
     state = app.extensions["session_store"].get(assessment_id)
     assert state.payload["status"] == "complete"
     assert state.payload["evidence_by_id"]["ev-1"]["evidence_id"] == "ev-1"
+
+
+def test_docx_labels_current_context_verification():
+    from cpf_fcv_reviewer.export_docx import current_context_chip_label
+
+    assert current_context_chip_label("verified") == "Verified"
+    assert current_context_chip_label("partially_verified") == "Partially verified — verify before use"
+    assert current_context_chip_label("unverified") == "Unverified — verify before use"

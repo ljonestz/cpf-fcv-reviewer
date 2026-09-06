@@ -151,6 +151,7 @@ class SmokeResearchGateway:
             context_kind=context_kind,
             relationship="establishes",
             licensed_data_required=False,
+            verification="verified",
         )
 
 
