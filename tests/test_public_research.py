@@ -229,7 +229,8 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
     parse_call = parse_calls[0]
     assert parse_call["output_format"].__name__ == "ResearchClaimBatch"
     assert "tools" not in parse_call
-    assert parse_call["max_tokens"] == 2_000
+    assert parse_call["max_tokens"] == public_research.MAX_NORMALIZATION_OUTPUT_TOKENS
+    assert public_research.MAX_NORMALIZATION_OUTPUT_TOKENS > public_research.MAX_SEARCH_OUTPUT_TOKENS
     normalized_payload = json.loads(parse_call["messages"][0]["content"])
     assert normalized_payload == {
         "narrative": "The first cited narrative segment.\nThe second cited narrative segment.",
