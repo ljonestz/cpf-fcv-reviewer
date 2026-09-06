@@ -199,6 +199,7 @@ MODAL_CLAUSE_PATTERN = re.compile(
 class ValidationIssue:
     code: ValidationIssueCode
     message: str
+    severity: Literal["fatal", "advisory"] = "fatal"
 
 
 ValidationIssueCode = Literal[
@@ -684,6 +685,7 @@ def _append_current_context_support_issue(
                 "missing_current_context_support",
                 f"{priority_area.priority_area_id} cites current-context evidence that "
                 f"does not substantively support its present-day FCV claim: {unsupported}.",
+                severity="advisory",
             )
         )
 

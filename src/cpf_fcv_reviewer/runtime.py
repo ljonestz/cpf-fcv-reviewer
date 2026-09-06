@@ -1205,7 +1205,14 @@ def build_runtime_services(
             )
         )
         issues.extend(validate_reproducibility_metadata(context["result"].metadata))
-        return [{"code": issue.code, "message": issue.message} for issue in issues]
+        return [
+            {
+                "code": issue.code,
+                "message": issue.message,
+                "severity": getattr(issue, "severity", "fatal"),
+            }
+            for issue in issues
+        ]
 
     def mark_step(name):
         def step(context):
