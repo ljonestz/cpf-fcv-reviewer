@@ -110,3 +110,11 @@ def test_preserve_research_limitation_appends_readout_caveat():
     joined = " ".join(out.limitations).casefold()
     assert "ai-generated readout" in joined
     assert "post-coup transition" in " ".join(out.limitations)
+
+
+def test_load_prompt_supports_fcv_readout():
+    from cpf_fcv_reviewer.prompts import PROMPT_NAMES, load_prompt
+
+    assert "fcv_readout" in PROMPT_NAMES
+    text = load_prompt("fcv_readout").casefold()
+    assert "fcv" in text and "current" in text and "readout" in text
