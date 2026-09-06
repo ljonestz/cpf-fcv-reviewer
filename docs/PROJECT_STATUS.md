@@ -1,5 +1,62 @@
 # Project status
 
+## 2026-09-06 Option B: current-context claim grading implemented + provider-free verified (`feat/option-b-current-context`)
+
+**What changed.** The current-context (live-news) path no longer deletes claims that fail
+soft checks or fails the review solely because machine-verified current evidence was thin.
+Instead:
+
+- **Claims are graded** at the research boundary: `verified` (recent, FCV-substantive,
+  passes all checks), `partially_verified` (recent and substantive but some soft checks
+  failed), or `unverified` (not recent, or failed a hard check). Unverified and
+  non-recent claims are excluded from coverage calculation and do not elevate the evidence
+  tier; they remain in the research result as context-only items.
+- **`missing_current_context_support` is now an advisory validation issue** via a new
+  `severity` field on `ValidationIssue`. The orchestrator only repairs or fails on
+  `fatal`-severity issues; advisory issues are surfaced in metadata but do not block the
+  run. A review will never fail solely because current-context claims could not be
+  machine-verified — the worst case is a clearly labelled, thin current-context section.
+- **Ambiguous country names** (Guinea / Congo / Niger and compound neighbours) are
+  disambiguated in the research prompt, preventing the country-scope filter from dropping
+  valid claims.
+- **Tiered influence in the review prompt:** verified claims may support ratings and
+  recommendations; partially verified claims are corroboration only; unverified claims
+  are background context only. The LLM is instructed not to draw conclusions from
+  unverified claims alone.
+- **Exports** (DOCX and HTML) show an "AI-generated from trusted sources — verify before
+  use" banner and per-claim confidence chips indicating the verification grade of each
+  current-context item.
+
+**Scope.** The change is confined to the current-context research and grading path.
+Uploaded-document analysis, the registry, schema validation, and policy-language checks
+remain fully fail-closed and are unchanged.
+
+**Regression fix (Task 10).** The `SmokeResearchGateway._claim` method did not set
+`verification` explicitly, so it inherited the new `"unverified"` default introduced by
+Task 3. Since `_missing_coverage` excludes unverified claims, all 8 smoke mode tests
+failed with `current_evidence_tier == "reduced"` instead of `"full"`. Fixed by setting
+`verification="verified"` in the smoke fixture — synthetic fixtures are always trusted by
+construction. This was the only Option B regression; all other failures matched the 4
+known pre-existing `test_public_research.py` failures.
+
+**Provider-free verification (2026-09-06).** Full suite: **1,466 passed, 4 failed**. The 4
+failures are the pre-existing `test_bounded_article_metadata_reads_publication_fields_only`,
+`test_gateway_performs_at_most_one_metadata_get_for_opaque_sources`,
+`test_missing_date_is_recorded_before_metadata_client_failure`, and
+`test_article_metadata_stream_stops_at_shared_attempt_deadline` — all in
+`tests/test_public_research.py`, all predating Option B, and all unrelated to this work.
+The browser smoke runner (`scripts/run_smoke_browser.py`) requires a running local server
+and was not run.
+
+**Not yet deployed.** Branch `feat/option-b-current-context`; not merged to `main`; not
+on Render. The single paid Guinea CPF+RRA acceptance run required to complete the Option B
+acceptance gate is **pending explicit maintainer authorization** and has not been run.
+
+Design spec: `docs/superpowers/specs/2026-09-06-option-b-current-context-design.md`
+Implementation plan: `docs/superpowers/plans/2026-09-06-option-b-current-context.md`
+
+---
+
 ## 2026-09-06 live-news pipeline fixed + deployed; review still gated on current-context (`bf1f14b`)
 
 - **Three root-cause bugs in the current-context (live-news) pipeline found, fixed, merged (PRs #11,
