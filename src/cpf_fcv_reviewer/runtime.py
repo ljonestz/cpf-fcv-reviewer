@@ -1001,6 +1001,7 @@ def build_runtime_services(
                         if _is_explicit_authoritative_claim(claim)
                         else "medium"
                     ),
+                    verification=claim.verification,
                 )
             )
             used_evidence_ids.add(evidence_id)

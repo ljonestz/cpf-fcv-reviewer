@@ -167,6 +167,7 @@ class EvidenceItem(FrozenModel):
     ] | None = None
     source_url: str | None = None
     document_role: DocumentRole | None = None
+    verification: Literal["verified", "partially_verified", "unverified"] = "unverified"
 
     @model_validator(mode="after")
     def requires_evidence_source(self) -> EvidenceItem:
