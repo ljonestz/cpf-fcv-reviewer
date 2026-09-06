@@ -157,6 +157,7 @@ class CurrentContextClaim(BaseModel):
         "establishes",
     ]
     licensed_data_required: StrictBool
+    verification: Literal["verified", "partially_verified", "unverified"] = "unverified"
 
     @field_validator("claim_id", "text", "publisher", "source_title", "source_type")
     @classmethod
@@ -1204,6 +1205,23 @@ def _quote_is_from_source(quote: str | None, excerpt: str | None) -> bool:
     normalized_quote = " ".join(quote.split()).casefold()
     normalized_excerpt = " ".join(excerpt.split()).casefold()
     return bool(normalized_quote and normalized_quote in normalized_excerpt)
+
+
+def _grade_claim(
+    source: "ResearchSource", supporting_quote: str | None
+) -> Literal["verified", "partially_verified", "unverified"]:
+    """Grade a floor-passing claim by how strongly it is machine-verifiable.
+
+    Recency is enforced separately by the research controller, which caps non-recent
+    claims to ``unverified`` and excludes them from evidence-tier elevation.
+    """
+    has_date = source.published_at is not None
+    has_exact_quote = _quote_is_from_source(supporting_quote, source.excerpt)
+    if has_date and has_exact_quote:
+        return "verified"
+    if has_date or has_exact_quote:
+        return "partially_verified"
+    return "unverified"
 
 
 def _extract_search_artifact(
