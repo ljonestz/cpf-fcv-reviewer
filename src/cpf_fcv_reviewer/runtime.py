@@ -17,6 +17,7 @@ from pypdf.errors import PdfReadError
 from pydantic import ValidationError
 
 from .contracts import (
+    CurrentEvidenceTier,
     DetailLevel,
     DiagnosticMap,
     DiagnosticMode,
@@ -24,6 +25,11 @@ from .contracts import (
     EvidenceItem,
     EvidenceLocator,
     UserCorrection,
+)
+from .fcv_readout import (
+    generate_fcv_readout,
+    readout_caveat_limitation,
+    readout_payload,
 )
 from .diagnostic_map import validate_diagnostic_references
 from .diagnostic_sources import identify_uploaded_diagnostic
@@ -743,6 +749,12 @@ def _preserve_research_limitation(context: dict):
         limitations,
         context.get("diagnostic_coverage_warning"),
     )
+    readout = context.get("fcv_readout")
+    if readout is not None:
+        limitations = _append_limitation_once(
+            limitations,
+            readout_caveat_limitation(readout),
+        )
     return result.model_copy(update={"limitations": limitations})
 
 
@@ -1228,9 +1240,13 @@ def build_runtime_services(
                 if not isinstance(review_focus, str):
                     review_focus = ""
                 review_focus = review_focus.strip()[:4000]
+                readout = context.get("fcv_readout")
                 context["result"] = review_engine.review(
                     context["evidence_pack"],
                     review_focus=review_focus,
+                    current_context_readout=(
+                        readout_payload(readout) if readout is not None else None
+                    ),
                 )
                 context["result"] = _preserve_research_limitation(context)
             if name == "research":
@@ -1330,6 +1346,34 @@ def build_runtime_services(
                     context["_emit"],
                     allow_document_led=_allow_document_led(context),
                 )
+                if (
+                    context["research_result"].tier
+                    is CurrentEvidenceTier.DOCUMENT_LED
+                ):
+                    # No external current sources were established. Fall back to a
+                    # bounded, knowledge-based readout so the review still has current
+                    # context (clearly caveated). Best-effort: never fail the run.
+                    try:
+                        readout = generate_fcv_readout(
+                            model_gateway,
+                            country=payload["country"],
+                            review_date=review_date,
+                            reference_start_date=(
+                                dated_diagnostic.publication_date
+                                if dated_diagnostic is not None
+                                else None
+                            ),
+                        )
+                    except Exception:  # noqa: BLE001 - readout is best-effort
+                        readout = None
+                    if readout is not None:
+                        context["fcv_readout"] = readout
+                        context["_emit"](
+                            "fcv_readout_generated",
+                            {"theme_count": len(readout.key_themes)},
+                        )
+                    else:
+                        context["_emit"]("fcv_readout_unavailable", {})
             if name == "build_evidence":
                 return build_uploaded_evidence(context)
             if name == "map":

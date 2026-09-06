@@ -263,3 +263,19 @@ from trusted sources that the reader must verify before use:
 Never present current-context claims as established fact. When a present-day FCV assertion rests
 only on partially verified or unverified evidence, phrase it as reported/indicative and keep it
 context only.
+
+## Current-context readout (AI-generated fallback)
+
+The payload may include `current_context_readout` ONLY when independent external current-source
+research returned nothing usable, so the app fell back to a knowledge-based readout from the
+model. When it is present:
+
+- Treat it as an AI-generated, non-sourced summary of current FCV conditions — context-only.
+  Use it to inform the present-day framing of whether the CPF remains relevant to current
+  conditions (e.g. political transition, security, displacement, social cohesion).
+- Never treat it as a cited source, never attach an evidence ID to it, and never let it be the
+  sole basis for a rating or a specific recommendation.
+- You MUST record in `limitations` that current context for this review is drawn from an
+  AI-generated readout because no external current sources were available, and should be
+  verified.
+- Phrase any present-day assertion it supports as indicative/reported, not established fact.

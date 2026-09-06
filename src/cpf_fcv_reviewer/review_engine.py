@@ -601,6 +601,7 @@ class ReviewEngine:
         evidence_pack: EvidencePack,
         *,
         review_focus: str = "",
+        current_context_readout: dict | None = None,
     ) -> ReviewResult:
         stage = evidence_pack.metadata.review_stage
         if stage not in STAGE_PROFILES:
@@ -616,6 +617,8 @@ class ReviewEngine:
             "detail_profile": _serialize_detail_profile(detail_profile),
             "review_focus": review_focus,
         }
+        if current_context_readout is not None:
+            payload["current_context_readout"] = current_context_readout
         if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
             raise PackageCoverageUnavailable(
                 "Complete review request exceeds the safe request budget."
