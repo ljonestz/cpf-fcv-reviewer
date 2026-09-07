@@ -1,5 +1,14 @@
 # Project status
 
+## 2026-09-07 Live probes block release
+
+The three authorized research-only probes on `0b65e0f` accepted zero current-context
+claims for Guinea, Kenya, and Haiti. Guinea/Kenya lost all cited passages to publisher
+acceptance; Haiti retained sources but lost its claims at the FCV-relevance stage.
+No full review or deployment followed. Diagnostic source capture is prepared to
+identify exact rejection causes before further changes. See
+`docs/validation/2026-09-07-paid-source-probes.md`.
+
 ## 2026-09-07 All-country live-research finalization (branch validation)
 
 Current work removes narrow discovery restrictions, fixes approved-publisher date

@@ -58,4 +58,5 @@ attribution, and relevance to CPF priorities. Then run one complete Guinea CPF/R
 review and inspect both readouts and exports for specific, grounded recommendations.
 Do not count an AI knowledge fallback as successful live-source acceptance.
 
-No deployment or paid provider assessment has been performed for this change yet.
+Subsequent authorized live probes failed acceptance; see
+`2026-09-07-paid-source-probes.md`. No full review or deployment followed.
