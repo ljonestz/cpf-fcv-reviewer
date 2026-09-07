@@ -54,3 +54,14 @@ page payload construction and inspect only sanitized Pydantic details. A subsequ
 approved deployment needs a full Guinea completion, rendered readout, and DOCX
 check. These local tests do not establish live completion or production readiness.
 The original handover remains uncommitted because it includes live assessment IDs.
+
+## Authorized map-only probe preparation
+
+`20260907_diagnose_diagnostic_map.py` defaults to dry-run and reuses runtime page
+items, extraction limits, schema, and sanitized retry details. Explicit execution
+is capped at two calls with SDK transport retries disabled. Provider-free fake-
+gateway verification confirmed the two-call cap and sanitized retry payload;
+Ruff passed. Real Guinea preflight extracted 101 text pages and estimated 112,867
+input tokens, within the 160,000-token runtime bound. No provider calls occurred:
+the local process and checked local configuration had no Anthropic API key.
+Paid execution is authorized but awaits the maintainer's credential location.
