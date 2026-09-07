@@ -1321,6 +1321,17 @@ def test_map_step_downgrades_to_limited_framing_when_diagnostic_map_invalid(
     assert "diagnostic_map" not in updated
     assert any("limited-framing" in warning for warning in pack.warnings)
 
+    # Runtime-owned caveats are scanned too, and are restored after model repair.
+    updated["result"] = result.model_copy(update={"metadata": pack.metadata})
+    updated["research_result"] = SimpleNamespace(limitation=None)
+    for _ in range(2):
+        updated["result"] = runtime._preserve_research_limitation(updated)
+        issues = runtime.validate_review(
+            updated["result"], evidence_ids=set(evidence), prohibited_terms=set()
+        )
+        assert "limited_mode_overclaim" not in {issue.code for issue in issues}
+    assert updated["result"].limitations.count(updated["diagnostic_coverage_warning"]) == 1
+
 
 def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
     services = _runtime_services(monkeypatch)
@@ -3783,7 +3794,7 @@ def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnos
 
 
 def test_runtime_downgrades_to_limited_framing_after_second_diagnostic_map_schema_validation_error(
-    monkeypatch,
+    monkeypatch, caplog,
 ):
     first_error = _invalid_diagnostic_map_error()
     second_error = _invalid_diagnostic_map_error()
@@ -3796,6 +3807,16 @@ def test_runtime_downgrades_to_limited_framing_after_second_diagnostic_map_schem
     assert pack.diagnostic_entries == ()
     assert context["diagnostic_downgraded_to_limited_framing"] is True
     assert len(gateway.calls) == 2
+    records = [record for record in caplog.records
+               if record.message.startswith("diagnostic_map_schema_invalid ")]
+    assert len(records) == 1
+    assert "attempt=2" in records[0].message
+    assert "entry_id" in records[0].message
+    assert "string_type" in records[0].message
+    assert "MODEL_OUTPUT_SECRET" not in records[0].message
+    assert "raw_secret" not in records[0].message
+    assert "ignore_previous_instructions" not in records[0].message
+    assert records[0].exc_info is None
 
 
 @pytest.mark.parametrize("error", [RuntimeError("provider failed"), ValueError("bad response")])

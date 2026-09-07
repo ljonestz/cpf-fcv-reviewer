@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import UTC, date, datetime
 from hashlib import sha256
@@ -721,7 +722,7 @@ def _downgrade_to_limited_framing(context: dict, reason: str) -> dict:
     base_pack = context["evidence_pack"]
     downgrade_warning = (
         "The uploaded diagnostic could not be mapped in full; the review proceeds in "
-        f"limited-framing mode without RRA alignment. {reason}"
+        f"limited-framing mode. RRA alignment was not assessed. {reason}"
     ).strip()
     context["diagnostic_coverage_warning"] = downgrade_warning
     context.pop("diagnostic_map", None)
@@ -1193,7 +1194,12 @@ def build_runtime_services(
                     },
                     output_type=DiagnosticMap,
                 )
-            except ValidationError:
+            except ValidationError as retry_error:
+                # Log schema structure only; never rejected values or exception text.
+                logging.getLogger(__name__).warning(
+                    "diagnostic_map_schema_invalid attempt=2 schema_diagnostics=%s",
+                    json.dumps(_safe_diagnostic_map_schema_issues(retry_error)),
+                )
                 return _downgrade_to_limited_framing(
                     context,
                     "The diagnostic mapping did not satisfy the required schema.",

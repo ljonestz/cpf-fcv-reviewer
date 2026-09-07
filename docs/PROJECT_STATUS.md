@@ -1,5 +1,36 @@
 # Project status
 
+## 2026-09-07 Guinea map-only probe passed (not an end-to-end acceptance)
+
+One authorized model request using the Render service's configured model
+`claude-sonnet-4-5` mapped all 101 extractable RRA pages to 16 valid thematic
+entries; schema and representative evidence-reference validation passed. No retry
+was needed. The earlier schema failure was not reproduced, so no schema loosening
+is justified. The validated correction remains in draft PR #21, not deployed.
+Next: approved deployment and one full Guinea review with readout/DOCX verification.
+Safe details are in `docs/validation/2026-09-07-limited-mode-validation.md`.
+
+## 2026-09-07 Limited-mode validation correction (prepared; not deployed)
+
+Based on verified GitHub main `3bf4f08`. A provider-free regression proves that
+runtime's own downgrade warning, "without RRA alignment", triggers
+`limited_mode_overclaim`. The warning is restored after repair, making the failure
+unrepairable even when model-authored text is valid. The warning now explicitly
+states "RRA alignment was not assessed"; the validator and its safety boundary
+are unchanged. Final diagnostic-map schema failure now logs sanitized field paths
+and issue types using the existing bounded sanitizer.
+
+Runtime, validator, and smoke coverage: 308 tests passed initially; two temporary-
+directory setup errors passed on isolated rerun outside the Windows sandbox.
+Both new regression assertions were observed failing before their fixes.
+The changed files retain three pre-existing lint findings (two import-order issues
+and one long line). No paid API calls, merge, or deployment were performed.
+The Guinea mapping schema cause remains unknown. Next: authorized map-only
+provider diagnosis with sanitized errors, then an approved deployment and one
+end-to-end Guinea acceptance run. Production readiness is not established.
+See `docs/validation/2026-09-07-limited-mode-validation.md`.
+
+
 ## 2026-09-07 FCV model-readout fallback DEPLOYED; confirming paid run PENDING (`main` @ `ec8d3e3`)
 
 When external current-source research comes back empty (Guinea returns only neighbour-country
