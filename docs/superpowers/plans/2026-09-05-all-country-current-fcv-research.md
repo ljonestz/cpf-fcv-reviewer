@@ -8,6 +8,15 @@
 
 **Tech Stack:** Existing Python, Pydantic, httpx, pytest, Flask and Playwright; stdlib date, URL, JSON and HTML parsing. No new dependency, provider, crawler framework, model phase, or production country-classification system.
 
+## Current status (2026-09-07)
+
+The selected-country search and provenance improvements in this plan were implemented and
+deployed through PRs #11/#12/#13 and the subsequent current-context releases. The plan
+remains a historical implementation record. Genuine Guinea current-source coverage is
+still incomplete: the deployed acceptance retrieved no independent current-context
+evidence and used the bounded context-only readout fallback. See
+`docs/validation/2026-09-07-guinea-acceptance.md` for the live outcome.
+
 ---
 
 ## Status and scope
