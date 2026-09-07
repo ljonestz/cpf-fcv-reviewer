@@ -1,5 +1,16 @@
 # Project status
 
+## 2026-09-07 Recommendation length is advisory
+
+User approved treating excess recommendation length as advisory. The validator still
+reports the word-limit issue, but it no longer blocks completion or causes paid repair.
+The bounded repair follow-up now filters advisory issues before deciding whether another
+model call is warranted. Evidence/citation errors retain fatal validation.
+
+Three new orchestrator cases and the expanded runtime regression failed before the fixes.
+Final provider-free suite: **1,524 passed**, including smoke tests. No paid calls or deployment.
+The all-country research candidate remains on PR24 pending successful live quality acceptance.
+
 ## 2026-09-07 Luna max retry: word-limit blocker remains
 
 One further explicitly authorized paid quality assessment on `6fb6869` was delegated to

@@ -261,3 +261,38 @@ def test_repair_receives_only_fatal_issues():
     orchestrator.run({}, emit)
     codes = [i["code"] for i in received]
     assert codes == ["stage_overreach"]
+
+
+@pytest.mark.parametrize("fatal_code", [None, "unknown_evidence", "missing_registry_support"])
+def test_actual_length_advisory_completes_without_repair_but_evidence_errors_block(fatal_code):
+    from dataclasses import asdict
+
+    from cpf_fcv_reviewer.validators import ValidationIssue, validate_stage_behavior
+
+    issues = [asdict(issue) for issue in validate_stage_behavior(
+        "finalization", " ".join(["word"] * 61),
+    )]
+    if fatal_code:
+        issues.append(asdict(ValidationIssue(fatal_code, "Invalid evidence link.")))
+    events = []
+    repairs = []
+
+    def validate(context):
+        context["validation_issues"] = issues
+        return context
+
+    def repair(context, fatal_issues):
+        repairs.extend(fatal_issues)
+        return context
+
+    runner = ReviewOrchestrator(steps=(("validate", validate),), repair=repair)
+    if fatal_code:
+        with pytest.raises(ValueError):
+            runner.run({}, lambda name, data: events.append(name))
+        assert [issue["code"] for issue in repairs] == [fatal_code]
+        assert "run_failed" in events
+    else:
+        runner.run({}, lambda name, data: events.append(name))
+        assert repairs == []
+        assert "advisory_notice" in events
+        assert "run_complete" in events

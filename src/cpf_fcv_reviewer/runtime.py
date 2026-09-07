@@ -1474,8 +1474,11 @@ def build_runtime_services(
             return review_validation_issues(context)
 
         remaining_issues = repair_once(issues)
-        if _can_retry_mechanical_repair(remaining_issues):
-            remaining_issues = repair_once(remaining_issues)
+        remaining_fatal = [
+            issue for issue in remaining_issues if issue.get("severity") != "advisory"
+        ]
+        if _can_retry_mechanical_repair(remaining_fatal):
+            remaining_issues = repair_once(remaining_fatal)
         context["validation_issues"] = remaining_issues
         return context
 

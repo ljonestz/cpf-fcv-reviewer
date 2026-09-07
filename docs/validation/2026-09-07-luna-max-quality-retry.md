@@ -25,3 +25,15 @@ PNG and confirmed the stopped-review display. Artifacts and live IDs remain unco
 Next issue: the recommendation word-limit rule still blocks the entire assessment after
 bounded correction. Address that presentation failure locally before another paid run.
 The prior complete suite passed 1,520 tests; no production code changed in this validation.
+
+## Authorized local resolution
+The user approved making recommendation length advisory. stage_length_overreach now has
+advisory severity; the existing orchestrator reports it without blocking the review.
+The bounded follow-up repair path filters out advisory issues, avoiding an unnecessary
+paid correction when only a length notice remains. Prompt word targets stay in place.
+Unknown evidence and missing registry support remain fatal. Three new orchestration
+regressions failed before the severity change; a runtime regression then reproduced the
+unnecessary follow-up call and passed after filtering. All **1,524 provider-free tests pass**.
+No paid quality run, merge or deployment was performed for this local fix. Ruff is clean
+for runtime.py and test_orchestrator.py; validators.py has the same three pre-existing
+lint findings confirmed against HEAD. Git whitespace checks pass.

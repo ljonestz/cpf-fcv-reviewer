@@ -2710,7 +2710,8 @@ def test_runtime_bounds_model_visible_corrections_but_preserves_lineage(monkeypa
     assert len(pack.metadata.correction_ids) == 25
 
 
-def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
+@pytest.mark.parametrize("residual_fatal", [True, False])
+def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch, residual_fatal):
     repair_payloads = []
 
     class FakeGateway:
@@ -2722,7 +2723,7 @@ def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
                 repair_payloads.append(payload)
                 overall_read = (
                     "This package is eligible for special treatment."
-                    if len(repair_payloads) == 1
+                    if residual_fatal and len(repair_payloads) == 1
                     else "The draft requires cautious review."
                 )
             else:
@@ -2742,6 +2743,16 @@ def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
         "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
         FakeGateway,
     )
+    original_validate = runtime.validate_review
+
+    def with_length_advisory(*args, **kwargs):
+        from cpf_fcv_reviewer.validators import ValidationIssue
+
+        return (*original_validate(*args, **kwargs), ValidationIssue(
+            "stage_length_overreach", "Long recommendation.", severity="advisory",
+        ))
+
+    monkeypatch.setattr(runtime, "validate_review", with_length_advisory)
     services = build_runtime_services(
         production_config(ALLOW_SYNTHETIC_REGISTRY=True),
         research_controller=_InjectedResearchController(),
@@ -2767,7 +2778,7 @@ def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
         lambda kind, data: None,
     )
 
-    assert len(repair_payloads) == 2
+    assert len(repair_payloads) == (2 if residual_fatal else 1)
     assert all(
         payload["forbidden_phrases"] == ("eligible for", "eligible")
         for payload in repair_payloads
