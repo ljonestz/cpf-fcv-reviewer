@@ -676,6 +676,14 @@ def test_export_route_requires_a_completed_traceable_result(make_valid_result):
     with ZipFile(BytesIO(response.data)) as archive:
         assert "word/document.xml" in archive.namelist()
 
+    summary = client.get(f"/api/reviews/{assessment_id}/export.docx?view=summary")
+    assert summary.status_code == 200
+    assert "CPF-FCV-Five-Minute-Readout.docx" in summary.headers["Content-Disposition"]
+    assert Document(BytesIO(summary.data)).paragraphs[0].text == "Five-minute readout"
+    assert client.get(f"/api/reviews/{assessment_id}/export.docx?view=unknown").status_code == 400
+    app.extensions["session_store"].update(assessment_id, evidence_by_id=None)
+    assert client.get(f"/api/reviews/{assessment_id}/export.docx?view=summary").status_code == 409
+
 
 def test_background_run_persists_traceable_evidence(make_valid_result):
     result, evidence = make_valid_result
@@ -709,3 +717,28 @@ def test_docx_labels_current_context_verification():
     assert current_context_chip_label("verified") == "Verified"
     assert current_context_chip_label("partially_verified") == "Partially verified — verify before use"
     assert current_context_chip_label("unverified") == "Unverified — verify before use"
+
+
+def test_five_minute_export_preserves_actions_and_limits_detail(make_valid_result):
+    result, evidence = make_valid_result
+    area = result.priority_areas[0].model_copy(update={
+        "assessment": "First assessment. Second assessment. Extra detail.",
+        "why_it_matters": "Fragility relevance. Extra relevance.",
+        "recommended_action": "First action. Second action. Third action.",
+    })
+    result = result.model_copy(update={"priority_areas": (area,)})
+    document = Document(BytesIO(build_docx(
+        result, evidence=evidence, hydrated_referrals=(), summary=True,
+    )))
+    paragraphs = document.paragraphs
+    text = "\n".join(p.text for p in paragraphs)
+    assert "Five-minute readout" in text
+    assert "First assessment. Second assessment. Fragility relevance." in text
+    assert "Extra detail." not in text
+    assert "Extra relevance." not in text
+    assert "First action. Second action. Third action." in text
+    assert "Basis and important limitations" in text
+    overview = next(p for p in paragraphs if p.text.startswith("First assessment."))
+    assert not any(run.bold for run in overview.runs)
+    action = next(p for p in paragraphs if "First action." in p.text)
+    assert all(not run.bold for run in action.runs if "First action." in run.text)

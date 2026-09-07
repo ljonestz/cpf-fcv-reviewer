@@ -417,6 +417,9 @@ def review_result(assessment_id):
 
 @bp.get("/api/reviews/<assessment_id>/export.docx")
 def export_review(assessment_id):
+    view = request.args.get("view", "detailed")
+    if view not in {"detailed", "summary"}:
+        return jsonify(error="Unknown export view."), 400
     try:
         state = store().get(assessment_id)
     except SessionExpired:
@@ -450,6 +453,7 @@ def export_review(assessment_id):
             result,
             evidence=evidence,
             hydrated_referrals=(),
+            summary=view == "summary",
         )
     except EvidenceCompletenessError:
         return jsonify(error="Traceable evidence is invalid."), 409
@@ -460,7 +464,9 @@ def export_review(assessment_id):
         BytesIO(data),
         mimetype=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         as_attachment=True,
-        download_name="CPF-FCV-Review.docx",
+        download_name=(
+            "CPF-FCV-Five-Minute-Readout.docx" if view == "summary" else "CPF-FCV-Review.docx"
+        ),
     )
 
 

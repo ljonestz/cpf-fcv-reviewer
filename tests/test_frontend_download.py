@@ -69,7 +69,8 @@ for (const id of [
   "#cpf", "#country", "#country-detection", "#submit-review", "#submit-correction", "#correction-text",
   "#assistant-card", "#assistant-conversation", "#assistant-form", "#assistant-input", "#assistant-send", "#assistant-status",
   "#assistant-suggestions",
-  "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog", "#close-process-dialog",
+  "#export-docx", "#export-readout-docx", "#reset-review", "#process-dialog",
+  "#open-process-dialog", "#close-process-dialog",
   "#research-recovery", "#research-recovery-heading", "#research-recovery-message", "#retry-research",
   "#evidence-status", "#evidence-status-label", "#evidence-status-limitation", "#result-title", "#result-context",
 ]) nodes[id] = node();
@@ -147,7 +148,7 @@ def test_docx_download_fetches_blob_and_keeps_results_page_on_recoverable_errors
                 blob: async () => ({kind: "docx"}),
               };
             }
-            return {ok: false, status};
+            return {ok: status === 202, status};
           };
 
           require(process.argv[1]);
@@ -158,7 +159,7 @@ def test_docx_download_fetches_blob_and_keeps_results_page_on_recoverable_errors
             ...(root?.children || []).flatMap((child) => find(child, predicate)),
           ];
 
-          for (const expectedStatus of [409, 410, 500]) {
+          for (const expectedStatus of [202, 409, 410, 500]) {
             status = expectedStatus;
             await nodes["#export-docx"].trigger("click");
             if (requests.at(-1) !== "/api/reviews/assessment-1/export.docx") {
@@ -186,6 +187,13 @@ def test_docx_download_fetches_blob_and_keeps_results_page_on_recoverable_errors
           }
           if (blobs.length !== 1 || revokedUrls.length !== 1 || revokedUrls[0] !== "blob:cpf-1") {
             throw Error("successful download did not consume and revoke the response blob URL");
+          }
+          await nodes["#export-readout-docx"].trigger("click");
+          const summaryLink = createdElements.filter((item) => item.tagName === "a").at(-1);
+          if (requests.at(-1) !== "/api/reviews/assessment-1/export.docx?view=summary" ||
+              summaryLink.download !== "CPF-FCV-Five-Minute-Readout.docx" ||
+              summaryLink.clicked !== 1) {
+            throw Error("five-minute download did not use its endpoint and filename");
           }
           const notices = find(nodes["#actions"], (item) => item?.className === "download-error");
           if (!notices[0].hidden || notices[0].textContent) {

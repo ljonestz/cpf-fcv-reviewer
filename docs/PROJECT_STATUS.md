@@ -1,5 +1,21 @@
 # Project status
 
+## 2026-09-07 Five-minute readout refinement (deployment pending)
+
+Priority overviews combine up to two assessment sentences with one FCV-relevance
+sentence in a plain-text paragraph. Recommended responses retain the full detailed
+action. The separate FCV-relevance label is removed from the short view.
+A five-minute Word download joins the existing detailed note and new-review actions;
+it preserves the same three summary priorities, full actions, and important limitations.
+The detailed assessment is unchanged. No model calls are required for either export.
+
+Validation: 74 targeted tests and the provider-free browser smoke passed, including
+both actual Word downloads and the link to the detailed recommendation. Across the
+full suite and temporary-directory reruns, 1,479 tests passed. Four existing
+article-metadata tests also fail against main: their AP News fixtures are excluded
+by the crawler allow-list reused in the metadata fetcher. This separate research
+issue remains open; no live run or deployment was performed for the readout change.
+
 ## 2026-09-07 PR #21 deployed; Guinea end-to-end completion passed
 
 Release `63b16da` is live, verified through Render and `/health`. One authorized

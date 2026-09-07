@@ -616,6 +616,7 @@ def build_docx(
     *,
     evidence: dict[str, EvidenceItem],
     hydrated_referrals: tuple[dict, ...],
+    summary: bool = False,
 ) -> bytes:
     validate_evidence_completeness(result, evidence)
     document = Document()
@@ -625,7 +626,7 @@ def build_docx(
         created_at=result.metadata.created_at,
     )
 
-    document.add_heading("CPF FCV Review", level=0)
+    document.add_heading("Five-minute readout" if summary else "CPF FCV Review", level=0)
     advisory = document.add_paragraph()
     advisory_run = advisory.add_run(
         "Public version. Use public or non-sensitive material only. "
@@ -640,23 +641,43 @@ def build_docx(
     _add_readable_paragraph(document, result.overall_read)
     document.add_heading(RRA_ALIGNMENT_QUESTION, level=2)
     _add_readable_paragraph(document, result.alignment_readout)
-    _add_rra_assessments(document, result)
+    if not summary:
+        _add_rra_assessments(document, result)
     document.add_heading(STRATEGY_ALIGNMENT_QUESTION, level=2)
     _add_readable_paragraph(document, result.strategy_readout)
-    _add_strategy_assessments(document, result)
+    if not summary:
+        _add_strategy_assessments(document, result)
 
-    document.add_heading("Priority areas for strengthening", level=1)
-    if result.priority_areas:
-        for area in result.priority_areas:
-            document.add_heading(area.heading, level=2)
-            _add_readable_paragraph(document, area.assessment)
-            _add_readable_paragraph(document, area.why_it_matters)
-            _add_labelled_paragraph(document, "Recommended action", area.recommended_action)
-            _add_labelled_paragraph(document, "Target", target_text(area.target_locator))
-            if area.comment_reference:
-                _add_labelled_paragraph(document, "Comment addressed", area.comment_reference)
+    if summary:
+        document.add_heading("Priority measures to strengthen the CPF / CEN", level=1)
+        areas = {area.priority_area_id: area for area in result.priority_areas}
+        items = [item for item in result.revision_summary if item.priority_area_id in areas][:3]
+        for item in items:
+            area = areas[item.priority_area_id]
+            document.add_heading(item.title, level=2)
+            overview = (
+                *_sentence_parts(area.assessment)[:2],
+                *_sentence_parts(area.why_it_matters)[:1],
+            )
+            document.add_paragraph(" ".join(overview))
+            response = document.add_paragraph()
+            response.add_run("Recommended response: ").bold = True
+            response.add_run(area.recommended_action)
+        if not items:
+            document.add_paragraph("No revision summary was returned for this review.")
     else:
-        document.add_paragraph("No priority areas were returned for this review.")
+        document.add_heading("Priority areas for strengthening", level=1)
+        if result.priority_areas:
+            for area in result.priority_areas:
+                document.add_heading(area.heading, level=2)
+                _add_readable_paragraph(document, area.assessment)
+                _add_readable_paragraph(document, area.why_it_matters)
+                _add_labelled_paragraph(document, "Recommended action", area.recommended_action)
+                _add_labelled_paragraph(document, "Target", target_text(area.target_locator))
+                if area.comment_reference:
+                    _add_labelled_paragraph(document, "Comment addressed", area.comment_reference)
+        else:
+            document.add_paragraph("No priority areas were returned for this review.")
 
     document.add_heading("Basis and important limitations", level=1)
     limitations = list(result.limitations)
