@@ -560,10 +560,10 @@ def test_detailed_analysis_keeps_priority_prose_and_hides_technical_coverage():
     assert "innerHTML" not in javascript
 
 
-def test_export_always_uses_the_full_note_endpoint():
+def test_exports_share_the_validated_note_endpoint():
     javascript = JS.read_text(encoding="utf-8")
 
-    assert "`/api/reviews/${assessmentId}/export.docx`" in javascript
+    assert '/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}' in javascript
     assert "summary/export" not in javascript
     assert 'document.createElement("a")' in javascript
     assert "downloadLink.click()" in javascript

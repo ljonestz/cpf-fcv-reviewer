@@ -25,7 +25,8 @@ The public Render prototype and the future internal ITS version are separate tra
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Download full detailed note** for an active review, or `GET /api/reviews/<assessment_id>/export.docx`.
+Use **Download five-minute readout** or **Download full detailed note** for an active review.
+Both use `GET /api/reviews/<assessment_id>/export.docx`; add `?view=summary` for the five-minute Word download.
 
 ## Important constraints
 

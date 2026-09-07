@@ -276,12 +276,23 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         if (summaryPriorityCards.length !== 3) throw Error("five-minute readout did not cap priority summaries at three cards");
         const inclusionSummary = summaryPriorityCards.find((card) => card.textContent.includes("Inclusive services"));
         const inclusionSummaryText = inclusionSummary?.textContent || "";
-        const relevanceLabel = "FCV relevance.";
-        if (!inclusionSummaryText.includes(relevanceLabel) ||
-            !inclusionSummaryText.includes("Unequal access can deepen fragility.") ||
-            !(inclusionSummaryText.indexOf("The inclusion gap is not yet explicit.") < inclusionSummaryText.indexOf(relevanceLabel) &&
-              inclusionSummaryText.indexOf(relevanceLabel) < inclusionSummaryText.indexOf("Name the inclusion response in the CPF."))) {
-          throw Error("priority summaries omitted FCV relevance or rendered it out of order");
+        if (inclusionSummaryText.includes("FCV relevance.") ||
+            !inclusionSummaryText.includes("Unequal access can deepen fragility.")) {
+          throw Error("priority overview must embed relevance without a separate label");
+        }
+        const delivery = summaryPriorityCards[0];
+        const overview = delivery.children.find((item) => item.className === "priority-assessment");
+        const sentences = hooks.splitNarrativeIntoChunks(longNarrative).flat();
+        const expectedOverview = sentences.slice(0, 2)
+          .concat(sentences.slice(0, 1)).join(" ");
+        if (overview?.textContent !== expectedOverview || overview.children.length) {
+          throw Error("priority overview must be three plain-text sentences");
+        }
+        const response = delivery.children.find((item) => item.className === "recommended-action");
+        if (!response?.textContent.includes(longNarrative) ||
+            findAll(response, (item) => item.tagName === "strong")
+              .some((item) => item.textContent !== "Recommended response. ")) {
+          throw Error("priority response must preserve the full action without bolding its prose");
         }
         const detailedPriorityCards = findAll(view, (item) => item?.className === "priority-area");
         if (detailedPriorityCards.length !== 5) throw Error("detailed analysis did not retain all five priority areas");

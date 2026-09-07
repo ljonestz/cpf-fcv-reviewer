@@ -538,10 +538,6 @@ function renderReadoutPanel(title, value, className) {
   return panel;
 }
 
-function firstNarrativeSentence(value) {
-  return splitNarrativeIntoChunks(value)[0]?.[0] || String(value || "").trim();
-}
-
 function locatorLabel(locator) {
   if (!locator) return "";
   return [
@@ -791,15 +787,13 @@ function renderRevisionSummary(result, anchorIds) {
     card.className = "priority-area";
     card.append(
       text("h3", item.title),
-      renderNarrative(firstNarrativeSentence(area?.assessment), "priority-assessment"),
-      labelledNarrative(
-        "FCV relevance",
-        firstNarrativeSentence(area?.why_it_matters),
-        "priority-why-it-matters",
-      ),
-      labelledNarrative(
+      text("p", [
+        ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
+        ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
+      ].join(" "), "priority-assessment"),
+      labelledParagraph(
         "Recommended response",
-        firstNarrativeSentence(area?.recommended_action),
+        area?.recommended_action || "",
         "recommended-action",
       ),
     );
@@ -1450,24 +1444,24 @@ function showDownloadError(message) {
 }
 
 function downloadErrorMessage(status) {
-  if (status === 409) {
-    return "The detailed note is not ready for download yet. The results page remains available; try again in a moment.";
+  if (status === 409 || status === 202) {
+    return "The document is not ready for download yet. The results page remains available; try again in a moment.";
   }
   if (status === 410) {
-    return "This review session has expired, so the detailed note cannot be downloaded. The results page remains available; start a new review to try again.";
+    return "This review session has expired, so the document cannot be downloaded. The results page remains available; start a new review to try again.";
   }
   if (status === 500) {
-    return "The detailed note could not be generated for download. The results page remains available; try again.";
+    return "The document could not be generated for download. The results page remains available; try again.";
   }
-  return "The detailed note could not be downloaded. The results page remains available; try again.";
+  return "The document could not be downloaded. The results page remains available; try again.";
 }
 
-async function downloadDocx() {
+async function downloadDocx(summary = false) {
   if (!assessmentId) return;
   clearDownloadError();
   try {
-    const response = await fetch(`/api/reviews/${assessmentId}/export.docx`);
-    if (!response.ok) {
+    const response = await fetch(`/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}`);
+    if (!response.ok || response.status === 202) {
       showDownloadError(downloadErrorMessage(response.status));
       return;
     }
@@ -1475,7 +1469,7 @@ async function downloadDocx() {
     const objectUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement("a");
     downloadLink.href = objectUrl;
-    downloadLink.download = "CPF-FCV-Review.docx";
+    downloadLink.download = summary ? "CPF-FCV-Five-Minute-Readout.docx" : "CPF-FCV-Review.docx";
     document.body.append(downloadLink);
     try {
       downloadLink.click();
@@ -1488,7 +1482,8 @@ async function downloadDocx() {
   }
 }
 
-document.querySelector("#export-docx").addEventListener("click", downloadDocx);
+document.querySelector("#export-docx").addEventListener("click", () => downloadDocx());
+document.querySelector("#export-readout-docx")?.addEventListener("click", () => downloadDocx(true));
 
 async function resetReview() {
   if (resetPending) return;
