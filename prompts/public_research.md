@@ -17,8 +17,13 @@ ReliefWeb, ISS Africa, Africa Center for Strategic Studies, or other approved in
 reporting. One substantive trusted source is useful; do not chase publisher diversity or attempt
 to cover every theme. Return no more than three sources and six short findings.
 
-Search only the preferred and supplementary current-reporting routes named above. A broader
-publisher validation allowlist does not justify generic development or indicator sources.
+Search broadly for reporting relevant to the selected country, prioritizing the publishers
+named above. The publisher validation allowlist checks provenance after discovery. Do not substitute
+generic development or indicator sources for substantive FCV reporting. Use the country
+name and distinguishing terms when searching; do not confuse compound country names.
+Preserve exact source quotations with enough context to identify the country. A clearly
+country-specific article title can establish context for a quote that does not repeat the
+country name; a regional title cannot establish which country an ambiguous quote describes.
 Use only public publication pages. Do not use World Bank Indicators API observations as
 current-FCV evidence. Do not use licensed event-level data, including licensed ACLED event data,
 authenticated tools, or bulk datasets. Public ACLED analysis and summaries may be used.

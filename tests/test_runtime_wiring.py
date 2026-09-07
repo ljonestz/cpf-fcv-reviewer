@@ -29,8 +29,8 @@ from cpf_fcv_reviewer.contracts import (
     GapLocus,
     PriorityArea,
     RecommendationScale,
-    RRADriverAssessment,
     RevisionSummaryItem,
+    RRADriverAssessment,
     SensitivityCategory,
 )
 from cpf_fcv_reviewer.extraction import (
@@ -2777,7 +2777,10 @@ def test_runtime_retries_only_residual_mechanical_repair_issues(monkeypatch):
     assert context["result"].metadata.repair_count == 1
 
 
-def _run_narrow_runtime(monkeypatch, package_text, *, controller=None, country="Benin"):
+def _run_narrow_runtime(
+    monkeypatch, package_text, *, controller=None, country="Benin",
+    primary_text=b"CPF text " * 20, review_focus="",
+):
     captured = {}
 
     class ModelGateway:
@@ -2818,9 +2821,9 @@ def _run_narrow_runtime(monkeypatch, package_text, *, controller=None, country="
             "assessment_id": "narrow-runtime-run",
             "payload": {
                 "country": country, "review_stage": "finalization",
-                "cpf": {"name": "benin-cpf.txt", "bytes": b"CPF text " * 20},
+                "cpf": {"name": "benin-cpf.txt", "bytes": primary_text},
                 "package_documents": [{"name": "package.txt", "bytes": package_text}],
-                "context_documents": [], "review_focus": "", "detail_level": "standard",
+                "context_documents": [], "review_focus": review_focus, "detail_level": "standard",
                 "corrections": [],
             },
         },
@@ -4024,3 +4027,25 @@ def test_runtime_251_page_rra_samples_for_identification_but_fails_full_coverage
         "run_failed",
         {"error": "diagnostic_coverage_unavailable"},
     )
+
+
+@pytest.mark.parametrize("package_text", [
+    b"Package context without a diagnostic marker.",
+    b"Benin Risk and Resilience Assessment, March 2025. Diagnostic context.",
+])
+def test_runtime_passes_bounded_cpf_context_and_focus_to_research(monkeypatch, package_text):
+    from cpf_fcv_reviewer.research_controller import (
+        MAX_PRIMARY_CPF_CONTEXT_CHARACTERS,
+        MAX_REVIEW_FOCUS_CHARACTERS,
+    )
+    controller = _InjectedResearchController()
+    _run_narrow_runtime(
+        monkeypatch, package_text, controller=controller,
+        primary_text=b"CPF priorities: local service delivery and displaced youth jobs. " * 400,
+        review_focus="Focus on community participation. " * 200,
+    )
+    request = controller.requests[0]
+    assert "local service delivery" in request.primary_cpf_context
+    assert len(request.primary_cpf_context) <= MAX_PRIMARY_CPF_CONTEXT_CHARACTERS
+    assert request.review_focus.startswith("Focus on community participation.")
+    assert len(request.review_focus) <= MAX_REVIEW_FOCUS_CHARACTERS

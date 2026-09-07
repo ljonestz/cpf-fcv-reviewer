@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import re
 from collections import Counter
 from collections.abc import Mapping
@@ -28,9 +27,6 @@ from pydantic import (
 
 from .country_detection import COUNTRY_ALIASES
 
-
-logger = logging.getLogger(__name__)
-
 MAX_SEARCH_OUTPUT_TOKENS = 2_000
 # The normalization step must emit up to MAX_RETAINED_FINDINGS (6) full claims, each
 # with a supporting quote up to MAX_SOURCE_EXCERPT_CHARACTERS (1500 chars). At the
@@ -51,40 +47,6 @@ MAX_RETAINED_SOURCES = 3
 MAX_RETAINED_FINDINGS = 6
 MAX_SOURCE_EXCERPT_CHARACTERS = 1_500
 MAX_SOURCE_BUNDLE_CHARACTERS = 6_000
-PREFERRED_SEARCH_DOMAINS = (
-    "crisisgroup.org",
-    "reuters.com",
-    "apnews.com",
-    "bbc.com",
-    "bbc.co.uk",
-    "rescue.org",
-    "acleddata.com",
-)
-SECONDARY_SEARCH_DOMAINS = (
-    "un.org",
-    "unhcr.org",
-    "unocha.org",
-    "wfp.org",
-    "icrc.org",
-    "iom.int",
-    "reliefweb.int",
-    "issafrica.org",
-    "africacenter.org",
-)
-# News wires whose sites block Anthropic's web-search crawler. Anthropic rejects
-# the ENTIRE web_search request with HTTP 400 if any of these appears in
-# allowed_domains (confirmed live: "The following domains are not accessible to
-# our user agent: [...]"). They remain approved *publishers* (see
-# _INSTITUTIONAL_PUBLISHER_HOSTS) and reachable via the app-fetched curated
-# fallback; they are only excluded from the crawler allow-list sent to the API.
-CRAWLER_BLOCKED_SEARCH_DOMAINS = frozenset(
-    {"apnews.com", "bbc.co.uk", "bbc.com", "reuters.com"}
-)
-SEARCH_ALLOWED_DOMAINS = tuple(
-    domain
-    for domain in (*PREFERRED_SEARCH_DOMAINS, *SECONDARY_SEARCH_DOMAINS)
-    if domain not in CRAWLER_BLOCKED_SEARCH_DOMAINS
-)
 PUBLIC_RESEARCH_DIAGNOSTIC_KEYS = (
     "source_candidates",
     "source_linked_excerpts",
@@ -99,35 +61,6 @@ def Anthropic(*args, **kwargs):
     from anthropic import Anthropic as AnthropicClient
 
     return AnthropicClient(*args, **kwargs)
-
-
-_INACCESSIBLE_DOMAINS_PATTERN = re.compile(
-    r"not accessible[^\[]*\[([^\]]*)\]", re.IGNORECASE
-)
-
-
-def _inaccessible_search_domains(exc: object) -> frozenset[str]:
-    """Return the domains an Anthropic web_search 400 flagged as inaccessible.
-
-    The error reads: "The following domains are not accessible to our user
-    agent: ['reuters.com', 'bbc.com']." Returns an empty set for any other error.
-    """
-    message = ""
-    body = getattr(exc, "body", None)
-    if isinstance(body, Mapping):
-        error = body.get("error")
-        if isinstance(error, Mapping):
-            message = str(error.get("message") or "")
-    if not message:
-        message = str(exc)
-    match = _INACCESSIBLE_DOMAINS_PATTERN.search(message)
-    if match is None:
-        return frozenset()
-    return frozenset(
-        token.strip().strip("'\"").casefold()
-        for token in match.group(1).split(",")
-        if token.strip().strip("'\"")
-    )
 
 
 class CurrentContextClaim(BaseModel):
@@ -194,7 +127,7 @@ class SearchArtifact(BaseModel):
     sources: tuple[ResearchSource, ...] = Field(max_length=MAX_RETAINED_SOURCES)
 
     @model_validator(mode="after")
-    def caps_complete_serialized_bundle(self) -> "SearchArtifact":
+    def caps_complete_serialized_bundle(self) -> SearchArtifact:
         if len(self.model_dump_json()) > MAX_SOURCE_BUNDLE_CHARACTERS:
             raise ValueError("Serialized source bundle exceeds the character limit.")
         return self
@@ -754,46 +687,6 @@ class AnthropicPublicResearchGateway:
         max_uses: int = 2,
         deadline: float,
     ):
-        allowed_domains = list(SEARCH_ALLOWED_DOMAINS)
-        try:
-            return self._web_search_create(
-                messages,
-                max_uses=max_uses,
-                deadline=deadline,
-                allowed_domains=allowed_domains,
-            )
-        except Exception as exc:  # noqa: BLE001 - inspect before deciding to re-raise
-            blocked = _inaccessible_search_domains(exc)
-            if not blocked:
-                raise
-            remaining = [
-                domain
-                for domain in allowed_domains
-                if domain.casefold() not in blocked
-            ]
-            if not remaining or len(remaining) == len(allowed_domains):
-                # Nothing we can drop (the rejected domains were not in our list);
-                # retrying would not change the outcome.
-                raise
-            logger.warning(
-                "web_search: Anthropic rejected allowed_domains %s; retrying without them",
-                sorted(blocked),
-            )
-            return self._web_search_create(
-                messages,
-                max_uses=max_uses,
-                deadline=deadline,
-                allowed_domains=remaining,
-            )
-
-    def _web_search_create(
-        self,
-        messages: list[dict[str, object]],
-        *,
-        max_uses: int,
-        deadline: float,
-        allowed_domains: list[str],
-    ):
         return self._client.beta.messages.create(
             model=self._model_id,
             max_tokens=MAX_SEARCH_OUTPUT_TOKENS,
@@ -807,7 +700,6 @@ class AnthropicPublicResearchGateway:
                     "type": "web_search_20250305",
                     "name": "web_search",
                     "max_uses": max_uses,
-                    "allowed_domains": list(allowed_domains),
                 }
             ],
             messages=messages,
@@ -998,7 +890,7 @@ def _fetch_article_publication_date(
         or parsed.username is not None
         or parsed.password is not None
         or parsed.port not in {None, 443}
-        or not _host_matches(normalized_url, SEARCH_ALLOWED_DOMAINS)
+        or _publisher_for_source_url(normalized_url) is None
         or _hostname(normalized_url) == "api.acleddata.com"
     ):
         return None
@@ -1199,6 +1091,31 @@ def _text_mentions_country(text: str | None, selected_country: str | None) -> bo
     )
 
 
+def _source_supports_country(
+    source: ResearchSource, selected_country: str | None, quote: str | None = None
+) -> bool:
+    """Use explicit quote geography or an unambiguous country article title."""
+    text = source.excerpt if quote is None else quote
+    if selected_country is None or _text_mentions_country(text, selected_country):
+        return True
+    if not _quote_is_from_source(text, source.excerpt):
+        return False
+    if not _text_mentions_country(source.title, selected_country):
+        return False
+    selected_markers = set(_country_markers(selected_country))
+    # Remove the selected country's complete names before checking other geography.
+    context = _normalize_text(f"{source.title} {text or ''}")
+    for marker in sorted(selected_markers, key=len, reverse=True):
+        context = re.sub(rf"\b{re.escape(marker)}\b", " ", context)
+    for country in COUNTRY_ALIASES:
+        markers = _country_markers(country)
+        if selected_markers.intersection(markers):
+            continue
+        if any(re.search(rf"\b{re.escape(marker)}\b", context) for marker in markers):
+            return False
+    return True
+
+
 def _quote_is_from_source(quote: str | None, excerpt: str | None) -> bool:
     if quote is None or excerpt is None:
         return False
@@ -1292,7 +1209,7 @@ def _extract_search_artifact(
                         update={"excerpt": combined_excerpt}
                     )
                     sources[source.url] = source
-                if not _source_mentions_country(source, selected_country):
+                if not _source_supports_country(source, selected_country):
                     if diagnostics is not None:
                         diagnostics["country_mismatch"] += 1
                     continue
@@ -1306,9 +1223,11 @@ def _extract_search_artifact(
     resolved_urls = {
         source.url for _, attached_sources in grounded_segments for source in attached_sources
     }
-    resolved_sources = tuple(
-        source for url, source in sources.items() if url in resolved_urls
-    )[:MAX_RETAINED_SOURCES]
+    # Broad discovery must not let unapproved hits crowd out usable sources.
+    resolved_sources = tuple(sorted(
+        (source for url, source in sources.items() if url in resolved_urls),
+        key=lambda source: source.publisher is None,
+    ))[:MAX_RETAINED_SOURCES]
     retained_urls = {source.url for source in resolved_sources}
     bounded_segments = tuple(
         (
@@ -1351,7 +1270,7 @@ def _validate_normalized_claims(
         if (
             source.publisher == "ReliefWeb"
             or not supporting_quote
-            or not _text_mentions_country(supporting_quote, selected_country)
+            or not _source_supports_country(source, selected_country, supporting_quote)
         ):
             continue
         grade = _grade_claim(source, supporting_quote)
@@ -1387,7 +1306,7 @@ def _salvage_grounded_segments(
                 source.publisher == "ReliefWeb"
                 or not supporting_quote
                 or not _is_unambiguous_single_sentence(supporting_quote)
-                or not _text_mentions_country(supporting_quote, selected_country)
+                or not _source_supports_country(source, selected_country, supporting_quote)
             ):
                 continue
             key = (supporting_quote, source.url)
@@ -1396,7 +1315,10 @@ def _salvage_grounded_segments(
             seen.add(key)
             digest_input = json.dumps(
                 {
-                    "source_date": source.published_at.isoformat() if source.published_at is not None else "undated",
+                    "source_date": (
+                        source.published_at.isoformat()
+                        if source.published_at is not None else "undated"
+                    ),
                     "source_title": source.title,
                     "source_url": source.url,
                     "text": supporting_quote,

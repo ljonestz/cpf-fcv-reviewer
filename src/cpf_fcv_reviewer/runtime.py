@@ -14,8 +14,8 @@ from zlib import error as ZlibError
 
 from docx.opc.exceptions import PackageNotFoundError
 from lxml.etree import XMLParser, XMLSyntaxError, fromstring
-from pypdf.errors import PdfReadError
 from pydantic import ValidationError
+from pypdf.errors import PdfReadError
 
 from .contracts import (
     CurrentEvidenceTier,
@@ -27,21 +27,21 @@ from .contracts import (
     EvidenceLocator,
     UserCorrection,
 )
-from .fcv_readout import (
-    generate_fcv_readout,
-    readout_caveat_limitation,
-    readout_payload,
-)
 from .diagnostic_map import validate_diagnostic_references
 from .diagnostic_sources import identify_uploaded_diagnostic
 from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .extraction import (
+    PDF_SAMPLING_WARNING_SUFFIX,
     DiagnosticCoverageUnavailable,
     ExtractionLimitExceeded,
     PackageCoverageUnavailable,
-    PDF_SAMPLING_WARNING_SUFFIX,
     extract_document,
     require_readable_primary,
+)
+from .fcv_readout import (
+    generate_fcv_readout,
+    readout_caveat_limitation,
+    readout_payload,
 )
 from .follow_on import AnthropicFollowOnGateway
 from .model_gateway import AnthropicModelGateway
@@ -49,7 +49,13 @@ from .orchestrator import ReviewOrchestrator
 from .prompts import load_prompt
 from .public_research import AnthropicPublicResearchGateway, load_research_prompt
 from .registry import RegistryUnavailable, load_registry_bundle
-from .research_controller import ResearchController, ResearchMode, ResearchRequest
+from .research_controller import (
+    MAX_PRIMARY_CPF_CONTEXT_CHARACTERS,
+    MAX_REVIEW_FOCUS_CHARACTERS,
+    ResearchController,
+    ResearchMode,
+    ResearchRequest,
+)
 from .review_engine import ReviewEngine
 from .sources import choose_authoritative_source
 from .validators import (
@@ -1363,6 +1369,13 @@ def build_runtime_services(
                         ResearchMode.RRA_UPDATE
                         if dated_diagnostic is not None
                         else ResearchMode.HOLISTIC
+                    ),
+                    primary_cpf_context=" ".join(
+                        segment.text for segment in context["primary_document"].segments
+                    )[:MAX_PRIMARY_CPF_CONTEXT_CHARACTERS],
+                    review_focus=(
+                        payload.get("review_focus", "")[:MAX_REVIEW_FOCUS_CHARACTERS]
+                        if isinstance(payload.get("review_focus", ""), str) else ""
                     ),
                     diagnostic_title=(
                         dated_diagnostic.name if dated_diagnostic is not None else None

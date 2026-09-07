@@ -278,4 +278,11 @@ model. When it is present:
 - You MUST record in `limitations` that current context for this review is drawn from an
   AI-generated readout because no external current sources were available, and should be
   verified.
-- Phrase any present-day assertion it supports as indicative/reported, not established fact.
+- Qualify fallback-based statements where they appear in `overall_read`, `alignment_readout`,
+  `strategy_readout`, and priority paragraphs; a caveat in `limitations` alone is insufficient.
+  Do not say "reported" when there is no retrieved report. Distinguish a historical document
+  finding from a hypothesis about current conditions, using "if this persists" or "verify whether".
+- Keep recommendations concrete: tie them to the CPF objective, delivery mechanism, location,
+  or affected group and explain the FCV implication. Where an adaptation depends on unverified
+  current context, make that dependency explicit rather than presenting the development as fact.
+  Do not turn useful document-supported recommendations into generic warnings.

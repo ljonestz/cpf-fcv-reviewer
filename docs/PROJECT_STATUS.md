@@ -1,5 +1,17 @@
 # Project status
 
+## 2026-09-07 All-country live-research finalization (branch validation)
+
+Current work removes narrow discovery restrictions, fixes approved-publisher date
+fetching, and allows exact quotes to inherit unambiguous article-country context.
+CPF context and review focus now inform search, and substantive political events and
+mixed FCV/economic reporting are retained. Fallback guidance separates historical
+knowledge from current hypotheses and
+qualifies their use in recommendations. The goal is useful source-backed CPF analysis
+for all countries, not a Guinea-specific recovery route. All 1,501 tests pass;
+live research quality and deployment remain pending. See
+`docs/validation/2026-09-07-all-country-live-research.md`.
+
 ## 2026-09-07 Five-minute readout refinement (deployment pending)
 
 Priority overviews combine up to two assessment sentences with one FCV-relevance
