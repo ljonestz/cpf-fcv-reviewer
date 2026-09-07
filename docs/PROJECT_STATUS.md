@@ -1,5 +1,14 @@
 # Project status
 
+## 2026-09-07 Model-led live evidence: acceptance in progress
+
+The candidate branch replaces publisher/keyword exclusion with model-assessed relevance
+and credible provenance, preserves exact citation checks, includes CPF context in normalization,
+and retains explicitly undated reporting as qualified context. Haiti live research retained four
+findings. A Guinea normalization replay retained three dated findings with CPF links; Kenya
+retains one undated Crisis Group excerpt as context. Full candidate assessment and deployment
+remain pending. See `docs/validation/2026-09-07-model-led-evidence.md`.
+
 ## 2026-09-07 Live probes block release
 
 The three authorized research-only probes on `0b65e0f` accepted zero current-context

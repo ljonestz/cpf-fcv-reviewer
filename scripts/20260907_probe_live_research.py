@@ -53,7 +53,11 @@ def main() -> int:
     parser.add_argument("--guinea-cpf", type=Path, required=True)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--country", choices=("Guinea", "Kenya", "Haiti"))
+    parser.add_argument("--replay", type=Path,
+                        help="Reuse saved public source citations; calls normalization only.")
     args = parser.parse_args()
+    if args.replay and not args.country:
+        parser.error("--replay requires --country")
     document = extract_document(args.guinea_cpf.read_bytes(), args.guinea_cpf.name)
     primary = " ".join(segment.text for segment in document.segments)[:12000]
     today = datetime.now(UTC).date()
@@ -99,7 +103,7 @@ def main() -> int:
     from anthropic import Anthropic
 
     public_research.Anthropic = lambda **kw: Anthropic(
-        http_client=httpx.Client(verify=tls, timeout=90), **kw
+        http_client=httpx.Client(verify=tls, timeout=180), **kw
     )
     output = ROOT / "output" / datetime.now(UTC).strftime("%Y%m%d_%H%M%S_live-probes")
     output.mkdir(parents=True, exist_ok=False)
@@ -150,9 +154,40 @@ def main() -> int:
             gateway = public_research.AnthropicPublicResearchGateway(
                 env["ANTHROPIC_API_KEY"],
                 env["ANTHROPIC_MODEL_ID"],
-                timeout_seconds=float(env.get("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "90")),
+                timeout_seconds=float(env.get("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "180")),
                 metadata_client=metadata_client,
             )
+            if args.replay:
+                saved = json.loads(args.replay.read_text(encoding="utf-8"))
+                if saved["country"] != case.country:
+                    raise ValueError("Replay country mismatch.")
+                source_data = saved["source_diagnostics"]
+                blocks = [{"type": "web_search_tool_result", "content": [
+                    {"type": "web_search_result", "title": item["title"],
+                     "url": item["url"], "page_age": item.get("published")}
+                    for item in source_data["candidates"]
+                ]}]
+                blocks.extend({"type": "text", "text": item["quote"], "citations": [
+                    {"type": "web_search_result_location", "title": item["title"],
+                     "url": item["url"], "cited_text": item["quote"]}
+                ]} for item in source_data["citations"] if item.get("quote"))
+                replay_response = {"content": blocks, "stop_reason": "end_turn"}
+                gateway._create_web_search_response = (
+                    lambda *a, response=replay_response, **kw: response
+                )
+            parse = gateway._client.messages.parse
+
+            def observed_parse(*a, parse=parse, current_capture=capture, **kw):
+                response = parse(*a, **kw)
+                parsed = getattr(response, "parsed_output", None)
+                current_capture["normalization"] = {
+                    "stop_reason": getattr(response, "stop_reason", None),
+                    "parsed": parsed.model_dump(mode="json") if parsed is not None else None,
+                    "usage": response.usage.model_dump(mode="json"),
+                }
+                return response
+
+            gateway._client.messages.parse = observed_parse
             search = gateway.search
 
             def observed_search(prompt, search=search, current_capture=capture):

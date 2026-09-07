@@ -18,8 +18,11 @@ reporting. One substantive trusted source is useful; do not chase publisher dive
 to cover every theme. Return no more than three sources and six short findings.
 
 Search broadly for reporting relevant to the selected country, prioritizing the publishers
-named above. The publisher validation allowlist checks provenance after discovery. Do not substitute
-generic development or indicator sources for substantive FCV reporting. Use the country
+named above. Use at least one publisher-targeted search for an original institutional report
+or established news outlet. If a broad search yields encyclopedias or promotional roundups,
+use the next search to find an original report rather than summarizing those results. Use model-assessed source quality after discovery; the publisher catalogue is a provenance aid, not an exhaustive list. Do not substitute
+generic indicator sources for substantive FCV reporting. Country-specific evidence on
+CPF delivery constraints or distributional effects is substantive when the connection is explained. Use the country
 name and distinguishing terms when searching; do not confuse compound country names.
 Preserve exact source quotations with enough context to identify the country. A clearly
 country-specific article title can establish context for a quote that does not repeat the
@@ -27,6 +30,15 @@ country name; a regional title cannot establish which country an ambiguous quote
 Use only public publication pages. Do not use World Bank Indicators API observations as
 current-FCV evidence. Do not use licensed event-level data, including licensed ACLED event data,
 authenticated tools, or bulk datasets. Public ACLED analysis and summaries may be used.
+
+Select credible original reporting, institutional publications and substantive analysis, including
+relevant national or specialist publishers beyond those named above. Do not cite Wikipedia,
+social posts, commercial promotional material or search-optimized summaries as evidence.
+Use them only as leads to an original publication. Include sources on governance, exclusion,
+resource distribution and delivery constraints when they matter to the CPF, even when they
+do not use the words conflict or violence. For each finding explain its relevance to a specific
+CPF objective, delivery mechanism, location or affected group when CPF context is supplied.
+Do not invent CPF features when no CPF is supplied.
 
 Distinguish source-supported fact from interpretation, identify source dates, represent credible
 disagreement, and avoid overstating certainty in conflict-sensitive contexts.
