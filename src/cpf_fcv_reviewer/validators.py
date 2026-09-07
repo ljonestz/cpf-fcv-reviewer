@@ -857,6 +857,7 @@ def validate_stage_behavior(
                 "stage_length_overreach",
                 f"{target} recommended_action has {word_count} whitespace-separated words; "
                 f"{review_stage} allows at most {profile.max_immediate_insertion_words}.",
+                severity="advisory",
             )
         )
     if review_stage == "finalization" and any(

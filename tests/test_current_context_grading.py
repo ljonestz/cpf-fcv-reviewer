@@ -69,7 +69,7 @@ def test_salvage_undated_source_has_null_source_date():
     assert claims[0].verification == "partially_verified"
 
 
-def test_validate_normalized_keeps_and_grades_undated_and_paraphrased():
+def test_validate_normalized_grades_exact_quotes_and_rejects_paraphrased_quotes():
     from datetime import date
     from cpf_fcv_reviewer import public_research
     from cpf_fcv_reviewer.public_research import SearchArtifact, ResearchSource
@@ -117,7 +117,7 @@ def test_validate_normalized_keeps_and_grades_undated_and_paraphrased():
     )
     grades = {claim.claim_id: claim.verification for claim in retained}
     assert grades["dated-exact"] == "verified"
-    assert grades["dated-paraphrase"] == "partially_verified"
+    assert "dated-paraphrase" not in grades
     assert grades["undated-exact"] == "partially_verified"
     # undated source keeps a null date
     undated_claim = next(c for c in retained if c.claim_id == "undated-exact")

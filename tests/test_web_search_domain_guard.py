@@ -1,14 +1,4 @@
-"""Regression tests for the web_search allowed-domains 400 failure.
-
-Root cause (confirmed against the live API, request_id req_011Cen5rjLbvogiirH5nzooS):
-the web_search request sent ``allowed_domains`` containing news wires whose sites
-block Anthropic's crawler (reuters.com, apnews.com, bbc.com, bbc.co.uk). Anthropic
-rejects the ENTIRE request with HTTP 400 ("The following domains are not accessible
-to our user agent: [...]"), so live-news research failed on every run.
-
-Fix: exclude crawler-blocked wires from the domains actually sent, and self-heal by
-dropping any domain Anthropic rejects and retrying once (future-proofing).
-"""
+"""Broad search discovery preserves source acceptance and call limits."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -23,34 +13,6 @@ def _gateway(monkeypatch, fake_client):
     )
 
 
-class _DomainsBlockedError(Exception):
-    """Mimics anthropic.BadRequestError for inaccessible allowed_domains."""
-
-    def __init__(self, domains: list[str]) -> None:
-        listed = ", ".join(f"'{d}'" for d in domains)
-        message = (
-            "The following domains are not accessible to our user agent: "
-            f"[{listed}]. Read more: https://support.anthropic.com/..."
-        )
-        self.status_code = 400
-        self.body = {
-            "type": "error",
-            "error": {"type": "invalid_request_error", "message": message},
-        }
-        super().__init__(f"Error code: 400 - {self.body}")
-
-
-def test_search_allowed_domains_excludes_crawler_blocked_wires():
-    sent = set(public_research.SEARCH_ALLOWED_DOMAINS)
-    # The wires that block Anthropic's crawler must NOT be sent (they cause the 400).
-    assert public_research.CRAWLER_BLOCKED_SEARCH_DOMAINS.isdisjoint(sent)
-    for wire in ("reuters.com", "apnews.com", "bbc.com", "bbc.co.uk"):
-        assert wire not in sent
-    # Reachable trusted sources are still sent.
-    assert {"crisisgroup.org", "rescue.org", "acleddata.com", "reliefweb.int",
-            "un.org", "unhcr.org", "issafrica.org"} <= sent
-
-
 def test_blocked_wires_remain_approved_publishers():
     # The wires are still valid publishers, so results reaching us via the
     # app-fetched curated fallback (or any crawlable mirror) are accepted.
@@ -61,44 +23,27 @@ def test_blocked_wires_remain_approved_publishers():
     )
 
 
-def test_inaccessible_search_domains_parsed_from_error_body():
-    exc = _DomainsBlockedError(["reuters.com", "bbc.com"])
-    assert public_research._inaccessible_search_domains(exc) == frozenset(
-        {"reuters.com", "bbc.com"}
-    )
-
-
-def test_inaccessible_search_domains_empty_for_unrelated_error():
-    assert public_research._inaccessible_search_domains(ValueError("nope")) == frozenset()
-
-
-def test_web_search_drops_rejected_domain_and_retries(monkeypatch):
-    """If Anthropic rejects a currently-allowed domain, drop it and retry once."""
-    rejected = public_research.SEARCH_ALLOWED_DOMAINS[0]
+def test_web_search_discovers_broadly_without_extra_calls(monkeypatch):
+    calls = []
     sentinel = SimpleNamespace(content=(), stop_reason="end_turn")
-    calls: list[dict] = []
 
     class FakeBetaMessages:
         def create(self, **kwargs):
             calls.append(kwargs)
-            if len(calls) == 1:
-                raise _DomainsBlockedError([rejected])
             return sentinel
 
     fake_client = SimpleNamespace(
         beta=SimpleNamespace(messages=FakeBetaMessages()), messages=SimpleNamespace()
     )
     gateway = _gateway(monkeypatch, fake_client)
-
     result = gateway._create_web_search_response(
-        [{"role": "user", "content": "country: Guinea"}],
+        [{"role": "user", "content": "country: Kenya"}],
         deadline=gateway._monotonic() + 30,
     )
-
     assert result is sentinel
-    assert len(calls) == 2
-    assert rejected in calls[0]["tools"][0]["allowed_domains"]
-    assert rejected not in calls[1]["tools"][0]["allowed_domains"]
+    assert len(calls) == 1
+    assert "allowed_domains" not in calls[0]["tools"][0]
+    assert calls[0]["tools"][0]["max_uses"] == 2
 
 
 def test_web_search_does_not_retry_on_unrelated_400(monkeypatch):

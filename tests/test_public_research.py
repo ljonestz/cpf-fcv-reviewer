@@ -214,14 +214,8 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
     assert "concise cited synthesis" in beta_calls[0]["system"]
     search_tool = beta_calls[0]["tools"][0]
     assert search_tool["max_uses"] == 2
-    assert search_tool["allowed_domains"] == list(public_research.SEARCH_ALLOWED_DOMAINS)
-    allowed_domains = set(search_tool["allowed_domains"])
-    # Reachable preferred sources are sent; crawler-blocked wires are excluded so
-    # Anthropic does not reject the whole request with a 400.
-    assert {"crisisgroup.org", "rescue.org", "acleddata.com"} <= allowed_domains
-    assert public_research.CRAWLER_BLOCKED_SEARCH_DOMAINS.isdisjoint(allowed_domains)
-    assert {"un.org", "reliefweb.int", "icrc.org", "issafrica.org"} <= allowed_domains
-    assert {"worldbank.org", "imf.org", "oecd.org"}.isdisjoint(allowed_domains)
+    # Broad discovery retains publisher checks at evidence acceptance.
+    assert "allowed_domains" not in search_tool
     assert beta_calls[0]["max_tokens"] == 2_000
 
 
@@ -230,7 +224,9 @@ def test_anthropic_gateway_normalizes_only_final_cited_narrative(monkeypatch):
     assert parse_call["output_format"].__name__ == "ResearchClaimBatch"
     assert "tools" not in parse_call
     assert parse_call["max_tokens"] == public_research.MAX_NORMALIZATION_OUTPUT_TOKENS
-    assert public_research.MAX_NORMALIZATION_OUTPUT_TOKENS > public_research.MAX_SEARCH_OUTPUT_TOKENS
+    assert (
+        public_research.MAX_NORMALIZATION_OUTPUT_TOKENS > public_research.MAX_SEARCH_OUTPUT_TOKENS
+    )
     normalized_payload = json.loads(parse_call["messages"][0]["content"])
     assert normalized_payload == {
         "narrative": "The first cited narrative segment.\nThe second cited narrative segment.",
@@ -400,8 +396,7 @@ def test_anthropic_gateway_continues_pause_turn_once_and_preserves_search_result
     normalized_payload = json.loads(parse_calls[0]["messages"][0]["content"])
     assert [call["tools"][0]["max_uses"] for call in beta_calls] == [2, 1]
     assert all(
-        call["tools"][0]["allowed_domains"]
-        == list(public_research.SEARCH_ALLOWED_DOMAINS)
+        "allowed_domains" not in call["tools"][0]
         for call in beta_calls
     )
     assert normalized_payload["narrative"] == (
@@ -1362,7 +1357,7 @@ def test_normalization_exception_falls_back_to_block_level_salvage(monkeypatch):
         "Unpunctuated cited block",
     ],
 )
-def test_salvage_rejects_ambiguous_or_unpunctuated_cited_blocks(monkeypatch, narrative):
+def test_salvage_preserves_exact_cited_blocks_without_punctuation_requirements(monkeypatch, narrative):
     class FakeBetaMessages:
         def create(self, **kwargs):
             return _cited_response(
@@ -1385,8 +1380,9 @@ def test_salvage_rejects_ambiguous_or_unpunctuated_cited_blocks(monkeypatch, nar
     )
     monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
 
-    with pytest.raises(ValidationError):
-        public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+    claims = public_research.AnthropicPublicResearchGateway("key", "model").search("prompt")
+    assert claims[0].supporting_quote == narrative
+    assert claims[0].verification == "partially_verified"
 
 
 def test_dated_government_source_salvage_is_not_accepted(monkeypatch):
@@ -1738,8 +1734,8 @@ def test_public_research_prompt_requires_exact_modes_and_source_hierarchy():
         "selected country",
         "One substantive trusted source",
         "three sources and six short findings",
-        "publisher validation allowlist",
-        "generic development or indicator sources",
+        "model-assessed source quality",
+        "generic indicator sources",
         "licensed event-level data",
     ):
         assert term in prompt
@@ -2043,12 +2039,10 @@ def test_normalized_claim_requires_quote_from_exact_country_source():
         selected_country="Guinea",
     )
 
-    assert [claim.claim_id for claim in retained] == ["valid", "swapped", "no-excerpt"]
+    assert [claim.claim_id for claim in retained] == ["valid"]
     grades = {claim.claim_id: claim.verification for claim in retained}
     assert grades == {
         "valid": "verified",
-        "swapped": "partially_verified",
-        "no-excerpt": "partially_verified",
     }
     assert retained[0].text == transition.excerpt
     assert retained[0].publisher == "Reuters"
@@ -2099,9 +2093,13 @@ def test_bounded_article_metadata_reads_publication_fields_only():
         blocked = public_research._fetch_article_publication_date(
             "http://apnews.com/article/opaque-story-id", client
         )
+        unsafe_host = public_research._fetch_article_publication_date(
+            "https://apnews.com.evil.example/article/opaque-story-id", client
+        )
 
     assert resolved == date(2026, 8, 30)
     assert blocked is None
+    assert unsafe_host is None
     assert len(requests) == 1
 
 
@@ -2165,7 +2163,7 @@ def test_gateway_performs_at_most_one_metadata_get_for_opaque_sources(monkeypatc
         ).search("country: Guinea")
 
     assert len(metadata_requests) == 1
-    assert [claim.source_url for claim in result] == [urls[0]]
+    assert [claim.source_url for claim in result] == list(urls)
     assert result[0].publication_date_basis == "article_metadata"
 
 
@@ -2596,7 +2594,7 @@ def test_same_url_preserves_later_useful_excerpt_within_source_bound():
     assert "Political violence increased in Somalia." in artifact.sources[0].excerpt
 
 
-def test_primary_reliefweb_copy_without_originating_publisher_is_not_accepted():
+def test_primary_reliefweb_copy_preserves_host_attribution_with_qualified_confidence():
     quote = "Political violence increased in Somalia."
     source = public_research.ResearchSource(
         title="Somalia situation report",
@@ -2620,7 +2618,9 @@ def test_primary_reliefweb_copy_without_originating_publisher_is_not_accepted():
         selected_country="Somalia",
     )
 
-    assert accepted == ()
+    assert len(accepted) == 1
+    assert accepted[0].publisher == "ReliefWeb"
+    assert accepted[0].verification == "partially_verified"
 
 
 def test_gateway_stops_before_operation_after_attempt_deadline(monkeypatch):
@@ -2738,7 +2738,7 @@ def test_normalized_claim_country_must_be_in_exact_quote_not_other_excerpt():
         publisher="Reuters",
         published_at=date(2026, 8, 30),
         excerpt=(
-            "Somalia held local consultations. […] "
+            "Somalia held local consultations. [Ã¢â‚¬Â¦] "
             "Political violence increased in Kenya."
         ),
     )
@@ -2846,3 +2846,153 @@ def test_overflow_source_remains_available_for_local_qualification():
     assert len(segments) == 4
     assert len(claims) == 4
     assert claims[-1].supporting_quote == "Political violence increased in Somalia."
+
+
+@pytest.mark.parametrize("country", ["Guinea", "Kenya", "Haiti", "Ukraine"])
+def test_country_specific_article_supplies_context_for_exact_quote(country):
+    quote = "Political violence disrupted local services."
+    source = public_research.ResearchSource(
+        title=f"{country} political update",
+        url="https://www.reuters.com/world/update-2026-08-30",
+        publisher="Reuters",
+        published_at=date(2026, 8, 30),
+        excerpt=quote,
+    )
+    claim = _claim(
+        publisher="Reuters", source_url=source.url, source_title=source.title,
+        source_date=source.published_at, text=quote, supporting_quote=quote,
+    )
+    accepted = public_research._validate_normalized_claims(
+        (claim,), public_research.SearchArtifact(narrative=quote, sources=(source,)),
+        selected_country=country,
+    )
+    assert len(accepted) == 1
+    assert accepted[0].supporting_quote == quote
+
+
+@pytest.mark.parametrize("title,quote", [
+    ("Guinea-Bissau political update", "Political violence disrupted services."),
+    ("Guinea and Mali update", "Political violence disrupted services."),
+    ("Guinea political update", "Political violence increased in Mali."),
+])
+def test_article_context_does_not_reassign_ambiguous_or_other_country_quotes(title, quote):
+    source = public_research.ResearchSource(
+        title=title, url="https://www.reuters.com/world/update-2026-08-30",
+        publisher="Reuters", published_at=date(2026, 8, 30), excerpt=quote,
+    )
+    claim = _claim(
+        publisher="Reuters", source_url=source.url, source_title=title,
+        source_date=source.published_at, text=quote, supporting_quote=quote,
+    )
+    accepted = public_research._validate_normalized_claims(
+        (claim,), public_research.SearchArtifact(narrative=quote, sources=(source,)),
+        selected_country="Guinea",
+    )
+    assert accepted == ()
+
+
+@pytest.mark.parametrize("country", ["Guinea", "Kenya", "Haiti", "Ukraine"])
+def test_gateway_retains_country_article_quote_through_extraction_and_salvage(monkeypatch, country):
+    quote = "Political violence disrupted local services."
+    gateway = _diagnostic_gateway(
+        monkeypatch,
+        _cited_response(
+            source_url="https://www.reuters.com/world/update-2026-08-30",
+            source_title=f"{country} political update", page_age="2026-08-30",
+            cited_text=quote,
+        ),
+        None,
+    )
+    claims = gateway.search(f"country: {country}")
+    assert len(claims) == 1
+    assert claims[0].supporting_quote == quote
+    assert claims[0].verification == "partially_verified"
+    assert gateway.last_diagnostics["country_mismatch"] == 0
+
+
+def test_broad_discovery_prioritizes_approved_sources_before_normalization_limit():
+    blocks = []
+    for host in ("example.org", "example.com", "example.net", "www.reuters.com"):
+        blocks.extend(_cited_response(
+            source_url=f"https://{host}/update-2026-08-30",
+            source_title="Kenya political update", page_age="2026-08-30",
+            cited_text="Political violence increased in Kenya.",
+        ).content)
+    artifact, _ = public_research._extract_search_artifact(
+        tuple(blocks), selected_country="Kenya"
+    )
+    assert artifact.sources[0].publisher == "Reuters"
+    assert len(artifact.sources) <= public_research.MAX_RETAINED_SOURCES
+
+
+@pytest.mark.parametrize("host", ["news.mongabay.com", "bti-project.org", "nation.africa"])
+def test_model_assessed_source_outside_catalogue_retains_grounded_evidence(host):
+    quote = "Local councils in Guinea are appointed by the ruling authorities."
+    source = public_research.ResearchSource(
+        title="Guinea local governance", url=f"https://{host}/2026/08/report",
+        published_at=date(2026, 8, 1), excerpt=quote,
+    )
+    item = _claim("new-publisher", source_url=source.url, supporting_quote=quote,
+                  source_quality="analysis", fcv_relevant=True)
+    result = public_research._validate_normalized_claims(
+        (item,), public_research.SearchArtifact(narrative="Cited synthesis", sources=(source,)),
+        selected_country="Guinea",
+    )
+    assert len(result) == 1
+    assert result[0].publisher == host
+    assert result[0].verification == "partially_verified"
+    assert result[0].fcv_relevant is True
+
+
+def test_model_quality_cannot_admit_wikipedia_or_invented_quotes():
+    for host, quote in [("en.wikipedia.org", "Guinea report."),
+                        ("news.mongabay.com", "Guinea invented quotation.")]:
+        source = public_research.ResearchSource(
+            title="Guinea report", url=f"https://{host}/report",
+            published_at=date(2026, 8, 1), excerpt="Guinea report.",
+        )
+        item = _claim(source_url=source.url, supporting_quote=quote,
+                      source_quality="reporting", fcv_relevant=True)
+        assert not public_research._validate_normalized_claims(
+            (item,), public_research.SearchArtifact(narrative="Synthesis", sources=(source,)),
+            selected_country="Guinea",
+        )
+
+
+def test_model_assessed_official_blog_is_usable_analysis():
+    item = _claim(source_url="https://blogs.worldbank.org/en/governance/guinea",
+                  source_title="World Bank Blog", source_quality="analysis", fcv_relevant=True)
+    assert retain_public_claims((item,))[0] == (item,)
+
+
+def test_model_assessed_unsuitable_known_source_is_rejected():
+    item = _claim(source_quality="unsuitable", fcv_relevant=True)
+    assert not retain_public_claims((item,))[0]
+
+
+@pytest.mark.parametrize("decision", ["unsuitable", "empty"])
+def test_normalization_source_rejection_is_not_undone_by_salvage(monkeypatch, decision):
+    url = "https://www.worldbank.org/2026/08/guinea"
+    quote = "Guinea local councils remain appointed."
+    claims = () if decision == "empty" else (_claim(
+        source_url=url, supporting_quote=quote, source_quality="unsuitable", fcv_relevant=False,
+    ),)
+    gateway = _diagnostic_gateway(
+        monkeypatch,
+        _cited_response(source_url=url, source_title="Guinea", page_age="2026-08-01",
+                        cited_text=quote),
+        public_research.ResearchClaimBatch(claims=claims),
+    )
+    assert gateway.search("country: Guinea") == ()
+
+
+def test_grounded_multisentence_rights_reporting_survives_normalization_failure(monkeypatch):
+    quote = "Guinea's authorities restricted protests. Local groups reported intimidation..."
+    gateway = _diagnostic_gateway(monkeypatch, _cited_response(
+        source_url="https://www.hrw.org/world-report/2025/country-chapters/guinea",
+        source_title="World Report 2025: Guinea", page_age="2025-01-16", cited_text=quote,
+    ), None)
+    claims = gateway.search("country: Guinea")
+    assert len(claims) == 1
+    assert claims[0].supporting_quote == quote
+    assert claims[0].verification == "partially_verified"

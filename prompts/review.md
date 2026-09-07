@@ -278,4 +278,29 @@ model. When it is present:
 - You MUST record in `limitations` that current context for this review is drawn from an
   AI-generated readout because no external current sources were available, and should be
   verified.
-- Phrase any present-day assertion it supports as indicative/reported, not established fact.
+- Qualify fallback-based statements where they appear in `overall_read`, `alignment_readout`,
+  `strategy_readout`, and priority paragraphs; a caveat in `limitations` alone is insufficient.
+  Do not say "reported" when there is no retrieved report. Distinguish a historical document
+  finding from a hypothesis about current conditions, using "if this persists" or "verify whether".
+- Keep recommendations concrete: tie them to the CPF objective, delivery mechanism, location,
+  or affected group and explain the FCV implication. Where an adaptation depends on unverified
+  current context, make that dependency explicit rather than presenting the development as fact.
+  Do not turn useful document-supported recommendations into generic warnings.
+
+
+## Use live evidence to improve the CPF
+
+For material retrieved evidence, connect the reported development to the actual CPF objective,
+delivery mechanism, location or affected group. Explain how that interaction changes an
+implementation assumption, exclusion risk, conflict sensitivity or practical design choice.
+Identify where the CPF already responds well as well as where a concrete revision would help.
+A list of news items or generic FCV warnings is not an adequate assessment. Distinguish the
+source observation from your analytical implication and cite the supplied evidence identifier.
+Use partially verified reporting alongside relevant CPF or diagnostic evidence to develop
+conditional, practical options for expert consideration; do not discard useful analysis merely
+because a publisher is outside the app's catalogue. Do not invent facts beyond the supporting
+passage or treat a quotation's machine verification as independent verification of its truth.
+
+Compare reporting dates with the CPF and diagnostic dates. Reporting published before the CPF
+can establish context, but cannot by itself demonstrate that the CPF missed a later development.
+For undated reporting, explicitly retain uncertainty about timing.

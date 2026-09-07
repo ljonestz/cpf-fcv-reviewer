@@ -1,5 +1,66 @@
 # Project status
 
+## 2026-09-07 Recommendation length is advisory
+
+User approved treating excess recommendation length as advisory. The validator still
+reports the word-limit issue, but it no longer blocks completion or causes paid repair.
+The bounded repair follow-up now filters advisory issues before deciding whether another
+model call is warranted. Evidence/citation errors retain fatal validation.
+
+Three new orchestrator cases and the expanded runtime regression failed before the fixes.
+Final provider-free suite: **1,524 passed**, including smoke tests. No paid calls or deployment.
+The all-country research candidate remains on PR24 pending successful live quality acceptance.
+
+## 2026-09-07 Luna max retry: word-limit blocker remains
+
+One further explicitly authorized paid quality assessment on `6fb6869` was delegated to
+Luna max. It failed after bounded correction with one residual `stage_length_overreach`.
+The missing-registry-support residual did not recur. No successful result, assistant call,
+or Word export was produced. The coordinating agent inspected the failure screenshot.
+No further paid run, merge or deployment. See
+`docs/validation/2026-09-07-luna-max-quality-retry.md`. The next local issue is the word-limit
+rule blocking the entire assessment; live content quality remains unaccepted.
+
+## 2026-09-07 Candidate quality run: correction failure, local fix validated
+
+The user explicitly authorized one full public Guinea CPF+RRA assessment and one
+assistant follow-up. The local candidate on `03b4601` retained dated current evidence
+(`research_reduced`, not model-only fallback), but failed final validation after repair.
+Safe codes: initial `unknown_institutional_referral` and `stage_length_overreach`;
+terminal `missing_registry_support` (three issues), then `review_failed`.
+No successful review, assistant request, or Word export was produced.
+
+A local regression reproduced loss of valid priority evidence during unrelated mechanical
+repair. The correction now preserves the original assessment, source links and unaffected
+content when only action length and institutional-reference corrections are requested.
+All three new regressions failed before the fix; the full provider-free suite now passes
+**1,520 tests**. The bounded registry-link follow-up also preserves already grounded
+priorities and only adds supplied registry evidence to an unsupported priority. This establishes the local failure-class fix, not the exact content of the
+rejected live draft, which was not retrieved. A second paid assessment requires explicit
+authorization under the repository's one-run rule. PR24 remains draft; no merge or deployment.
+See `docs/validation/2026-09-07-model-led-evidence.md`.
+
+## 2026-09-07 Live probes block release
+
+The three authorized research-only probes on `0b65e0f` accepted zero current-context
+claims for Guinea, Kenya, and Haiti. Guinea/Kenya lost all cited passages to publisher
+acceptance; Haiti retained sources but lost its claims at the FCV-relevance stage.
+No full review or deployment followed. Diagnostic source capture is prepared to
+identify exact rejection causes before further changes. See
+`docs/validation/2026-09-07-paid-source-probes.md`.
+
+## 2026-09-07 All-country live-research finalization (branch validation)
+
+Current work removes narrow discovery restrictions, fixes approved-publisher date
+fetching, and allows exact quotes to inherit unambiguous article-country context.
+CPF context and review focus now inform search, and substantive political events and
+mixed FCV/economic reporting are retained. Fallback guidance separates historical
+knowledge from current hypotheses and
+qualifies their use in recommendations. The goal is useful source-backed CPF analysis
+for all countries, not a Guinea-specific recovery route. All 1,501 tests pass;
+live research quality and deployment remain pending. See
+`docs/validation/2026-09-07-all-country-live-research.md`.
+
 ## 2026-09-07 Five-minute readout refinement (deployment pending)
 
 Priority overviews combine up to two assessment sentences with one FCV-relevance

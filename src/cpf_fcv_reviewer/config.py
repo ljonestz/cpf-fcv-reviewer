@@ -50,7 +50,7 @@ def build_config(
         "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
         "RESEARCH_MAX_ATTEMPTS": int(environment("RESEARCH_MAX_ATTEMPTS", "1")),
         "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": float(
-            environment("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "90")
+            environment("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "180")
         ),
         "RESEARCH_TOTAL_BUDGET_SECONDS": float(
             environment("RESEARCH_TOTAL_BUDGET_SECONDS", "300")

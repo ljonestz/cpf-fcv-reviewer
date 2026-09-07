@@ -727,6 +727,42 @@ class ReviewEngine:
             },
             output_type=ReviewDraft,
         )
+        issue_codes = {issue["code"] for issue in issues}
+        if issue_codes and issue_codes <= {
+            "stage_length_overreach", "unknown_institutional_referral",
+            "missing_registry_support",
+        }:
+            # Mechanical correction must preserve the assessment and existing
+            # sources, including during the bounded registry-link follow-up.
+            repaired_areas = {area.priority_area_id: area for area in draft.priority_areas}
+            registry_ids = {
+                item for item in available_evidence_ids if item.startswith("registry-")
+            }
+            priorities = []
+            for area in result.priority_areas:
+                candidate = repaired_areas.get(area.priority_area_id)
+                updates = {}
+                if candidate is not None:
+                    if (
+                        "stage_length_overreach" in issue_codes
+                        and len(area.recommended_action.split())
+                        > stage_profile.max_immediate_insertion_words
+                    ):
+                        updates["recommended_action"] = candidate.recommended_action
+                    if (
+                        "missing_registry_support" in issue_codes
+                        and registry_ids.isdisjoint(area.evidence_ids)
+                    ):
+                        updates["evidence_ids"] = area.evidence_ids + tuple(
+                            item for item in candidate.evidence_ids
+                            if item in registry_ids and item not in area.evidence_ids
+                        )
+                priorities.append(area.model_copy(update=updates))
+            preserved = dict(draft_payload)
+            preserved["priority_areas"] = priorities
+            if "unknown_institutional_referral" in issue_codes:
+                preserved["institutional_referral_ids"] = draft.institutional_referral_ids
+            draft = ReviewDraft.model_validate(preserved)
         allow_coverage_status_repair = any(
             issue["code"] == "incomplete_coverage_absence_claim"
             for issue in issues
