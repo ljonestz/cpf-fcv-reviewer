@@ -1,5 +1,15 @@
 # Project status
 
+## 2026-09-07 Guinea map-only probe passed (not an end-to-end acceptance)
+
+One authorized model request using the Render service's configured model
+`claude-sonnet-4-5` mapped all 101 extractable RRA pages to 16 valid thematic
+entries; schema and representative evidence-reference validation passed. No retry
+was needed. The earlier schema failure was not reproduced, so no schema loosening
+is justified. The validated correction remains in draft PR #21, not deployed.
+Next: approved deployment and one full Guinea review with readout/DOCX verification.
+Safe details are in `docs/validation/2026-09-07-limited-mode-validation.md`.
+
 ## 2026-09-07 Limited-mode validation correction (prepared; not deployed)
 
 Based on verified GitHub main `3bf4f08`. A provider-free regression proves that

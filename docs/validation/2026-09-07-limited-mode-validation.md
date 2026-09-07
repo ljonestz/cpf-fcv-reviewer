@@ -65,3 +65,23 @@ Ruff passed. Real Guinea preflight extracted 101 text pages and estimated 112,86
 input tokens, within the 160,000-token runtime bound. No provider calls occurred:
 the local process and checked local configuration had no Anthropic API key.
 Paid execution is authorized but awaits the maintainer's credential location.
+
+## Authorized map-only result
+
+The authorized provider probe completed with `claude-sonnet-4-5`: all 101
+extractable RRA pages were supplied, yielding 16 valid thematic entries on the
+first request. `validate_diagnostic_references` passed. One actual model request
+was used, with transport retries disabled; no schema retry was needed. The probe
+used the existing Render service settings in process memory, without saving or
+printing credentials. Local SDK versions: anthropic 0.84.0, pydantic 2.12.5.
+
+An earlier local attempt failed during SDK construction because of an invalid
+inherited SSL_CERT_FILE, before any model request. A provider-free boundary test
+confirmed this; the successful attempt used a valid CA bundle plus Windows trust
+roots and an additional hard one-call guard.
+
+The previous provider schema rejection was not reproduced. Do not infer that the
+Guinea RRA is inherently unmappable, or relax its schema based on this result.
+No full assessment, merge, or deployment occurred. Next acceptance step requires
+approval: deploy the reviewed validation correction, verify the exact live commit,
+and run one full Guinea review including rendered output and DOCX checks.
