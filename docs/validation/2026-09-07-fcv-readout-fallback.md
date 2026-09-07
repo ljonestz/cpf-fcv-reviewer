@@ -1,7 +1,16 @@
-# 2026-09-07 — FCV model-readout fallback: implemented, deployed, confirming paid run PENDING
+# 2026-09-07 - FCV model-readout fallback: implemented, deployed, and verified
 
 Deployed build: `main` @ `ec8d3e3` (PRs #17 feature + #18 fix), live on Render
 `srv-d9tju52jobas73d6jvk0` (`/health` → `release: ec8d3e3`).
+
+## Superseded status
+
+The confirmation that was pending in this dated record was completed on release
+`63b16da`. The Guinea run emitted `fcv_readout_generated` with six themes, carried the
+verify-before-use limitation into the result, reached `run_complete`, and exported a
+valid DOCX. No independent current-context evidence was accepted, so the fallback was
+exercised as a context-only resilience path. See `docs/validation/2026-09-07-guinea-acceptance.md`.
+
 
 ## Why (the Guinea "nothing returned" problem)
 
@@ -40,24 +49,22 @@ instantly and the best-effort guard swallowed it (`fcv_readout_unavailable`). Ad
    **`fcv_readout_unavailable`** because of the `PROMPT_NAMES` allowlist defect. This run is
    what exposed the bug.
 
-## Confirming run — PENDING EXPLICIT AUTHORIZATION (not run)
+## Confirming run - completed later on release `63b16da`
 
-The allowlist fix (`ec8d3e3`) is **provider-free verified** (`load_prompt("fcv_readout")`
-now returns the prompt; full suite 1477 passed, 4 pre-existing unrelated failures) and
-**deployed**. A confirming paid Guinea run was intentionally NOT executed — the standing rule
-is one authorized paid run at a time, and tonight's authorization was consumed by run #2.
+At the time of this record, the allowlist fix (`ec8d3e3`) was provider-free verified
+and deployed, but the confirming paid run had not yet been authorized. That run was later
+completed on release `63b16da`; the original procedure is retained below as historical
+reproduction context.
 
-To run the confirmation (one paid Guinea run):
+Original confirmation procedure:
 ```
 cd "C:\Users\wb559324\OneDrive - WBG\Claude_Outputs\cpf_screener\GuineaCPFRRA\20260907_readout_fixed_run"
 C:\WBG\Python313\python.exe run_guinea_paid.py
 ```
 (The folder already has `merged_ca.pem` and the runner; `/health` must show
-`release: ec8d3e3` or later.) **Expected on success:** an `fcv_readout_generated` event after
-research, and the review's `limitations` containing an "AI-generated readout … no external
-current sources were available … verify before use" entry with the current Guinea FCV
-synthesis + themes, informing the review's present-day framing. Confidence is high because the
-only prior failure was the now-fixed allowlist `ValueError`.
+`release: ec8d3e3` or later.) The expected `fcv_readout_generated` event and
+verify-before-use limitation were observed in the later `63b16da` acceptance, with six
+fallback themes. The current acceptance record is `docs/validation/2026-09-07-guinea-acceptance.md`.
 
 ## Recommended next (higher-value root fix, not done)
 

@@ -1,6 +1,12 @@
 # Limited-mode validation diagnosis - 2026-09-07
 
-Base release: `3bf4f08`, verified against GitHub main. No deployment or paid calls.
+Base release: `3bf4f08`, verified against GitHub main. No deployment or paid calls at the time of this record.
+
+## Later outcome
+
+The correction described here subsequently shipped in PR #21 and release `63b16da`.
+The authorized map-only probe passed, and the full Guinea acceptance reached
+`run_complete` without `limited_mode_overclaim`; see `docs/validation/2026-09-07-guinea-acceptance.md`.
 
 ## Findings
 

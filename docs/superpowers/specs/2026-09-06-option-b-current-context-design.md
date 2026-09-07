@@ -3,7 +3,9 @@
 Date: 2026-09-06
 Repo: `cpf-fcv-reviewer`
 Branch: `feat/option-b-current-context` (off `origin/main` @ `fc544a7`, source-identical to production `bf1f14b`)
-Status: approved for planning (maintainer signed off on the citation-risk tradeoff on 2026-09-06)
+Status: implemented and verified in production on 2026-09-07. The citation-risk
+tradeoff was approved on 2026-09-06; release `63b16da` completed the Guinea acceptance
+with the bounded fallback, explicit limitation, and non-fatal thin-news behavior.
 
 ## 1. Purpose and the one deliberate philosophy change
 

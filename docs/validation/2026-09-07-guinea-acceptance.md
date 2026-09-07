@@ -53,9 +53,10 @@ this run is not evidence of full-package analytical coverage.
 
 Artifacts are in `output/20260907_acceptance_0845/` in the acceptance worktree:
 `20260907_guinea-review.docx`, `acceptance-safe-summary.json`, and dated Guinea
-intake, progress, summary, detailed, and result-header PNGs. Screenshot full-page
-stitching was unreliable for the long detailed view; viewport screenshots were
-also inspected. Artifacts and live assessment identifiers are not committed.
+intake, progress, summary, detailed, result-header, `20260907-guinea-five-minute-full.png`,
+and `20260907-guinea-detailed-full.png` PNGs. The two `*-full.png` files are direct
+full-panel captures (760 x 6,951 and 760 x 21,759 pixels), rather than stitched viewport
+screenshots. Artifacts and live assessment identifiers are not committed.
 The live run ID is retained only in the existing non-repository Guinea handoff.
 
 ## Next work
