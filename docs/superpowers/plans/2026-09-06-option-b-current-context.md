@@ -8,6 +8,14 @@
 
 **Tech Stack:** Python 3.13, Pydantic v2, Flask, pytest. Frontend: vanilla JS (`static/app.js`). DOCX via python-docx (`export_docx.py`). All tests are provider-free.
 
+## Implementation status (2026-09-07)
+
+Implemented and deployed through the Option B, FCV readout, and follow-up validation
+releases. The full Guinea acceptance on `63b16da` reached `run_complete` with zero
+independent current-context evidence and a six-theme context-only readout. The plan is
+retained as the implementation record; current limitations and source-coverage work are
+tracked in `docs/PROJECT_STATUS.md`.
+
 **Spec:** `docs/superpowers/specs/2026-09-06-option-b-current-context-design.md`
 
 **Pre-flight for every test run:** clear inherited CA env so pytest does not try the corporate proxy:

@@ -1,5 +1,10 @@
 # 2026-09-06 — Option B paid Guinea acceptance run (PASS)
 
+This is the first Option B acceptance record and remains historical. The later
+`63b16da` release added the model-readout fallback and completed a further Guinea
+acceptance with six fallback themes; see `docs/validation/2026-09-07-guinea-acceptance.md`.
+
+
 Deployed build: `main` @ `4dd0f69` (merge of PR #15, "Option B: current-context as graded
 trusted synthesis"), manually deployed to Render service `srv-d9tju52jobas73d6jvk0`
 (`cpf-fcv-review-prototype`, free tier, autoDeploy off). `/health` returned 200 with
@@ -9,8 +14,7 @@ trusted synthesis"), manually deployed to Render service `srv-d9tju52jobas73d6jv
 
 One authorized paid run against the deployed Option B build, real Guinea CPF + RRA
 (`guineacpf.pdf` + `guinearra.pdf`) via `POST /api/reviews` (`country=Guinea`,
-`review_stage=decision_review`, RRA as `context_documents`). Assessment
-`ad9fe458426e4cdba6fcfdfc47fe1c04`. Terminal event **`run_complete`** (repair_count 1) in
+`review_stage=decision_review`, RRA as `context_documents`). Assessment ID retained in the non-repository run folder. Terminal event **`run_complete`** (repair_count 1) in
 ~413 s; valid **46,394-byte DOCX**; 3 priority areas; 6 limitations.
 
 This is the first time a Guinea CPF+RRA run has reached `run_complete` — the exact

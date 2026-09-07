@@ -1,5 +1,14 @@
 # 2026-09-06 — live-news (current-context) pipeline: three root-cause fixes + live verification
 
+## Later outcome
+
+The downstream zero-claim failure described below was subsequently addressed by
+Option B grading/advisory behavior and the bounded FCV readout fallback. Release
+`63b16da` completed the Guinea acceptance with `run_complete`; it still accepted zero
+independent current-context evidence, so source retrieval remains the substantive
+follow-up. This record preserves the original root-cause evidence.
+
+
 Deployed production commit at end of session: **`bf1f14b`** (PRs #11, #12, #13 merged to `main`,
 each manually deployed to Render service `srv-d9tju52jobas73d6jvk0`). `/health` returned 200 and the
 app started cleanly after each deploy.

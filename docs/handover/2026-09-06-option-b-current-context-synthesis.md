@@ -4,6 +4,15 @@ Date: 2026-09-06
 Repo: `cpf-fcv-reviewer`
 Production at handover: `main` @ `bf1f14b` (deployed, healthy).
 
+## Superseded status (2026-09-07)
+
+The Option B implementation described here was subsequently merged, deployed, and
+verified. The current release is `63b16da`; a full Guinea acceptance reached
+`run_complete` with zero independent current-context evidence, a six-theme model-readout
+fallback, and a valid DOCX. This handover remains useful as the design rationale and
+search-coverage diagnosis. Use `docs/validation/2026-09-07-guinea-acceptance.md` and
+`docs/PROJECT_STATUS.md` for the live status and remaining source-coverage limitation.
+
 ## Read first
 - `CLAUDE.md`, `README.md`, `docs/PROJECT_STATUS.md`
 - `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md` (what was fixed and why)

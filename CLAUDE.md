@@ -65,10 +65,10 @@ Use **Download full detailed note** for an active review, or `GET /api/reviews/<
 - `docs/validation/`: dated historical validation evidence.
 - `docs/superpowers/specs/` and `plans/`: historical designs and implementation plans.
 
-## Current-context (live-news) pipeline — status (2026-09-06)
+## Current-context (live-news) pipeline - status (2026-09-07)
 
-Three root-cause bugs that blocked live current-context for 6–7 sessions are now fixed, deployed
-(`main` @ `bf1f14b`), and verified on live Render runs (PRs #11/#12/#13):
+Three root-cause bugs that blocked live current-context for 6-7 sessions were fixed in PRs
+#11/#12/#13 and remain deployed:
 - web_search `allowed_domains` included crawler-blocked wires (Reuters/AP/BBC) → HTTP 400 every run;
   now excluded (kept as publishers) + self-heal retry (`public_research.py`).
 - `_source_mentions_country` over-rejected sources naming a country **and** a compound neighbour
@@ -78,10 +78,22 @@ Three root-cause bugs that blocked live current-context for 6–7 sessions are n
 - New WARNING log `research_provider_exception` (`research_controller._classify_exception`) makes
   research failures diagnosable from Render logs.
 
-**Still open:** a review cannot complete with zero accepted current-context claims
-(`missing_current_context_support` → `review_failed`). Next step is **Option B** (trusted synthesis with
-soft-flags + graceful degradation, not delete-and-fail): `docs/handover/2026-09-06-option-b-current-context-synthesis.md`.
-Evidence and the exact fixes: `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`.
+Option B is now deployed and verified. Current-context claims are graded at the research boundary;
+`missing_current_context_support` is advisory, and a review no longer fails solely because current
+news is thin. When no independent current claims survive the hard country/source floor, the runtime
+generates a bounded model readout from the configured knowledge cutoff, injects it as context only,
+and carries an explicit verify-before-use limitation through the HTML and DOCX. A full Guinea
+acceptance on release `63b16da` emitted six fallback themes, reached `run_complete`, and exported
+successfully. It accepted zero independent current-context evidence, so the fallback is a resilience
+path, not evidence that live Guinea reporting was retrieved.
+
+PRs #17/#18 added and repaired the fallback; PR #20 made diagnostic-map failure non-fatal and PR #21
+fixed the limited-mode caveat/diagnostics path. The current source-coverage limitation remains open:
+improve retrieval of genuine Guinea reporting and keep all model-only claims visibly qualified.
+Evidence: `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`,
+`docs/validation/2026-09-07-fcv-readout-fallback.md`, and
+`docs/validation/2026-09-07-guinea-acceptance.md`.
+
 
 **Test assets (local only, not in repo):** real Guinea CPF/RRA source docs at
 `C:\Users\wb559324\OneDrive - WBG\Claude_Outputs\cpf_screener\GuineaCPFRRA\guineacpf.pdf` and

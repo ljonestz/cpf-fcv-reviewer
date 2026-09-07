@@ -8,14 +8,15 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified deployment: `bf1f14b` on 2026-09-06 (`/health` 200, clean startup). This deploy
-  fixed three long-standing live-news (current-context) bugs — the web_search `allowed_domains` 400,
-  a country/compound-neighbour over-rejection, and reading the publication date from Anthropic's
-  `page_age` field. Live search now returns trusted, dated sources. However, a review still cannot
-  **complete** when zero current-context claims are accepted (`missing_current_context_support` →
-  `review_failed`); the next step is "Option B" (trusted synthesis + graceful degradation). See
-  `docs/PROJECT_STATUS.md`, `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`,
-  and `docs/handover/2026-09-06-option-b-current-context-synthesis.md`.
+- Latest verified deployment: `63b16da` on 2026-09-07 (`/health` 200, clean startup). The live-news
+  path now includes the crawler-domain self-heal, country/compound-neighbour disambiguation,
+  Anthropic `page_age` dating, graded current-context claims, and a non-fatal fallback when no
+  independent current claims survive. In that fallback the app emits a bounded six-theme,
+  knowledge-based FCV readout as context only, with an explicit "AI-generated; no external current
+  sources; verify before use" limitation. The review can complete instead of failing on thin news.
+  The full Guinea acceptance on this release reached `run_complete` and exported a valid DOCX;
+  it accepted zero independent current-context evidence, so the fallback was exercised. See
+  `docs/PROJECT_STATUS.md` and `docs/validation/2026-09-07-guinea-acceptance.md`.
 - Every assessment researches only its confirmed country through the same bounded,
   country-agnostic route; it never fans out across other countries. Source selection
   prioritizes recent substantive reporting from ICG, Reuters/AP/BBC, approved
@@ -27,10 +28,11 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Optional mapped ICG and ReliefWeb recovery complements rather than defines the generic
   primary route. ReliefWeb requires a pre-approved application name. The previous
   arbitrary default was removed after its HTTP 403 was confirmed.
-- Exactly one authorized paid Guinea assessment was completed on the preceding release.
-  It produced a valid document-led review and DOCX without current-context or indicator
-  evidence; no provider-backed assistant call or second assessment was made. The new
-  think-tank recovery then passed complete provider-free validation.
+- The latest authorized Guinea assessment completed end to end on `63b16da` with full RRA
+  alignment, five RRA driver assessments, four FCV Strategy assessments, four priority areas,
+  the six-theme fallback readout, refresh restoration, and a valid DOCX. No independent
+  current-context evidence was accepted in that run, so the readout remains clearly labelled
+  context rather than evidence.
 
 - The authorized Guinea production quality run on deployed commit `1ba44bf` completed
   successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core

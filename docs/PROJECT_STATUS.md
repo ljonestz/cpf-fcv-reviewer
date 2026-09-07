@@ -1,16 +1,33 @@
 # Project status
 
-## 2026-09-07 Guinea map-only probe passed (not an end-to-end acceptance)
+## 2026-09-07 PR #21 deployed; Guinea end-to-end completion passed
+
+Release `63b16da` is live, verified through Render and `/health`. One authorized
+Guinea CPF+RRA run completed in full RRA-alignment mode with five driver assessments,
+four Strategy assessments, four priority areas, and a valid 48,924-byte DOCX.
+Summary/detailed browser views and refresh restoration passed. The six-theme
+AI-context fallback ran because zero independent current-context sources were
+accepted. One bounded repair completed; the prior limited-mode blocker did not recur.
+
+Production readiness remains limited by current-evidence quality: fallback caveats
+are disclosed, but some main-narrative trends and recommendations are too confident
+for unverified model knowledge. Execution success is not factual validation.
+See `docs/validation/2026-09-07-guinea-acceptance.md` for checks, limits, and next work.
+
+Entries below are retained as dated historical evidence. Where they say a deployment,
+acceptance run, or fallback was pending, the current snapshot above supersedes that status.
+
+## 2026-09-07 Guinea map-only probe passed (historical pre-deployment record)
 
 One authorized model request using the Render service's configured model
 `claude-sonnet-4-5` mapped all 101 extractable RRA pages to 16 valid thematic
 entries; schema and representative evidence-reference validation passed. No retry
 was needed. The earlier schema failure was not reproduced, so no schema loosening
-is justified. The validated correction remains in draft PR #21, not deployed.
-Next: approved deployment and one full Guinea review with readout/DOCX verification.
+is justified. The correction subsequently shipped in PR #21 and release `63b16da`; the full Guinea
+acceptance and DOCX verification are recorded above and in `docs/validation/2026-09-07-guinea-acceptance.md`.
 Safe details are in `docs/validation/2026-09-07-limited-mode-validation.md`.
 
-## 2026-09-07 Limited-mode validation correction (prepared; not deployed)
+## 2026-09-07 Limited-mode validation correction (historical pre-deployment record)
 
 Based on verified GitHub main `3bf4f08`. A provider-free regression proves that
 runtime's own downgrade warning, "without RRA alignment", triggers
@@ -24,14 +41,14 @@ Runtime, validator, and smoke coverage: 308 tests passed initially; two temporar
 directory setup errors passed on isolated rerun outside the Windows sandbox.
 Both new regression assertions were observed failing before their fixes.
 The changed files retain three pre-existing lint findings (two import-order issues
-and one long line). No paid API calls, merge, or deployment were performed.
-The Guinea mapping schema cause remains unknown. Next: authorized map-only
-provider diagnosis with sanitized errors, then an approved deployment and one
-end-to-end Guinea acceptance run. Production readiness is not established.
+and one long line). At the time of this record no paid API call, merge, or deployment
+had been performed. The correction and its sanitized diagnostics subsequently shipped
+in PR #21; the authorized map probe and end-to-end acceptance are recorded above.
+Production readiness remains limited by current-evidence quality.
 See `docs/validation/2026-09-07-limited-mode-validation.md`.
 
 
-## 2026-09-07 FCV model-readout fallback DEPLOYED; confirming paid run PENDING (`main` @ `ec8d3e3`)
+## 2026-09-07 FCV model-readout fallback (historical pre-confirmation record; superseded)
 
 When external current-source research comes back empty (Guinea returns only neighbour-country
 hits from the narrow institutional `allowed_domains`), the app now falls back to a bounded,
@@ -40,13 +57,13 @@ context-only and clearly caveated ("AI-generated; no external current sources; v
 use"), plus a provenance limitation. PRs #17 (feature) + #18 (fix). A paid readout run
 (`f31e3c6`) exposed a one-line defect — `load_prompt` rejected the new `fcv_readout` name
 (not in `PROMPT_NAMES`) → `fcv_readout_unavailable`; #18 fixes it (provider-free verified,
-full suite 1477 passed). The confirming paid Guinea run was NOT executed (one-run
-authorization was consumed); ready-to-run instructions + expected outcome are in
-`docs/validation/2026-09-07-fcv-readout-fallback.md`. Recommended higher-value follow-up:
+full suite 1477 passed). The confirming paid Guinea run was not executed at the time of this record. It was
+subsequently completed on release `63b16da`; see `docs/validation/2026-09-07-guinea-acceptance.md`.
+Recommended higher-value follow-up:
 broaden the search (one unrestricted `web_search` retry filtered by the existing publisher
 allowlist) so real wire reporting surfaces instead of relying on the readout.
 
-## 2026-09-06 Option B DEPLOYED + paid Guinea acceptance run PASSED (`main` @ `4dd0f69`)
+## 2026-09-06 Option B DEPLOYED + paid Guinea acceptance run PASSED (historical)
 
 PR #15 merged to `main` and manually deployed to Render (`srv-d9tju52jobas73d6jvk0`,
 `release: 4dd0f69`). One authorized paid Guinea CPF+RRA run reached **`run_complete`** (a
@@ -60,7 +77,7 @@ content, all floored on country-match) — it remains covered by the 1468-test s
 record: `docs/validation/2026-09-06-option-b-paid-guinea-acceptance.md`. Follow-up:
 strengthen Guinea search-side disambiguation so genuine Guinea reporting surfaces.
 
-## 2026-09-06 Option B: current-context claim grading implemented + provider-free verified (`feat/option-b-current-context`)
+## 2026-09-06 Option B: current-context claim grading implemented + provider-free verified (historical)
 
 **What changed.** The current-context (live-news) path no longer deletes claims that fail
 soft checks or fails the review solely because machine-verified current evidence was thin.
@@ -108,16 +125,16 @@ failures are the pre-existing `test_bounded_article_metadata_reads_publication_f
 The browser smoke runner (`scripts/run_smoke_browser.py`) requires a running local server
 and was not run.
 
-**Not yet deployed.** Branch `feat/option-b-current-context`; not merged to `main`; not
-on Render. The single paid Guinea CPF+RRA acceptance run required to complete the Option B
-acceptance gate is **pending explicit maintainer authorization** and has not been run.
+**Historical status at the time of this entry:** branch `feat/option-b-current-context` had
+not yet been merged or deployed, and the paid acceptance gate had not yet been run.
+It was subsequently merged, deployed, and verified; see the current snapshot above.
 
 Design spec: `docs/superpowers/specs/2026-09-06-option-b-current-context-design.md`
 Implementation plan: `docs/superpowers/plans/2026-09-06-option-b-current-context.md`
 
 ---
 
-## 2026-09-06 live-news pipeline fixed + deployed; review still gated on current-context (`bf1f14b`)
+## 2026-09-06 live-news pipeline fixed + deployed; review still gated on current-context (historical)
 
 - **Three root-cause bugs in the current-context (live-news) pipeline found, fixed, merged (PRs #11,
   #12, #13), deployed to Render, and verified on live runs.** All were hidden for 6–7 sessions because

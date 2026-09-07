@@ -4,6 +4,12 @@
 
 For each CPF/CEN review, research only its confirmed country. A Somalia CPF triggers Somalia research, not searches for all FCV countries. The application must offer this same capability for every supported country or territory, particularly low- and middle-income countries, regardless of FCV classification.
 
+**Current status (2026-09-07):** the selected-country route, source dating, country
+disambiguation, and bounded degradation described here are deployed. The latest Guinea
+acceptance confirms graceful completion but found no independent current-context evidence;
+source retrieval quality remains a follow-up. The model-readout fallback is context only
+and does not replace live evidence.
+
 Country catalogues and country matrices are offline development checks. They are never runtime loops or lists of countries to call during an assessment. Regional reporting may be used only where the retained excerpt concerns the selected country or an explicit spillover affecting it.
 
 This revision incorporates Astra's review and the user's clarification. The companion implementation plan supersedes the earlier recipe and defines the work and tests. No new live-quality acceptance is claimed.
