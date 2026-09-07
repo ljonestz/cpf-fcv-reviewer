@@ -1,5 +1,15 @@
 # Project status
 
+## 2026-09-07 Luna max retry: word-limit blocker remains
+
+One further explicitly authorized paid quality assessment on `6fb6869` was delegated to
+Luna max. It failed after bounded correction with one residual `stage_length_overreach`.
+The missing-registry-support residual did not recur. No successful result, assistant call,
+or Word export was produced. The coordinating agent inspected the failure screenshot.
+No further paid run, merge or deployment. See
+`docs/validation/2026-09-07-luna-max-quality-retry.md`. The next local issue is the word-limit
+rule blocking the entire assessment; live content quality remains unaccepted.
+
 ## 2026-09-07 Candidate quality run: correction failure, local fix validated
 
 The user explicitly authorized one full public Guinea CPF+RRA assessment and one
