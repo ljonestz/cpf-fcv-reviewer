@@ -2,6 +2,10 @@
 
 ## 2026-09-07 Model-led live evidence: acceptance in progress
 
+Candidate `9e7eb7e` passes all 1,517 tests and is pushed to draft PR24.
+The full assessment has not been submitted: automatic approval review requires explicit
+user authorization for the public CPF+RRA transfer to Anthropic. No merge or deployment.
+
 The candidate branch replaces publisher/keyword exclusion with model-assessed relevance
 and credible provenance, preserves exact citation checks, includes CPF context in normalization,
 and retains explicitly undated reporting as qualified context. Haiti live research retained four
