@@ -59,6 +59,13 @@ def main(
             else None,
         )
         page.on("pageerror", lambda error: page_errors.append(str(error)))
+        if not cpf:
+            def require_country_confirmation(route):
+                response = route.fetch()
+                payload = response.json()
+                payload["requires_confirmation"] = True
+                route.fulfill(response=response, json=payload)
+            page.route("**/api/detect-country", require_country_confirmation)
         page.goto(base_url, wait_until="networkidle")
         capture(page, 1, "smoke-intake-desktop")
 
@@ -86,6 +93,13 @@ def main(
                     b"[SYNTHETIC SMOKE] Full diagnostic context for local QA.",
                 }
             )
+        page.wait_for_function(
+            "document.querySelector('#country-detection input') || "
+            "!document.querySelector('#submit-review').disabled"
+        )
+        correction = page.locator("#country-detection input")
+        if correction.count():
+            correction.fill(country)
         page.wait_for_function(
             "document.querySelector('#country').value === " + json.dumps(country) + " && "
             "!document.querySelector('#submit-review').disabled"

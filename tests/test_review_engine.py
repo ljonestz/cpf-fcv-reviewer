@@ -1897,3 +1897,84 @@ def test_repair_receives_bounded_current_source_support_records():
             "publication_date_basis": "provider_metadata",
         },
     ]
+
+
+def test_length_and_referral_repair_preserves_priority_grounding_and_other_content():
+    meta = metadata()
+    original_draft = draft_for(meta)
+    original_area = original_draft.priority_areas[0].model_copy(update={
+        "assessment": "The FCV Strategy supports this delivery focus.",
+        "recommended_action": " ".join(["delivery"] * 200),
+        "evidence_ids": ("ev-primary-1", "registry-PUB-FCV-STRAT-001"),
+    })
+    initial = result_for(meta).model_copy(update={
+        "priority_areas": (original_area,),
+        "institutional_referral_ids": ("unknown-referral",),
+    })
+    changed_area = original_area.model_copy(update={
+        "assessment": "Unrequested replacement assessment.",
+        "recommended_action": "Clarify delivery responsibilities.",
+        "evidence_ids": ("ev-primary-1",),
+    })
+    candidate = original_draft.model_copy(update={
+        "overall_read": "Unrequested replacement readout.",
+        "priority_areas": (changed_area,),
+    })
+    repaired = ReviewEngine(FakeGateway(candidate)).repair(
+        initial,
+        [{"code": "stage_length_overreach"}, {"code": "unknown_institutional_referral"}],
+        evidence_ids={"ev-primary-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+    assert repaired.priority_areas == (original_area.model_copy(update={
+        "recommended_action": "Clarify delivery responsibilities.",
+    }),)
+    assert repaired.overall_read == initial.overall_read
+    assert repaired.institutional_referral_ids == ()
+    assert repaired.document_coverage == initial.document_coverage
+
+
+def test_length_repair_does_not_change_already_short_priority_or_referrals():
+    meta = metadata()
+    original_area = draft_for(meta).priority_areas[0]
+    initial = result_for(meta).model_copy(update={
+        "priority_areas": (original_area,),
+        "institutional_referral_ids": ("PUB-FCV-STRAT-001",),
+    })
+    candidate = draft_for(meta).model_copy(update={
+        "priority_areas": (original_area.model_copy(update={
+            "recommended_action": "Unrequested new action.",
+        }),),
+    })
+    repaired = ReviewEngine(FakeGateway(candidate)).repair(
+        initial, [{"code": "stage_length_overreach"}],
+        evidence_ids={"ev-primary-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+    assert repaired.priority_areas == initial.priority_areas
+    assert repaired.institutional_referral_ids == initial.institutional_referral_ids
+
+
+def test_registry_repair_only_adds_supplied_support_to_unsupported_priorities():
+    meta = metadata()
+    area = draft_for(meta).priority_areas[0]
+    registry_id = "registry-PUB-FCV-STRAT-001"
+    grounded = tuple(area.model_copy(update={
+        "priority_area_id": f"pa-{index}",
+        "evidence_ids": ("ev-primary-1", registry_id),
+    }) for index in range(1, 4))
+    unsupported = area.model_copy(update={"priority_area_id": "pa-4"})
+    initial = result_for(meta).model_copy(update={
+        "priority_areas": (*grounded, unsupported),
+    })
+    candidate = draft_for(meta).model_copy(update={
+        "priority_areas": (unsupported.model_copy(update={
+            "assessment": "Unrequested replacement.",
+            "evidence_ids": (registry_id, "registry-fabricated", "new-source"),
+        }),),
+    })
+    repaired = ReviewEngine(FakeGateway(candidate)).repair(
+        initial, [{"code": "missing_registry_support"}],
+        evidence_ids={"ev-primary-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+    assert repaired.priority_areas == (*grounded, unsupported.model_copy(update={
+        "evidence_ids": ("ev-primary-1", registry_id),
+    }))

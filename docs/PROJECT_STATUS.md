@@ -1,17 +1,23 @@
 # Project status
 
-## 2026-09-07 Model-led live evidence: acceptance in progress
+## 2026-09-07 Candidate quality run: correction failure, local fix validated
 
-Candidate `9e7eb7e` passes all 1,517 tests and is pushed to draft PR24.
-The full assessment has not been submitted: automatic approval review requires explicit
-user authorization for the public CPF+RRA transfer to Anthropic. No merge or deployment.
+The user explicitly authorized one full public Guinea CPF+RRA assessment and one
+assistant follow-up. The local candidate on `03b4601` retained dated current evidence
+(`research_reduced`, not model-only fallback), but failed final validation after repair.
+Safe codes: initial `unknown_institutional_referral` and `stage_length_overreach`;
+terminal `missing_registry_support` (three issues), then `review_failed`.
+No successful review, assistant request, or Word export was produced.
 
-The candidate branch replaces publisher/keyword exclusion with model-assessed relevance
-and credible provenance, preserves exact citation checks, includes CPF context in normalization,
-and retains explicitly undated reporting as qualified context. Haiti live research retained four
-findings. A Guinea normalization replay retained three dated findings with CPF links; Kenya
-retains one undated Crisis Group excerpt as context. Full candidate assessment and deployment
-remain pending. See `docs/validation/2026-09-07-model-led-evidence.md`.
+A local regression reproduced loss of valid priority evidence during unrelated mechanical
+repair. The correction now preserves the original assessment, source links and unaffected
+content when only action length and institutional-reference corrections are requested.
+All three new regressions failed before the fix; the full provider-free suite now passes
+**1,520 tests**. The bounded registry-link follow-up also preserves already grounded
+priorities and only adds supplied registry evidence to an unsupported priority. This establishes the local failure-class fix, not the exact content of the
+rejected live draft, which was not retrieved. A second paid assessment requires explicit
+authorization under the repository's one-run rule. PR24 remains draft; no merge or deployment.
+See `docs/validation/2026-09-07-model-led-evidence.md`.
 
 ## 2026-09-07 Live probes block release
 
