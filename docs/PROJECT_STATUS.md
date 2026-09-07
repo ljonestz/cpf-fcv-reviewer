@@ -1,5 +1,20 @@
 # Project status
 
+## 2026-09-07 PR #21 deployed; Guinea end-to-end completion passed
+
+Release `63b16da` is live, verified through Render and `/health`. One authorized
+Guinea CPF+RRA run completed in full RRA-alignment mode with five driver assessments,
+four Strategy assessments, four priority areas, and a valid 48,924-byte DOCX.
+Summary/detailed browser views and refresh restoration passed. The six-theme
+AI-context fallback ran because zero independent current-context sources were
+accepted. One bounded repair completed; the prior limited-mode blocker did not recur.
+
+Production readiness remains limited by current-evidence quality: fallback caveats
+are disclosed, but some main-narrative trends and recommendations are too confident
+for unverified model knowledge. Execution success is not factual validation.
+See `docs/validation/2026-09-07-guinea-acceptance.md` for checks, limits, and next work.
+
+
 ## 2026-09-07 Guinea map-only probe passed (not an end-to-end acceptance)
 
 One authorized model request using the Render service's configured model
