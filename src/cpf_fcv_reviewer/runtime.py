@@ -709,6 +709,37 @@ def _diagnostic_coverage_warning(document) -> str:
     )
 
 
+def _downgrade_to_limited_framing(context: dict, reason: str) -> dict:
+    """Proceed without RRA alignment when an uploaded diagnostic cannot be mapped.
+
+    A failed diagnostic mapping is an enrichment failure, not a fatal one. Rather than
+    aborting the whole review with ``DiagnosticCoverageUnavailable``, the run continues
+    in limited-framing mode (which must not claim RRA alignment). The downgrade reason is
+    surfaced as an evidence-pack warning and a review limitation so the caveat is visible
+    to the reader.
+    """
+    base_pack = context["evidence_pack"]
+    downgrade_warning = (
+        "The uploaded diagnostic could not be mapped in full; the review proceeds in "
+        f"limited-framing mode without RRA alignment. {reason}"
+    ).strip()
+    context["diagnostic_coverage_warning"] = downgrade_warning
+    context.pop("diagnostic_map", None)
+    context.pop("diagnostic_page_evidence", None)
+    context["diagnostic_downgraded_to_limited_framing"] = True
+    context["evidence_pack"] = build_evidence_pack(
+        metadata=base_pack.metadata.model_copy(
+            update={"diagnostic_mode": DiagnosticMode.LIMITED_FRAMING}
+        ),
+        evidence=base_pack.evidence,
+        diagnostic_entries=(),
+        material_diagnostic_ids=(),
+        corrections=base_pack.user_corrections,
+        warnings=(*base_pack.warnings, downgrade_warning),
+    )
+    return context
+
+
 def _allow_document_led(context: dict) -> bool:
     if _has_usable_uploaded_document(context.get("primary_document")):
         return True
@@ -1112,8 +1143,9 @@ def build_runtime_services(
             document_role=diagnostic_role,
         )
         if not page_items:
-            raise DiagnosticCoverageUnavailable(
-                "Selected uploaded diagnostic contains no extractable text."
+            return _downgrade_to_limited_framing(
+                context,
+                "The selected diagnostic contained no extractable text.",
             )
         material_ids = tuple(item.evidence_id for item in page_items)
         mapping_evidence = []
@@ -1139,8 +1171,9 @@ def build_runtime_services(
             + 2
         ) // 3
         if estimated_input_tokens > DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS:
-            raise DiagnosticCoverageUnavailable(
-                "Diagnostic mapping request exceeds the safe input budget."
+            return _downgrade_to_limited_framing(
+                context,
+                "The diagnostic was too large to map within the safe input budget.",
             )
         try:
             diagnostic_map = model_gateway.generate(
@@ -1160,16 +1193,18 @@ def build_runtime_services(
                     },
                     output_type=DiagnosticMap,
                 )
-            except ValidationError as retry_error:
-                raise DiagnosticCoverageUnavailable(
-                    "Selected uploaded diagnostic mapping is invalid."
-                ) from retry_error
+            except ValidationError:
+                return _downgrade_to_limited_framing(
+                    context,
+                    "The diagnostic mapping did not satisfy the required schema.",
+                )
         try:
             validate_diagnostic_references(material_ids, diagnostic_map.entries)
-        except ValueError as exc:
-            raise DiagnosticCoverageUnavailable(
-                "Selected uploaded diagnostic mapping is incomplete."
-            ) from exc
+        except ValueError:
+            return _downgrade_to_limited_framing(
+                context,
+                "The diagnostic mapping did not cover the material evidence.",
+            )
 
         base_pack = context["evidence_pack"]
         referenced_ids = {

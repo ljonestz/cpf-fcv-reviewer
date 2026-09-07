@@ -1265,6 +1265,63 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
     assert events[-1][0] == "run_complete"
 
 
+def test_map_step_downgrades_to_limited_framing_when_diagnostic_map_invalid(
+    monkeypatch, make_valid_result
+):
+    """An unmappable uploaded diagnostic must degrade to limited framing, not abort the run."""
+    result, evidence = make_valid_result
+
+    class FailingDiagnosticGateway:
+        def __init__(self, api_key, model_id, *, timeout_seconds=None):
+            pass
+
+        def generate(self, *, prompt_name, payload, output_type):
+            assert prompt_name == "diagnostic_map"
+            # The model returns a structure that fails DiagnosticMap validation on
+            # both the initial call and the schema-retry call.
+            output_type.model_validate({"entries": []})
+            raise AssertionError("model_validate should have raised ValidationError")
+
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicModelGateway", FailingDiagnosticGateway
+    )
+    monkeypatch.setattr(
+        "cpf_fcv_reviewer.runtime.AnthropicPublicResearchGateway",
+        FailingDiagnosticGateway,
+    )
+    services = build_runtime_services(production_config(ALLOW_SYNTHETIC_REGISTRY=True))
+    map_step = dict(services["review_orchestrator"].steps)["map"]
+
+    base_pack = EvidencePack(
+        metadata=result.metadata.model_copy(
+            update={"diagnostic_mode": DiagnosticMode.RRA_ALIGNMENT}
+        ),
+        evidence=tuple(evidence.values()),
+        diagnostic_entries=(),
+    )
+    context = {
+        "evidence_pack": base_pack,
+        "full_diagnostic_document": ExtractedDocument(
+            "rra.pdf",
+            (ExtractedSegment("Structural fragility driver.", 1, None, "page 1"),),
+            (),
+        ),
+        "diagnostic_document_role": DocumentRole.PACKAGE,
+        "diagnostic_coverage_warning": (
+            "rra.pdf: 1 pages attempted; 1 pages with extractable text; "
+            "thematic diagnostic synthesis complete."
+        ),
+    }
+
+    updated = map_step(context)
+
+    pack = updated["evidence_pack"]
+    assert pack.metadata.diagnostic_mode is DiagnosticMode.LIMITED_FRAMING
+    assert pack.diagnostic_entries == ()
+    assert "diagnostic_map" not in updated
+    assert any("limited-framing" in warning for warning in pack.warnings)
+
+
 def test_runtime_excludes_bad_optional_uploads_independently(monkeypatch):
     services = _runtime_services(monkeypatch)
     steps = dict(services["review_orchestrator"].steps)
@@ -3666,27 +3723,33 @@ def _run_diagnostic_map_step(monkeypatch, gateway, *, package_text=None):
     )
 
 
-def test_runtime_fails_closed_for_referentially_invalid_schema_valid_map_without_coverage_retry(
+def test_runtime_downgrades_to_limited_framing_for_referentially_invalid_map_without_coverage_retry(
     monkeypatch,
 ):
     gateway = _SequencedDiagnosticMapGateway(_referentially_invalid_diagnostic_map)
 
-    with pytest.raises(DiagnosticCoverageUnavailable, match="incomplete"):
-        _run_diagnostic_map_step(monkeypatch, gateway)
+    context = _run_diagnostic_map_step(monkeypatch, gateway)
 
+    pack = context["evidence_pack"]
+    assert pack.metadata.diagnostic_mode is DiagnosticMode.LIMITED_FRAMING
+    assert pack.diagnostic_entries == ()
+    assert context["diagnostic_downgraded_to_limited_framing"] is True
     assert len(gateway.calls) == 1
     assert "coverage_retry" not in gateway.calls[0][1]
     assert "scaffold" not in gateway.calls[0][1]
 
 
-def test_runtime_fails_closed_for_empty_representative_map_without_coverage_retry(
+def test_runtime_downgrades_to_limited_framing_for_empty_representative_map_without_coverage_retry(
     monkeypatch,
 ):
     gateway = _SequencedDiagnosticMapGateway(_empty_diagnostic_map)
 
-    with pytest.raises(DiagnosticCoverageUnavailable, match="incomplete"):
-        _run_diagnostic_map_step(monkeypatch, gateway)
+    context = _run_diagnostic_map_step(monkeypatch, gateway)
 
+    pack = context["evidence_pack"]
+    assert pack.metadata.diagnostic_mode is DiagnosticMode.LIMITED_FRAMING
+    assert pack.diagnostic_entries == ()
+    assert context["diagnostic_downgraded_to_limited_framing"] is True
     assert len(gateway.calls) == 1
     assert "coverage_retry" not in gateway.calls[0][1]
     assert "scaffold" not in gateway.calls[0][1]
@@ -3719,17 +3782,19 @@ def test_runtime_retries_diagnostic_map_schema_validation_once_with_safe_diagnos
     assert all(set(issue) == {"loc", "type"} for issue in diagnostics["issues"])
 
 
-def test_runtime_fails_closed_after_second_diagnostic_map_schema_validation_error(
+def test_runtime_downgrades_to_limited_framing_after_second_diagnostic_map_schema_validation_error(
     monkeypatch,
 ):
     first_error = _invalid_diagnostic_map_error()
     second_error = _invalid_diagnostic_map_error()
     gateway = _SequencedDiagnosticMapGateway(first_error, second_error)
 
-    with pytest.raises(DiagnosticCoverageUnavailable) as exc_info:
-        _run_diagnostic_map_step(monkeypatch, gateway)
+    context = _run_diagnostic_map_step(monkeypatch, gateway)
 
-    assert exc_info.value.__cause__ is second_error
+    pack = context["evidence_pack"]
+    assert pack.metadata.diagnostic_mode is DiagnosticMode.LIMITED_FRAMING
+    assert pack.diagnostic_entries == ()
+    assert context["diagnostic_downgraded_to_limited_framing"] is True
     assert len(gateway.calls) == 2
 
 
@@ -3814,8 +3879,12 @@ def test_runtime_serialized_diagnostic_map_budget_is_exact_and_byte_sensitive(mo
         "DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS",
         byte_estimate - 1,
     )
-    with pytest.raises(DiagnosticCoverageUnavailable, match="safe input budget"):
-        map_with(failing_gateway)
+    downgraded = map_with(failing_gateway)
+    assert (
+        downgraded["evidence_pack"].metadata.diagnostic_mode
+        is DiagnosticMode.LIMITED_FRAMING
+    )
+    assert downgraded["diagnostic_downgraded_to_limited_framing"] is True
     assert failing_gateway.payloads == []
 
 
