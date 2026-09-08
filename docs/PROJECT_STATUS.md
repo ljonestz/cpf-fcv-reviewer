@@ -1,5 +1,27 @@
 # Project status
 
+## Current position — 2026-09-08
+
+Application PR24 is on main and deployed as `9f787f4`. Live execution and exports passed.
+Readiness is **supervised public-document pilot**, not routine operational production.
+The remaining RRA date error, proposal wording, source breadth and volatile storage are
+tracked in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Documentation below is a
+chronological record; older pending-deployment statements refer to earlier checkpoints.
+The latest full readout and screenshots are indexed in the readiness record.
+
+## 2026-09-07 Deployed: live Guinea flow passes with qualified evidence
+
+PR24 is deployed as `9f787f4`; Render and /health confirm the exact release.
+Luna max completed the authorized live Guinea flow: eight screenshots, assistant
+restored after refresh, and both Word exports. Five dated current observations from
+two Africa Center articles entered the assessment. Coverage is explicitly reduced.
+The coordinating agent independently inspected the short Word note and summary PNG.
+
+Remaining factual issue: the generated review says September 2022 for the RRA, whereas
+the approved PDF cover says June 2023. Some proposed delivery changes need expert
+validation. Execution/source integration passed; native-chat parity and blanket factual
+accuracy are not established. See `docs/validation/2026-09-07-live-release-acceptance.md`.
+
 ## 2026-09-07 Recommendation length is advisory
 
 User approved treating excess recommendation length as advisory. The validator still

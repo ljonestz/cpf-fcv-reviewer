@@ -8,40 +8,29 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified deployment: `63b16da` on 2026-09-07 (`/health` 200, clean startup). The live-news
-  path now includes the crawler-domain self-heal, country/compound-neighbour disambiguation,
-  Anthropic `page_age` dating, graded current-context claims, and a non-fatal fallback when no
-  independent current claims survive. In that fallback the app emits a bounded six-theme,
-  knowledge-based FCV readout as context only, with an explicit "AI-generated; no external current
-  sources; verify before use" limitation. The review can complete instead of failing on thin news.
-  The full Guinea acceptance on this release reached `run_complete` and exported a valid DOCX;
-  it accepted zero independent current-context evidence, so the fallback was exercised. See
-  `docs/PROJECT_STATUS.md` and `docs/validation/2026-09-07-guinea-acceptance.md`.
-- Every assessment researches only its confirmed country through the same bounded,
-  country-agnostic route; it never fans out across other countries. Source selection
-  prioritizes recent substantive reporting from ICG, Reuters/AP/BBC, approved
-  UN/humanitarian publishers, IRC, public ACLED analysis, and approved think tanks.
-- One recent grounded, substantively FCV-relevant source is sufficient for a reduced
-  current update. Generic macro/demographic indicators cannot substitute for current-FCV
-  reporting or support unrelated political, violence, displacement, or land-conflict
-  claims. Observations, URLs, and publishers are counted separately.
-- Optional mapped ICG and ReliefWeb recovery complements rather than defines the generic
-  primary route. ReliefWeb requires a pre-approved application name. The previous
-  arbitrary default was removed after its HTTP 403 was confirmed.
-- The latest authorized Guinea assessment completed end to end on `63b16da` with full RRA
-  alignment, five RRA driver assessments, four FCV Strategy assessments, four priority areas,
-  the six-theme fallback readout, refresh restoration, and a valid DOCX. No independent
-  current-context evidence was accepted in that run, so the readout remains clearly labelled
-  context rather than evidence.
+- Latest verified deployment: `9f787f4` (PR24), 2026-09-07. Render and `/health`
+  confirmed the exact release. All **1,524 provider-free tests** passed before deployment.
+- The live Guinea CPF/RRA assessment completed with five current observations from two
+  Africa Center for Strategic Studies articles, five RRA-driver assessments, four FCV
+  Strategy assessments and three CPF-specific priorities. Current evidence is explicitly
+  **reduced** because there is only one originating publisher.
+- The browser flow passed: eight screenshots, one assistant response restored after
+  refresh, and both the five-minute and full detailed Word exports.
+- Research uses model-assessed FCV relevance and source quality across countries, with
+  CPF context, exact quotation and country checks. Credible publishers outside the
+  catalogue can be retained with qualified provenance; undated reporting remains
+  explicitly qualified context. Model-only fallback is still disclosed when needed.
+- Excess recommendation length is advisory and does not block completion or trigger a
+  paid correction. Evidence and citation failures retain their checks.
 
-- The authorized Guinea production quality run on deployed commit `1ba44bf` completed
-  successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
-  result schema, 32 evidence records, reproducibility metadata, and application validation
-  passed with zero issues. Browser screenshots, the 79 KB JSON response, and the 49,830-byte
-  DOCX were saved. Current-country evidence was truthfully rated `reduced` because only two
-  recent public sources were established.
-
-The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
+**Readiness: supervised public-document pilot, not routine operational production.**
+The successful run still misdates the RRA as September 2022 (the cover says June 2023).
+Some proposed delivery changes require expert validation; source diversity and cross-country
+output quality need further acceptance. The live public service uses volatile storage,
+so restarts discard sessions. Use public or otherwise approved non-sensitive inputs only.
+See [readiness and remaining work](docs/PRODUCTION_READINESS.md),
+[project status](docs/PROJECT_STATUS.md), and
+[live validation](docs/validation/2026-09-07-live-release-acceptance.md).
 
 The review starts with three document buckets: the draft CPF/CEN, accompanying package documents, and an optional public RRA or supporting analytics. Country inference uses the recognized title when available and requires manual country confirmation when it is not. Review stage is selected explicitly: Early drafting / PCN, Concept review, Decision review, ROC / OC, Finalization, or Response to comments.
 
