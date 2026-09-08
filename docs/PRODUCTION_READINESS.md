@@ -6,8 +6,8 @@ Not yet accepted for routine operational production. This is a quality and servi
 readiness assessment, not a request for additional policy safeguards.
 
 ## What has passed
-- PR24 application deployed as 9f787f4; Render and health verified.
-- 1,524 provider-free tests passed.
+- Current application release `72743f5` (PR28); Render and health verified.
+- 1,527 provider-free tests passed.
 - Live Guinea review completed with source-backed current context, assistant restoration,
   eight screenshots and both Word downloads.
 - Five observations from two URLs, one originating publisher; reduced coverage disclosed.

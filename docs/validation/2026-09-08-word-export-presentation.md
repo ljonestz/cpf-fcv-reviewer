@@ -34,8 +34,9 @@ The two dated DOCX proposals and local render evidence remain untracked under
 `scripts/20260908_preview_word_reports.py`; it refuses to overwrite existing files.
 No raw documents, model outputs or reference-report content are committed.
 
-This change is prepared for main. The live service remains on `9f787f4`; a main
-merge does not deploy automatically. No paid model or research calls were made.
+The presentation change was merged through PR28 and deployed as `72743f5`. Render
+reported the deployment live and `/health` returned the exact release. No paid model
+or research calls were made.
 
 ## Approved full-width running-banner follow-up
 
@@ -50,4 +51,5 @@ inspected on every page and remains clear of the body. Structural checks confirm
 shapes, pictures, tables, text boxes, or anchored objects in either header; body text is
 identical to the prior approved reports. All 39 focused export/parity tests and exporter
 Ruff checks passed. New files are under `output/20260908_word_full_width/` and preserve
-the earlier proposals. No model calls were made.
+the earlier proposals. PR28 deployed the final implementation as `72743f5`; `/health`
+confirmed the exact release. No model calls were made.

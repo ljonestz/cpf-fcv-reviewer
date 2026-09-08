@@ -73,8 +73,8 @@ horizontal indents, a quarter-inch header offset, white text, and a teal border.
 
 ## Current-context pipeline and readiness (2026-09-08)
 
-Deployed application: `9f787f4` (PR24). All 1,524 provider-free tests passed before
-release. The authorized live Guinea flow passed with five dated observations from two
+Deployed application: `72743f5` (PR28). All 1,527 provider-free tests passed before
+release. The authorized live Guinea flow on the earlier PR24 build passed with five dated observations from two
 Africa Center articles, five RRA-driver assessments, four Strategy assessments, three
 priorities, eight screenshots, assistant restoration and both Word exports.
 
