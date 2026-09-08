@@ -24,3 +24,8 @@ The registered codex-selected-country-worktree was relocated through git worktre
 - Full Ruff check reports 121 findings in unchanged baseline source and tests. These are an existing lint backlog; no lint fixes are included.
 - No model-backed assessment or deployment was performed.
 - All 18 local links in the new navigation and guide resolved. git diff --check passed. Ignore rules were verified for generated metadata, output and the preservation archive.
+
+- Word handover: seven pages rendered in native Word after the packaged renderer reported missing LibreOffice. The corrected cover and all six content pages were visually checked; the six content pages were pixel-identical to the previously inspected render after the cover-only correction.
+- All 123 Markdown content items were verified against the Word XML. ZIP integrity passed. Template package comparison confirmed only the document body and default footer identity changed; styles, sections, relationships and other package parts were preserved.
+- Final sharing copy: output/its-handover/20260908_CPF-ITS-handover.docx in the original repository folder, excluded from Git. It matches the corrected verified file byte for byte.
+- Automatic approval review blocked switching the original checkout because that would replace its modified CLAUDE.md. The original checkout and file remain unchanged pending explicit approval; the prepared code and docs are on codex/its-handover in .worktrees/its-handover.

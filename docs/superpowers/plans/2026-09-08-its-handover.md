@@ -8,6 +8,8 @@ Architecture: retain the src package and runtime asset locations. Remove generat
 - [x] Update README, documentation navigation and ITS handover.
 - [x] Stop tracking generated egg-info and ignore development artifacts.
 - [x] Remove only confirmed disposable local cache/temp files; preserve unique work.
-- [ ] Generate the matching Word handover using the selected System Design template.
-- [ ] Verify links, package discovery, provider-free smoke tests and document rendering.
-- [ ] Commit, push and open a reviewable PR without changing app hosting.
+- [x] Generate the matching Word handover using the selected System Design template.
+- [x] Verify links, package discovery, provider-free smoke tests and document rendering.
+- [x] Commit, push and open a reviewable PR without changing app hosting.
+
+Original-checkout switch is separately pending explicit approval because it would replace the locally modified CLAUDE.md. It is not required to review PR32 or share the Word handover.
