@@ -12,4 +12,4 @@ Architecture: retain the src package and runtime asset locations. Remove generat
 - [x] Verify links, package discovery, provider-free smoke tests and document rendering.
 - [x] Commit, push and open a reviewable PR without changing app hosting.
 
-Original-checkout switch is separately pending explicit approval because it would replace the locally modified CLAUDE.md. It is not required to review PR32 or share the Word handover.
+The owner explicitly approved the original-checkout switch. The repository root now uses codex/its-handover; the original modified CLAUDE.md is preserved in the ignored local archive.
