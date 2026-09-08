@@ -8,7 +8,7 @@ The CPF FCV Reviewer helps country and FCV teams review draft Country Partnershi
 
 This guide provides a route from the repository to a local demonstration, explains the main components, and identifies decisions needed to incorporate the capability into the internal FCV Project Screener. The existing application is suitable for supervised use with public or approved non-sensitive documents. Internal operational deployment requires further quality acceptance and ITS hosting and access decisions.
 
-Source: [ljonestz/cpf-fcv-reviewer](https://github.com/ljonestz/cpf-fcv-reviewer). The repository is private. The owner must grant ITS users or a team access; a GitHub 404 can mean the browser is not signed into an authorized account.
+Source: [ljonestz/cpf-fcv-reviewer](https://github.com/ljonestz/cpf-fcv-reviewer). The repository is public, as verified on 8 September 2026 after the owner changed its visibility. ITS colleagues can browse and clone it without a repository invitation. Service credentials and local assessment artifacts are not included.
 
 This handover uses source baseline `2fc2b77`, fetched from GitHub main on 8 September 2026. The preceding application release is `27ef3aa`; the repository records its deployment and 1,527 passing provider-free tests. These are recorded release results, not a new full test run for this handover. Live Guinea acceptance predates the final Word presentation changes. See [production readiness](../PRODUCTION_READINESS.md) and [Word release validation](../validation/2026-09-08-word-export-presentation.md).
 
@@ -146,7 +146,7 @@ For changes, run targeted tests and then the provider-free smoke suite. Full che
 
 ## Handover checklist
 
-1. Grant ITS GitHub access and agree the adoption revision.
+1. Share the public GitHub link with ITS and agree the adoption revision.
 2. Run the synthetic demonstration and smoke tests.
 3. Review the folder map, routes, prompts, contracts and readiness record together.
 4. Agree service integration versus porting, ownership, identity, model access and durable hosting.

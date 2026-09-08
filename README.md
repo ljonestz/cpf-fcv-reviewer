@@ -6,7 +6,7 @@ An advisory application for evidence-linked FCV review of Country Partnership Fr
 
 ## Access and status
 
-This GitHub repository is **private**. ITS colleagues need repository access; a 404 may mean the browser is signed out or using an unauthorized account.
+This GitHub repository is **public**. ITS colleagues can browse and clone it without a repository invitation. Service credentials and local assessment artifacts are not included.
 
 [Public prototype](https://cpf-fcv-review-prototype.onrender.com/) — use only public or approved non-sensitive documents. This supports expert judgment, not policy compliance or clearance decisions.
 

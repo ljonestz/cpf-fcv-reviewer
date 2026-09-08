@@ -17,7 +17,7 @@ The registered codex-selected-country-worktree was relocated through git worktre
 
 ## Verification
 
-- Authenticated GitHub CLI confirmed repository ljonestz/cpf-fcv-reviewer exists and is private; owner account has admin access.
+- Authenticated GitHub CLI confirmed the repository exists. It was initially private; after the owner made it public during this session, a second check returned visibility PUBLIC and isPrivate false. Guidance was updated accordingly.
 - git fetch origin established baseline 2fc2b77.
 - Provider-free test command: python -m pytest tests/test_smoke_mode.py -q -p no:cacheprovider — 36 passed in 21.55 seconds.
 - Setuptools package discovery returns cpf_fcv_reviewer after removal of generated metadata from tracking.
