@@ -455,6 +455,12 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
         document_xml = ET.fromstring(archive.read("word/document.xml"))
         styles_xml = ET.fromstring(archive.read("word/styles.xml"))
         numbering_xml = ET.fromstring(archive.read("word/numbering.xml"))
+        header_xml = ET.fromstring(archive.read("word/header1.xml"))
+        assert header_xml.find(".//w:shd", ns).attrib[f"{{{w}}}fill"] == "153956"
+        assert header_xml.find(".//w:bottom", ns).attrib[f"{{{w}}}color"] == "13A6A4"
+        assert header_xml.find(".//w:rPr/w:color", ns).attrib[f"{{{w}}}val"] == "FFFFFF"
+        assert header_xml.find(".//w:txbxContent", ns) is None
+
 
     assert document_xml.find(".//w:txbxContent", ns) is None
     alignment = styles_xml.find(".//w:style[@w:styleId='Normal']/w:pPr/w:jc", ns)
