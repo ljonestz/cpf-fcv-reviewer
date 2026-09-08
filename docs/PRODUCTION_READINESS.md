@@ -13,6 +13,8 @@ readiness assessment, not a request for additional policy safeguards.
 - Five observations from two URLs, one originating publisher; reduced coverage disclosed.
 - Recommendations connect political reporting to CPF adaptive management, PAGL2/local
   governance delivery and staffing/tools. Word limits no longer block useful output.
+- Native Word verified the final top-edge running banner across all 12 pages of the
+  three-page short readout and nine-page detailed report, using one editable header paragraph.
 
 ## Remaining work, in priority order
 1. Correct RRA date provenance: the output says September 2022, but the uploaded cover

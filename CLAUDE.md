@@ -31,7 +31,9 @@ Word exports omit the website-only basis/limitations section and start with a la
 caution about findings, exact dates and expert consultation. Keep layouts editable: native
 paragraph styles, left alignment, one-inch margins and no floating text boxes. The
 full-width navy running banner uses one header paragraph with shading, negative
-horizontal indents, a quarter-inch header offset, white text, and a teal border.
+horizontal indents, zero header distance, exact 42.5-point line height, white text,
+and a teal border. Use only the default header; do not create a separate even-page
+header.
 
 ## Important constraints
 

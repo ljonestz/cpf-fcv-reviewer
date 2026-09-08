@@ -212,7 +212,7 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
     section.right_margin = Inches(1)
     section.bottom_margin = Inches(1)
     section.left_margin = Inches(1)
-    section.header_distance = Inches(0.25)
+    section.header_distance = Inches(0)
     section.footer_distance = Inches(0.492)
 
     normal = document.styles["Normal"]
@@ -686,9 +686,9 @@ def _apply_report_layout(document: Document, *, summary: bool, created_at: datet
     document.styles["Title"].font.size = Pt(26)
     header = document.sections[0].header.paragraphs[0]
     header.text = "CPF FCV REVIEW  /  EXPERT REVIEW NOTE"
-    header.paragraph_format.space_before = Pt(4)
-    header.paragraph_format.space_after = Pt(4)
-    header.paragraph_format.line_spacing = 1.4
+    header.paragraph_format.space_before = Pt(0)
+    header.paragraph_format.space_after = Pt(0)
+    header.paragraph_format.line_spacing = Pt(42.5)
     # Extend only the shaded header into the page margins. The first-line indent
     # keeps its text aligned with the one-inch body margin.
     header.paragraph_format.left_indent = Inches(-1)
@@ -713,8 +713,6 @@ def _apply_report_layout(document: Document, *, summary: bool, created_at: datet
         run.font.size = Pt(8)
         run.font.bold = True
         run.font.color.rgb = RGBColor(255, 255, 255)
-    even_header = document.sections[0].even_page_header.paragraphs[0]
-    even_header._p.getparent().replace(even_header._p, deepcopy(header._p))
 
 
 def build_docx(

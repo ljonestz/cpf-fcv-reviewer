@@ -464,12 +464,19 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
         assert header_indent.attrib[f"{{{w}}}left"] == "-1440"
         assert header_indent.attrib[f"{{{w}}}right"] == "-1440"
         assert header_indent.attrib[f"{{{w}}}firstLine"] == "1440"
+        header_spacing = header_xml.find(".//w:pPr/w:spacing", ns)
+        assert header_spacing.attrib[f"{{{w}}}before"] == "0"
+        assert header_spacing.attrib[f"{{{w}}}after"] == "0"
+        assert header_spacing.attrib[f"{{{w}}}line"] == "850"
+        assert header_spacing.attrib[f"{{{w}}}lineRule"] == "exact"
 
 
     assert document_xml.find(".//w:txbxContent", ns) is None
     alignment = styles_xml.find(".//w:style[@w:styleId='Normal']/w:pPr/w:jc", ns)
     assert alignment.attrib[f"{{{w}}}val"] == "left"
     section = document_xml.find(".//w:sectPr", ns)
+    header_references = section.findall("w:headerReference", ns)
+    assert [item.attrib[f"{{{w}}}type"] for item in header_references] == ["default"]
     page_size = section.find("w:pgSz", ns)
     page_margins = section.find("w:pgMar", ns)
     assert page_size.attrib[f"{{{w}}}w"] == "12240"
@@ -478,7 +485,7 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
     assert page_margins.attrib[f"{{{w}}}right"] == "1440"
     assert page_margins.attrib[f"{{{w}}}bottom"] == "1440"
     assert page_margins.attrib[f"{{{w}}}left"] == "1440"
-    assert page_margins.attrib[f"{{{w}}}header"] == "360"
+    assert page_margins.attrib[f"{{{w}}}header"] == "0"
     assert page_margins.attrib[f"{{{w}}}footer"] == "708"
 
     def style(style_id):
