@@ -1,5 +1,9 @@
 # Project status
 
+## 2026-09-08 ITS handover preparation
+
+The [ITS guide](handover/20260908_ITS-handover.md) and [documentation index](README.md) provide the onboarding path. Cleanup preserves the application layout, removes generated package metadata from Git and excludes local outputs. Source baseline is `2fc2b77`; app behavior and hosting are unchanged. GitHub visibility was reverified as public after the owner changed it during handover preparation. See the [cleanup validation](validation/2026-09-08-its-handover.md).
+
 ## Current position — 2026-09-08
 
 Application PR30 is on main and deployed as `27ef3aa`. Render and `/health` confirm the

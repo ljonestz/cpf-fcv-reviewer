@@ -28,3 +28,13 @@ output/playwright/
 Thumbs.db
 desktop.ini
 .worktrees/
+
+# Generated packaging and local-only development artifacts
+*.egg-info/
+build/
+dist/
+output/
+.local-archive/
+*.tmp
+*.sqlite3
+*.sqlite3-*
