@@ -1,5 +1,11 @@
 # Selected-Country Live FCV Research Implementation Plan
 
+> Status update (2026-09-08): this is a historical design/handover. PR24 is now
+> deployed as 9f787f4 and the live Guinea flow passed with five current observations.
+> See docs/PRODUCTION_READINESS.md and docs/validation/2026-09-07-live-release-acceptance.md
+> for the current result and remaining quality limits. Historical targets below are not
+> claims that every proposed check or scope item was completed.
+
 > **For agentic workers:** Use test-driven implementation task by task, following Ponytail: reuse existing code and add only what a failing behavior test requires. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** For one CPF/CEN review, obtain a small amount of recent trusted FCV reporting about its confirmed country and use it accurately in the review. The same pipeline must work for any supported country, particularly low- and middle-income countries.

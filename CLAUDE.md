@@ -66,35 +66,26 @@ Both use `GET /api/reviews/<assessment_id>/export.docx`; add `?view=summary` for
 - `docs/validation/`: dated historical validation evidence.
 - `docs/superpowers/specs/` and `plans/`: historical designs and implementation plans.
 
-## Current-context (live-news) pipeline - status (2026-09-07)
+## Current-context pipeline and readiness (2026-09-08)
 
-Three root-cause bugs that blocked live current-context for 6-7 sessions were fixed in PRs
-#11/#12/#13 and remain deployed:
-- web_search `allowed_domains` included crawler-blocked wires (Reuters/AP/BBC) → HTTP 400 every run;
-  now excluded (kept as publishers) + self-heal retry (`public_research.py`).
-- `_source_mentions_country` over-rejected sources naming a country **and** a compound neighbour
-  (Guinea + Guinea-Bissau); now strips compound names then requires a standalone reference.
-- `_source_metadata` read `published_at`, but Anthropic's `web_search_result` dates live in **`page_age`**;
-  now reads `page_age` so real sources are dated.
-- New WARNING log `research_provider_exception` (`research_controller._classify_exception`) makes
-  research failures diagnosable from Render logs.
+Deployed application: `9f787f4` (PR24). All 1,524 provider-free tests passed before
+release. The authorized live Guinea flow passed with five dated observations from two
+Africa Center articles, five RRA-driver assessments, four Strategy assessments, three
+priorities, eight screenshots, assistant restoration and both Word exports.
 
-Option B is now deployed and verified. Current-context claims are graded at the research boundary;
-`missing_current_context_support` is advisory, and a review no longer fails solely because current
-news is thin. When no independent current claims survive the hard country/source floor, the runtime
-generates a bounded model readout from the configured knowledge cutoff, injects it as context only,
-and carries an explicit verify-before-use limitation through the HTML and DOCX. A full Guinea
-acceptance on release `63b16da` emitted six fallback themes, reached `run_complete`, and exported
-successfully. It accepted zero independent current-context evidence, so the fallback is a resilience
-path, not evidence that live Guinea reporting was retrieved.
+Source quality/relevance is model-assessed across countries; the publisher catalogue is
+not an exhaustive acceptance gate. Exact quotations and country checks remain enforced.
+Reduced source breadth is disclosed. Undated context and model-only fallback must remain
+qualified. Excess recommendation length is advisory, including during repair follow-up;
+evidence/citation failures remain blocking.
 
-PRs #17/#18 added and repaired the fallback; PR #20 made diagnostic-map failure non-fatal and PR #21
-fixed the limited-mode caveat/diagnostics path. The current source-coverage limitation remains open:
-improve retrieval of genuine Guinea reporting and keep all model-only claims visibly qualified.
-Evidence: `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`,
-`docs/validation/2026-09-07-fcv-readout-fallback.md`, and
-`docs/validation/2026-09-07-guinea-acceptance.md`.
-
+Do not equate this flow success with blanket factual acceptance or production readiness.
+The generated RRA date is wrong (September 2022 rather than cover date June 2023), some
+proposed delivery changes need expert validation, and the live service uses volatile
+storage. Current readiness is supervised expert use with public documents. See
+`docs/PRODUCTION_READINESS.md` and `docs/validation/2026-09-07-live-release-acceptance.md`.
+Historical validation records describe earlier releases and must not be rewritten as
+current results. No further paid run is authorized merely by updating documentation.
 
 **Test assets (local only, not in repo):** real Guinea CPF/RRA source docs at
 `C:\Users\wb559324\OneDrive - WBG\Claude_Outputs\cpf_screener\GuineaCPFRRA\guineacpf.pdf` and

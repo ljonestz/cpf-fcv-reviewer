@@ -1,5 +1,11 @@
 # Handover — Option B: current-context as trusted synthesis (not a machine-verified gauntlet)
 
+> Status update (2026-09-08): this is a historical design/handover. PR24 is now
+> deployed as 9f787f4 and the live Guinea flow passed with five current observations.
+> See docs/PRODUCTION_READINESS.md and docs/validation/2026-09-07-live-release-acceptance.md
+> for the current result and remaining quality limits. Historical targets below are not
+> claims that every proposed check or scope item was completed.
+
 Date: 2026-09-06
 Repo: `cpf-fcv-reviewer`
 Production at handover: `main` @ `bf1f14b` (deployed, healthy).
