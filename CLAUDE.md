@@ -75,7 +75,7 @@ header.
 
 ## Current-context pipeline and readiness (2026-09-08)
 
-Deployed application: `72743f5` (PR28). All 1,527 provider-free tests passed before
+Deployed application: `27ef3aa` (PR30). All 1,527 provider-free tests passed before
 release. The authorized live Guinea flow on the earlier PR24 build passed with five dated observations from two
 Africa Center articles, five RRA-driver assessments, four Strategy assessments, three
 priorities, eight screenshots, assistant restoration and both Word exports.

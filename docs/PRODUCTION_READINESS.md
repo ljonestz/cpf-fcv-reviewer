@@ -6,7 +6,7 @@ Not yet accepted for routine operational production. This is a quality and servi
 readiness assessment, not a request for additional policy safeguards.
 
 ## What has passed
-- Current application release `72743f5` (PR28); Render and health verified.
+- Current application release `27ef3aa` (PR30); Render and health verified.
 - 1,527 provider-free tests passed.
 - Live Guinea review completed with source-backed current context, assistant restoration,
   eight screenshots and both Word downloads.

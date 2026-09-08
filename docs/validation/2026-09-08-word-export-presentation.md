@@ -52,5 +52,6 @@ the banner at rows 0-64 on every one of the 12 pages, matching the reference exa
 Every page was inspected in a contact sheet; the banner remained consistent and clear of
 the body. Structural checks confirm one default header reference and no separate even-page
 header, shapes, pictures, tables, text boxes, or anchored objects. The final files are
-under `output/20260908_word_exact_top/`; earlier proposals remain preserved. No model or
-research calls were made.
+under `output/20260908_word_exact_top/`; earlier proposals remain preserved. PR30
+deployed the implementation as `27ef3aa`; Render and `/health` confirmed the exact
+release. No model or research calls were made.

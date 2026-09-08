@@ -2,7 +2,7 @@
 
 ## Current position — 2026-09-08
 
-Application PR28 is on main and deployed as `72743f5`. Render and `/health` confirm the
+Application PR30 is on main and deployed as `27ef3aa`. Render and `/health` confirm the
 exact release. Live execution and exports passed on the preceding PR24 acceptance run.
 Readiness is **supervised public-document pilot**, not routine operational production.
 The remaining RRA date error, proposal wording, source breadth and volatile storage are
@@ -17,7 +17,8 @@ teal rule. Negative one-inch horizontal indents extend its shading to both page 
 zero header distance places it at the top edge while one-inch body margins remain
 unchanged. The 42.5-point exact line height reproduces the user-edited banner's 65-pixel
 depth in native Word on all 12 pages (3-page short and 9-page full). The header contains
-no floating or positioned objects. No paid assessment was performed. See the
+no floating or positioned objects. PR30 deployed this implementation as `27ef3aa`;
+Render and `/health` confirmed the exact release. No paid assessment was performed. See the
 [Word presentation validation](validation/2026-09-08-word-export-presentation.md).
 
 ## 2026-09-08 Word presentation update
