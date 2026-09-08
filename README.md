@@ -8,8 +8,8 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified deployment: `9f787f4` (PR24), 2026-09-07. Render and `/health`
-  confirmed the exact release. All **1,524 provider-free tests** passed before deployment.
+- Latest verified deployment: `72743f5` (PR28), 2026-09-08. Render and `/health`
+  confirmed the exact release. All **1,527 provider-free tests** passed before deployment.
 - The live Guinea CPF/RRA assessment completed with five current observations from two
   Africa Center for Strategic Studies articles, five RRA-driver assessments, four FCV
   Strategy assessments and three CPF-specific priorities. Current evidence is explicitly

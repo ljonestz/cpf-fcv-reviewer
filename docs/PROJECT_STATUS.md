@@ -2,7 +2,8 @@
 
 ## Current position — 2026-09-08
 
-Application PR24 is on main and deployed as `9f787f4`. Live execution and exports passed.
+Application PR28 is on main and deployed as `72743f5`. Render and `/health` confirm the
+exact release. Live execution and exports passed on the preceding PR24 acceptance run.
 Readiness is **supervised public-document pilot**, not routine operational production.
 The remaining RRA date error, proposal wording, source breadth and volatile storage are
 tracked in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Documentation below is a
@@ -25,8 +26,8 @@ Both Word exports now use an opening language-model caution and omit the final
 basis/limitations section; the website disclosure is unchanged. Native Word styles,
 one-inch margins, left alignment and subtle heading/action shading keep reports editable.
 Existing Guinea exports were restyled locally: three-page short note and nine-page
-full note. All 1,527 provider-free tests passed; no new assessment was run. The live
-service remains on `9f787f4` pending a separate deployment. See
+full note. All 1,527 provider-free tests passed; no new assessment was run. The final Word
+presentation is deployed as `72743f5`. See
 [Word presentation validation](validation/2026-09-08-word-export-presentation.md).
 
 ## 2026-09-07 Deployed: live Guinea flow passes with qualified evidence
