@@ -9,6 +9,16 @@ tracked in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Documentation bel
 chronological record; older pending-deployment statements refer to earlier checkpoints.
 The latest full readout and screenshots are indexed in the readiness record.
 
+## 2026-09-08 Word presentation update
+
+Both Word exports now use an opening language-model caution and omit the final
+basis/limitations section; the website disclosure is unchanged. Native Word styles,
+one-inch margins, left alignment and subtle heading/action shading keep reports editable.
+Existing Guinea exports were restyled locally: three-page short note and nine-page
+full note. All 1,527 provider-free tests passed; no new assessment was run. The live
+service remains on `9f787f4` pending a separate deployment. See
+[Word presentation validation](validation/2026-09-08-word-export-presentation.md).
+
 ## 2026-09-07 Deployed: live Guinea flow passes with qualified evidence
 
 PR24 is deployed as `9f787f4`; Render and /health confirm the exact release.

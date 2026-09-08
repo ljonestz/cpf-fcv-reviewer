@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from datetime import UTC, datetime
 from io import BytesIO
 
@@ -11,6 +12,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
+from docx.text.paragraph import Paragraph
 
 from .contracts import (
     AssessmentConfidence,
@@ -22,10 +24,15 @@ from .contracts import (
     ReviewResult,
 )
 
-BLUE = RGBColor(0x2E, 0x74, 0xB5)
-DARK_BLUE = RGBColor(0x1F, 0x4D, 0x78)
+BLUE = RGBColor(0x15, 0x39, 0x56)
+DARK_BLUE = RGBColor(0x15, 0x39, 0x56)
 MUTED = RGBColor(0x66, 0x70, 0x85)
 BLACK = RGBColor(0, 0, 0)
+ADVISORY_NOTE = (
+    "Note: This review was generated using a language model. Treat its findings and exact "
+    "dates with caution, and always use it in consultation with a country or FCV expert. "
+    "It is an advisory input, not an institutional clearance or policy determination."
+)
 
 PAGE_WIDTH_DXA = 9360
 LIST_TEXT_INDENT_DXA = 720
@@ -196,6 +203,8 @@ def _add_page_field(paragraph) -> None:
 
 def _configure_document(document: Document, *, created_at: datetime) -> tuple[int, int]:
     section = document.sections[0]
+    document.settings.odd_and_even_pages_header_footer = False
+    section.different_first_page_header_footer = False
     section.orientation = WD_ORIENT.PORTRAIT
     section.page_width = Inches(8.5)
     section.page_height = Inches(11)
@@ -208,6 +217,7 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
 
     normal = document.styles["Normal"]
     _set_style_font(normal, name="Calibri", size=11, color=BLACK)
+    normal.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
     normal.paragraph_format.space_before = Pt(0)
     normal.paragraph_format.space_after = Pt(6)
     normal.paragraph_format.line_spacing = 1.1
@@ -225,6 +235,8 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
     _set_style_font(title, name="Calibri", size=23, color=BLACK)
     title.paragraph_format.space_before = Pt(0)
     title.paragraph_format.space_after = Pt(8)
+    for border in title.element.xpath("./w:pPr/w:pBdr"):
+        border.getparent().remove(border)
 
     for name, size, color, before, after in (
         ("Heading 1", 16, BLUE, 16, 8),
@@ -262,6 +274,7 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
         run.font.color.rgb = MUTED
 
     footer = section.footer.paragraphs[0]
+    footer.clear()
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     footer.paragraph_format.space_before = Pt(0)
     label = footer.add_run("CPF FCV review | Page ")
@@ -269,6 +282,9 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
     label.font.size = Pt(8.5)
     label.font.color.rgb = MUTED
     _add_page_field(footer)
+    # Explicit even-page content also avoids workstation-template substitutions.
+    even_footer = section.even_page_footer.paragraphs[0]
+    even_footer._p.getparent().replace(even_footer._p, deepcopy(footer._p))
 
     return revision_num_id, limitation_num_id
 
@@ -611,6 +627,74 @@ def _add_reproducibility_metadata(document: Document, result: ReviewResult) -> N
         _add_labelled_paragraph(document, "Correction", correction_id)
 
 
+def _shade_paragraph(paragraph, fill: str, *, accent: bool = False) -> None:
+    properties = paragraph._p.get_or_add_pPr()
+    shade = OxmlElement("w:shd")
+    shade.set(qn("w:fill"), fill)
+    properties.append(shade)
+    if accent:
+        borders = OxmlElement("w:pBdr")
+        left = OxmlElement("w:left")
+        for key, value in {"val": "single", "sz": "16", "space": "8", "color": "13A6A4"}.items():
+            left.set(qn(f"w:{key}"), value)
+        borders.append(left)
+        properties.append(borders)
+    paragraph.paragraph_format.left_indent = Inches(0.12)
+    paragraph.paragraph_format.right_indent = Inches(0.12)
+    paragraph.paragraph_format.space_before = Pt(8)
+    paragraph.paragraph_format.space_after = Pt(10)
+
+
+def _apply_report_layout(document: Document, *, summary: bool, created_at: datetime) -> None:
+    """Apply a restrained editorial layout without changing assessment content."""
+    for paragraph in document.paragraphs:
+        paragraph.paragraph_format.widow_control = True
+        if paragraph.style.name == "Title":
+            for border in paragraph._p.xpath("./w:pPr/w:pBdr"):
+                border.getparent().remove(border)
+            paragraph.paragraph_format.space_after = Pt(4)
+            subtitle = OxmlElement("w:p")
+            paragraph._p.addnext(subtitle)
+            line = Paragraph(subtitle, paragraph._parent)
+            label = "FIVE MINUTE READOUT" if summary else "FULL ASSESSMENT"
+            run = line.add_run(f"{label}  |  {created_at.strftime('%d %B %Y')}")
+            run.font.name = "Calibri"
+            run.font.size = Pt(9)
+            run.font.bold = True
+            run.font.color.rgb = DARK_BLUE
+            line.paragraph_format.space_after = Pt(12)
+        elif paragraph.text == ADVISORY_NOTE:
+            paragraph.paragraph_format.space_after = Pt(14)
+            for run in paragraph.runs:
+                run.font.size = Pt(9)
+                run.font.color.rgb = MUTED
+        elif paragraph.style.name == "Heading 1":
+            paragraph.paragraph_format.space_before = Pt(18)
+        elif paragraph.style.name == "Heading 3":
+            _shade_paragraph(paragraph, "F0F4F7")
+        elif paragraph.text.startswith(("Recommended action:", "Recommended response:")):
+            _shade_paragraph(paragraph, "F0F4F7", accent=True)
+        elif paragraph.text.startswith("Status and confidence:"):
+            paragraph.paragraph_format.space_after = Pt(14)
+            for run in paragraph.runs:
+                run.font.size = Pt(9)
+                run.font.color.rgb = DARK_BLUE
+        elif paragraph.text.startswith(("Target:", "Comment addressed:")):
+            for run in paragraph.runs:
+                run.font.size = Pt(9)
+                run.font.color.rgb = MUTED
+    document.styles["Title"].font.size = Pt(26)
+    header = document.sections[0].header.paragraphs[0]
+    header.text = "CPF FCV REVIEW  /  EXPERT REVIEW NOTE"
+    for run in header.runs:
+        run.font.name = "Calibri"
+        run.font.size = Pt(8)
+        run.font.bold = True
+        run.font.color.rgb = DARK_BLUE
+    even_header = document.sections[0].even_page_header.paragraphs[0]
+    even_header._p.getparent().replace(even_header._p, deepcopy(header._p))
+
+
 def build_docx(
     result: ReviewResult,
     *,
@@ -621,21 +705,13 @@ def build_docx(
     validate_evidence_completeness(result, evidence)
     document = Document()
     del hydrated_referrals
-    _, limitation_num_id = _configure_document(
+    _configure_document(
         document,
         created_at=result.metadata.created_at,
     )
 
     document.add_heading("Five-minute readout" if summary else "CPF FCV Review", level=0)
-    advisory = document.add_paragraph()
-    advisory_run = advisory.add_run(
-        "Public version. Use public or non-sensitive material only. "
-        "AI-assisted advisory first pass. This is not clearance, policy advice, "
-        "a compliance finding, an eligibility determination, or an official "
-        "classification."
-    )
-    advisory_run.bold = True
-    advisory_run.font.color.rgb = DARK_BLUE
+    document.add_paragraph(ADVISORY_NOTE)
 
     document.add_heading("Overall assessment", level=1)
     _add_readable_paragraph(document, result.overall_read)
@@ -679,23 +755,7 @@ def build_docx(
         else:
             document.add_paragraph("No priority areas were returned for this review.")
 
-    document.add_heading("Basis and important limitations", level=1)
-    limitations = list(result.limitations)
-    current_limitation = result.metadata.current_evidence_limitation
-    if current_limitation and current_limitation not in limitations:
-        limitations.append(current_limitation)
-    if limitations:
-        for limitation in limitations:
-            _add_readable_list_paragraph(
-                document,
-                limitation,
-                style_name="CPF Bullet List",
-                num_id=limitation_num_id,
-            )
-    else:
-        document.add_paragraph(
-            "Findings are advisory and bounded by the material available for review."
-        )
+    _apply_report_layout(document, summary=summary, created_at=result.metadata.created_at)
 
     stream = BytesIO()
     document.save(stream)

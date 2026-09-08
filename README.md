@@ -48,7 +48,7 @@ output theme. One sanitized retry remains available only for a schema-invalid ma
 Other contextual material may be summarized at a higher level, with incomplete coverage
 disclosed rather than treated as proof that content is absent.
 
-Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and one bounded basis/limitations disclosure. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
+Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and a bounded basis/limitations disclosure on the website. Word exports instead carry a short language-model caution at the top. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
 
 ## Safety boundary
 
@@ -80,7 +80,7 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Download five-minute readout** or **Download full detailed note** before the retained review expires or is reset. The five-minute readout combines up to two assessment sentences and one FCV-relevance sentence per priority, and retains the full recommended action. Both Word downloads include important limitations; the detailed note retains all assessment sections.
+Use **Download five-minute readout** or **Download full detailed note** before the retained review expires or is reset. The five-minute readout combines up to two assessment sentences and one FCV-relevance sentence per priority, and retains the full recommended action. Both Word downloads carry a short caution about findings and exact dates, with advice to consult a country or FCV expert. The basis/limitations section stays on the website. Word uses standard one-inch margins, left-aligned Calibri text, navy headings and subtle shaded action paragraphs; the detailed note retains all assessment sections.
 
 ## Validation and API-cost control
 
