@@ -29,8 +29,9 @@ Use **Download five-minute readout** or **Download full detailed note** for an a
 Both use `GET /api/reviews/<assessment_id>/export.docx`; add `?view=summary` for the five-minute Word download.
 Word exports omit the website-only basis/limitations section and start with a language-model
 caution about findings, exact dates and expert consultation. Keep layouts editable: native
-paragraph styles, left alignment, one-inch margins and no floating text boxes. The navy
-running banner uses header paragraph shading and a teal border, with white text.
+paragraph styles, left alignment, one-inch margins and no floating text boxes. The
+full-width navy running banner uses one header paragraph with shading, negative
+horizontal indents, a quarter-inch header offset, white text, and a teal border.
 
 ## Important constraints
 

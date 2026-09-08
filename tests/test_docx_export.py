@@ -460,6 +460,10 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
         assert header_xml.find(".//w:bottom", ns).attrib[f"{{{w}}}color"] == "13A6A4"
         assert header_xml.find(".//w:rPr/w:color", ns).attrib[f"{{{w}}}val"] == "FFFFFF"
         assert header_xml.find(".//w:txbxContent", ns) is None
+        header_indent = header_xml.find(".//w:pPr/w:ind", ns)
+        assert header_indent.attrib[f"{{{w}}}left"] == "-1440"
+        assert header_indent.attrib[f"{{{w}}}right"] == "-1440"
+        assert header_indent.attrib[f"{{{w}}}firstLine"] == "1440"
 
 
     assert document_xml.find(".//w:txbxContent", ns) is None
@@ -474,7 +478,7 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
     assert page_margins.attrib[f"{{{w}}}right"] == "1440"
     assert page_margins.attrib[f"{{{w}}}bottom"] == "1440"
     assert page_margins.attrib[f"{{{w}}}left"] == "1440"
-    assert page_margins.attrib[f"{{{w}}}header"] == "708"
+    assert page_margins.attrib[f"{{{w}}}header"] == "360"
     assert page_margins.attrib[f"{{{w}}}footer"] == "708"
 
     def style(style_id):

@@ -9,13 +9,14 @@ tracked in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Documentation bel
 chronological record; older pending-deployment statements refer to earlier checkpoints.
 The latest full readout and screenshots are indexed in the readiness record.
 
-## 2026-09-08 Word running banner
+## 2026-09-08 Full-width Word running banner
 
-Approved follow-up adds a slim navy banner with white text and a teal rule in the
-standard Word header. One-inch body margins and report text are unchanged. Native
-Word renders confirm the banner on all 12 pages across the two Guinea examples
+The approved full-width treatment uses one native header paragraph with white text and
+a teal rule. Negative horizontal indents extend only the shading across the page, while
+a quarter-inch header offset avoids clipping and one-inch body margins remain unchanged.
+Native Word renders confirm the banner on all 12 pages across the two Guinea examples
 (3-page short and 9-page full). All 39 focused export/parity tests and exporter lint
-passed. No paid assessment or deployment was performed. See the
+passed. No paid assessment was performed. See the
 [Word presentation validation](validation/2026-09-08-word-export-presentation.md).
 
 ## 2026-09-08 Word presentation update
