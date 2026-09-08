@@ -333,7 +333,6 @@ def test_complete_synthetic_local_workflow(fixture_name):
         "How does the CPF contribute to current FCV Strategy priorities?",
         "2026-2030 FCV Strategy alignment",
         "Priority areas for strengthening",
-        "Basis and important limitations",
     ]
     assert [heading for heading in docx_headings if heading in authoritative_docx_headings] == (
         authoritative_docx_headings

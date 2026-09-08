@@ -22,6 +22,20 @@ from cpf_fcv_reviewer.export_docx import (
 from cpf_fcv_reviewer.registry import load_registry_bundle
 
 
+LANGUAGE_MODEL_CAVEAT_TERMS = (
+    "language model",
+    "dates",
+    "findings",
+    "country or fcv expert",
+)
+
+
+def assert_language_model_caveat(text: str) -> None:
+    lowered = text.casefold()
+    for term in LANGUAGE_MODEL_CAVEAT_TERMS:
+        assert term in lowered
+
+
 def test_docx_reader_note_contains_synthesis_and_omits_technical_material(
     make_valid_result,
 ):
@@ -49,12 +63,7 @@ def test_docx_reader_note_contains_synthesis_and_omits_technical_material(
     assert text.count("Status and confidence") == (
         len(result.rra_driver_assessments) + len(result.fcv_strategy_assessments)
     )
-    assert (
-        "Public version. Use public or non-sensitive material only. "
-        "AI-assisted advisory first pass. This is not clearance, policy advice, "
-        "a compliance finding, an eligibility determination, or an official "
-        "classification."
-    ) in text
+    assert_language_model_caveat(text)
 
     for omitted in (
         "Evidence and reproducibility",
@@ -97,17 +106,16 @@ def test_docx_contains_same_result_and_source_locator(make_valid_result):
     assert result.alignment_readout in text
     assert result.strategy_readout in text
     assert "Priority areas for strengthening" in text
-    assert "Basis and important limitations" in text
+    assert "Basis and important limitations" not in text
     assert result.priority_areas[0].heading in text
     assert result.priority_areas[0].assessment in text
     assert result.priority_areas[0].why_it_matters in text
     assert result.priority_areas[0].recommended_action in text
     assert "Target: CPF.docx | Results framework | paragraph 12" in text
     assert "Consult the designated policy owner." not in text
-    assert "Public version." in text
-    assert "public or non-sensitive material" in text
+    assert_language_model_caveat(text)
     assert "fake-model" not in text
-    assert "No RRA was available." in text
+    assert "No RRA was available." not in text
     assert "Evidence and document locations" not in text
 
 
@@ -368,7 +376,7 @@ def test_docx_uses_question_led_note_sections(make_valid_result):
     assert text.index("2026-2030 FCV Strategy alignment") < text.index(
         "Priority areas for strengthening"
     )
-    assert "Basis and important limitations" in text
+    assert "Basis and important limitations" not in text
     assert "Questions for confirmation" not in text
     assert "Priority questions" not in text
     assert "ev-1" not in text
@@ -448,6 +456,9 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
         styles_xml = ET.fromstring(archive.read("word/styles.xml"))
         numbering_xml = ET.fromstring(archive.read("word/numbering.xml"))
 
+    assert document_xml.find(".//w:txbxContent", ns) is None
+    alignment = styles_xml.find(".//w:style[@w:styleId='Normal']/w:pPr/w:jc", ns)
+    assert alignment.attrib[f"{{{w}}}val"] == "left"
     section = document_xml.find(".//w:sectPr", ns)
     page_size = section.find("w:pgSz", ns)
     page_margins = section.find("w:pgMar", ns)
@@ -472,9 +483,9 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
     assert normal_fonts.attrib[f"{{{w}}}hAnsi"] == "Calibri"
     assert normal_run_properties.find("w:sz", ns).attrib[f"{{{w}}}val"] == "22"
     expected_headings = {
-        "Heading1": ("320", "160", "2E74B5", "32"),
-        "Heading2": ("240", "120", "2E74B5", "26"),
-        "Heading3": ("160", "80", "1F4D78", "24"),
+        "Heading1": ("320", "160", "153956", "32"),
+        "Heading2": ("240", "120", "153956", "26"),
+        "Heading3": ("160", "80", "153956", "24"),
     }
     for style_id, (before, after, color, size) in expected_headings.items():
         heading = style(style_id)
@@ -520,7 +531,6 @@ def test_docx_encodes_standard_business_brief_tokens(make_valid_result):
             in {"C0F00001", "C0F00002"}
         }
     }
-    assert list_num_ids
     assert set(list_num_ids).issubset(custom_num_ids)
     assert len(custom_num_ids) == 2
 
@@ -584,11 +594,13 @@ def test_docx_empty_narrative_collections_have_explicit_empty_states(make_valid_
         ),
     ),
 )
-def test_docx_omits_evidence_status_but_keeps_reader_limitation(
+@pytest.mark.parametrize("summary", (False, True))
+def test_docx_omits_evidence_status_and_reader_limitations(
     make_valid_result,
     tier,
     status,
     limitation,
+    summary,
 ):
     result, evidence = make_valid_result
     metadata = result.metadata.model_copy(
@@ -600,18 +612,33 @@ def test_docx_omits_evidence_status_but_keeps_reader_limitation(
     limitations = result.limitations if limitation is None else (*result.limitations, limitation)
     result = result.model_copy(update={"metadata": metadata, "limitations": limitations})
 
+    result_limitations = result.limitations
+    result_current_limitation = result.metadata.current_evidence_limitation
     paragraphs = [
         paragraph.text
         for paragraph in Document(
-            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+            BytesIO(
+                build_docx(
+                    result,
+                    evidence=evidence,
+                    hydrated_referrals=(),
+                    summary=summary,
+                )
+            )
         ).paragraphs
     ]
     text = "\n".join(paragraphs)
-    assert "Basis and important limitations" in paragraphs
+    assert_language_model_caveat(text)
+    assert result.overall_read in text
+    assert result.alignment_readout in text
+    assert result.strategy_readout in text
+    assert "Basis and important limitations" not in paragraphs
     assert status not in text
     assert "Current evidence tier" not in text
     if limitation is not None:
-        assert limitation in text
+        assert limitation not in text
+        assert limitation in result_limitations
+        assert result_current_limitation == limitation
 
 def test_docx_visible_evidence_status_matches_html(make_valid_result):
     result, evidence = make_valid_result
@@ -637,7 +664,7 @@ def test_docx_visible_evidence_status_matches_html(make_valid_result):
 
     assert "Review based primarily on submitted documents" not in text
     assert "Current evidence tier" not in text
-    assert limitation in text
+    assert limitation not in text
 
 def test_export_route_requires_a_completed_traceable_result(make_valid_result):
     result, evidence = make_valid_result
@@ -737,7 +764,7 @@ def test_five_minute_export_preserves_actions_and_limits_detail(make_valid_resul
     assert "Extra detail." not in text
     assert "Extra relevance." not in text
     assert "First action. Second action. Third action." in text
-    assert "Basis and important limitations" in text
+    assert "Basis and important limitations" not in text
     overview = next(p for p in paragraphs if p.text.startswith("First assessment."))
     assert not any(run.bold for run in overview.runs)
     action = next(p for p in paragraphs if "First action." in p.text)

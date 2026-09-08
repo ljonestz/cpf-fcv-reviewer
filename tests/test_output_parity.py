@@ -31,7 +31,7 @@ def test_browser_fields_are_present_in_docx(make_valid_result):
         assert area.target_locator.document_title in text
         assert area.target_locator.heading in text
         assert area.target_locator.element in text
-    assert result.limitations[0] in text
+    assert result.limitations[0] not in text
     assert result.document_coverage.coverage_note not in text
 
 
@@ -98,7 +98,7 @@ def test_browser_json_exposes_evidence_status_from_review_metadata(make_valid_re
     assert payload["metadata"] == result.metadata.model_dump(mode="json")
 
 
-def test_browser_json_and_docx_share_document_led_evidence_status(make_valid_result):
+def test_browser_keeps_evidence_limitations_omitted_from_docx(make_valid_result):
     result, evidence = make_valid_result
     limitation = "Independent current-country research was unavailable."
     result = result.model_copy(
@@ -140,7 +140,8 @@ def test_browser_json_and_docx_share_document_led_evidence_status(make_valid_res
     assert payload["metadata"]["current_evidence_limitation"] == limitation
     assert "Review based primarily on submitted documents" not in docx_text
     assert "Current evidence tier" not in docx_text
-    assert limitation in docx_text
+    assert limitation not in docx_text
+    assert limitation in payload["limitations"]
 
 
 def test_detailed_docx_keeps_main_readout_free_of_repeated_evidence_details(
