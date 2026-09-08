@@ -212,7 +212,7 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
     section.right_margin = Inches(1)
     section.bottom_margin = Inches(1)
     section.left_margin = Inches(1)
-    section.header_distance = Inches(0.492)
+    section.header_distance = Inches(0.25)
     section.footer_distance = Inches(0.492)
 
     normal = document.styles["Normal"]
@@ -685,10 +685,15 @@ def _apply_report_layout(document: Document, *, summary: bool, created_at: datet
                 run.font.color.rgb = MUTED
     document.styles["Title"].font.size = Pt(26)
     header = document.sections[0].header.paragraphs[0]
-    header.text = "  CPF FCV REVIEW  /  EXPERT REVIEW NOTE"
+    header.text = "CPF FCV REVIEW  /  EXPERT REVIEW NOTE"
     header.paragraph_format.space_before = Pt(4)
     header.paragraph_format.space_after = Pt(4)
     header.paragraph_format.line_spacing = 1.4
+    # Extend only the shaded header into the page margins. The first-line indent
+    # keeps its text aligned with the one-inch body margin.
+    header.paragraph_format.left_indent = Inches(-1)
+    header.paragraph_format.right_indent = Inches(-1)
+    header.paragraph_format.first_line_indent = Inches(1)
     properties = header._p.get_or_add_pPr()
     # Native paragraph shading and a bottom rule repeat without floating objects.
     for existing in properties.xpath("./w:shd | ./w:pBdr"):

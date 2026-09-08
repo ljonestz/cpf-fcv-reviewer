@@ -37,13 +37,17 @@ No raw documents, model outputs or reference-report content are committed.
 This change is prepared for main. The live service remains on `9f787f4`; a main
 merge does not deploy automatically. No paid model or research calls were made.
 
-## Approved running-banner follow-up
+## Approved full-width running-banner follow-up
 
-The user approved a slim navy header banner with white text and a teal accent.
-This is native paragraph shading and a bottom border inside the standard header,
-not a floating object. Existing body text and one-inch margins are unchanged.
-Native Word rendered both new examples at 3 and 9 pages. PDF text and rendered
-navy-pixel checks confirm the banner repeats on every page; visual checks confirm
-clear separation from the body. All 39 focused export/parity tests and exporter
-Ruff checks passed. New files are under `output/20260908_word_banner/` and preserve
-the earlier proposals. No model calls or live deployment were made.
+The user's manual full-width example remained structurally simple, with native header
+paragraphs and no floating objects. Its zero header offset clipped alternate rendered
+pages, so the reusable implementation adopts the same visual direction with one shaded
+paragraph, negative one-inch horizontal indents, a one-inch first-line indent, and a
+stable quarter-inch header offset. Existing body text and one-inch margins are unchanged.
+
+Native Word rendered both final examples at 3 and 9 pages. The banner was visually
+inspected on every page and remains clear of the body. Structural checks confirm no
+shapes, pictures, tables, text boxes, or anchored objects in either header; body text is
+identical to the prior approved reports. All 39 focused export/parity tests and exporter
+Ruff checks passed. New files are under `output/20260908_word_full_width/` and preserve
+the earlier proposals. No model calls were made.
