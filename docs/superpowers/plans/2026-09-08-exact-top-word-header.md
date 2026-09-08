@@ -56,7 +56,7 @@ on every page, no clipping, and unchanged body content.
 
 If any page differs, restore the plain non-color header and repeat tests and rendering.
 
-- [ ] **Step 4: Merge, deploy, and verify**
+- [x] **Step 4: Merge, deploy, and verify**
 
 Merge through a pull request, deploy the exact main commit, and confirm `/health` reports
 that release.
