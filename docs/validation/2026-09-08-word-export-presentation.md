@@ -36,3 +36,14 @@ No raw documents, model outputs or reference-report content are committed.
 
 This change is prepared for main. The live service remains on `9f787f4`; a main
 merge does not deploy automatically. No paid model or research calls were made.
+
+## Approved running-banner follow-up
+
+The user approved a slim navy header banner with white text and a teal accent.
+This is native paragraph shading and a bottom border inside the standard header,
+not a floating object. Existing body text and one-inch margins are unchanged.
+Native Word rendered both new examples at 3 and 9 pages. PDF text and rendered
+navy-pixel checks confirm the banner repeats on every page; visual checks confirm
+clear separation from the body. All 39 focused export/parity tests and exporter
+Ruff checks passed. New files are under `output/20260908_word_banner/` and preserve
+the earlier proposals. No model calls or live deployment were made.

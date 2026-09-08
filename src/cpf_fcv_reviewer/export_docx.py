@@ -685,12 +685,29 @@ def _apply_report_layout(document: Document, *, summary: bool, created_at: datet
                 run.font.color.rgb = MUTED
     document.styles["Title"].font.size = Pt(26)
     header = document.sections[0].header.paragraphs[0]
-    header.text = "CPF FCV REVIEW  /  EXPERT REVIEW NOTE"
+    header.text = "  CPF FCV REVIEW  /  EXPERT REVIEW NOTE"
+    header.paragraph_format.space_before = Pt(4)
+    header.paragraph_format.space_after = Pt(4)
+    header.paragraph_format.line_spacing = 1.4
+    properties = header._p.get_or_add_pPr()
+    # Native paragraph shading and a bottom rule repeat without floating objects.
+    for existing in properties.xpath("./w:shd | ./w:pBdr"):
+        properties.remove(existing)
+    shade = OxmlElement("w:shd")
+    shade.set(qn("w:val"), "clear")
+    shade.set(qn("w:fill"), "153956")
+    properties.append(shade)
+    borders = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    for key, value in {"val": "single", "sz": "18", "space": "1", "color": "13A6A4"}.items():
+        bottom.set(qn(f"w:{key}"), value)
+    borders.append(bottom)
+    properties.append(borders)
     for run in header.runs:
         run.font.name = "Calibri"
         run.font.size = Pt(8)
         run.font.bold = True
-        run.font.color.rgb = DARK_BLUE
+        run.font.color.rgb = RGBColor(255, 255, 255)
     even_header = document.sections[0].even_page_header.paragraphs[0]
     even_header._p.getparent().replace(even_header._p, deepcopy(header._p))
 
