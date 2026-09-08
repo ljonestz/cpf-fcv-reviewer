@@ -10,14 +10,14 @@ tracked in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Documentation bel
 chronological record; older pending-deployment statements refer to earlier checkpoints.
 The latest full readout and screenshots are indexed in the readiness record.
 
-## 2026-09-08 Full-width Word running banner
+## 2026-09-08 Top-edge Word running banner
 
-The approved full-width treatment uses one native header paragraph with white text and
-a teal rule. Negative horizontal indents extend only the shading across the page, while
-a quarter-inch header offset avoids clipping and one-inch body margins remain unchanged.
-Native Word renders confirm the banner on all 12 pages across the two Guinea examples
-(3-page short and 9-page full). All 39 focused export/parity tests and exporter lint
-passed. No paid assessment was performed. See the
+The approved treatment uses one native default-header paragraph with white text and a
+teal rule. Negative one-inch horizontal indents extend its shading to both page edges;
+zero header distance places it at the top edge while one-inch body margins remain
+unchanged. The 42.5-point exact line height reproduces the user-edited banner's 65-pixel
+depth in native Word on all 12 pages (3-page short and 9-page full). The header contains
+no floating or positioned objects. No paid assessment was performed. See the
 [Word presentation validation](validation/2026-09-08-word-export-presentation.md).
 
 ## 2026-09-08 Word presentation update

@@ -38,18 +38,19 @@ The presentation change was merged through PR28 and deployed as `72743f5`. Rende
 reported the deployment live and `/health` returned the exact release. No paid model
 or research calls were made.
 
-## Approved full-width running-banner follow-up
+## Approved top-edge running-banner follow-up
 
-The user's manual full-width example remained structurally simple, with native header
-paragraphs and no floating objects. Its zero header offset clipped alternate rendered
-pages, so the reusable implementation adopts the same visual direction with one shaded
-paragraph, negative one-inch horizontal indents, a one-inch first-line indent, and a
-stable quarter-inch header offset. Existing body text and one-inch margins are unchanged.
+The user's edited full report established the target: a navy banner touching the top and
+both side edges with a 65-pixel rendered depth. Inspection confirmed that the reference
+used native shaded header paragraphs and no floating objects. The reusable exporter uses
+a simpler structure: one default-header paragraph, negative one-inch horizontal indents,
+a one-inch first-line indent, zero header distance, and an exact 42.5-point line height.
+Existing body text and one-inch margins are unchanged.
 
-Native Word rendered both final examples at 3 and 9 pages. The banner was visually
-inspected on every page and remains clear of the body. Structural checks confirm no
-shapes, pictures, tables, text boxes, or anchored objects in either header; body text is
-identical to the prior approved reports. All 39 focused export/parity tests and exporter
-Ruff checks passed. New files are under `output/20260908_word_full_width/` and preserve
-the earlier proposals. PR28 deployed the final implementation as `72743f5`; `/health`
-confirmed the exact release. No model calls were made.
+Native Microsoft Word rendered the final examples at 3 and 9 pages. Pixel checks found
+the banner at rows 0-64 on every one of the 12 pages, matching the reference exactly.
+Every page was inspected in a contact sheet; the banner remained consistent and clear of
+the body. Structural checks confirm one default header reference and no separate even-page
+header, shapes, pictures, tables, text boxes, or anchored objects. The final files are
+under `output/20260908_word_exact_top/`; earlier proposals remain preserved. No model or
+research calls were made.
