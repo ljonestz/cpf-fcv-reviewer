@@ -1,8 +1,9 @@
 # CPF FCV Reviewer
 
-Application release **3904935** (PR 33) is deployed and health-verified on 10 September.
+Application release **992c35a** (PR 36) is deployed and health-verified on 10 September.
+Main CI passed 1,619 tests. Grounding improvements are live; no new paid assessment.
 The open pilot uses one paid 0.5 CPU / 512 MB instance and 16 request threads.
-Storage remains volatile. See the [release record](docs/validation/2026-09-10-pilot-release.md).
+Storage remains volatile. See the [deployment record](docs/validation/2026-09-10-grounding-deployment.md).
 `render.yaml` remains a candidate durable configuration, not a dump of live dashboard settings.
 
 An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN drafts. It supports expert judgment and practical options; it does not make policy, compliance, eligibility, endorsement, or clearance determinations.

@@ -75,7 +75,11 @@ header.
 
 ## Current-context pipeline and readiness (2026-09-10)
 
-Application release `3904935` (PR 33) is deployed; Render and `/health` confirm it.
+Application release `992c35a` (PR 36) is deployed; Render and `/health` confirm it.
+Main CI passed 1,619 tests including Gunicorn. Grounding improvements are live; no
+paid assessment was run on this release. See `docs/validation/2026-09-10-grounding-deployment.md`.
+
+Prior release `3904935` acceptance:
 The candidate passed 1,610 provider-free tests including real Gunicorn, and merged-release
 CI passed. One Guinea paid run passed browser/export checks after one repair; proposal
 qualification and reduced research breadth remain concerns. See

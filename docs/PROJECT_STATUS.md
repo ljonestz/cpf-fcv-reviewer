@@ -1,5 +1,13 @@
 # Project status
 
+## 2026-09-10 Deployed: grounded recommendations
+
+PR 36 is merged; **992c35a** is live. Render and TLS-verified health confirm the
+exact release; homepage and JavaScript checks passed. Main CI passed **1,619 tests**
+including Gunicorn. No new paid assessment; model adherence still needs live acceptance.
+Open access, 16 request threads and volatile storage remain unchanged. See the
+[deployment record](validation/2026-09-10-grounding-deployment.md).
+
 ## 2026-09-10 Candidate: grounded recommendations
 
 Candidate `f5af172` passed Linux CI: **1,619 tests**, including Gunicorn.
