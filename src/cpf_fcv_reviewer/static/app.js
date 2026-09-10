@@ -851,7 +851,6 @@ function renderPriorityAreas(result, anchorIds) {
         labelledParagraph("Comment addressed", area.comment_reference, "comment-reference"),
       );
     }
-    section.append(renderTraceabilityForEvidence(result, area.evidence_ids));
     fragment.append(section);
   }
   if (!result.priority_areas.length) {
@@ -961,13 +960,7 @@ function renderDetailedAnalysisView(result, includeDisclosurePanels = true) {
     renderStrategyAssessments(result),
     renderPriorityAreas(result, anchorIds),
   );
-  if (includeDisclosurePanels) {
-    fragment.append(
-      renderEvidenceStatusDisclosure(result),
-      renderCoverageView(result),
-      renderBasisAndLimitations(result),
-    );
-  }
+  if (includeDisclosurePanels) fragment.append(renderBasisAndLimitations(result));
   return fragment;
 }
 function inferDocumentType(primaryDocumentName) {

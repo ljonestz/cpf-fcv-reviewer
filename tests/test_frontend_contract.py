@@ -549,16 +549,13 @@ def test_detailed_analysis_keeps_priority_prose_and_hides_technical_coverage():
         assert fragment in javascript
 
     detailed_renderer = javascript.split("function renderDetailedAnalysisView", 1)[1].split("function inferDocumentType", 1)[0]
-    for wired in (
-        "renderCoverageView(result)",
-        "renderEvidenceStatusDisclosure(result)",
-        "renderBasisAndLimitations(result)",
-    ):
-        assert wired in detailed_renderer
+    assert "renderBasisAndLimitations(result)" in detailed_renderer
+    for omitted in ("renderCoverageView(result)", "renderEvidenceStatusDisclosure(result)"):
+        assert omitted not in detailed_renderer
     priority_renderer = javascript.split("function renderPriorityAreas", 1)[1].split(
         "function labelledNarrative", 1
     )[0]
-    assert "renderTraceabilityForEvidence(result, area.evidence_ids)" in priority_renderer
+    assert "renderTraceabilityForEvidence(result, area.evidence_ids)" not in priority_renderer
     assert "innerHTML" not in javascript
 
 
@@ -685,7 +682,7 @@ def test_task3_result_disclosures_and_statuses_use_focused_visual_contracts():
     assert "#results.output-card" in css
 
 
-def test_app_js_renders_current_context_verification_banner():
+def test_app_js_discloses_current_context_limitations():
     completed = _run_dom_harness(
         """
         global.fetch = async () => ({status: 200, ok: true, json: async () => complete});
@@ -696,8 +693,8 @@ def test_app_js_renders_current_context_verification_banner():
         await FakeSource.all[0].emit("run_complete");
         const rendered = collectText(nodes["#results"]);
         for (const expected of [
-          "AI-generated from trusted sources — verify before use",
-          "Partially verified — verify before use",
+          "Basis and important limitations",
+          "Source breadth was reduced.",
         ]) {
           if (!rendered.includes(expected)) throw Error(`result omitted ${expected}`);
         }
@@ -768,7 +765,7 @@ def _run_dom_harness(body):
     )
 
 
-def test_detailed_view_renders_evidence_sources_status_and_coverage():
+def test_detailed_view_preserves_approved_plain_language_limitations():
     completed = _run_dom_harness(
         """
         global.fetch = async () => ({status: 200, ok: true, json: async () => complete});
@@ -779,24 +776,17 @@ def test_detailed_view_renders_evidence_sources_status_and_coverage():
         await FakeSource.all[0].emit("run_complete");
         const rendered = collectText(nodes["#results"]);
         for (const expected of [
-          "Traceability",
-          "Evidence and document locations",
-          "CPF.docx | page 4 | Results",
-          "The programme will deliver results.",
-          "Current context | https://example.test/context",
-          "Context note explains the regional setting.",
-          "AI-generated from trusted sources — verify before use",
-          "Partially verified — verify before use",
-          "Evidence status",
-          "Current evidence partially established",
+          "Basis and important limitations",
           "Source breadth was reduced.",
-          "Coverage and limitations",
-          "CPF package annex.docx",
-          "The review covers the supplied CPF.",
+          "The RRA was not supplied.",
+          "Add a short explanation of the pathway.",
         ]) {
           if (!rendered.includes(expected)) throw Error(`result omitted ${expected}`);
         }
-        if (rendered.includes("ev-1") || rendered.includes("ev-context")) throw Error("internal evidence ID was rendered");
+        for (const omitted of ["Traceability", "Evidence status", "Coverage and limitations",
+                               "Evidence and document locations", "ev-1", "ev-context"]) {
+          if (rendered.includes(omitted)) throw Error(`technical disclosure rendered: ${omitted}`);
+        }
         })().catch(error => { console.error(error); process.exit(1); });
         """
     )

@@ -12,7 +12,6 @@ src/cpf_fcv_reviewer/diagnostic_sources.py
 src/cpf_fcv_reviewer/evidence_builder.py
 src/cpf_fcv_reviewer/export_docx.py
 src/cpf_fcv_reviewer/extraction.py
-src/cpf_fcv_reviewer/fcv_readout.py
 src/cpf_fcv_reviewer/follow_on.py
 src/cpf_fcv_reviewer/model_gateway.py
 src/cpf_fcv_reviewer/orchestrator.py
@@ -45,8 +44,6 @@ tests/test_contracts.py
 tests/test_correction_rerun.py
 tests/test_country_detection.py
 tests/test_curated_research.py
-tests/test_curated_verification.py
-tests/test_current_context_advisory.py
 tests/test_current_context_grading.py
 tests/test_diagnostic_map.py
 tests/test_diagnostic_sources.py
@@ -55,7 +52,6 @@ tests/test_end_to_end.py
 tests/test_evidence_builder.py
 tests/test_extraction.py
 tests/test_failure_handling.py
-tests/test_fcv_readout.py
 tests/test_follow_on.py
 tests/test_frontend_accessibility.py
 tests/test_frontend_contract.py
@@ -77,7 +73,6 @@ tests/test_reproducibility_export.py
 tests/test_research_controller.py
 tests/test_review_engine.py
 tests/test_review_focus_intake.py
-tests/test_review_prompt.py
 tests/test_routes.py
 tests/test_runtime_wiring.py
 tests/test_security.py

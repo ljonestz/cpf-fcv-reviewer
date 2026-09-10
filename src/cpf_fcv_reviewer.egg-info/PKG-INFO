@@ -15,29 +15,38 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified deployment: `27ef3aa` (PR30), 2026-09-08. Render and `/health`
-  confirmed the exact release. All **1,527 provider-free tests** passed before deployment.
-- The live Guinea CPF/RRA assessment completed with five current observations from two
-  Africa Center for Strategic Studies articles, five RRA-driver assessments, four FCV
-  Strategy assessments and three CPF-specific priorities. Current evidence is explicitly
-  **reduced** because there is only one originating publisher.
-- The browser flow passed: eight screenshots, one assistant response restored after
-  refresh, and both the five-minute and full detailed Word exports.
-- Research uses model-assessed FCV relevance and source quality across countries, with
-  CPF context, exact quotation and country checks. Credible publishers outside the
-  catalogue can be retained with qualified provenance; undated reporting remains
-  explicitly qualified context. Model-only fallback is still disclosed when needed.
-- Excess recommendation length is advisory and does not block completion or trigger a
-  paid correction. Evidence and citation failures retain their checks.
+- Latest verified deployment: `bf1f14b` on 2026-09-06 (`/health` 200, clean startup). This deploy
+  fixed three long-standing live-news (current-context) bugs — the web_search `allowed_domains` 400,
+  a country/compound-neighbour over-rejection, and reading the publication date from Anthropic's
+  `page_age` field. Live search now returns trusted, dated sources. However, a review still cannot
+  **complete** when zero current-context claims are accepted (`missing_current_context_support` →
+  `review_failed`); the next step is "Option B" (trusted synthesis + graceful degradation). See
+  `docs/PROJECT_STATUS.md`, `docs/validation/2026-09-06-live-news-pipeline-fixes-and-verification.md`,
+  and `docs/handover/2026-09-06-option-b-current-context-synthesis.md`.
+- Every assessment researches only its confirmed country through the same bounded,
+  country-agnostic route; it never fans out across other countries. Source selection
+  prioritizes recent substantive reporting from ICG, Reuters/AP/BBC, approved
+  UN/humanitarian publishers, IRC, public ACLED analysis, and approved think tanks.
+- One recent grounded, substantively FCV-relevant source is sufficient for a reduced
+  current update. Generic macro/demographic indicators cannot substitute for current-FCV
+  reporting or support unrelated political, violence, displacement, or land-conflict
+  claims. Observations, URLs, and publishers are counted separately.
+- Optional mapped ICG and ReliefWeb recovery complements rather than defines the generic
+  primary route. ReliefWeb requires a pre-approved application name. The previous
+  arbitrary default was removed after its HTTP 403 was confirmed.
+- Exactly one authorized paid Guinea assessment was completed on the preceding release.
+  It produced a valid document-led review and DOCX without current-context or indicator
+  evidence; no provider-backed assistant call or second assessment was made. The new
+  think-tank recovery then passed complete provider-free validation.
 
-**Readiness: supervised public-document pilot, not routine operational production.**
-The successful run still misdates the RRA as September 2022 (the cover says June 2023).
-Some proposed delivery changes require expert validation; source diversity and cross-country
-output quality need further acceptance. The live public service uses volatile storage,
-so restarts discard sessions. Use public or otherwise approved non-sensitive inputs only.
-See [readiness and remaining work](docs/PRODUCTION_READINESS.md),
-[project status](docs/PROJECT_STATUS.md), and
-[live validation](docs/validation/2026-09-07-live-release-acceptance.md).
+- The authorized Guinea production quality run on deployed commit `1ba44bf` completed
+  successfully on 2026-08-31. The result and DOCX endpoints returned HTTP 200; the core
+  result schema, 32 evidence records, reproducibility metadata, and application validation
+  passed with zero issues. Browser screenshots, the 79 KB JSON response, and the 49,830-byte
+  DOCX were saved. Current-country evidence was truthfully rated `reduced` because only two
+  recent public sources were established.
+
+The public service is an MVP, not approved for operational use. Use only approved historical, synthetic, or otherwise non-sensitive material. Do not submit confidential operational packages.
 
 The review starts with three document buckets: the draft CPF/CEN, accompanying package documents, and an optional public RRA or supporting analytics. Country inference uses the recognized title when available and requires manual country confirmation when it is not. Review stage is selected explicitly: Early drafting / PCN, Concept review, Decision review, ROC / OC, Finalization, or Response to comments.
 
@@ -55,7 +64,7 @@ output theme. One sanitized retry remains available only for a schema-invalid ma
 Other contextual material may be summarized at a higher level, with incomplete coverage
 disclosed rather than treated as proof that content is absent.
 
-Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and a bounded basis/limitations disclosure on the website. Word exports instead carry a short language-model caution at the top. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
+Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and one bounded basis/limitations disclosure. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
 
 ## Safety boundary
 
@@ -87,7 +96,7 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Download five-minute readout** or **Download full detailed note** before the retained review expires or is reset. The five-minute readout combines up to two assessment sentences and one FCV-relevance sentence per priority, and retains the full recommended action. Both Word downloads carry a short caution about findings and exact dates, with advice to consult a country or FCV expert. The basis/limitations section stays on the website. Word uses standard one-inch margins, left-aligned Calibri text, navy headings, a full-width navy running-header banner that reaches the top page edge, with white text and a teal rule, and subtle shaded action paragraphs; the detailed note retains all assessment sections.
+Use **Download full detailed note** before the retained review expires or is reset.
 
 ## Validation and API-cost control
 

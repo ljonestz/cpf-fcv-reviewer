@@ -1,5 +1,6 @@
 import time
 from threading import Event
+from types import SimpleNamespace
 
 from cpf_fcv_reviewer.background import PersistentAssessmentWorker
 
@@ -19,6 +20,12 @@ class ClaimingStore:
 
     def update(self, assessment_id, **values):
         self.updated.append((assessment_id, values))
+
+    def get(self, assessment_id):
+        return SimpleNamespace(payload={})
+
+    def remove_keys(self, assessment_id, *keys):
+        pass
 
 
 def test_persistent_worker_recovers_and_runs_claimed_assessment(monkeypatch):
@@ -171,3 +178,34 @@ def test_persistent_worker_does_not_log_exception_text(monkeypatch, caplog):
     assert "SENSITIVE" not in logged
     assert "Traceback" not in caplog.text
     assert "RuntimeError" in logged
+
+
+def test_worker_fallback_removes_saved_output_before_failure(tmp_path, make_valid_result):
+    from cpf_fcv_reviewer.app import create_app
+
+    result, evidence = make_valid_result
+    app = create_app({
+        "TESTING": True,
+        "START_BACKGROUND_RUNS": False,
+        "PERSISTENCE_PATH": str(tmp_path / "reviews.sqlite3"),
+    })
+    store = app.extensions["session_store"]
+    assessment_id = store.create({
+        "status": "complete",
+        "country": "Benin",
+        "result": result.model_dump(mode="json"),
+        "evidence_by_id": {key: item.model_dump(mode="json") for key, item in evidence.items()},
+        "validation_issues": ["stale"],
+        "research_summary": "partial",
+        "current_research": "partial",
+    })
+    client = app.test_client()
+    assert client.get(f"/api/reviews/{assessment_id}/result").status_code == 200
+
+    PersistentAssessmentWorker(app, store)._fail_closed(assessment_id)
+
+    payload = store.get(assessment_id).payload
+    assert payload == {"status": "failed", "country": "Benin", "failure_code": "review_failed"}
+    response = client.get(f"/api/reviews/{assessment_id}/result")
+    assert response.status_code == 202
+    assert response.get_json() == {"status": "failed"}

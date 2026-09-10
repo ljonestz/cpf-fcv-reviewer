@@ -95,7 +95,19 @@ class PersistentAssessmentWorker:
         Without this the review stays `running` with no terminal event and the
         browser waits on a stream that never resolves.
         """
+        from .routes import _partial_research_keys
+
         try:
+            # A late completion/emit failure can leave a saved result behind.
+            # Clear it before publishing the terminal failure, as run_assessment does.
+            state = self._store.get(assessment_id)
+            self._store.remove_keys(
+                assessment_id,
+                "result",
+                "evidence_by_id",
+                "validation_issues",
+                *_partial_research_keys(state.payload),
+            )
             self._store.update(
                 assessment_id, status="failed", failure_code="review_failed"
             )
