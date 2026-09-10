@@ -1,6 +1,6 @@
 import copy
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
 
@@ -254,3 +254,23 @@ def test_checked_in_public_guardrail_bundle_is_valid_and_hash_pinned():
     assert tuple(
         entry.model_dump() for entry in v1_0_bundle.entries[:4]
     ) == tuple(entry.model_dump() for entry in bundle.entries[:4])
+
+
+def test_checked_in_public_guardrail_bundle_has_remaining_validity():
+    """The shipped bundle must not quietly age into a boot failure.
+
+    load_registry_bundle refuses an expired bundle, so an expiry that passes
+    unnoticed stops the application from starting at all. This check uses the
+    real clock deliberately: the frozen-time test above can never catch it.
+    """
+    bundle = load_registry_bundle(
+        PUBLIC_BUNDLE,
+        allow_synthetic=False,
+        expected_hash=sha256(PUBLIC_BUNDLE.read_bytes()).hexdigest(),
+    )
+
+    remaining = bundle.expires_at - datetime.now(UTC)
+    assert remaining > timedelta(days=90), (
+        f"Approved registry bundle expires in {remaining.days} days; "
+        "renew it before it stops the application from booting."
+    )

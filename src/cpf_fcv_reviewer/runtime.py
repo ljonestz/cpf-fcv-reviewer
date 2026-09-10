@@ -33,6 +33,7 @@ from .evidence_builder import build_evidence_pack, build_reproducible_evidence_p
 from .extraction import (
     PDF_SAMPLING_WARNING_SUFFIX,
     DiagnosticCoverageUnavailable,
+    DocumentUnreadable,
     ExtractionLimitExceeded,
     PackageCoverageUnavailable,
     extract_document,
@@ -96,6 +97,7 @@ OPTIONAL_PDF_SAMPLE_PAGES = 16
 DIAGNOSTIC_MAX_PAGES = 250
 DIAGNOSTIC_MAX_CHARACTERS = 600_000
 DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES = 50_000_000
+DIAGNOSTIC_MAX_ARCHIVE_MEMBERS = 512
 PACKAGE_MAX_DOCUMENTS = 10
 PACKAGE_MAX_SEGMENTS_TOTAL = 400
 PACKAGE_MAX_CHARACTERS_TOTAL = 300_000
@@ -485,6 +487,34 @@ def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
     if suffix == ".docx":
         return _has_valid_docx_container(data)
     return True
+
+
+def _extract_primary_document(data: bytes, name: str):
+    """Extract the primary CPF/CEN under the same bounds as full diagnostic extraction.
+
+    The primary document is the principal review lens, so it is never sampled. It is
+    still bounded: an unusable container or an upload that exceeds the extraction
+    budget fails closed as an unreadable primary rather than being extracted.
+    """
+    suffix = Path(name).suffix.lower()
+    if suffix not in SUPPORTED_UPLOAD_SUFFIXES or not _has_valid_optional_container(
+        data, suffix
+    ):
+        raise DocumentUnreadable("Primary CPF/CEN is unreadable or unsupported.")
+    try:
+        return extract_document(
+            data,
+            name,
+            max_pdf_pages=DIAGNOSTIC_MAX_PAGES,
+            max_segments=DIAGNOSTIC_MAX_PAGES,
+            max_characters=DIAGNOSTIC_MAX_CHARACTERS,
+            max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+            max_archive_members=DIAGNOSTIC_MAX_ARCHIVE_MEMBERS,
+        )
+    except ExtractionLimitExceeded as exc:
+        raise DocumentUnreadable(
+            "Primary CPF/CEN exceeds the safe extraction budget."
+        ) from exc
 
 
 def _extract_optional_uploads(
@@ -882,7 +912,7 @@ def build_runtime_services(
         if not payload or "cpf" not in payload:
             return context
         primary = payload["cpf"]
-        primary_document = extract_document(primary["bytes"], primary["name"])
+        primary_document = _extract_primary_document(primary["bytes"], primary["name"])
         require_readable_primary(primary_document)
         package_documents, package_uploads, package_warnings = _extract_optional_uploads(
             payload.get("package_documents", ()),

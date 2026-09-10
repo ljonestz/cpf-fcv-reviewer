@@ -81,16 +81,21 @@ def create_app(
 
     @app.get("/health")
     def health():
-        return jsonify(
-            status="ok",
+        queue = app.extensions["assessment_queue"]
+        worker_state = getattr(queue, "worker_state", "not_applicable")
+        healthy = worker_state != "stopped"
+        payload = jsonify(
+            status="ok" if healthy else "degraded",
             release=app.config["APP_RELEASE"],
             storage=getattr(
                 app.extensions["session_store"], "storage_mode", "volatile"
             ),
-            queue=getattr(
-                app.extensions["assessment_queue"], "mode", "configured"
-            ),
+            queue=getattr(queue, "mode", "configured"),
+            worker=worker_state,
         )
+        # A dead worker leaves every later review queued forever, so the health
+        # check must fail and let the platform replace the instance.
+        return payload if healthy else (payload, 503)
 
     return app
 

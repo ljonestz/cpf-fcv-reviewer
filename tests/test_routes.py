@@ -683,3 +683,83 @@ def test_result_rejects_priority_area_with_unavailable_cited_evidence(make_valid
 
     assert response.status_code == 409
     assert response.get_json() == {"error": "Traceable evidence is invalid."}
+
+
+def make_stream_app(max_seconds):
+    return create_app(
+        {
+            "TESTING": True,
+            "START_BACKGROUND_RUNS": False,
+            "EVENT_STREAM_MAX_SECONDS": max_seconds,
+        }
+    )
+
+
+def test_event_stream_closes_cleanly_after_maximum_duration():
+    app = make_stream_app(0.01)
+    store = app.extensions["session_store"]
+    assessment_id = store.create({"status": "created"})
+    store.emit(assessment_id, "run_started", {})
+
+    response = app.test_client().get(f"/api/reviews/{assessment_id}/events")
+    body = response.get_data(as_text=True)
+
+    assert "id: 1" in body
+    assert "event: run_started" in body
+    assert "event: keepalive" in body
+    assert "event: run_complete" not in body
+    assert "event: expired" not in body
+
+
+def test_event_stream_resumes_without_loss_after_maximum_duration():
+    app = make_stream_app(0.01)
+    store = app.extensions["session_store"]
+    assessment_id = store.create({"status": "created"})
+    store.emit(assessment_id, "run_started", {})
+    store.emit(assessment_id, "step_start", {"step": "extract"})
+    client = app.test_client()
+
+    first = client.get(f"/api/reviews/{assessment_id}/events").get_data(as_text=True)
+
+    assert "id: 1" in first
+    assert "id: 2" in first
+
+    store.emit(assessment_id, "step_complete", {"step": "extract"})
+    store.emit(assessment_id, "run_complete", {"repair_count": 0})
+
+    second = client.get(
+        f"/api/reviews/{assessment_id}/events",
+        headers={"Last-Event-ID": "2"},
+    ).get_data(as_text=True)
+
+    assert "event: step_start" not in second
+    assert "id: 3" in second
+    assert "event: step_complete" in second
+    assert "id: 4" in second
+    assert "event: run_complete" in second
+
+
+def test_event_stream_ends_immediately_on_terminal_event_within_maximum_duration():
+    app = make_stream_app(3600)
+    store = app.extensions["session_store"]
+    assessment_id = store.create({"status": "complete"})
+    store.emit(assessment_id, "run_complete", {"repair_count": 0})
+    store.emit(assessment_id, "step_start", {"step": "never_streamed"})
+
+    body = app.test_client().get(
+        f"/api/reviews/{assessment_id}/events"
+    ).get_data(as_text=True)
+
+    assert "event: run_complete" in body
+    assert "event: keepalive" not in body
+    assert "never_streamed" not in body
+
+
+def test_event_stream_ends_immediately_when_the_session_expired():
+    app = make_stream_app(3600)
+
+    body = app.test_client().get(
+        "/api/reviews/missing-assessment/events"
+    ).get_data(as_text=True)
+
+    assert body == "event: expired\ndata: {}\n\n"

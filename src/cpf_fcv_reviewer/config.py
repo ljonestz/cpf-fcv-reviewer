@@ -76,6 +76,9 @@ def build_config(
         ),
         "PERSISTENCE_PATH": environment("PERSISTENCE_PATH", ""),
         "WORKER_POLL_SECONDS": float(environment("WORKER_POLL_SECONDS", "1")),
+        "EVENT_STREAM_MAX_SECONDS": float(
+            environment("EVENT_STREAM_MAX_SECONDS", "90")
+        ),
         "START_BACKGROUND_RUNS": True,
         "TESTING": False,
     }
@@ -102,6 +105,7 @@ def build_config(
         ("RESEARCH_RETRY_BACKOFF_SECONDS", False),
         ("RESEARCH_RECOVERY_TIMEOUT_SECONDS", True),
         ("WORKER_POLL_SECONDS", True),
+        ("EVENT_STREAM_MAX_SECONDS", True),
     ):
         value = config[name]
         if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):

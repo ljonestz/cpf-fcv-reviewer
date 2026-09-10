@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
 from threading import RLock
-from time import sleep
+from time import monotonic, sleep
 from uuid import uuid4
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
@@ -45,6 +45,7 @@ RETRYABLE_RESEARCH_CODES = {
 LEGACY_REVIEW_RESULT_ERROR = (
     "This review was created by an earlier version. Start a new review."
 )
+EVENT_STREAM_KEEPALIVE_SECONDS = 5
 ASSISTANT_MESSAGE_MAX_LENGTH = 10_000
 ASSISTANT_HISTORY_MAX_MESSAGES = 20
 ASSISTANT_RETRY_MESSAGE = "The assistant could not complete that response. Please try again."
@@ -341,6 +342,8 @@ def review_events(assessment_id):
     except (TypeError, ValueError):
         initial_cursor = 0
 
+    deadline = monotonic() + current_app.config["EVENT_STREAM_MAX_SECONDS"]
+
     def generate():
         cursor = initial_cursor
         while True:
@@ -360,7 +363,9 @@ def review_events(assessment_id):
                         return
             else:
                 yield "event: keepalive\ndata: {}\n\n"
-                sleep(5)
+                if monotonic() + EVENT_STREAM_KEEPALIVE_SECONDS > deadline:
+                    return
+                sleep(EVENT_STREAM_KEEPALIVE_SECONDS)
 
     return Response(
         stream_with_context(generate()),

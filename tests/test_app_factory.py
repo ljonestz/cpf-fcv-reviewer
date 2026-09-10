@@ -22,6 +22,7 @@ def test_health_reports_release_without_secrets():
         "release": "test-release",
         "storage": "volatile",
         "queue": "in_process",
+        "worker": "not_applicable",
     }
     assert api_key not in response.get_data(as_text=True)
 
@@ -114,3 +115,44 @@ def test_wsgi_patches_gevent_before_importing_application_dependencies():
     assert wsgi.index("monkey.patch_all()") < wsgi.index(
         "from cpf_fcv_reviewer.app import create_app"
     )
+
+
+def test_health_reports_a_dead_background_worker_as_unhealthy():
+    """A silently dead worker must not keep reporting a healthy service."""
+
+    class DeadWorker:
+        mode = "persistent_worker"
+        worker_state = "stopped"
+
+        def enqueue(self, assessment_id):
+            raise AssertionError("the dead worker must not accept work")
+
+    app = create_app(
+        {"TESTING": True},
+        services={"assessment_queue": DeadWorker()},
+    )
+    response = app.test_client().get("/health")
+
+    assert response.status_code == 503
+    payload = response.get_json()
+    assert payload["status"] == "degraded"
+    assert payload["worker"] == "stopped"
+
+
+def test_health_reports_a_live_background_worker_as_ok():
+    class LiveWorker:
+        mode = "persistent_worker"
+        worker_state = "alive"
+
+        def enqueue(self, assessment_id):
+            return None
+
+    app = create_app(
+        {"TESTING": True},
+        services={"assessment_queue": LiveWorker()},
+    )
+    response = app.test_client().get("/health")
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "ok"
+    assert response.get_json()["worker"] == "alive"

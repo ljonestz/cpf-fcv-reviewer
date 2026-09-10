@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from threading import Condition, Event, Thread
+
+logger = logging.getLogger(__name__)
 
 
 class InProcessAssessmentQueue:
@@ -56,6 +59,10 @@ class PersistentAssessmentWorker:
         with self._condition:
             self._condition.notify()
 
+    @property
+    def worker_state(self) -> str:
+        return "alive" if self._thread.is_alive() else "stopped"
+
     def stop(self) -> None:
         self._stop.set()
         with self._condition:
@@ -71,4 +78,12 @@ class PersistentAssessmentWorker:
                 with self._condition:
                     self._condition.wait(timeout=self._poll_seconds)
                 continue
-            run_assessment(self._app, assessment_id)
+            try:
+                run_assessment(self._app, assessment_id)
+            except Exception:
+                # The worker is the only one in the process. Losing it would leave
+                # every later review queued forever, so an unhandled failure is
+                # recorded and the loop continues.
+                logger.exception(
+                    "assessment_worker_run_failed assessment_id=%s", assessment_id
+                )

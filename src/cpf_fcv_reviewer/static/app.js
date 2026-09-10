@@ -12,6 +12,11 @@ const progressCountry = document.querySelector("#progress-country") || document.
 const elapsedTime = document.querySelector("#elapsed-time") || document.createElement("span");
 const remainingTime = document.querySelector("#remaining-time") || document.createElement("span");
 const guidanceCard = document.querySelector("#guidance-card") || document.createElement("p");
+const progressKicker = document.querySelector("#progress-kicker") || document.createElement("p");
+const progressStepList = document.querySelector("#progress-steps") || document.createElement("ol");
+const progressTiming = document.querySelector(".progress-timing") || document.createElement("p");
+const whileWeWork = document.querySelector("#while-we-work") || document.createElement("aside");
+const progressKeepOpen = document.querySelector(".progress-keep-open") || document.createElement("p");
 const results = document.querySelector("#results");
 const resultTitle = document.querySelector("#result-title") || document.createElement("h2");
 const resultContext = document.querySelector("#result-context") || document.createElement("p");
@@ -274,6 +279,15 @@ const failureLabels = {
   review_failed: "The review could not be completed.",
 };
 
+function setProgressRunningPresentation(running) {
+  progressStepList.hidden = !running;
+  progressTiming.hidden = !running;
+  whileWeWork.hidden = !running;
+  progressKeepOpen.hidden = !running;
+  progressKicker.textContent = running ? "BUILDING YOUR FCV REVIEW" : "REVIEW STOPPED";
+  progressTitle.textContent = running ? "Building your FCV review" : "The review stopped";
+}
+
 function showLanding(notice = "") {
   stopJourneyClock();
   landingView.hidden = false;
@@ -292,6 +306,7 @@ function showProgress() {
   landingNotice.hidden = true;
   reviewWorkspace.hidden = false;
   progress.hidden = false;
+  setProgressRunningPresentation(true);
   progressTitle.focus({preventScroll: true});
   results.hidden = true;
   assistantCard.hidden = true;
@@ -327,6 +342,8 @@ function showRecoverableFailure(message) {
   showProgress();
   stopJourneyClock();
   resetProgress();
+  setProgressRunningPresentation(false);
+  progressTitle.focus({preventScroll: true});
   progressMessage.textContent = message;
   retryResearchButton.hidden = true;
   researchRecovery.hidden = true;
@@ -833,6 +850,7 @@ function renderPriorityAreas(result, anchorIds) {
         labelledParagraph("Comment addressed", area.comment_reference, "comment-reference"),
       );
     }
+    section.append(renderTraceabilityForEvidence(result, area.evidence_ids));
     fragment.append(section);
   }
   if (!result.priority_areas.length) {
@@ -942,7 +960,13 @@ function renderDetailedAnalysisView(result, includeDisclosurePanels = true) {
     renderStrategyAssessments(result),
     renderPriorityAreas(result, anchorIds),
   );
-  if (includeDisclosurePanels) fragment.append(renderBasisAndLimitations(result));
+  if (includeDisclosurePanels) {
+    fragment.append(
+      renderEvidenceStatusDisclosure(result),
+      renderCoverageView(result),
+      renderBasisAndLimitations(result),
+    );
+  }
   return fragment;
 }
 function inferDocumentType(primaryDocumentName) {
@@ -1268,6 +1292,10 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
   const source = new EventSource(eventUrl);
   activeEventSource = source;
   let sourceErrors = 0;
+  source.addEventListener("open", () => {
+    if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
+    sourceErrors = 0;
+  });
   source.addEventListener("step_start", (event) => {
     if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
     const step = JSON.parse(event.data).step;

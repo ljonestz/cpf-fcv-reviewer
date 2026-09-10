@@ -1701,7 +1701,7 @@ def test_runtime_primary_document_remains_fail_closed(monkeypatch):
     extract = dict(services["review_orchestrator"].steps)["extract"]
     monkeypatch.setattr(
         "cpf_fcv_reviewer.runtime.extract_document",
-        lambda data, name, *, max_pdf_pages=None: ExtractedDocument(name, (), ()),
+        lambda data, name, **kwargs: ExtractedDocument(name, (), ()),
     )
 
     with pytest.raises(DocumentUnreadable):
@@ -4060,3 +4060,106 @@ def test_runtime_passes_bounded_cpf_context_and_focus_to_research(monkeypatch, p
     assert len(request.primary_cpf_context) <= MAX_PRIMARY_CPF_CONTEXT_CHARACTERS
     assert request.review_focus.startswith("Focus on community participation.")
     assert len(request.review_focus) <= MAX_REVIEW_FOCUS_CHARACTERS
+
+
+PRIMARY_EXTRACTION_BOUNDS = {
+    "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+    "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
+    "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+    "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+    "max_archive_members": runtime.DIAGNOSTIC_MAX_ARCHIVE_MEMBERS,
+}
+
+
+def _readable_primary(name):
+    return ExtractedDocument(
+        name=name,
+        segments=(
+            ExtractedSegment(
+                text="Primary strategic context. " * 10,
+                page=1,
+                heading=None,
+                element="Paragraph 1",
+            ),
+        ),
+        warnings=(),
+    )
+
+
+def test_runtime_primary_extraction_applies_full_document_bounds(monkeypatch):
+    services = _runtime_services(monkeypatch)
+    steps = dict(services["review_orchestrator"].steps)
+    calls = []
+
+    def fake_extract(data, name, **kwargs):
+        calls.append((name, kwargs))
+        return _readable_primary(name)
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+
+    steps["extract"]({"payload": {"cpf": {"name": "country.pdf", "bytes": b"%PDF-1.7 "}}})
+
+    assert calls == [("country.pdf", PRIMARY_EXTRACTION_BOUNDS)]
+
+
+def test_runtime_primary_extraction_fails_closed_when_budget_exceeded(monkeypatch):
+    services = _runtime_services(monkeypatch)
+    steps = dict(services["review_orchestrator"].steps)
+
+    def fake_extract(data, name, **kwargs):
+        raise ExtractionLimitExceeded("primary extraction budget exceeded")
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+
+    with pytest.raises(DocumentUnreadable):
+        steps["extract"]({"payload": {"cpf": {"name": "country.pdf", "bytes": b"%PDF-1.7 "}}})
+
+
+@pytest.mark.parametrize(
+    ("name", "data"),
+    (
+        ("country.pdf", b"not a pdf at all, just bytes"),
+        ("country.docx", b"PK\x03\x04 but not a real docx container"),
+        ("country.exe", b"MZ binary payload"),
+    ),
+)
+def test_runtime_primary_extraction_rejects_unusable_upload(monkeypatch, name, data):
+    services = _runtime_services(monkeypatch)
+    steps = dict(services["review_orchestrator"].steps)
+    calls = []
+
+    def fake_extract(document_data, document_name, **kwargs):
+        calls.append(document_name)
+        return _readable_primary(document_name)
+
+    monkeypatch.setattr(runtime, "extract_document", fake_extract)
+
+    with pytest.raises(DocumentUnreadable):
+        steps["extract"]({"payload": {"cpf": {"name": name, "bytes": data}}})
+
+    assert calls == []
+
+
+def test_runtime_primary_extraction_rejects_compression_bomb(monkeypatch):
+    """A small DOCX upload that inflates past the budget must not be extracted."""
+    services = _runtime_services(monkeypatch)
+    steps = dict(services["review_orchestrator"].steps)
+    paragraph = b"<w:p><w:r><w:t>" + b"A" * 1000 + b"</w:t></w:r></w:p>"
+    repetitions = (runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES // len(paragraph)) + 1000
+    document_xml = (
+        b'<?xml version="1.0"?><w:document '
+        b'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        b"<w:body>" + paragraph * repetitions + b"</w:body></w:document>"
+    )
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED, compresslevel=1) as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("_rels/.rels", "<Relationships/>")
+        archive.writestr("word/document.xml", document_xml)
+    data = buffer.getvalue()
+
+    assert len(data) < 5_000_000
+    assert len(document_xml) > runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES
+
+    with pytest.raises(DocumentUnreadable):
+        steps["extract"]({"payload": {"cpf": {"name": "bomb.docx", "bytes": data}}})

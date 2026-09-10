@@ -10,6 +10,48 @@ tracked in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Documentation bel
 chronological record; older pending-deployment statements refer to earlier checkpoints.
 The latest full readout and screenshots are indexed in the readiness record.
 
+## 2026-09-10 Production readiness review and availability fixes
+
+A full-application review on branch `claude/production-readiness-review-6evrz7` found five
+blocking defects. All five are fixed here, provider-free; **no model API was called, no paid
+quality run was performed and nothing was deployed.** The full findings inventory, including
+the items left open, is in
+[the 2026-09-10 review record](validation/2026-09-10-production-readiness-review.md).
+
+Fixed:
+- The primary CPF/CEN was extracted with every safety budget disabled (`runtime.py`), so a
+  479 KB DOCX inflating to 200 MB was accepted at 841 MB peak RSS — an OOM kill of the single
+  512 MB instance from one anonymous request. The primary now uses the same bounds as full RRA
+  extraction and fails closed as `document_unreadable`.
+- An unhandled exception in `background.py` killed the only worker thread, leaving every later
+  review queued forever while `/health` still reported `ok`. The loop now records and
+  continues, and `/health` reports `worker` state, returning 503 when the worker is gone.
+- An SSE stream held a gunicorn thread for a whole multi-minute run; four viewers could starve
+  the four-thread pool including `/health`. Streams now end at `EVENT_STREAM_MAX_SECONDS`
+  (default 90) and resume losslessly via `Last-Event-ID`; `app.js` resets its error counter on
+  reconnect so a capped close is not mistaken for a failure.
+- The website rendered no evidence, sources, dates or verification status at all — the
+  renderers existed but nothing called them, so the "evidence-linked" promise held only in the
+  Word export. Priority areas now carry their Traceability panel, and the detailed view carries
+  evidence status and coverage.
+- The failure screen reused the running-progress presentation with a reset timer, so a failed
+  run read as restarted. It now presents as stopped.
+
+Three tests were asserting the wrong thing and are corrected: a frontend test that matched
+app.js source text rather than rendered DOM (and a sibling that asserted the missing-evidence
+bug as correct), a blueprint test pinning a deploy branch 148 commits behind `main`, and a
+registry test frozen at 2026-08-23 that could never catch the bundle's 2027-08-22 expiry.
+`render.yaml` now targets `main`, and the registry hash is derived from the bundle rather than
+duplicated as a literal.
+
+Provider-free suite: **1,553 passed** (1,527 before). Ruff is unchanged at pre-existing debt;
+the changed lines are clean.
+
+Still open and unchanged by this work: the public URL has no authentication or rate limiting,
+the RRA date remains model-authored (root cause diagnosed in the review record), the bounded
+repair can still drop priority areas for non-allowlisted issue codes, and the live service's
+storage posture still needs reconciling with `render.yaml`.
+
 ## 2026-09-08 Top-edge Word running banner
 
 The approved treatment uses one native default-header paragraph with white text and a

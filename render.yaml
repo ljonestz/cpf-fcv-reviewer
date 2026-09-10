@@ -4,7 +4,7 @@ services:
     runtime: python
     region: oregon
     plan: starter
-    branch: fix/research-resilience-guided-journey
+    branch: main
     autoDeployTrigger: off
     numInstances: 1
     buildCommand: pip install -r requirements.txt
