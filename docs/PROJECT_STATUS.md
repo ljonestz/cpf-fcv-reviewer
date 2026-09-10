@@ -26,10 +26,13 @@ Fixed:
 - An unhandled exception in `background.py` killed the only worker thread, leaving every later
   review queued forever while `/health` still reported `ok`. The loop now records and
   continues, and `/health` reports `worker` state, returning 503 when the worker is gone.
-- An SSE stream held a gunicorn thread for a whole multi-minute run; four viewers could starve
-  the four-thread pool including `/health`. Streams now end at `EVENT_STREAM_MAX_SECONDS`
-  (default 90) and resume losslessly via `Last-Event-ID`; `app.js` resets its error counter on
-  reconnect so a capped close is not mistaken for a failure.
+- SSE streams starved `/health`: under real gunicorn with the deployed configuration, four
+  held-open streams made the health check time out at 15s, which would restart the instance
+  mid-review. The thread pool is now 16 across `render.yaml`, `Procfile` and
+  `gunicorn.conf.py` (previously inconsistent), streams end at `EVENT_STREAM_MAX_SECONDS`
+  (default 90) and resume losslessly via `Last-Event-ID`, and `app.js` resets its error
+  counter on reconnect so a capped close is not mistaken for a failure. **The bound is raised,
+  not removed:** 16 concurrent long-lived streams would still starve the health check.
 - The website rendered no evidence, sources, dates or verification status at all — the
   renderers existed but nothing called them, so the "evidence-linked" promise held only in the
   Word export. Priority areas now carry their Traceability panel, and the detailed view carries
@@ -44,8 +47,16 @@ registry test frozen at 2026-08-23 that could never catch the bundle's 2027-08-2
 `render.yaml` now targets `main`, and the registry hash is derived from the bundle rather than
 duplicated as a literal.
 
-Provider-free suite: **1,553 passed** (1,527 before). Ruff is unchanged at pre-existing debt;
-the changed lines are clean.
+An external review of the first commit found the primary-extraction fix over-restrictive
+(250 segments is 250 pages only for PDFs; for DOCX a segment is one paragraph, so ordinary
+CPFs were rejected), found that DOCX container validation decompressed parts before any size
+check, found the accompanying bomb test proved the wrong thing, and found the SSE claim
+overstated. All were reproduced and fixed in a second pass; see the review record for the
+measurements and for the corrections made to that record itself.
+
+Provider-free suite: **1,563 passed** on **Python 3.13.12 with a real editable install**
+(the earlier 1,527 figure was produced on 3.11 via `PYTHONPATH`). Ruff is unchanged at
+pre-existing debt; the changed lines are clean.
 
 Still open and unchanged by this work: the public URL has no authentication or rate limiting,
 the RRA date remains model-authored (root cause diagnosed in the review record), the bounded

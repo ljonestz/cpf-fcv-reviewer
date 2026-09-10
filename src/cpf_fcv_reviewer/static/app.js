@@ -273,6 +273,7 @@ const failureLabels = {
   model_timeout: "The model timed out. Try the review again.",
   registry_unavailable: "The approved registry is unavailable.",
   document_unreadable: "The primary document could not be read.",
+  document_too_large: "The primary document is too large to review in full. Upload a shorter version, or split the annexes into package documents.",
   diagnostic_coverage_unavailable: "The uploaded diagnostic could not be assessed in full. Upload a shorter or text-searchable version, or start a new review without it.",
   package_coverage_unavailable: "The accompanying package could not be reviewed in full. Upload fewer, shorter, or text-searchable package documents.",
   review_schema_invalid: "The review could not be completed.",

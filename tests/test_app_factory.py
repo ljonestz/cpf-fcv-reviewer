@@ -92,7 +92,7 @@ def test_render_uses_threaded_worker_without_late_ssl_monkey_patch():
     procfile = Path("Procfile").read_text(encoding="utf-8")
 
     assert "--worker-class gthread" in procfile
-    assert "--threads 4" in procfile
+    assert "--threads 16" in procfile
     assert "gevent" not in procfile
 
 

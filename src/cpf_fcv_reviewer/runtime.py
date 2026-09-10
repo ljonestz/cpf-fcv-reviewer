@@ -33,6 +33,7 @@ from .evidence_builder import build_evidence_pack, build_reproducible_evidence_p
 from .extraction import (
     PDF_SAMPLING_WARNING_SUFFIX,
     DiagnosticCoverageUnavailable,
+    DocumentTooLarge,
     DocumentUnreadable,
     ExtractionLimitExceeded,
     PackageCoverageUnavailable,
@@ -98,6 +99,14 @@ DIAGNOSTIC_MAX_PAGES = 250
 DIAGNOSTIC_MAX_CHARACTERS = 600_000
 DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES = 50_000_000
 DIAGNOSTIC_MAX_ARCHIVE_MEMBERS = 512
+# The primary CPF/CEN is the principal lens and is never sampled, so its budgets are
+# generous. They are also role-appropriate: a PDF segment is a page, but a DOCX segment
+# is a single paragraph or table row, so one page-sized budget cannot serve both.
+PRIMARY_MAX_PDF_PAGES = 400
+PRIMARY_MAX_SEGMENTS = 10_000
+PRIMARY_MAX_CHARACTERS = 600_000
+PRIMARY_MAX_UNCOMPRESSED_BYTES = 50_000_000
+PRIMARY_MAX_ARCHIVE_MEMBERS = 512
 PACKAGE_MAX_DOCUMENTS = 10
 PACKAGE_MAX_SEGMENTS_TOTAL = 400
 PACKAGE_MAX_CHARACTERS_TOTAL = 300_000
@@ -409,6 +418,13 @@ def _has_valid_docx_container(data: bytes) -> bool:
     try:
         with ZipFile(BytesIO(data)) as archive:
             archive_entries = archive.infolist()
+            # Validating the container means decompressing [Content_Types].xml and the
+            # relationship parts, so the archive's declared size must be checked first,
+            # from the central directory, before anything is inflated.
+            if len(archive_entries) > PRIMARY_MAX_ARCHIVE_MEMBERS or sum(
+                entry.file_size for entry in archive_entries
+            ) > PRIMARY_MAX_UNCOMPRESSED_BYTES:
+                return False
             if any(
                 entry.flag_bits & 0x1
                 or entry.compress_type not in SUPPORTED_DOCX_COMPRESSION_TYPES
@@ -501,18 +517,26 @@ def _extract_primary_document(data: bytes, name: str):
         data, suffix
     ):
         raise DocumentUnreadable("Primary CPF/CEN is unreadable or unsupported.")
+    if suffix == ".pdf":
+        # Equal page and segment budgets: an unequal pair makes extract_pdf_bytes
+        # silently truncate to max_pdf_pages instead of failing closed.
+        bounds = {
+            "max_pdf_pages": PRIMARY_MAX_PDF_PAGES,
+            "max_segments": PRIMARY_MAX_PDF_PAGES,
+        }
+    else:
+        bounds = {"max_segments": PRIMARY_MAX_SEGMENTS}
     try:
         return extract_document(
             data,
             name,
-            max_pdf_pages=DIAGNOSTIC_MAX_PAGES,
-            max_segments=DIAGNOSTIC_MAX_PAGES,
-            max_characters=DIAGNOSTIC_MAX_CHARACTERS,
-            max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
-            max_archive_members=DIAGNOSTIC_MAX_ARCHIVE_MEMBERS,
+            **bounds,
+            max_characters=PRIMARY_MAX_CHARACTERS,
+            max_uncompressed_bytes=PRIMARY_MAX_UNCOMPRESSED_BYTES,
+            max_archive_members=PRIMARY_MAX_ARCHIVE_MEMBERS,
         )
     except ExtractionLimitExceeded as exc:
-        raise DocumentUnreadable(
+        raise DocumentTooLarge(
             "Primary CPF/CEN exceeds the safe extraction budget."
         ) from exc
 

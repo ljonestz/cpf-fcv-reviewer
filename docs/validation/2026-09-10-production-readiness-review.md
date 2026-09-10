@@ -22,9 +22,12 @@ Remediation in this session was limited to the top five blockers plus the mislea
 | CI | — | **None.** No `.github/` directory exists |
 | Smoke flow | `create_smoke_app()` + Playwright | Intake → holding → summary → detailed → assistant → refresh → both DOCX all work |
 
-Note on the environment: this review ran on **Python 3.11.15**, while `pyproject.toml`
-requires `>=3.13` and `.python-version` pins 3.13. `pip install -e .` refuses on 3.11, so the
-suite was run via `PYTHONPATH=src`. The documented 1,527-test result has the same caveat.
+Note on the environment: the review itself ran on **Python 3.11.15** via `PYTHONPATH=src`,
+because `pip install -e .` refuses on 3.11 while `pyproject.toml` requires `>=3.13`. A
+reviewer rightly pointed out that this does not validate the documented runtime, so
+**everything was re-run on Python 3.13.12 with a real editable install and no `PYTHONPATH`
+override**: `1,563 passed`. The pre-existing 1,527-count in earlier records still carries the
+3.11 caveat; this one does not.
 
 ---
 
@@ -55,14 +58,39 @@ unguarded path (exactly as runtime.py:885):   ACCEPTED — 203,015 segments, 33.
 841 MB on a 512 MB instance with `--workers 1` and `numInstances: 1` is an OOM kill from a
 single anonymous request; `MAX_CONTENT_LENGTH` is 40 MB, leaving ample ratio headroom.
 
-*Behaviour change to review:* the primary is now bounded by the same budgets already
-applied to full RRA extraction — 250 pages / segments, 600,000 characters, 50 MB
-uncompressed, 512 archive members. A primary longer than 250 pages, which previously
-extracted without limit, now fails closed as `document_unreadable`. RRAs are typically
-longer than CPFs and already live within this bound, so the convention is the repository's
-own; but the failure code is generic, so a legitimate 300-page CPF would be told it is
-"unreadable". If real packages exceed the bound, raise `DIAGNOSTIC_MAX_PAGES` for the
-primary path (or give it its own constant) rather than removing the budget.
+*Second iteration, after external review.* The first version of this fix was wrong in two
+ways, both found by a reviewer and then reproduced here:
+
+1. **It would have rejected almost every real DOCX CPF.** It reused `DIAGNOSTIC_MAX_PAGES = 250`
+   as `max_segments`, but a segment is only a page for PDFs — for DOCX it is one paragraph or
+   one table row (`extraction.py:198-231`). Measured: a 400-paragraph DOCX was rejected, and
+   real CPFs run to well over a thousand paragraphs. The primary now has its own
+   role-appropriate budgets — `PRIMARY_MAX_PDF_PAGES = 400` for PDFs (page and segment bounds
+   deliberately equal, because an unequal pair makes `extract_pdf_bytes` silently truncate
+   instead of failing closed) and `PRIMARY_MAX_SEGMENTS = 10,000` for flowing documents, with
+   `PRIMARY_MAX_CHARACTERS = 600,000` as the real volume guard in both cases. A
+   1,200-paragraph DOCX is now accepted, with a regression test.
+
+2. **Container validation was itself an unbounded decompression path, and it ran first.**
+   `_has_valid_docx_container` reads `[Content_Types].xml` and every `.rels` part through
+   `_read_docx_part` → `archive.read()` with no size bound, before the bounded extraction is
+   ever reached. Measured on the previous commit: a 537 KB upload declaring a 120 MB
+   `[Content_Types].xml` was inflated during validation at **479 MB peak RSS** in 0.9s — still
+   an OOM on a 512 MB instance. The validator now checks member count and total declared
+   uncompressed size from the zip central directory *before* reading any part; the same upload
+   is refused in **0.001s with no measurable memory growth**. This also closes the identical
+   pre-existing gap on the optional/package upload paths, which share the validator.
+
+3. **The original bomb test proved the wrong thing.** It built its DOCX with unnamespaced
+   `<Types/>` and `<Relationships/>` parts, which the container validator rejects on structure
+   alone, so the extraction budget was never exercised. The tests now use a structurally valid
+   DOCX and assert each guard at the layer where it actually fires: the size gate for an
+   oversized archive, and the extraction budget for a valid, modestly sized document with too
+   many segments.
+
+An over-limit primary now fails as the distinct `document_too_large` rather than
+`document_unreadable`, and the UI says so: "The primary document is too large to review in
+full. Upload a shorter version, or split the annexes into package documents."
 
 **B2 — No authentication and no rate limiting on endpoints that spend money. OPEN.**
 `POST /api/reviews` (`routes.py:283`) queues the full pipeline, `/corrections` (`:473`) re-runs
@@ -79,9 +107,11 @@ problem. **This is the largest open risk given the URL is publicly reachable.**
 calling each other. `renderDetailedAnalysisView` (`:925`) called none of them. Confirmed in a
 browser: the rendered result contained no `http`, no "Publisher", no "Retrieved", no "Current
 context", no "Verified". The only on-screen locator was `Target: <document> | text chunk 1`,
-which is where to *edit the CPF*, not where a claim came from. All of it is present in the
-Word export (`export_docx.py:67, 316-332`), so the website silently dropped the product's
-core "evidence-linked" promise.
+which is where to *edit the CPF*, not where a claim came from. The Word export does carry the
+source URL and a `Source` label (`export_docx.py:331-332`, `:566`), so the website was the
+weaker surface — but *correcting an earlier draft of this record*: "Publisher" and "Retrieved"
+fields do not exist in the Word export either, and listing them as web-only omissions was
+wrong. The gap was source URL, excerpt, verification chip and coverage, not those two fields.
 
 `tests/test_frontend_contract.py:686` passed by substring-matching the **app.js source text**,
 and `:530` explicitly asserted the detailed renderer did **not** call these functions — the
@@ -89,18 +119,51 @@ suite encoded the bug rather than catching it.
 
 **B4 `[FIXED]` — One unhandled exception permanently bricked the queue while `/health` stayed green.**
 `background.py:_run` called `run_assessment(self._app, assessment_id)` with no `try/except`.
-`run_assessment`'s own handler catches only `SessionExpired` (`routes.py:618`), so a
-`sqlite3.OperationalError` (disk full, I/O error) escaped, the daemon thread exited, and
-nothing restarted it. Every later review sat in "queued" forever while SSE emitted keepalives.
-`/health` read `queue` from a `getattr` on the object (`app.py:88`) and never checked
-`thread.is_alive()`.
 
-**B5 `[FIXED]` — An SSE stream pinned a gunicorn thread for the entire run.**
+*Correction to an earlier draft of this record:* `run_assessment` does have a broad
+`except Exception` (`routes.py:598`) that records a safe failure code and a terminal event —
+that part is sound. The escape path is narrower: the **inner** recovery block that persists
+the failure state catches only `SessionExpired` (`routes.py:642`), so a `sqlite3.OperationalError`
+raised while *recording* the failure propagates out of `run_assessment` entirely. The daemon
+thread then exited and nothing restarted it, leaving every later review queued forever while
+SSE emitted keepalives. `/health` read `queue` from a `getattr` (`app.py:88`) and never
+checked `thread.is_alive()`.
+
+The worker now also (a) guards `claim_next()`, which was still outside the original catch, so
+a store error there cannot end the loop either, and (b) marks a review that escaped this way
+as `failed` and emits a terminal `run_failed`, so it does not sit in `running` with a browser
+waiting on a stream that never resolves. Logging records only exception type and cause chain,
+matching the deliberately sanitized pattern in `routes.py:614` — the first version used
+`logger.exception`, whose traceback can quote uploaded document text.
+
+**B5 `[PARTLY FIXED — bound raised, not removed]` — SSE streams starved the health check.**
 `routes.py:344-369` used `stream_with_context` with `while True` and blocking `sleep(5)`,
-returning only on a terminal event. With `--threads 4`, four open streams — three colleagues
-watching plus the mandated keep-awake tab — exhausted the pool; `/health` then queued behind
-them, Render restarted the service, and the in-flight review was killed and re-run from
-scratch. A dead worker or a half-open connection could hold a thread for the full 24-hour TTL.
+returning only on a terminal event, so each open stream held one of the four request threads
+for the whole multi-minute run.
+
+*Second iteration, after external review.* The first fix — a 90-second cap on a single stream
+— was described as fixing this. That was wrong, and a reviewer was right to challenge it. Under
+real gunicorn with the deployed configuration the starvation was reproduced directly:
+
+| Configuration | Streams connected | `/health` latency |
+| --- | --- | --- |
+| `--threads 4` (as deployed) | 4 of 8 | 15.0s, 15.0s, 15.0s — all timed out |
+| `--threads 16` (now) | 8 of 8 | all sub-second |
+
+Render's health check would have failed the first case and restarted the instance mid-review.
+The thread pool is now 16 in `render.yaml`, `Procfile` and `gunicorn.conf.py` — which are now
+identical to each other, where previously the `Procfile` did not even load `gunicorn.conf.py`
+and so silently used gunicorn's 30-second graceful timeout against `maxShutdownDelaySeconds: 300`.
+`tests/test_stream_concurrency.py` launches real gunicorn with the argv parsed out of
+`render.yaml` and asserts `/health` answers under load; it was red before the change and is
+green after.
+
+**State the limit honestly: this raises the bound, it does not remove it.** With one worker and
+16 threads, 16 concurrent long-lived streams will still starve the health check. Tolerated now
+is roughly 15 concurrent viewers, verified empirically at 8. The 90-second cap is complementary
+and remains: it bounds how long any one viewer holds a slot, so occupancy churns instead of
+pinning. Removing the bound entirely needs an async worker class or moving SSE off the request
+thread pool; neither was in scope.
 
 ### High — all OPEN
 
@@ -154,9 +217,11 @@ edits only to the fields the cited issue codes actually target.
 thing preventing a stale deploy, and `tests/test_render_blueprint.py:17` asserted the stale
 branch name, blocking anyone from correcting it.
 *Still open:* `render.yaml` declares `plan: starter` plus a 1 GB disk, while
-`PRODUCTION_READINESS.md:30` says the live service is free-tier volatile. Both cannot be true,
-and `tests/test_render_blueprint.py:7-11` asserts the persistent config. Someone with Render
-dashboard access should reconcile the blueprint with the service that actually runs.
+`PRODUCTION_READINESS.md:30` describes the live service as free-tier volatile. I have no
+Render access, so I could not determine which describes the running service — only that the
+repository asserts both, and that `tests/test_render_blueprint.py:7-11` locks in the
+persistent one. Someone with dashboard access should reconcile them; until then, treat the
+blueprint as the intended operational configuration rather than evidence of the live one.
 
 **H10 — Input validation is deferred until after the run starts.**
 All of these return **201 Created** and only fail minutes later (verified against the running
@@ -247,7 +312,11 @@ progress bar with no position-in-queue signal, while burning one of the four thr
 
 ---
 
-## Verified as sound — do not spend time re-auditing
+## Reviewed and found sound at this commit
+
+These were examined in this review and no defect was found. That is a statement about what
+was checked on `340c0ad`, not a guarantee of correctness, and not a reason to skip them if a
+change lands nearby or new evidence appears.
 
 - **SSRF defence.** Two independent layers: a hard host allowlist with https-only,
   port ∈ {None, 443}, no userinfo, no fragment (`curated_research.py:543-560`), and
@@ -306,3 +375,40 @@ source text, and treat a frozen clock as a reason for a second real-clock test.
   but it is the largest open risk while the URL is publicly reachable.
 - **H7 (the RRA date) is diagnosed, not fixed** — the proposed change touches the review
   payload and `prompts/review.md`, which requires guardrail tests per CLAUDE.md.
+
+
+---
+
+## How this record was corrected
+
+An external reviewer (codex) inspected the pushed commit `340c0ad` rather than its summary and
+raised six points. Five were correct and are addressed above; all were reproduced locally
+before acting, and none was taken on assertion alone:
+
+1. **The 250-segment primary limit was not 250 pages.** Correct, and worse than stated — a
+   400-paragraph DOCX was rejected. Fixed with separate PDF-page and flowing-document segment
+   budgets; see B1.
+2. **DOCX container validation decompressed parts before any budget check, and the bomb test
+   used an invalid container.** Both correct, both reproduced (479 MB peak RSS during
+   validation; the test's `<Types/>` failed structural validation so the budget was never
+   exercised). Fixed and re-tested; see B1.
+3. **The 90-second cap mitigated starvation rather than fixing it.** Correct, and now measured
+   rather than argued: 4 streams timed out `/health` at 15s under the deployed config. See B5,
+   which no longer claims the problem is eliminated.
+4. **Worker survival left the failed review stuck, and `claim_next` was outside the catch.**
+   Correct. Both fixed, plus the `logger.exception` traceback replaced with sanitized
+   type/cause logging; see B4.
+5. **The reported test result was on an unsupported Python version.** Correct; re-run on 3.13.
+6. **This record repeated factual mistakes.** Partly correct. The `run_assessment` and Word
+   export claims were wrong and are corrected inline above, as is the absolute
+   "do not re-audit" framing. On the blueprint-versus-live-configuration point the record now
+   says plainly that the repository asserts both and that I could not check the running
+   service.
+
+One point I did not adopt as stated: the reviewer suggested treating the restored evidence
+panels as a presentation decision reversing a deliberate simplification. The panels were not
+simplified away deliberately — `renderTraceabilityForEvidence` and its siblings were complete,
+reachable-looking functions that nothing called, and a test asserted the absence as correct
+while another passed by matching source text. That reads as drift, not a decision. It is still
+worth a product owner confirming the restored presentation, and that confirmation is listed as
+an open item rather than assumed.

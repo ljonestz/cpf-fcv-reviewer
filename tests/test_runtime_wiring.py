@@ -35,6 +35,7 @@ from cpf_fcv_reviewer.contracts import (
 )
 from cpf_fcv_reviewer.extraction import (
     DiagnosticCoverageUnavailable,
+    DocumentTooLarge,
     DocumentUnreadable,
     ExtractedDocument,
     ExtractedSegment,
@@ -4062,13 +4063,58 @@ def test_runtime_passes_bounded_cpf_context_and_focus_to_research(monkeypatch, p
     assert len(request.review_focus) <= MAX_REVIEW_FOCUS_CHARACTERS
 
 
-PRIMARY_EXTRACTION_BOUNDS = {
-    "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
-    "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
-    "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
-    "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
-    "max_archive_members": runtime.DIAGNOSTIC_MAX_ARCHIVE_MEMBERS,
+PRIMARY_PDF_BOUNDS = {
+    "max_pdf_pages": runtime.PRIMARY_MAX_PDF_PAGES,
+    "max_segments": runtime.PRIMARY_MAX_PDF_PAGES,
+    "max_characters": runtime.PRIMARY_MAX_CHARACTERS,
+    "max_uncompressed_bytes": runtime.PRIMARY_MAX_UNCOMPRESSED_BYTES,
+    "max_archive_members": runtime.PRIMARY_MAX_ARCHIVE_MEMBERS,
 }
+PRIMARY_FLOWING_BOUNDS = {
+    "max_segments": runtime.PRIMARY_MAX_SEGMENTS,
+    "max_characters": runtime.PRIMARY_MAX_CHARACTERS,
+    "max_uncompressed_bytes": runtime.PRIMARY_MAX_UNCOMPRESSED_BYTES,
+    "max_archive_members": runtime.PRIMARY_MAX_ARCHIVE_MEMBERS,
+}
+
+
+
+DOCX_CONTENT_TYPES = (
+    '<?xml version="1.0"?><Types '
+    'xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    '<Default Extension="xml" ContentType="application/xml"/>'
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.'
+    'openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'
+)
+DOCX_ROOT_RELS = (
+    '<?xml version="1.0"?><Relationships '
+    'xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/'
+    '2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+)
+
+
+def _docx_bytes(paragraphs: int, *, extra_body_bytes: int = 0) -> bytes:
+    """A structurally valid DOCX, so container checks pass and budgets are exercised."""
+    body = b"".join(
+        b"<w:p><w:r><w:t>Country partnership framework paragraph "
+        + str(index).encode("ascii")
+        + b".</w:t></w:r></w:p>"
+        for index in range(paragraphs)
+    )
+    if extra_body_bytes:
+        filler = b"<w:p><w:r><w:t>" + b"A" * 1000 + b"</w:t></w:r></w:p>"
+        body += filler * ((extra_body_bytes // len(filler)) + 1)
+    document_xml = (
+        b'<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org'
+        b'/wordprocessingml/2006/main"><w:body>' + body + b"</w:body></w:document>"
+    )
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED, compresslevel=1) as archive:
+        archive.writestr("[Content_Types].xml", DOCX_CONTENT_TYPES)
+        archive.writestr("_rels/.rels", DOCX_ROOT_RELS)
+        archive.writestr("word/document.xml", document_xml)
+    return buffer.getvalue()
 
 
 def _readable_primary(name):
@@ -4086,20 +4132,48 @@ def _readable_primary(name):
     )
 
 
-def test_runtime_primary_extraction_applies_full_document_bounds(monkeypatch):
+@pytest.mark.parametrize(
+    ("name", "data", "expected"),
+    (
+        ("country.pdf", b"%PDF-1.7 ", PRIMARY_PDF_BOUNDS),
+        ("country.docx", None, PRIMARY_FLOWING_BOUNDS),
+        ("country.txt", b"plain text", PRIMARY_FLOWING_BOUNDS),
+    ),
+)
+def test_runtime_primary_extraction_applies_role_appropriate_bounds(
+    monkeypatch, name, data, expected
+):
+    """Page bounds belong to PDFs; segment bounds belong to flowing documents.
+
+    A DOCX segment is one paragraph or table row, so a page-sized segment budget
+    would reject ordinary CPFs.
+    """
     services = _runtime_services(monkeypatch)
     steps = dict(services["review_orchestrator"].steps)
     calls = []
 
-    def fake_extract(data, name, **kwargs):
-        calls.append((name, kwargs))
-        return _readable_primary(name)
+    def fake_extract(document_data, document_name, **kwargs):
+        calls.append((document_name, kwargs))
+        return _readable_primary(document_name)
 
     monkeypatch.setattr(runtime, "extract_document", fake_extract)
+    monkeypatch.setattr(runtime, "_has_valid_optional_container", lambda d, s: True)
 
-    steps["extract"]({"payload": {"cpf": {"name": "country.pdf", "bytes": b"%PDF-1.7 "}}})
+    steps["extract"]({"payload": {"cpf": {"name": name, "bytes": data or b"x"}}})
 
-    assert calls == [("country.pdf", PRIMARY_EXTRACTION_BOUNDS)]
+    assert calls == [(name, expected)]
+
+
+def test_runtime_primary_accepts_an_ordinary_length_docx(monkeypatch):
+    """Regression: a 1,200-paragraph CPF is ordinary and must not be rejected."""
+    services = _runtime_services(monkeypatch)
+    steps = dict(services["review_orchestrator"].steps)
+
+    context = steps["extract"](
+        {"payload": {"cpf": {"name": "country-cpf.docx", "bytes": _docx_bytes(1200)}}}
+    )
+
+    assert len(context["primary_document"].segments) == 1200
 
 
 def test_runtime_primary_extraction_fails_closed_when_budget_exceeded(monkeypatch):
@@ -4111,7 +4185,7 @@ def test_runtime_primary_extraction_fails_closed_when_budget_exceeded(monkeypatc
 
     monkeypatch.setattr(runtime, "extract_document", fake_extract)
 
-    with pytest.raises(DocumentUnreadable):
+    with pytest.raises(DocumentTooLarge):
         steps["extract"]({"payload": {"cpf": {"name": "country.pdf", "bytes": b"%PDF-1.7 "}}})
 
 
@@ -4140,26 +4214,55 @@ def test_runtime_primary_extraction_rejects_unusable_upload(monkeypatch, name, d
     assert calls == []
 
 
-def test_runtime_primary_extraction_rejects_compression_bomb(monkeypatch):
-    """A small DOCX upload that inflates past the budget must not be extracted."""
-    services = _runtime_services(monkeypatch)
-    steps = dict(services["review_orchestrator"].steps)
-    paragraph = b"<w:p><w:r><w:t>" + b"A" * 1000 + b"</w:t></w:r></w:p>"
-    repetitions = (runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES // len(paragraph)) + 1000
-    document_xml = (
-        b'<?xml version="1.0"?><w:document '
-        b'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-        b"<w:body>" + paragraph * repetitions + b"</w:body></w:document>"
+def test_runtime_primary_extraction_rejects_oversized_archive_before_inflating_it():
+    """A compression bomb is refused from the central directory, without inflating.
+
+    An earlier version of this test used unnamespaced <Types/>/<Relationships/> parts,
+    so the container validator rejected it as malformed and neither the size gate nor
+    the extraction budget was ever exercised.
+    """
+    data = _docx_bytes(
+        10, extra_body_bytes=runtime.PRIMARY_MAX_UNCOMPRESSED_BYTES + 5_000_000
     )
-    buffer = BytesIO()
-    with ZipFile(buffer, "w", ZIP_DEFLATED, compresslevel=1) as archive:
-        archive.writestr("[Content_Types].xml", "<Types/>")
-        archive.writestr("_rels/.rels", "<Relationships/>")
-        archive.writestr("word/document.xml", document_xml)
-    data = buffer.getvalue()
 
     assert len(data) < 5_000_000
-    assert len(document_xml) > runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES
 
     with pytest.raises(DocumentUnreadable):
-        steps["extract"]({"payload": {"cpf": {"name": "bomb.docx", "bytes": data}}})
+        runtime._extract_primary_document(data, "bomb.docx")
+
+
+def test_runtime_primary_extraction_rejects_too_many_segments_on_its_budget():
+    """A structurally valid, modestly sized DOCX still fails closed past the budget.
+
+    This is the case the size gate cannot catch, so it proves the extraction budget
+    itself is wired up rather than being shadowed by container validation.
+    """
+    data = _docx_bytes(runtime.PRIMARY_MAX_SEGMENTS + 50)
+
+    # Passes container validation and the archive size gate, so only the budget is left.
+    assert runtime._has_valid_optional_container(data, ".docx") is True
+
+    with pytest.raises(DocumentTooLarge):
+        runtime._extract_primary_document(data, "oversized.docx")
+
+
+def test_docx_container_validation_is_bounded_before_any_part_is_read():
+    """A bomb in [Content_Types].xml must not be decompressed to validate it."""
+    data = _docx_bytes(
+        10, extra_body_bytes=runtime.PRIMARY_MAX_UNCOMPRESSED_BYTES + 5_000_000
+    )
+    reads = []
+
+    original_read = runtime._read_docx_part
+
+    def tracking_read(archive, part_name):
+        reads.append(part_name)
+        return original_read(archive, part_name)
+
+    runtime._read_docx_part = tracking_read
+    try:
+        assert runtime._has_valid_docx_container(data) is False
+    finally:
+        runtime._read_docx_part = original_read
+
+    assert reads == [], f"parts decompressed before the size gate: {reads}"
