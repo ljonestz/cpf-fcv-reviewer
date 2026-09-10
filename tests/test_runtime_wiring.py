@@ -4285,3 +4285,30 @@ def test_docx_container_validation_is_bounded_before_any_part_is_read():
         runtime._read_docx_part = original_read
 
     assert reads == [], f"parts decompressed before the size gate: {reads}"
+
+
+def test_runtime_carries_diagnostic_provenance_into_final_result(monkeypatch):
+    context, pack = _run_narrow_runtime(
+        monkeypatch,
+        b"Benin Risk and Resilience Assessment, June 2023. "
+        b"The mission took place in September 2022.",
+        controller=_InjectedResearchController(),
+    )
+    provenance = pack.metadata.diagnostic_provenance
+    assert provenance is not None
+    assert provenance.publication_date == date(2023, 6, 1)
+    assert provenance.locator.document_title == "package.txt"
+    assert context["result"].metadata.diagnostic_provenance == provenance
+
+
+def test_runtime_records_unestablished_diagnostic_date(monkeypatch):
+    context, pack = _run_narrow_runtime(
+        monkeypatch,
+        b"Benin Risk and Resilience Assessment. Undated findings.",
+        controller=_InjectedResearchController(),
+    )
+    provenance = pack.metadata.diagnostic_provenance
+    assert provenance is not None
+    assert provenance.publication_date is None
+    assert provenance.date_basis == "unestablished"
+    assert context["result"].metadata.diagnostic_provenance == provenance

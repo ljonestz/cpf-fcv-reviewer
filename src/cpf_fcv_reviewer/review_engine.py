@@ -21,6 +21,7 @@ from .contracts import (
 from .extraction import PackageCoverageUnavailable
 from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
+from .validators import has_diagnostic_date_conflict
 
 # "missing_current_context_support" is intentionally excluded: it is raised with
 # severity="advisory" and is therefore filtered out by the orchestrator before repair
@@ -29,6 +30,7 @@ from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
     {
         "limited_mode_overclaim",
+        "diagnostic_date_conflict",
         "unknown_priority_area",
         "unknown_evidence",
         "raw_evidence_id_in_narrative",
@@ -515,7 +517,7 @@ def _normalize_repaired_assessments(
 
 
 
-_POLICY_RRA_TEXT_FIELDS = (
+_RRA_TEXT_FIELDS = (
     "driver",
     "cpf_response",
     "delivery_mechanism",
@@ -524,7 +526,7 @@ _POLICY_RRA_TEXT_FIELDS = (
 )
 
 
-def _clean_policy_fields(original, candidate, fields, forbidden_phrases):
+def _clean_guardrail_fields(original, candidate, fields, forbidden_phrases, provenance=None):
     phrases = tuple(
         phrase.casefold() for phrase in forbidden_phrases if phrase.strip()
     )
@@ -533,25 +535,29 @@ def _clean_policy_fields(original, candidate, fields, forbidden_phrases):
         original_text = getattr(original, field)
         candidate_text = getattr(candidate, field)
         if (
-            any(phrase in original_text.casefold() for phrase in phrases)
-            and not any(phrase in candidate_text.casefold() for phrase in phrases)
+            (any(phrase in original_text.casefold() for phrase in phrases)
+             and not any(phrase in candidate_text.casefold() for phrase in phrases))
+            or (has_diagnostic_date_conflict(original_text, provenance)
+                and not has_diagnostic_date_conflict(candidate_text, provenance))
         ):
             updates[field] = candidate_text
     return original.model_copy(update=updates) if updates else original
 
 
-def _preserve_cleaned_policy_assessment_text(
+def _preserve_cleaned_assessment_text(
     normalized: ReviewDraft,
     repaired: ReviewDraft,
     forbidden_phrases: tuple[str, ...],
+    provenance=None,
 ) -> ReviewDraft:
     repaired_rra = {row.assessment_id: row for row in repaired.rra_driver_assessments}
     rra_rows = tuple(
-        _clean_policy_fields(
+        _clean_guardrail_fields(
             row,
             repaired_rra[row.assessment_id],
-            _POLICY_RRA_TEXT_FIELDS,
+            _RRA_TEXT_FIELDS,
             forbidden_phrases,
+            provenance,
         )
         if row.assessment_id in repaired_rra
         else row
@@ -562,11 +568,12 @@ def _preserve_cleaned_policy_assessment_text(
         for row in repaired.fcv_strategy_assessments
     }
     strategy_rows = tuple(
-        _clean_policy_fields(
+        _clean_guardrail_fields(
             row,
             repaired_strategy[(row.strategic_shift, row.assessment_id)],
             ("assessment",),
             forbidden_phrases,
+            provenance,
         )
         if (row.strategic_shift, row.assessment_id) in repaired_strategy
         else row
@@ -590,6 +597,53 @@ def _document_names(evidence_pack: EvidencePack) -> dict[DocumentRole, tuple[str
         )
         for role in DocumentRole
     }
+
+
+def _preserve_priority_coverage(original, draft, issue_codes, available_evidence_ids):
+    """A repair may correct a priority, but cannot silently remove its assessment."""
+    if not original.priority_areas:
+        return draft
+    priorities = []
+    registry_ids = {item for item in available_evidence_ids if item.startswith("registry-")}
+    for area in original.priority_areas:
+        matches = [item for item in draft.priority_areas
+                   if item.priority_area_id == area.priority_area_id]
+        if len(matches) != 1:
+            # Restoring an invalid original deliberately leaves a residual issue
+            # for validation; omission must not make unsupported content disappear.
+            priorities.append(area)
+            continue
+        candidate = matches[0]
+        updates = {
+            "target_locator": area.target_locator,
+            "gap_locus": area.gap_locus,
+            "sensitivity": area.sensitivity,
+        }
+        if "stage_overreach" not in issue_codes:
+            updates["recommendation_scale"] = area.recommendation_scale
+        if "missing_comment_reference" not in issue_codes:
+            updates["comment_reference"] = area.comment_reference
+        if (
+            "unknown_evidence" not in issue_codes
+            or set(area.evidence_ids) <= available_evidence_ids
+        ):
+            updates["evidence_ids"] = area.evidence_ids
+            if (
+                "missing_registry_support" in issue_codes
+                and registry_ids.isdisjoint(area.evidence_ids)
+            ):
+                updates["evidence_ids"] += tuple(
+                    item for item in candidate.evidence_ids
+                    if item in registry_ids and item not in area.evidence_ids
+                )
+        priorities.append(candidate.model_copy(update=updates))
+    updates = {"priority_areas": tuple(priorities)}
+    if original.revision_summary and "unknown_priority_area" not in issue_codes:
+        summaries = {item.priority_area_id: item for item in draft.revision_summary}
+        updates["revision_summary"] = tuple(
+            summaries.get(item.priority_area_id, item) for item in original.revision_summary
+        )
+    return draft.model_copy(update=updates)
 
 
 class ReviewEngine:
@@ -617,6 +671,9 @@ class ReviewEngine:
             "detail_profile": _serialize_detail_profile(detail_profile),
             "review_focus": review_focus,
         }
+        provenance = evidence_pack.metadata.diagnostic_provenance
+        if provenance is not None:
+            payload["diagnostic_provenance"] = provenance.model_dump(mode="json")
         if current_context_readout is not None:
             payload["current_context_readout"] = current_context_readout
         if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
@@ -720,6 +777,10 @@ class ReviewEngine:
                     ),
                 },
                 "repair_support_evidence": current_support,
+                "diagnostic_provenance": (
+                    result.metadata.diagnostic_provenance.model_dump(mode="json")
+                    if result.metadata.diagnostic_provenance is not None else None
+                ),
                 "diagnostic_mode": result.metadata.diagnostic_mode.value,
                 "review_stage": stage,
                 "stage_profile": _serialize_stage_profile(stage_profile),
@@ -763,6 +824,9 @@ class ReviewEngine:
             if "unknown_institutional_referral" in issue_codes:
                 preserved["institutional_referral_ids"] = draft.institutional_referral_ids
             draft = ReviewDraft.model_validate(preserved)
+        draft = _preserve_priority_coverage(
+            result, draft, issue_codes, available_evidence_ids,
+        )
         allow_coverage_status_repair = any(
             issue["code"] == "incomplete_coverage_absence_claim"
             for issue in issues
@@ -784,11 +848,13 @@ class ReviewEngine:
             allow_new_rra_rows=allow_new_rra_rows,
             allow_missing_strategy_rows=allow_missing_strategy_rows,
         )
-        if any(issue["code"] == "prohibited_policy_language" for issue in issues):
-            draft = _preserve_cleaned_policy_assessment_text(
+        if issue_codes & {"prohibited_policy_language", "diagnostic_date_conflict"}:
+            draft = _preserve_cleaned_assessment_text(
                 draft,
                 repaired_assessments,
                 forbidden_phrases,
+                result.metadata.diagnostic_provenance
+                if "diagnostic_date_conflict" in issue_codes else None,
             )
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)

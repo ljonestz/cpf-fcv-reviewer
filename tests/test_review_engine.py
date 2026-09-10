@@ -861,6 +861,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         "forbidden_phrases": ("forbidden",),
         "repair_support_evidence_ids": {"current_context": [], "registry_language": []},
         "repair_support_evidence": [],
+        "diagnostic_provenance": None,
         "diagnostic_mode": "rra_alignment",
         "review_stage": "concept_review",
         "stage_profile": {
@@ -1772,7 +1773,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.2")
+    assert call["system"].startswith("Version: 3.0.3")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
@@ -1978,3 +1979,112 @@ def test_registry_repair_only_adds_supplied_support_to_unsupported_priorities():
     assert repaired.priority_areas == (*grounded, unsupported.model_copy(update={
         "evidence_ids": ("ev-primary-1", registry_id),
     }))
+
+
+@pytest.mark.parametrize("codes", [
+    ["prohibited_policy_language"],
+    ["raw_evidence_id_in_narrative"],
+    ["unknown_evidence"],
+    ["diagnostic_date_conflict"],
+    ["prohibited_policy_language", "missing_registry_support"],
+])
+def test_broad_repair_preserves_omitted_priorities_and_summary(codes):
+    meta = metadata()
+    initial = result_for(meta)
+    first = draft_for(meta).priority_areas[0]
+    second = first.model_copy(update={"priority_area_id": "pa-second"})
+    initial = initial.model_copy(update={"priority_areas": (first, second),
+        "revision_summary": (RevisionSummaryItem(priority_area_id=first.priority_area_id,
+                                                title="Clarify delivery"),)})
+    candidate = draft_for(meta).model_copy(update={
+        "priority_areas": (second.model_copy(update={"recommended_action": "Clarify ownership."}),),
+        "revision_summary": (),
+    })
+    repaired = ReviewEngine(FakeGateway(candidate)).repair(
+        initial, [{"code": code} for code in codes],
+        evidence_ids={"ev-primary-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+    assert [area.priority_area_id for area in repaired.priority_areas] == [
+        first.priority_area_id, "pa-second",
+    ]
+    assert repaired.priority_areas[0] == first
+    assert repaired.revision_summary == initial.revision_summary
+
+
+def test_broad_policy_repair_keeps_valid_priority_evidence_and_applies_text_fix():
+    meta = metadata()
+    initial = result_for(meta)
+    first = draft_for(meta).priority_areas[0].model_copy(update={
+        "assessment": "This is eligible for support.",
+    })
+    initial = initial.model_copy(update={"priority_areas": (first,)})
+    candidate = draft_for(meta).model_copy(update={"priority_areas": (
+        first.model_copy(update={
+            "assessment": "This warrants expert review.", "evidence_ids": ("unrelated",),
+        }),
+    )})
+    repaired = ReviewEngine(FakeGateway(candidate)).repair(
+        initial, [{"code": "prohibited_policy_language"}],
+        forbidden_phrases=("eligible for",),
+        evidence_ids={"ev-primary-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+    assert repaired.priority_areas[0].assessment == "This warrants expert review."
+    assert repaired.priority_areas[0].evidence_ids == first.evidence_ids
+
+
+def test_omitted_invalid_priority_remains_visible_to_validation():
+    meta = metadata()
+    initial = result_for(meta)
+    bad = draft_for(meta).priority_areas[0].model_copy(update={"evidence_ids": ("missing-source",)})
+    initial = initial.model_copy(update={"priority_areas": (bad,)})
+    candidate = draft_for(meta).model_copy(update={"priority_areas": (), "revision_summary": ()})
+    repaired = ReviewEngine(FakeGateway(candidate)).repair(
+        initial, [{"code": "unknown_evidence"}], evidence_ids={"ev-primary-1"},
+    )
+    assert repaired.priority_areas == (bad,)
+    assert "unknown_evidence" in {issue.code for issue in validate_review(
+        repaired, evidence_ids={"ev-primary-1"}, prohibited_terms=set(),
+    )}
+
+
+def test_repair_receives_and_preserves_diagnostic_provenance():
+    from cpf_fcv_reviewer.contracts import DiagnosticProvenance
+
+    meta = metadata().model_copy(update={"diagnostic_provenance": DiagnosticProvenance(
+        document_title="RRA.pdf", publication_date=date(2023, 6, 1), date_basis="cover",
+        locator=locator("RRA.pdf"),
+    )})
+    gateway = FakeGateway(draft_for(meta))
+    repaired = ReviewEngine(gateway).repair(
+        result_for(meta), [{"code": "diagnostic_date_conflict"}],
+        evidence_ids={"ev-primary-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+    assert gateway.calls[0][1]["diagnostic_provenance"]["publication_date"] == "2023-06-01"
+    assert repaired.metadata.diagnostic_provenance == meta.diagnostic_provenance
+
+
+def test_date_repair_keeps_corrected_assessment_text_and_original_evidence():
+    from cpf_fcv_reviewer.contracts import DiagnosticProvenance
+
+    meta = metadata(mode=DiagnosticMode.RRA_ALIGNMENT).model_copy(update={
+        "diagnostic_provenance": DiagnosticProvenance(
+            document_title="RRA.pdf", publication_date=date(2023, 6, 1), date_basis="cover",
+            locator=locator("RRA.pdf"),
+        ),
+    })
+    initial = result_for(meta)
+    original = initial.rra_driver_assessments[0].model_copy(update={
+        "remaining_gap": "The September 2022 RRA identifies a delivery gap.",
+    })
+    initial = initial.model_copy(update={"rra_driver_assessments": (original,)})
+    cleaned = original.model_copy(update={
+        "remaining_gap": "The June 2023 RRA identifies a delivery gap.",
+        "evidence_ids": ("unrelated",),
+    })
+    candidate = draft_for(meta).model_copy(update={"rra_driver_assessments": (cleaned,)})
+    repaired = ReviewEngine(FakeGateway(candidate)).repair(
+        initial, [{"code": "diagnostic_date_conflict"}],
+        evidence_ids={"ev-rra-1", *STRATEGY_REGISTRY_EVIDENCE_IDS},
+    )
+    assert repaired.rra_driver_assessments[0].remaining_gap == cleaned.remaining_gap
+    assert repaired.rra_driver_assessments[0].evidence_ids == original.evidence_ids

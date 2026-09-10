@@ -9,6 +9,7 @@ from .country_detection import COUNTRY_ALIASES
 from .contracts import (
     AssessmentStatus,
     DiagnosticMode,
+    DiagnosticProvenance,
     DocumentRole,
     EvidenceItem,
     FCVStrategicShift,
@@ -204,6 +205,7 @@ class ValidationIssue:
 
 ValidationIssueCode = Literal[
     "incomplete_reproducibility_metadata",
+    "diagnostic_date_conflict",
     "limited_mode_overclaim",
     "unknown_priority_area",
     "unknown_evidence",
@@ -318,6 +320,69 @@ def matched_prohibited_policy_phrases(
     return tuple(dict.fromkeys(matches))
 
 
+# Only explicit publication-date constructions are checked. Event dates elsewhere
+# in a diagnostic's narrative are not publication dates.
+_DIAGNOSTIC_NAME = r"(?:rra|risk\s+(?:and|&)\s+resilience\s+assessment|diagnostic)"
+_DATE_MONTHS = (
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+)
+_DATE_MONTH_PATTERN = "(?:" + "|".join(_DATE_MONTHS) + ")"
+_PUBLICATION_DATE = (
+    rf"(?:(?:\d{{1,2}}\s+)?{_DATE_MONTH_PATTERN}\s+(?:\d{{1,2}},?\s+)?"
+    r"(?:19|20)\d{2}|(?:19|20)\d{2}(?:-\d{2}(?:-\d{2})?)?)"
+)
+_DIAGNOSTIC_DATE_PATTERNS = (
+    re.compile(rf"\b(?P<date>{_PUBLICATION_DATE})\s+{_DIAGNOSTIC_NAME}\b", re.I),
+    re.compile(
+        rf"\b{_DIAGNOSTIC_NAME}\b(?:['\u2019]s)?"
+        r"(?:\s*[(,:-]\s*|\s+(?:(?:was|is)\s+)?"
+        r"(?:dated|published|issued|released|completed|finalized|from|of)"
+        r"(?:\s+in)?\s+|\s+)"
+        rf"(?P<date>{_PUBLICATION_DATE})\b", re.I,
+    ),
+)
+
+
+def has_diagnostic_date_conflict(text: str, provenance: DiagnosticProvenance | None) -> bool:
+    if provenance is None:  # Existing stored reviews predate provenance capture.
+        return False
+    expected = provenance.publication_date
+    lines = text.splitlines()
+    for pattern in _DIAGNOSTIC_DATE_PATTERNS:
+        matches = (match for line in lines for match in pattern.finditer(line))
+        for match in matches:
+            authored = match.group("date").casefold()
+            year_match = re.search(r"(?:19|20)\d{2}", authored)
+            year = int(year_match.group())
+            month = next((i for i, name in enumerate(_DATE_MONTHS, 1) if name in authored), None)
+            iso_month = re.search(r"\d{4}-(\d{2})", authored)
+            if iso_month:
+                month = int(iso_month.group(1))
+            # Our extractor establishes a month, not an exact calendar day.
+            has_day = bool(
+                re.search(
+                    r"\b\d{1,2}\s+[a-z]|[a-z]\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}",
+                    authored,
+                )
+            )
+            if expected is None or year != expected.year or (
+                month is not None and month != expected.month
+            ) or has_day:
+                return True
+    return False
+
+
+def _append_diagnostic_date_issue(issues: list[ValidationIssue], result: ReviewResult) -> None:
+    if has_diagnostic_date_conflict(result_text(result), result.metadata.diagnostic_provenance):
+        issues.append(ValidationIssue(
+            "diagnostic_date_conflict",
+            "Use only the application-owned diagnostic publication month; "
+            "omit the diagnostic date when it is unestablished. "
+            "Do not invent day precision or change dates of reported events.",
+        ))
+
+
 def validate_review(
     result: ReviewResult,
     *,
@@ -329,6 +394,7 @@ def validate_review(
 ) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
     text = result_text(result)
+    _append_diagnostic_date_issue(issues, result)
     _append_raw_evidence_id_issue(issues, text, evidence_ids)
     if registry_entry_ids is not None:
         _append_unknown_institutional_referral_issue(

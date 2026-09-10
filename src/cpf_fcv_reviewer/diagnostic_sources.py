@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from .contracts import DiagnosticProvenance, EvidenceLocator
 from .extraction import ExtractedDocument
 
 DiagnosticKind = Literal["rra", "accepted_equivalent"]
@@ -53,7 +54,65 @@ def _publication_date(text: str) -> date | None:
     if len(dates) != 1:
         return None
     year, month = next(iter(dates))
-    return date(year, month, 1)
+    return date(year, month, 1) if year > 0 else None
+
+
+_MONTH_YEAR_TEXT = r"(?:" + "|".join(MONTHS) + r")\s+\d{4}"
+_PUBLICATION_STATEMENT = re.compile(
+    rf"\b(?:publication(?:\s+date)?|date\s+of\s+publication|published|issued)"
+    rf"\s*[:,-]?\s*(?:in\s+)?(?P<date>{_MONTH_YEAR_TEXT})\b", re.I,
+)
+_TITLE_DATE = re.compile(
+    r"\b(?:risk\s+(?:and|&)\s+resilience\s+assessment|rra|"
+    r"accepted\s+equivalent\s+diagnostic|fcv\s+risk\s+assessment)"
+    rf"\s*[,:(.-]?\s*(?P<date>{_MONTH_YEAR_TEXT})\b", re.I,
+)
+_STANDALONE_DATE = re.compile(rf"^\s*(?P<date>{_MONTH_YEAR_TEXT})[.\s]*$", re.I | re.M)
+
+
+def diagnostic_provenance(document: ExtractedDocument) -> DiagnosticProvenance:
+    """Read a publication month from bounded frontmatter, retaining its source.
+
+    Physical PDF pages matter: the first extractable page is not necessarily the
+    cover. Filenames and file-creation timestamps are never publication evidence.
+    Conflicting cover/publication statements remain explicitly unestablished.
+    """
+    unknown = DiagnosticProvenance(document_title=document.name)
+    front = tuple(segment for segment in document.segments[:8]
+                  if segment.page is None or segment.page <= 4)
+    candidates = []
+    for index, segment in enumerate(front):
+        text = segment.text[:6000]
+        matches = [(match, "publication_statement")
+                   for match in _PUBLICATION_STATEMENT.finditer(text)]
+        if segment.page == 1 or (segment.page is None and index < 4):
+            matches.extend((match, "cover") for match in _TITLE_DATE.finditer(text))
+            for match in _STANDALONE_DATE.finditer(text):
+                preceding = text[:match.start()].strip()
+                if not preceding and index:
+                    preceding = front[index - 1].text.strip()
+                label = preceding.splitlines()[-1] if preceding else ""
+                if not re.search(
+                    r"\b(?:mission|fieldwork|consultations?|workshop|copyright|revised)\b",
+                    label[-150:], re.I,
+                ):
+                    matches.append((match, "cover"))
+        for match, basis in matches:
+            publication_date = _publication_date(match.group("date"))
+            if publication_date is not None:
+                candidates.append((publication_date, basis, segment, match.group("date")))
+    if len({candidate[0] for candidate in candidates}) != 1:
+        return unknown
+    publication_date, basis, segment, quote = candidates[0]
+    return DiagnosticProvenance(
+        document_title=document.name,
+        publication_date=publication_date,
+        date_basis=basis,
+        locator=EvidenceLocator(
+            document_title=document.name, page=segment.page, heading=segment.heading,
+            element=segment.element, excerpt=quote,
+        ),
+    )
 
 
 def identify_uploaded_diagnostic(
@@ -83,7 +142,7 @@ def identify_uploaded_diagnostic(
                 name=document.name,
                 source_index=source_index,
                 kind=kind,
-                publication_date=_publication_date(text),
+                publication_date=diagnostic_provenance(document).publication_date,
             )
         )
 

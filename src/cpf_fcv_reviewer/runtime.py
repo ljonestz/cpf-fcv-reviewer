@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from io import BytesIO
@@ -17,6 +18,7 @@ from lxml.etree import XMLParser, XMLSyntaxError, fromstring
 from pydantic import ValidationError
 from pypdf.errors import PdfReadError
 
+from . import diagnostic_sources
 from .contracts import (
     CurrentEvidenceTier,
     DetailLevel,
@@ -1206,6 +1208,12 @@ def build_runtime_services(
             correction_ids=tuple(item["correction_id"] for item in correction_payloads),
             parent_run_id=payload.get("parent_assessment_id"),
         )
+        pack = context["evidence_pack"]
+        context["evidence_pack"] = pack.model_copy(update={
+            "metadata": pack.metadata.model_copy(update={
+                "diagnostic_provenance": context.get("diagnostic_provenance"),
+            }),
+        })
         return context
 
     def map_uploaded_diagnostic(context):
@@ -1406,6 +1414,14 @@ def build_runtime_services(
                         raise DiagnosticCoverageUnavailable(
                             "Selected uploaded diagnostic could not be extracted in full."
                         ) from exc
+                    provenance = diagnostic_sources.diagnostic_provenance(full_diagnostic)
+                    context["diagnostic_provenance"] = provenance
+                    # Research and review share the same date from the fully extracted
+                    # document, not a date inferred from the identification sample.
+                    uploaded_diagnostic = replace(
+                        uploaded_diagnostic, publication_date=provenance.publication_date,
+                    )
+                    context["uploaded_diagnostic"] = uploaded_diagnostic
                     context["full_diagnostic_document"] = full_diagnostic
                     context["diagnostic_document_role"] = diagnostic_role
                     context["diagnostic_document_position"] = diagnostic_position
@@ -1461,7 +1477,7 @@ def build_runtime_services(
                             segment.text
                             for segment in context["full_diagnostic_document"].segments[:3]
                         )[:1200]
-                        if dated_diagnostic is not None
+                        if uploaded_diagnostic is not None
                         and context.get("full_diagnostic_document") is not None
                         else ""
                     ),
