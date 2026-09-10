@@ -2,7 +2,8 @@
 
 ## 2026-09-10 Candidate: grounded recommendations
 
-The candidate strengthens review, repair and follow-on instructions for source-backed
+Candidate `f5af172` passed Linux CI: **1,619 tests**, including Gunicorn.
+It strengthens review, repair and follow-on instructions for source-backed
 numerical targets, qualified proposed commitments, recognition of existing CPF provisions,
 time-bounded claims and concise actions. Review and repair now receive the original
 application assessment date explicitly; research reuses its existing review date.

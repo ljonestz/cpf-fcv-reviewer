@@ -29,3 +29,7 @@ Provider-free prompt contract tests check the instructions delivered to the mode
 - The first completed full run had 1,598 passes, one platform skip and 20 runtime-setup failures caused by an inherited invalid SSL_CERT_FILE. A subsequent run used the previously validated local trust bundle with certificate verification enabled. No application change was made for these environment failures.
 
 - With the valid trust bundle, the full run produced 1,617 passes, one Windows-only Gunicorn skip and one failure in an existing undated-source test that still made a real metadata HTTP request. The request exhausted its deadline. That test now injects an undated HTTP fixture through the existing metadata-client seam; both parameterizations passed (2/2) after the change. Production research behavior is unchanged by this test correction.
+
+## Final candidate result
+
+Implementation `f5af172` passed Linux Python 3.13 CI: **1,619 passed in 26.58 seconds**, including real Gunicorn concurrency. Run: https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/34474683175 . The clean CI run supersedes the environment-limited local attempts above. PR 36 is based on the preceding validation-record branch (PR 35). No deployment or new paid assessment was performed.
