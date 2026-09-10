@@ -1,5 +1,23 @@
 # Project status
 
+## 2026-09-10 Review-quality fixes on candidate branch
+
+Implementation `3a19740` on `codex/review-quality` continues from Claude's `510b85e`.
+The selected diagnostic now carries document-backed publication-month provenance
+through research, review, repair and result metadata. The approved Guinea RRA
+frontmatter yields June 2023 from physical page 1. Conflicting or unestablished
+publication dates cannot be silently asserted through the supported date forms.
+Repair also preserves original priority identities/order, summary coverage and
+unaffected source links; unresolved invalid content remains subject to validation.
+
+Final provider-free suite: **1,606 passed, 1 skipped** on Python 3.13.7. The skipped
+Gunicorn concurrency test requires a supported hosting platform. No added lint
+findings relative to the base across changed Python files. No application model API
+calls, paid quality run, merge or deployment. Live release/readiness statements below
+remain unchanged. Details and limitations are in the
+[quality follow-up record](validation/2026-09-10-review-quality-followup.md).
+
+
 ## Current position — 2026-09-08
 
 Application PR30 is on main and deployed as `27ef3aa`. Render and `/health` confirm the
