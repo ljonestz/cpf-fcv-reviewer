@@ -1,0 +1,24 @@
+name: Provider-free tests
+
+on:
+  pull_request:
+  push:
+    branches: [main, codex/review-quality]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install application and test dependencies
+        run: python -m pip install -e . -r requirements-dev.txt
+      - name: Run provider-free suite including Gunicorn concurrency
+        run: python -m pytest -q
