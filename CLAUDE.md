@@ -73,12 +73,17 @@ header.
 - `docs/validation/`: dated historical validation evidence.
 - `docs/superpowers/specs/` and `plans/`: historical designs and implementation plans.
 
-## Current-context pipeline and readiness (2026-09-08)
+## Current-context pipeline and readiness (2026-09-10)
 
-Deployed application: `27ef3aa` (PR30). All 1,527 provider-free tests passed before
-release. The authorized live Guinea flow on the earlier PR24 build passed with five dated observations from two
-Africa Center articles, five RRA-driver assessments, four Strategy assessments, three
-priorities, eight screenshots, assistant restoration and both Word exports.
+Application release `3904935` (PR 33) is deployed; Render and `/health` confirm it.
+The candidate passed 1,610 provider-free tests including real Gunicorn, and merged-release
+CI passed. No provider-backed quality run was performed on this release. The dashboard
+uses one gthread worker with 16 request threads on a paid 0.5 CPU / 512 MB instance.
+
+Diagnostic publication-date provenance, priority-preserving repair, extraction safety,
+worker recovery and stopped-screen fixes are deployed. The approved simplified evidence
+presentation is preserved. The owner wants the public pilot open without passwords or
+institutional sign-in. Storage remains volatile and reviews do not survive restarts.
 
 Source quality/relevance is model-assessed across countries; the publisher catalogue is
 not an exhaustive acceptance gate. Exact quotations and country checks remain enforced.
@@ -86,11 +91,9 @@ Reduced source breadth is disclosed. Undated context and model-only fallback mus
 qualified. Excess recommendation length is advisory, including during repair follow-up;
 evidence/citation failures remain blocking.
 
-Do not equate this flow success with blanket factual acceptance or production readiness.
-The generated RRA date is wrong (September 2022 rather than cover date June 2023), some
-proposed delivery changes need expert validation, and the live service uses volatile
-storage. Current readiness is supervised expert use with public documents. See
-`docs/PRODUCTION_READINESS.md` and `docs/validation/2026-09-07-live-release-acceptance.md`.
+Readiness remains supervised expert use with public documents, not blanket factual
+acceptance. Proposal feasibility and research breadth still require expert judgment.
+See `docs/PRODUCTION_READINESS.md` and `docs/validation/2026-09-10-pilot-release.md`.
 Historical validation records describe earlier releases and must not be rewritten as
 current results. No further paid run is authorized merely by updating documentation.
 

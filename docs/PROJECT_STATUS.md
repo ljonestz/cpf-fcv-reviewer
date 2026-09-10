@@ -1,5 +1,16 @@
 # Project status
 
+## 2026-09-10 Deployed: CPF review-quality and pilot-reliability fixes
+
+PR 33 is merged; application release **3904935** is live. Render and `/health`
+confirm the exact commit. The dashboard now uses **16 gthread request threads**.
+The site remains open with no login, as requested. Storage remains volatile and
+reviews do not survive restarts. Candidate validation passed 1,610 tests including
+real Gunicorn; merged-release CI also passed. No-cost health, homepage and static
+JavaScript checks passed, with no error-level startup entries returned. No paid
+assessment was run. See the [release record](validation/2026-09-10-pilot-release.md).
+Earlier candidate and hosting observations below are historical.
+
 ## 2026-09-10 Operational follow-up and Render verification
 
 Render's paid upgrade is live on 2fc2b77, with volatile storage, in-process queue and
