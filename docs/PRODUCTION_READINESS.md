@@ -1,4 +1,25 @@
-# Production readiness — 2026-09-08
+# Production readiness
+
+## Current follow-up - 2026-09-10
+
+The owner continues a small supervised public-document pilot and has deferred access
+protection. Render now uses a paid 0.5 CPU / 512 MB instance, but the live health check
+still reports volatile storage and an in-process queue. Live commit is 2fc2b77; its
+explicit start command still selects four request threads. The upgrade alone has not
+deployed the review fixes or enabled restart-safe storage.
+
+The candidate review branch contains diagnostic-date provenance and priority-preserving
+repair, plus Claude's operational changes under focused review. Its gthread mitigation
+uses 16 threads; the dashboard start command must also be updated at release. Do not
+interpret render.yaml's disk, SQLite path or auto-deploy setting as observed live state.
+
+See the [operational follow-up](validation/2026-09-10-operational-followup.md) for verified
+hosting, checks and remaining release steps, and the
+[review-quality validation](validation/2026-09-10-review-quality-followup.md).
+Proposal feasibility and cross-country research breadth still need expert acceptance.
+No new paid assessment, merge or deployment is recorded by this follow-up.
+
+## Historical readiness assessment - 2026-09-08
 
 ## Decision
 Suitable for a supervised expert pilot with public or approved non-sensitive documents.

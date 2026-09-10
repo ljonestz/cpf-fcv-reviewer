@@ -1,3 +1,5 @@
+# Candidate durable configuration, not the live dashboard settings.
+# See docs/validation/2026-09-10-operational-followup.md before applying.
 services:
   - type: web
     name: cpf-fcv-review-prototype

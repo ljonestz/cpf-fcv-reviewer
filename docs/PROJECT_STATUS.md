@@ -1,5 +1,18 @@
 # Project status
 
+## 2026-09-10 Operational follow-up and Render verification
+
+Render's paid upgrade is live on 2fc2b77, with volatile storage, in-process queue and
+an explicit four-thread dashboard command. Candidate code has not been deployed.
+Authentication is owner-deferred for the small pilot. Linux Python 3.13 CI now exercises
+real Gunicorn; the combined implementation ece8880 passed **1,610 tests**. The concurrency
+probe was strengthened to reject fast errors and require all eight connections. The approved
+31 August simplified evidence presentation is preserved. Implementation ece8880 also
+clears saved result/evidence before the worker fallback publishes failure; nine focused
+worker/persistence tests and the synthetic browser flow passed. See the
+[operational follow-up](validation/2026-09-10-operational-followup.md) for final checks,
+review findings and the exact dashboard change required before release.
+
 ## 2026-09-10 Review-quality fixes on candidate branch
 
 Implementation `3a19740` on `codex/review-quality` continues from Claude's `510b85e`.
