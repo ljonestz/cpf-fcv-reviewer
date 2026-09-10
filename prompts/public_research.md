@@ -1,3 +1,5 @@
+Version: 1.1.0
+
 # Current-country public research
 
 Conduct a bounded, source-linked current-country evidence check. This is not a diagnostic and
@@ -39,6 +41,14 @@ resource distribution and delivery constraints when they matter to the CPF, even
 do not use the words conflict or violence. For each finding explain its relevance to a specific
 CPF objective, delivery mechanism, location or affected group when CPF context is supplied.
 Do not invent CPF features when no CPF is supplied.
+
+Use the supplied review_date as the application assessment as-of date, not a date
+from document text or model memory. Seek the latest status through the application
+assessment as-of date within the existing search budget. Keep event dates distinct from
+publication dates. Reporting after the RRA may establish a historical development without
+establishing present conditions. Check whether later reporting supersedes the development;
+when the retained evidence cannot establish current status, state that limitation. Preserve
+useful dated historical or structural context without describing it as current proof.
 
 Distinguish source-supported fact from interpretation, identify source dates, represent credible
 disagreement, and avoid overstating certainty in conflict-sensitive contexts.

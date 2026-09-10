@@ -317,7 +317,7 @@ def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 
     for phrase in (
-        "Version: 3.0.3",
+        "Version: 3.0.4",
         "rra_driver_assessments",
         "fcv_strategy_assessments",
         "status",
@@ -418,7 +418,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
 
 @pytest.mark.parametrize(
     ("name", "version"),
-    [("diagnostic_map", "1.2.0"), ("review", "3.0.3"), ("repair", "3.0.3")],
+    [("diagnostic_map", "1.2.0"), ("review", "3.0.4"), ("repair", "3.0.4")],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)

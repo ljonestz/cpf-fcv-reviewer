@@ -1973,3 +1973,15 @@ def test_undated_semantically_relevant_reporting_is_qualified_context_not_curren
     assert result.claims[0].verification == "unverified"
     assert "publication dates" in result.limitation
     assert "verify timing" in result.limitation
+
+
+def test_research_prompt_grounds_current_status_to_application_assessment_date():
+    prompt = ResearchController(gateway=object())._prompt(
+        holistic_request(), attempt=1, missing=()
+    )
+
+    assert "application assessment as-of date" in prompt
+    assert "supplied review_date" in prompt
+    assert "event dates distinct from publication dates" in " ".join(prompt.split())
+    assert "latest status through the application assessment as-of date" in " ".join(prompt.split())
+    assert prompt.count("2026-08-01") == 1

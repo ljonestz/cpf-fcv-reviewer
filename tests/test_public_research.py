@@ -852,13 +852,15 @@ def test_anthropic_gateway_salvages_undated_source_when_normalization_absent(
         beta=SimpleNamespace(messages=FakeBetaMessages()), messages=FakeMessages()
     )
     monkeypatch.setattr(public_research, "Anthropic", lambda **kwargs: fake_client)
-    gateway = public_research.AnthropicPublicResearchGateway(
-        "test-key", "test-model", timeout_seconds=10
-    )
-
-    # With nullable source_date, salvage now accepts undated sources when normalization
-    # returns absent or empty output, emitting a claim with source_date=None.
-    result = gateway.search("Use this prompt exactly.")
+    # Exercise the undated-page path without making a real metadata HTTP request.
+    with httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, text="<html><body>Undated report</body></html>")
+    )) as metadata_client:
+        gateway = public_research.AnthropicPublicResearchGateway(
+            "test-key", "test-model", timeout_seconds=10, metadata_client=metadata_client
+        )
+        # Absent normalization must still retain the source without inventing a date.
+        result = gateway.search("Use this prompt exactly.")
     assert len(result) == 1
     assert result[0].source_date is None
 

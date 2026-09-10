@@ -425,6 +425,7 @@ def test_every_stage_and_detail_injects_serialized_profiles(stage, detail):
 
     payload = gateway.calls[0][1]
     assert set(payload) == {
+        "assessment_as_of",
         "evidence_pack",
         "stage_profile",
         "detail_profile",
@@ -856,6 +857,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
     )
     expected_draft["coverage_note"] = initial.document_coverage.coverage_note
     assert payload == {
+        "assessment_as_of": meta.created_at.date().isoformat(),
         "draft": expected_draft,
         "validation_issues": issues,
         "forbidden_phrases": ("forbidden",),
@@ -1773,7 +1775,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.3")
+    assert call["system"].startswith("Version: 3.0.4")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
@@ -2088,3 +2090,15 @@ def test_date_repair_keeps_corrected_assessment_text_and_original_evidence():
     )
     assert repaired.rra_driver_assessments[0].remaining_gap == cleaned.remaining_gap
     assert repaired.rra_driver_assessments[0].evidence_ids == original.evidence_ids
+
+
+def test_review_and_repair_share_original_application_assessment_date():
+    meta = metadata().model_copy(update={"created_at": datetime(2024, 2, 29, 23, 59)})
+    gateway = FakeGateway(draft_for(meta))
+    engine = ReviewEngine(gateway)
+    result = engine.review(evidence_pack(meta))
+    repaired = engine.repair(result, [{"code": "unknown_institutional_referral"}])
+    assert [call[1]["assessment_as_of"] for call in gateway.calls] == [
+        "2024-02-29", "2024-02-29",
+    ]
+    assert repaired.metadata.created_at == meta.created_at
