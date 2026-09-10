@@ -128,3 +128,23 @@ def test_volatile_prototype_mode_is_explicit_and_boolean(monkeypatch):
 
     with pytest.raises(ValueError, match="ALLOW_VOLATILE_PROTOTYPE"):
         build_config({"TESTING": True, "ALLOW_VOLATILE_PROTOTYPE": "yes"})
+
+
+def test_event_stream_maximum_duration_has_a_bounded_default():
+    config = build_config({"TESTING": True})
+
+    assert config["EVENT_STREAM_MAX_SECONDS"] == 90.0
+
+
+def test_event_stream_maximum_duration_accepts_environment_override(monkeypatch):
+    monkeypatch.setenv("EVENT_STREAM_MAX_SECONDS", "60")
+
+    config = build_config({"TESTING": True})
+
+    assert config["EVENT_STREAM_MAX_SECONDS"] == 60.0
+
+
+@pytest.mark.parametrize("value", [True, 0, -1, nan, inf, "90"])
+def test_event_stream_maximum_duration_rejects_invalid_values(value):
+    with pytest.raises(ValueError):
+        build_config({"TESTING": True, "EVENT_STREAM_MAX_SECONDS": value})

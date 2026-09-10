@@ -12,6 +12,11 @@ const progressCountry = document.querySelector("#progress-country") || document.
 const elapsedTime = document.querySelector("#elapsed-time") || document.createElement("span");
 const remainingTime = document.querySelector("#remaining-time") || document.createElement("span");
 const guidanceCard = document.querySelector("#guidance-card") || document.createElement("p");
+const progressKicker = document.querySelector("#progress-kicker") || document.createElement("p");
+const progressStepList = document.querySelector("#progress-steps") || document.createElement("ol");
+const progressTiming = document.querySelector(".progress-timing") || document.createElement("p");
+const whileWeWork = document.querySelector("#while-we-work") || document.createElement("aside");
+const progressKeepOpen = document.querySelector(".progress-keep-open") || document.createElement("p");
 const results = document.querySelector("#results");
 const resultTitle = document.querySelector("#result-title") || document.createElement("h2");
 const resultContext = document.querySelector("#result-context") || document.createElement("p");
@@ -268,11 +273,21 @@ const failureLabels = {
   model_timeout: "The model timed out. Try the review again.",
   registry_unavailable: "The approved registry is unavailable.",
   document_unreadable: "The primary document could not be read.",
+  document_too_large: "The primary document is too large to review in full. Upload a shorter version, or split the annexes into package documents.",
   diagnostic_coverage_unavailable: "The uploaded diagnostic could not be assessed in full. Upload a shorter or text-searchable version, or start a new review without it.",
   package_coverage_unavailable: "The accompanying package could not be reviewed in full. Upload fewer, shorter, or text-searchable package documents.",
   review_schema_invalid: "The review could not be completed.",
   review_failed: "The review could not be completed.",
 };
+
+function setProgressRunningPresentation(running) {
+  progressStepList.hidden = !running;
+  progressTiming.hidden = !running;
+  whileWeWork.hidden = !running;
+  progressKeepOpen.hidden = !running;
+  progressKicker.textContent = running ? "BUILDING YOUR FCV REVIEW" : "REVIEW STOPPED";
+  progressTitle.textContent = running ? "Building your FCV review" : "The review stopped";
+}
 
 function showLanding(notice = "") {
   stopJourneyClock();
@@ -292,6 +307,7 @@ function showProgress() {
   landingNotice.hidden = true;
   reviewWorkspace.hidden = false;
   progress.hidden = false;
+  setProgressRunningPresentation(true);
   progressTitle.focus({preventScroll: true});
   results.hidden = true;
   assistantCard.hidden = true;
@@ -327,6 +343,8 @@ function showRecoverableFailure(message) {
   showProgress();
   stopJourneyClock();
   resetProgress();
+  setProgressRunningPresentation(false);
+  progressTitle.focus({preventScroll: true});
   progressMessage.textContent = message;
   retryResearchButton.hidden = true;
   researchRecovery.hidden = true;
@@ -1268,6 +1286,10 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
   const source = new EventSource(eventUrl);
   activeEventSource = source;
   let sourceErrors = 0;
+  source.addEventListener("open", () => {
+    if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
+    sourceErrors = 0;
+  });
   source.addEventListener("step_start", (event) => {
     if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
     const step = JSON.parse(event.data).step;

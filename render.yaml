@@ -1,14 +1,16 @@
+# Candidate durable configuration, not the live dashboard settings.
+# See docs/validation/2026-09-10-operational-followup.md before applying.
 services:
   - type: web
     name: cpf-fcv-review-prototype
     runtime: python
     region: oregon
     plan: starter
-    branch: fix/research-resilience-guided-journey
+    branch: main
     autoDeployTrigger: off
     numInstances: 1
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --config gunicorn.conf.py --worker-class gthread --workers 1 --threads 4 --bind 0.0.0.0:$PORT wsgi:app
+    startCommand: gunicorn --config gunicorn.conf.py --worker-class gthread --workers 1 --threads 16 --bind 0.0.0.0:$PORT wsgi:app
     healthCheckPath: /health
     maxShutdownDelaySeconds: 300
     disk:

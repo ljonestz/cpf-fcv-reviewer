@@ -1,4 +1,4 @@
-Version: 3.0.2
+Version: 3.0.3
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -170,3 +170,19 @@ rra_driver_assessments, fcv_strategy_assessments, institutional_referral_ids,
 limitations, and coverage_note. Preserve the valid
 alignment_readout and valid priority order unless a supplied issue specifically
 requires repairing them.
+
+
+## Preserve priority coverage and diagnostic provenance
+
+Retain every original priority_area_id, its order and linked revision-summary entry.
+Correct the flagged content in place. Do not remove a priority to eliminate a
+validation error, invent replacement priority identities, or change unaffected
+source links and document targets. If a priority cannot be grounded, retain it so
+that validation can report the unresolved issue instead of silently losing it.
+
+For `diagnostic_date_conflict`, use only the application-owned
+`diagnostic_provenance.publication_date`, retaining month precision. The ISO day
+`01` does not establish an exact publication day. If the date is null, omit the
+publication date or state that it could not be established. Do not substitute
+mission dates, PDF creation timestamps, or model memory, and do not change dates
+of events discussed in the diagnostic. Provenance is not part of the editable draft.

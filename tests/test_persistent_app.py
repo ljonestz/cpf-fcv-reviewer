@@ -25,4 +25,5 @@ def test_two_app_instances_share_persisted_assessment(tmp_path):
         "release": "dev",
         "storage": "persistent",
         "queue": "in_process",
+        "worker": "not_applicable",
     }

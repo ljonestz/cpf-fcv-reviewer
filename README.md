@@ -1,5 +1,11 @@
 # CPF FCV Reviewer
 
+Hosting verified 10 September: live main commit `2fc2b77`, paid 0.5 CPU / 512 MB
+instance, still volatile storage and four request threads. The operational and
+review-quality fixes are candidates, not deployed. See the
+[operational follow-up](docs/validation/2026-09-10-operational-followup.md).
+`render.yaml` is a candidate durable configuration, not a dump of live dashboard settings.
+
 An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN drafts. It supports expert judgment and practical options; it does not make policy, compliance, eligibility, endorsement, or clearance determinations.
 
 **The stable FCV Project Screener is a separate product and must not be modified, integrated with, or deployed through this repository.**
@@ -8,7 +14,7 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
-- Latest verified deployment: `27ef3aa` (PR30), 2026-09-08. Render and `/health`
+- Historical application release: `27ef3aa` (PR30), 2026-09-08. Render and `/health`
   confirmed the exact release. All **1,527 provider-free tests** passed before deployment.
 - The live Guinea CPF/RRA assessment completed with five current observations from two
   Africa Center for Strategic Studies articles, five RRA-driver assessments, four FCV

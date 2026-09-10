@@ -600,3 +600,51 @@ def test_smoke_launcher_is_repository_relative_and_fixed_to_local_debug_server()
     assert "58422" in source
     assert "debug=False" in source
     assert "C:\\Users\\" not in source
+
+
+@pytest.mark.parametrize("repair_succeeds", [True, False])
+def test_smoke_date_repair_preserves_priorities_and_rejects_residual_conflict(
+    monkeypatch, repair_succeeds,
+):
+    original_generate = SmokeModelGateway.generate
+    calls = []
+
+    def generate(self, *, prompt_name, payload, output_type):
+        draft = original_generate(self, prompt_name=prompt_name, payload=payload,
+                                  output_type=output_type)
+        if prompt_name in {"review", "repair"}:
+            calls.append((prompt_name, payload))
+            month = "June 2023" if prompt_name == "repair" and repair_succeeds else "September 2022"
+            changes = {"overall_read": f"The {month} RRA identifies an inclusion constraint."}
+            if prompt_name == "repair":
+                changes.update(priority_areas=(), revision_summary=())
+            return draft.model_copy(update=changes)
+        return draft
+
+    monkeypatch.setattr(SmokeModelGateway, "generate", generate)
+    app = create_smoke_app(start_background_runs=False)
+    client = app.test_client()
+    created = client.post("/api/reviews", data={
+        "country": "Benin", "review_stage": "decision_review",
+        "cpf": (BytesIO((FIXTURES / "synthetic_en.txt").read_bytes()), "Benin-CPF.txt"),
+        "context_documents": (BytesIO(
+            b"Benin Risk and Resilience Assessment, June 2023. "
+            b"Exclusion and unequal territorial access affect delivery."
+        ), "Benin-RRA.txt"),
+    }).get_json()
+    run_assessment(app, created["assessment_id"])
+    state = app.extensions["session_store"].get(created["assessment_id"])
+    assert [name for name, _ in calls] == ["review", "repair"]
+    assert calls[1][1]["diagnostic_provenance"]["publication_date"] == "2023-06-01"
+    assert "diagnostic_date_conflict" in {
+        issue["code"] for issue in calls[1][1]["validation_issues"]
+    }
+    if repair_succeeds:
+        assert state.payload["status"] == "complete"
+        result = state.payload["result"]
+        assert "June 2023" in result["overall_read"]
+        assert result["priority_areas"]
+        assert result["revision_summary"]
+    else:
+        assert state.payload["status"] == "failed"
+        assert "result" not in state.payload

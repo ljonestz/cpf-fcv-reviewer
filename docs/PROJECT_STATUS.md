@@ -1,5 +1,36 @@
 # Project status
 
+## 2026-09-10 Operational follow-up and Render verification
+
+Render's paid upgrade is live on 2fc2b77, with volatile storage, in-process queue and
+an explicit four-thread dashboard command. Candidate code has not been deployed.
+Authentication is owner-deferred for the small pilot. Linux Python 3.13 CI now exercises
+real Gunicorn; the combined implementation ece8880 passed **1,610 tests**. The concurrency
+probe was strengthened to reject fast errors and require all eight connections. The approved
+31 August simplified evidence presentation is preserved. Implementation ece8880 also
+clears saved result/evidence before the worker fallback publishes failure; nine focused
+worker/persistence tests and the synthetic browser flow passed. See the
+[operational follow-up](validation/2026-09-10-operational-followup.md) for final checks,
+review findings and the exact dashboard change required before release.
+
+## 2026-09-10 Review-quality fixes on candidate branch
+
+Implementation `3a19740` on `codex/review-quality` continues from Claude's `510b85e`.
+The selected diagnostic now carries document-backed publication-month provenance
+through research, review, repair and result metadata. The approved Guinea RRA
+frontmatter yields June 2023 from physical page 1. Conflicting or unestablished
+publication dates cannot be silently asserted through the supported date forms.
+Repair also preserves original priority identities/order, summary coverage and
+unaffected source links; unresolved invalid content remains subject to validation.
+
+Final provider-free suite: **1,606 passed, 1 skipped** on Python 3.13.7. The skipped
+Gunicorn concurrency test requires a supported hosting platform. No added lint
+findings relative to the base across changed Python files. No application model API
+calls, paid quality run, merge or deployment. Live release/readiness statements below
+remain unchanged. Details and limitations are in the
+[quality follow-up record](validation/2026-09-10-review-quality-followup.md).
+
+
 ## Current position — 2026-09-08
 
 Application PR30 is on main and deployed as `27ef3aa`. Render and `/health` confirm the
@@ -9,6 +40,62 @@ The remaining RRA date error, proposal wording, source breadth and volatile stor
 tracked in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md). Documentation below is a
 chronological record; older pending-deployment statements refer to earlier checkpoints.
 The latest full readout and screenshots are indexed in the readiness record.
+
+## 2026-09-10 Production readiness review and availability fixes
+
+A full-application review on branch `claude/production-readiness-review-6evrz7` found five
+blocking defects. All five are fixed here, provider-free; **no model API was called, no paid
+quality run was performed and nothing was deployed.** The full findings inventory, including
+the items left open, is in
+[the 2026-09-10 review record](validation/2026-09-10-production-readiness-review.md).
+
+Fixed:
+- The primary CPF/CEN was extracted with every safety budget disabled (`runtime.py`), so a
+  479 KB DOCX inflating to 200 MB was accepted at 841 MB peak RSS — an OOM kill of the single
+  512 MB instance from one anonymous request. The primary now uses the same bounds as full RRA
+  extraction and fails closed as `document_unreadable`.
+- An unhandled exception in `background.py` killed the only worker thread, leaving every later
+  review queued forever while `/health` still reported `ok`. The loop now records and
+  continues, and `/health` reports `worker` state, returning 503 when the worker is gone.
+- SSE streams starved `/health`: under real gunicorn with the deployed configuration, four
+  held-open streams made the health check time out at 15s, which would restart the instance
+  mid-review. The thread pool is now 16 across `render.yaml`, `Procfile` and
+  `gunicorn.conf.py` (previously inconsistent), streams end at `EVENT_STREAM_MAX_SECONDS`
+  (default 90) and resume losslessly via `Last-Event-ID`, and `app.js` resets its error
+  counter on reconnect so a capped close is not mistaken for a failure. **The mechanism is
+  unchanged and only the number moved:** measured, `/health` is healthy at 8 concurrent
+  streams, degraded at 15 (2.96s) and starved at 16. Honest tolerance is ~8-12 viewers.
+  A measured `gevent` alternative is flat to 24 streams but was not adopted; see the review
+  record for what would need validating first.
+- The website rendered no evidence, sources, dates or verification status at all — the
+  renderers existed but nothing called them, so the "evidence-linked" promise held only in the
+  Word export. Priority areas now carry their Traceability panel, and the detailed view carries
+  evidence status and coverage.
+- The failure screen reused the running-progress presentation with a reset timer, so a failed
+  run read as restarted. It now presents as stopped.
+
+Three tests were asserting the wrong thing and are corrected: a frontend test that matched
+app.js source text rather than rendered DOM (and a sibling that asserted the missing-evidence
+bug as correct), a blueprint test pinning a deploy branch 148 commits behind `main`, and a
+registry test frozen at 2026-08-23 that could never catch the bundle's 2027-08-22 expiry.
+`render.yaml` now targets `main`, and the registry hash is derived from the bundle rather than
+duplicated as a literal.
+
+An external review of the first commit found the primary-extraction fix over-restrictive
+(250 segments is 250 pages only for PDFs; for DOCX a segment is one paragraph, so ordinary
+CPFs were rejected), found that DOCX container validation decompressed parts before any size
+check, found the accompanying bomb test proved the wrong thing, and found the SSE claim
+overstated. All were reproduced and fixed in a second pass; see the review record for the
+measurements and for the corrections made to that record itself.
+
+Provider-free suite: **1,564 passed** on **Python 3.13.12 with a real editable install**
+(the earlier 1,527 figure was produced on 3.11 via `PYTHONPATH`). Ruff is unchanged at
+pre-existing debt; the changed lines are clean.
+
+Still open and unchanged by this work: the public URL has no authentication or rate limiting,
+the RRA date remains model-authored (root cause diagnosed in the review record), the bounded
+repair can still drop priority areas for non-allowlisted issue codes, and the live service's
+storage posture still needs reconciling with `render.yaml`.
 
 ## 2026-09-08 Top-edge Word running banner
 

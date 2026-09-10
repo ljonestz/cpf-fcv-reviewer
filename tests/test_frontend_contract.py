@@ -1,4 +1,7 @@
+# ruff: noqa: E501
+
 import subprocess
+import textwrap
 from pathlib import Path
 
 from cpf_fcv_reviewer.app import create_app
@@ -546,17 +549,13 @@ def test_detailed_analysis_keeps_priority_prose_and_hides_technical_coverage():
         assert fragment in javascript
 
     detailed_renderer = javascript.split("function renderDetailedAnalysisView", 1)[1].split("function inferDocumentType", 1)[0]
-    for obsolete in (
-        "renderEvidenceGroup(",
-        "renderCoverageView(",
-        "renderEvidenceStatusDisclosure(",
-        "Traceability",
-        "Coverage and limitations",
-        "Evidence status",
-        "area.evidence_ids",
-    ):
-        assert obsolete not in detailed_renderer
     assert "renderBasisAndLimitations(result)" in detailed_renderer
+    for omitted in ("renderCoverageView(result)", "renderEvidenceStatusDisclosure(result)"):
+        assert omitted not in detailed_renderer
+    priority_renderer = javascript.split("function renderPriorityAreas", 1)[1].split(
+        "function labelledNarrative", 1
+    )[0]
+    assert "renderTraceabilityForEvidence(result, area.evidence_ids)" not in priority_renderer
     assert "innerHTML" not in javascript
 
 
@@ -683,10 +682,183 @@ def test_task3_result_disclosures_and_statuses_use_focused_visual_contracts():
     assert "#results.output-card" in css
 
 
-def test_app_js_renders_current_context_verification_banner():
-    from pathlib import Path
+def test_app_js_discloses_current_context_limitations():
+    completed = _run_dom_harness(
+        """
+        global.fetch = async () => ({status: 200, ok: true, json: async () => complete});
+        (async () => {
+        require(process.argv[1]);
+        const hooks = window.__cpfFcvReviewerTestHooks;
+        hooks.watchEvents("events", "result");
+        await FakeSource.all[0].emit("run_complete");
+        const rendered = collectText(nodes["#results"]);
+        for (const expected of [
+          "Basis and important limitations",
+          "Source breadth was reduced.",
+        ]) {
+          if (!rendered.includes(expected)) throw Error(`result omitted ${expected}`);
+        }
+        })().catch(error => { console.error(error); process.exit(1); });
+        """
+    )
 
-    app_js = Path("src/cpf_fcv_reviewer/static/app.js").read_text(encoding="utf-8")
-    assert "AI-generated from trusted sources" in app_js
-    assert "verify before use" in app_js.casefold()
-    assert "partially verified" in app_js.casefold()
+    assert completed.returncode == 0, completed.stderr
+
+
+DOM_PRELUDE = textwrap.dedent(
+    """
+    const nodes = {};
+    function node() { return { hidden: false, disabled: false, value: "", id: "", tagName: "", tabIndex: 0, focused: false, textContent: "", children: [], handlers: {}, attributes: {},
+      addEventListener(type, fn) { (this.handlers[type] ||= []).push(fn); }, append(...v) { this.children.push(...v); },
+      setAttribute(name, value) { this.attributes[name] = String(value); }, removeAttribute(name) { delete this.attributes[name]; },
+      replaceChildren(...v) { this.children = v; }, reset() {}, focus() { this.focused = true; }, click() { return Promise.all((this.handlers.click || []).map(fn => fn())); },
+      trigger(type) { return Promise.all((this.handlers[type] || []).map(fn => fn({preventDefault(){}}))); } }; }
+    for (const selector of ["#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress", "#progress-title", "#progress-kicker", "#progress-message", "#progress-steps", ".progress-timing", "#while-we-work", ".progress-keep-open", "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country", "#country-detection", "#primary-upload", "#submit-review", "#submit-correction", "#correction-text", "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog", "#close-process-dialog"]) nodes[selector] = node();
+    nodes["#cpf"].files = [{}]; nodes["#country"].value = "Benin";
+    nodes["#progress-title"].textContent = "Building your FCV review";
+    nodes["#progress-kicker"].textContent = "BUILDING YOUR FCV REVIEW";
+    global.document = { querySelector: selector => nodes[selector], getElementById: () => null,
+      createElement: tag => Object.assign(node(), {tagName: tag}), createTextNode: value => ({textContent: value, children: []}) };
+    global.window = { __CPF_FCV_REVIEWER_TEST__: true, setTimeout: fn => fn(), location: {assign(){}} };
+    let stored = ""; global.sessionStorage = { getItem(){return stored}, setItem(k,v){stored=v}, removeItem(){stored=""} };
+    global.FormData = class {};
+    class FakeSource { constructor() { this.listeners = {}; this.closed = false; FakeSource.all.push(this); } addEventListener(t, fn) { (this.listeners[t] ||= []).push(fn); } close(){this.closed=true;} async emit(t, data="{}") { for (const fn of this.listeners[t] || []) await fn({data}); } error(){this.onerror?.();} }
+    FakeSource.all = []; global.EventSource = FakeSource;
+    const collectText = (root) => [
+      root && typeof root.textContent === "string" ? root.textContent : "",
+      ...(root?.children || []).flatMap(collectText),
+    ].join(" ");
+    const complete = {
+      overall_read: "The draft has a sound foundation.",
+      alignment_readout: "RRA prose.",
+      strategy_readout: "Strategy prose.",
+      revision_summary: [{priority_area_id: "results / delivery#1", title: "Clarify the delivery pathway."}],
+      priority_areas: [{
+        priority_area_id: "results / delivery#1", heading: "Delivery pathway",
+        assessment: "The pathway is not yet explicit.",
+        why_it_matters: "Readers cannot follow implementation logic.",
+        recommended_action: "Add a short explanation of the pathway.",
+        target_locator: {document_title: "CPF.docx", page: 4, heading: "Results"},
+        evidence_ids: ["ev-1", "ev-context"], comment_reference: "QER comment 3"
+      }],
+      limitations: ["The RRA was not supplied."],
+      document_coverage: {
+        primary_document: "CPF.docx", package_documents: ["CPF package annex.docx"], context_documents: [],
+        coverage_note: "The review covers the supplied CPF."
+      },
+      metadata: {review_stage: "concept", current_evidence_tier: "reduced", current_evidence_limitation: "Source breadth was reduced."},
+      evidence_by_id: {
+        "ev-1": {locator: {document_title: "CPF.docx", page: 4, heading: "Results", excerpt: "The programme will deliver results."}},
+        "ev-context": {evidence_type: "current_context", verification: "partially_verified", source_url: "https://example.test/context", text: "Context note explains the regional setting."}
+      }
+    };
+    """
+)
+
+
+def _run_dom_harness(body):
+    return subprocess.run(
+        ["node", "-e", DOM_PRELUDE + textwrap.dedent(body), str(JS.resolve())],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_detailed_view_preserves_approved_plain_language_limitations():
+    completed = _run_dom_harness(
+        """
+        global.fetch = async () => ({status: 200, ok: true, json: async () => complete});
+        (async () => {
+        require(process.argv[1]);
+        const hooks = window.__cpfFcvReviewerTestHooks;
+        hooks.watchEvents("events", "result");
+        await FakeSource.all[0].emit("run_complete");
+        const rendered = collectText(nodes["#results"]);
+        for (const expected of [
+          "Basis and important limitations",
+          "Source breadth was reduced.",
+          "The RRA was not supplied.",
+          "Add a short explanation of the pathway.",
+        ]) {
+          if (!rendered.includes(expected)) throw Error(`result omitted ${expected}`);
+        }
+        for (const omitted of ["Traceability", "Evidence status", "Coverage and limitations",
+                               "Evidence and document locations", "ev-1", "ev-context"]) {
+          if (rendered.includes(omitted)) throw Error(`technical disclosure rendered: ${omitted}`);
+        }
+        })().catch(error => { console.error(error); process.exit(1); });
+        """
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_failure_screen_stops_presenting_a_running_review():
+    completed = _run_dom_harness(
+        """
+        global.fetch = async () => ({status: 200, ok: true, json: async () => complete});
+        (async () => {
+        require(process.argv[1]);
+        const hooks = window.__cpfFcvReviewerTestHooks;
+        hooks.watchEvents("events", "result");
+        await FakeSource.all[0].emit("run_failed", JSON.stringify({error: "review_failed"}));
+        for (const selector of ["#progress-steps", ".progress-timing", "#while-we-work", ".progress-keep-open"]) {
+          if (!nodes[selector].hidden) throw Error(`${selector} still shown on the failure screen`);
+        }
+        if (!nodes["#progress-title"].textContent.toLowerCase().includes("stopped")) {
+          throw Error("failure heading still announces a running review");
+        }
+        if (nodes["#progress-kicker"].textContent.toLowerCase().includes("building")) {
+          throw Error("failure kicker still announces a running review");
+        }
+        if (!nodes["#progress-title"].focused) throw Error("focus did not move to the failure heading");
+        if (!nodes["#progress-message"].textContent.includes("Review stopped: The review could not be completed.")) {
+          throw Error("failure message text changed");
+        }
+        if (nodes["#return-to-intake"].hidden) throw Error("failure was not recoverable");
+        hooks.showProgress();
+        for (const selector of ["#progress-steps", ".progress-timing", "#while-we-work", ".progress-keep-open"]) {
+          if (nodes[selector].hidden) throw Error(`${selector} stayed hidden for the next run`);
+        }
+        if (!nodes["#progress-title"].textContent.includes("Building your FCV review")) {
+          throw Error("next run kept the stopped heading");
+        }
+        })().catch(error => { console.error(error); process.exit(1); });
+        """
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_capped_stream_close_reconnects_without_failing_the_review():
+    completed = _run_dom_harness(
+        """
+        global.fetch = async () => ({status: 200, ok: true, json: async () => complete});
+        (async () => {
+        require(process.argv[1]);
+        const hooks = window.__cpfFcvReviewerTestHooks;
+        hooks.showProgress();
+        hooks.watchEvents("events", "result");
+        const source = FakeSource.all[0];
+        // The server caps each SSE response: a clean capped close fires error, the browser reopens.
+        source.error();
+        await source.emit("open");
+        source.error();
+        await source.emit("open");
+        source.error();
+        if (!nodes["#return-to-intake"].hidden) throw Error("capped stream closes aborted the run");
+        if (nodes["#progress-title"].textContent.toLowerCase().includes("stopped")) {
+          throw Error("capped stream close showed the failure screen");
+        }
+        // Two consecutive failures with no successful reopen must still fail closed.
+        source.error();
+        if (nodes["#return-to-intake"].hidden) throw Error("consecutive transport failures were not surfaced");
+        if (!nodes["#progress-title"].textContent.toLowerCase().includes("stopped")) {
+          throw Error("consecutive transport failures did not show the failure screen");
+        }
+        })().catch(error => { console.error(error); process.exit(1); });
+        """
+    )
+
+    assert completed.returncode == 0, completed.stderr

@@ -4,12 +4,13 @@ from collections.abc import Callable
 
 from .extraction import (
     DiagnosticCoverageUnavailable,
+    DocumentTooLarge,
     DocumentUnreadable,
     PackageCoverageUnavailable,
 )
-from .review_engine import ReviewSchemaUnavailable
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
+from .review_engine import ReviewSchemaUnavailable
 
 Emitter = Callable[[str, dict], None]
 Step = Callable[[dict], dict]
@@ -21,6 +22,7 @@ SAFE_FAILURES = {
     PackageCoverageUnavailable: "package_coverage_unavailable",
     RegistryUnavailable: "registry_unavailable",
     DocumentUnreadable: "document_unreadable",
+    DocumentTooLarge: "document_too_large",
 }
 
 

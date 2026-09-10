@@ -376,6 +376,29 @@ class DocumentCoverage(FrozenModel):
         return _requires_nonblank_items(value, "Document coverage entries")
 
 
+class DiagnosticProvenance(FrozenModel):
+    """Application-owned publication month and its supporting document location."""
+
+    document_title: str
+    publication_date: date | None = None
+    date_basis: Literal["cover", "publication_statement", "unestablished"] = "unestablished"
+    locator: EvidenceLocator | None = None
+
+    @model_validator(mode="after")
+    def requires_supported_publication_month(self) -> DiagnosticProvenance:
+        if self.publication_date is None:
+            if self.date_basis != "unestablished" or self.locator is not None:
+                raise ValueError("Unknown publication dates must remain unestablished.")
+        elif (
+            self.date_basis == "unestablished"
+            or self.locator is None
+            or self.locator.document_title != self.document_title
+            or self.publication_date.day != 1
+        ):
+            raise ValueError("Publication months require their document location.")
+        return self
+
+
 class RunMetadata(FrozenModel):
     run_id: str
     created_at: datetime
@@ -402,6 +425,7 @@ class RunMetadata(FrozenModel):
     correction_ids: tuple[str, ...] = ()
     parent_run_id: str | None = None
     repair_count: int = Field(default=0, ge=0, le=1)
+    diagnostic_provenance: DiagnosticProvenance | None = None
 
     @field_validator("document_fingerprints", "prompt_hashes")
     @classmethod

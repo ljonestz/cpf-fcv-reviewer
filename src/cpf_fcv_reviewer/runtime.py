@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from io import BytesIO
@@ -17,6 +18,7 @@ from lxml.etree import XMLParser, XMLSyntaxError, fromstring
 from pydantic import ValidationError
 from pypdf.errors import PdfReadError
 
+from . import diagnostic_sources
 from .contracts import (
     CurrentEvidenceTier,
     DetailLevel,
@@ -33,6 +35,8 @@ from .evidence_builder import build_evidence_pack, build_reproducible_evidence_p
 from .extraction import (
     PDF_SAMPLING_WARNING_SUFFIX,
     DiagnosticCoverageUnavailable,
+    DocumentTooLarge,
+    DocumentUnreadable,
     ExtractionLimitExceeded,
     PackageCoverageUnavailable,
     extract_document,
@@ -96,6 +100,15 @@ OPTIONAL_PDF_SAMPLE_PAGES = 16
 DIAGNOSTIC_MAX_PAGES = 250
 DIAGNOSTIC_MAX_CHARACTERS = 600_000
 DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES = 50_000_000
+DIAGNOSTIC_MAX_ARCHIVE_MEMBERS = 512
+# The primary CPF/CEN is the principal lens and is never sampled, so its budgets are
+# generous. They are also role-appropriate: a PDF segment is a page, but a DOCX segment
+# is a single paragraph or table row, so one page-sized budget cannot serve both.
+PRIMARY_MAX_PDF_PAGES = 400
+PRIMARY_MAX_SEGMENTS = 10_000
+PRIMARY_MAX_CHARACTERS = 600_000
+PRIMARY_MAX_UNCOMPRESSED_BYTES = 50_000_000
+PRIMARY_MAX_ARCHIVE_MEMBERS = 512
 PACKAGE_MAX_DOCUMENTS = 10
 PACKAGE_MAX_SEGMENTS_TOTAL = 400
 PACKAGE_MAX_CHARACTERS_TOTAL = 300_000
@@ -407,6 +420,13 @@ def _has_valid_docx_container(data: bytes) -> bool:
     try:
         with ZipFile(BytesIO(data)) as archive:
             archive_entries = archive.infolist()
+            # Validating the container means decompressing [Content_Types].xml and the
+            # relationship parts, so the archive's declared size must be checked first,
+            # from the central directory, before anything is inflated.
+            if len(archive_entries) > PRIMARY_MAX_ARCHIVE_MEMBERS or sum(
+                entry.file_size for entry in archive_entries
+            ) > PRIMARY_MAX_UNCOMPRESSED_BYTES:
+                return False
             if any(
                 entry.flag_bits & 0x1
                 or entry.compress_type not in SUPPORTED_DOCX_COMPRESSION_TYPES
@@ -485,6 +505,59 @@ def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
     if suffix == ".docx":
         return _has_valid_docx_container(data)
     return True
+
+
+def _docx_archive_exceeds_budget(data: bytes) -> bool:
+    """Read the zip central directory only; nothing is inflated to answer this."""
+    try:
+        with ZipFile(BytesIO(data)) as archive:
+            entries = archive.infolist()
+    except (BadZipFile, OSError):
+        return False
+    return len(entries) > PRIMARY_MAX_ARCHIVE_MEMBERS or sum(
+        entry.file_size for entry in entries
+    ) > PRIMARY_MAX_UNCOMPRESSED_BYTES
+
+
+def _extract_primary_document(data: bytes, name: str):
+    """Extract the primary CPF/CEN under the same bounds as full diagnostic extraction.
+
+    The primary document is the principal review lens, so it is never sampled. It is
+    still bounded: an unusable container or an upload that exceeds the extraction
+    budget fails closed as an unreadable primary rather than being extracted.
+    """
+    suffix = Path(name).suffix.lower()
+    # An oversized archive and a malformed one are different failures, and the reader
+    # is told which. This runs before container validation because validating a DOCX
+    # decompresses its metadata parts.
+    if suffix == ".docx" and _docx_archive_exceeds_budget(data):
+        raise DocumentTooLarge("Primary CPF/CEN exceeds the safe extraction budget.")
+    if suffix not in SUPPORTED_UPLOAD_SUFFIXES or not _has_valid_optional_container(
+        data, suffix
+    ):
+        raise DocumentUnreadable("Primary CPF/CEN is unreadable or unsupported.")
+    if suffix == ".pdf":
+        # Equal page and segment budgets: an unequal pair makes extract_pdf_bytes
+        # silently truncate to max_pdf_pages instead of failing closed.
+        bounds = {
+            "max_pdf_pages": PRIMARY_MAX_PDF_PAGES,
+            "max_segments": PRIMARY_MAX_PDF_PAGES,
+        }
+    else:
+        bounds = {"max_segments": PRIMARY_MAX_SEGMENTS}
+    try:
+        return extract_document(
+            data,
+            name,
+            **bounds,
+            max_characters=PRIMARY_MAX_CHARACTERS,
+            max_uncompressed_bytes=PRIMARY_MAX_UNCOMPRESSED_BYTES,
+            max_archive_members=PRIMARY_MAX_ARCHIVE_MEMBERS,
+        )
+    except ExtractionLimitExceeded as exc:
+        raise DocumentTooLarge(
+            "Primary CPF/CEN exceeds the safe extraction budget."
+        ) from exc
 
 
 def _extract_optional_uploads(
@@ -882,7 +955,7 @@ def build_runtime_services(
         if not payload or "cpf" not in payload:
             return context
         primary = payload["cpf"]
-        primary_document = extract_document(primary["bytes"], primary["name"])
+        primary_document = _extract_primary_document(primary["bytes"], primary["name"])
         require_readable_primary(primary_document)
         package_documents, package_uploads, package_warnings = _extract_optional_uploads(
             payload.get("package_documents", ()),
@@ -1135,6 +1208,12 @@ def build_runtime_services(
             correction_ids=tuple(item["correction_id"] for item in correction_payloads),
             parent_run_id=payload.get("parent_assessment_id"),
         )
+        pack = context["evidence_pack"]
+        context["evidence_pack"] = pack.model_copy(update={
+            "metadata": pack.metadata.model_copy(update={
+                "diagnostic_provenance": context.get("diagnostic_provenance"),
+            }),
+        })
         return context
 
     def map_uploaded_diagnostic(context):
@@ -1335,6 +1414,14 @@ def build_runtime_services(
                         raise DiagnosticCoverageUnavailable(
                             "Selected uploaded diagnostic could not be extracted in full."
                         ) from exc
+                    provenance = diagnostic_sources.diagnostic_provenance(full_diagnostic)
+                    context["diagnostic_provenance"] = provenance
+                    # Research and review share the same date from the fully extracted
+                    # document, not a date inferred from the identification sample.
+                    uploaded_diagnostic = replace(
+                        uploaded_diagnostic, publication_date=provenance.publication_date,
+                    )
+                    context["uploaded_diagnostic"] = uploaded_diagnostic
                     context["full_diagnostic_document"] = full_diagnostic
                     context["diagnostic_document_role"] = diagnostic_role
                     context["diagnostic_document_position"] = diagnostic_position
@@ -1390,7 +1477,7 @@ def build_runtime_services(
                             segment.text
                             for segment in context["full_diagnostic_document"].segments[:3]
                         )[:1200]
-                        if dated_diagnostic is not None
+                        if uploaded_diagnostic is not None
                         and context.get("full_diagnostic_document") is not None
                         else ""
                     ),

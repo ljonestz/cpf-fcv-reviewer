@@ -189,3 +189,82 @@ def test_identified_diagnostic_preserves_supplied_source_position():
 
     assert result is not None
     assert result.source_index == 1
+
+
+def test_provenance_uses_cover_date_not_later_mission_date():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = ExtractedDocument("Guinea RRA.pdf", (
+        ExtractedSegment("Guinea Risk and Resilience Assessment\nJune 2023", 1, None, "page 1"),
+        ExtractedSegment("The mission took place in September 2022.", 2, None, "page 2"),
+    ), ())
+    provenance = diagnostic_provenance(source)
+    assert provenance.publication_date == date(2023, 6, 1)
+    assert provenance.date_basis == "cover"
+    assert provenance.locator.page == 1
+    assert "June 2023" in provenance.locator.excerpt
+
+
+def test_image_only_cover_does_not_promote_body_date_to_cover():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = ExtractedDocument("Guinea RRA June 2023.pdf", (
+        ExtractedSegment("Risk and Resilience Assessment. Mission: September 2022.",
+                         2, None, "page 2"),
+    ), ("page 1 extracted no text",))
+    provenance = diagnostic_provenance(source)
+    assert provenance.publication_date is None
+    assert provenance.date_basis == "unestablished"
+    assert provenance.locator is None
+
+
+def test_docx_title_and_publication_month_can_be_separate_paragraphs():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = document("RRA.docx", "Guinea Risk and Resilience Assessment", "June 2023",
+                      "Mission: September 2022")
+    provenance = diagnostic_provenance(source)
+    assert provenance.publication_date == date(2023, 6, 1)
+    assert provenance.locator.element == "paragraph 1"
+
+
+def test_filename_and_mission_dates_are_not_publication_dates():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = document("Benin RRA March 2024.docx", "Mission: September 2022")
+    assert diagnostic_provenance(source).publication_date is None
+
+
+def test_explicit_publication_date_on_fourth_physical_page_has_provenance():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = ExtractedDocument("RRA.pdf", (
+        ExtractedSegment("Publication: March 2024", 4, None, "page 4"),
+    ), ())
+    provenance = diagnostic_provenance(source)
+    assert provenance.publication_date == date(2024, 3, 1)
+    assert provenance.date_basis == "publication_statement"
+    assert provenance.locator.page == 4
+
+
+def test_conflicting_cover_and_publication_statement_remain_unknown():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = document("RRA.docx", "Risk and Resilience Assessment, June 2023",
+                      "Publication: September 2022")
+    assert diagnostic_provenance(source).publication_date is None
+
+
+def test_standalone_mission_month_is_not_a_cover_date():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = document("RRA.docx", "Benin Risk and Resilience Assessment",
+                      "Mission", "September 2022")
+    assert diagnostic_provenance(source).publication_date is None
+
+
+def test_invalid_calendar_year_remains_unestablished():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = document("RRA.docx", "Publication: June 0000")
+    assert diagnostic_provenance(source).publication_date is None

@@ -15,6 +15,10 @@ class DocumentUnreadable(ValueError):
     """Raised when the required primary document contains too little text."""
 
 
+class DocumentTooLarge(ValueError):
+    """The upload is readable but exceeds the safe extraction budget."""
+
+
 class ExtractionLimitExceeded(ValueError):
     """Raised when a caller-specific extraction budget is exceeded."""
 
