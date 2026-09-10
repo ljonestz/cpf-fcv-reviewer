@@ -3,7 +3,7 @@ name: Provider-free tests
 on:
   pull_request:
   push:
-    branches: [main, codex/review-quality]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

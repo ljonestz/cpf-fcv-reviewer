@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -37,7 +38,7 @@ _START_COMMAND = re.compile(r"^\s*startCommand:\s*(?P<command>gunicorn .+?)\s*$"
 
 
 def deployed_gunicorn_argv() -> list[str]:
-    """The exact gunicorn command Render runs, so the test cannot drift from it."""
+    """The candidate Blueprint command; live dashboard overrides need separate checks."""
     blueprint = (REPO_ROOT / "render.yaml").read_text(encoding="utf-8")
     match = _START_COMMAND.search(blueprint)
     assert match is not None, "render.yaml has no gunicorn startCommand"
@@ -96,11 +97,9 @@ def _wait_for_health(base_url: str, deadline: float) -> bool:
 
 def _probe_health(base_url: str) -> float:
     started = time.monotonic()
-    try:
-        with urllib.request.urlopen(f"{base_url}/health", timeout=5) as response:
-            response.read()
-    except OSError:
-        return time.monotonic() - started
+    with urllib.request.urlopen(f"{base_url}/health", timeout=5) as response:
+        assert response.status == 200
+        response.read()
     return time.monotonic() - started
 
 
@@ -172,6 +171,9 @@ def test_concurrent_event_streams_do_not_starve_the_health_check(tmp_path):
                 if established.acquire(timeout=0.2):
                     connected += 1
 
+            assert connected == HELD_STREAMS, (
+                f"Only {connected}/{HELD_STREAMS} event streams connected"
+            )
             latencies = []
             for _ in range(HEALTH_PROBES):
                 latencies.append(_probe_health(base_url))
@@ -192,3 +194,16 @@ def test_concurrent_event_streams_do_not_starve_the_health_check(tmp_path):
             except subprocess.TimeoutExpired:
                 server.kill()
                 server.wait(timeout=15)
+
+
+@pytest.mark.parametrize("error", [
+    OSError("connection refused"),
+    urllib.error.HTTPError("http://local/health", 503, "unhealthy", {}, None),
+])
+def test_health_probe_rejects_fast_failures(monkeypatch, error):
+    def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(urllib.request, "urlopen", fail)
+    with pytest.raises(OSError):
+        _probe_health("http://local")
