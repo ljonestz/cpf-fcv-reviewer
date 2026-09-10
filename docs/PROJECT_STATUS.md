@@ -1,5 +1,9 @@
 # Project status
 
+## 2026-09-10 Guinea paid release test
+
+One paid assessment on **3904935** completed after one repair. Browser QA passed, including assistant restoration and both Word downloads. RRA date is June 2023; all three final priorities have matching summary links. Content acceptance remains qualified: numerical targets and institutional recommendations need stronger proposal/feasibility qualification, and current evidence is reduced to two items. See the [test record](validation/2026-09-10-guinea-paid-release-test.md). No second paid run was submitted.
+
 ## 2026-09-10 Deployed: CPF review-quality and pilot-reliability fixes
 
 PR 33 is merged; application release **3904935** is live. Render and `/health`

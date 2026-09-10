@@ -5,7 +5,10 @@
 Application release **3904935** (PR 33) is live and health-verified. Diagnostic-date,
 priority-repair, extraction and worker fixes are deployed; the dashboard now uses
 16 gthread threads. Candidate tests and merged-release CI passed, including real
-Gunicorn. No provider-backed quality run was performed for this release.
+Gunicorn. One Guinea paid run passed browser/export checks after one repair. RRA
+publication month is correct; recommendation feasibility and firm institutional/target
+wording remain quality concerns, with reduced research breadth. See the
+[paid test record](validation/2026-09-10-guinea-paid-release-test.md).
 
 The owner wants the site open without passwords or institutional sign-in. The paid
 instance still uses volatile storage. Readiness remains supervised expert use with

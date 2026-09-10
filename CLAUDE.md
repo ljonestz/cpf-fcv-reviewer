@@ -77,7 +77,9 @@ header.
 
 Application release `3904935` (PR 33) is deployed; Render and `/health` confirm it.
 The candidate passed 1,610 provider-free tests including real Gunicorn, and merged-release
-CI passed. No provider-backed quality run was performed on this release. The dashboard
+CI passed. One Guinea paid run passed browser/export checks after one repair; proposal
+qualification and reduced research breadth remain concerns. See
+`docs/validation/2026-09-10-guinea-paid-release-test.md`. The dashboard
 uses one gthread worker with 16 request threads on a paid 0.5 CPU / 512 MB instance.
 
 Diagnostic publication-date provenance, priority-preserving repair, extraction safety,
