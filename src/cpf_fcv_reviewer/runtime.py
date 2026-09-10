@@ -505,6 +505,18 @@ def _has_valid_optional_container(data: bytes, suffix: str) -> bool:
     return True
 
 
+def _docx_archive_exceeds_budget(data: bytes) -> bool:
+    """Read the zip central directory only; nothing is inflated to answer this."""
+    try:
+        with ZipFile(BytesIO(data)) as archive:
+            entries = archive.infolist()
+    except (BadZipFile, OSError):
+        return False
+    return len(entries) > PRIMARY_MAX_ARCHIVE_MEMBERS or sum(
+        entry.file_size for entry in entries
+    ) > PRIMARY_MAX_UNCOMPRESSED_BYTES
+
+
 def _extract_primary_document(data: bytes, name: str):
     """Extract the primary CPF/CEN under the same bounds as full diagnostic extraction.
 
@@ -513,6 +525,11 @@ def _extract_primary_document(data: bytes, name: str):
     budget fails closed as an unreadable primary rather than being extracted.
     """
     suffix = Path(name).suffix.lower()
+    # An oversized archive and a malformed one are different failures, and the reader
+    # is told which. This runs before container validation because validating a DOCX
+    # decompresses its metadata parts.
+    if suffix == ".docx" and _docx_archive_exceeds_budget(data):
+        raise DocumentTooLarge("Primary CPF/CEN exceeds the safe extraction budget.")
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES or not _has_valid_optional_container(
         data, suffix
     ):

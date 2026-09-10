@@ -92,6 +92,14 @@ An over-limit primary now fails as the distinct `document_too_large` rather than
 `document_unreadable`, and the UI says so: "The primary document is too large to review in
 full. Upload a shorter version, or split the annexes into package documents."
 
+4. **Oversized and malformed are reported separately.** A first pass at the size gate folded
+   both into `document_unreadable`, so an image-heavy but perfectly valid DOCX over the
+   uncompressed budget would have been reported as corrupt. The primary now checks the
+   archive's declared size from the central directory *before* container validation and
+   raises `DocumentTooLarge`; structural problems still raise `DocumentUnreadable`. Verified
+   end to end through real gunicorn: a 1,200-paragraph DOCX CPF completes, and a 312 KB
+   upload declaring 55 MB returns `document_too_large`.
+
 **B2 — No authentication and no rate limiting on endpoints that spend money. OPEN.**
 `POST /api/reviews` (`routes.py:283`) queues the full pipeline, `/corrections` (`:473`) re-runs
 it, `/assistant` (`:143`) streams 4,000 tokens. No `rate.limit|limiter|throttle|Authorization`
@@ -158,12 +166,49 @@ and so silently used gunicorn's 30-second graceful timeout against `maxShutdownD
 `render.yaml` and asserts `/health` answers under load; it was red before the change and is
 green after.
 
-**State the limit honestly: this raises the bound, it does not remove it.** With one worker and
-16 threads, 16 concurrent long-lived streams will still starve the health check. Tolerated now
-is roughly 15 concurrent viewers, verified empirically at 8. The 90-second cap is complementary
-and remains: it bounds how long any one viewer holds a slot, so occupancy churns instead of
-pinning. Removing the bound entirely needs an async worker class or moving SSE off the request
-thread pool; neither was in scope.
+**The failure mechanism is unchanged; only the number moved.** A reviewer pressed on exactly
+this, and they were right to. One stream still occupies one request thread for its lifetime,
+so the pool size is the concurrency ceiling. Measured against the deployed `gthread` config
+with the cap disabled, to isolate the thread-count effect:
+
+| Concurrent streams | `/health` latency | |
+| --- | --- | --- |
+| 8 | 0.00s | healthy |
+| 15 | 2.96s | degraded |
+| 16 | timeout | starved |
+| 24 | timeout | starved |
+
+So the honest tolerance is **roughly 8-12 concurrent viewers, not 15** — an earlier note in
+this record claimed ~15, which the measurement above does not support: at 15 the health check
+is already at 3 seconds because the probe itself needs a thread. For a single-instance
+supervised-expert pilot that is comfortable headroom over realistic load, but it is headroom,
+not a fix.
+
+The 90-second cap is complementary and remains, and it is worth being precise about what it
+buys: it does **not** reduce steady-state occupancy, because a live viewer's browser
+reconnects immediately. What it does is reclaim threads from connections that are dead but not
+closed — a slept laptop, a dropped network — which would otherwise hold a slot until TCP
+timeout, or for the full 24-hour TTL if the worker died without emitting a terminal event.
+
+**What would actually remove the mechanism, measured.** `gevent` is already a declared
+dependency and `wsgi.py` already carries a monkey-patch hook, both currently unused. Under
+`--worker-class gevent --worker-connections 200`, the same experiment is flat:
+
+| Concurrent streams | 8 | 15 | 16 | 24 |
+| --- | --- | --- | --- | --- |
+| `/health` latency | 0.00s | 0.00s | 0.00s | 0.00s |
+
+No server errors. **This was not adopted, and should not be adopted on the strength of that
+table alone.** The experiment ran with `start_background_runs=False`, so it demonstrates only
+that SSE concurrency scales — it does not show the review pipeline behaving correctly under
+monkey-patching. Three things need validating first: `sqlite3` calls are blocking C calls that
+gevent does not patch, so a slow disk write would block the whole hub rather than one thread;
+the Anthropic SDK's httpx usage needs checking under patching; and `wsgi.py`'s existing hook
+(`if "gevent" in sys.argv`) patches at worker-import time, which is later than
+`monkey.patch_all()` wants to run and does not match the `--worker-class=gevent` equals form.
+`tests/test_app_factory.py:90` also suggests the current thread-based choice was deliberate.
+This is an architecture decision for the owner, with its own validation cycle — not a
+drop-in.
 
 ### High — all OPEN
 

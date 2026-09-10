@@ -31,8 +31,11 @@ Fixed:
   mid-review. The thread pool is now 16 across `render.yaml`, `Procfile` and
   `gunicorn.conf.py` (previously inconsistent), streams end at `EVENT_STREAM_MAX_SECONDS`
   (default 90) and resume losslessly via `Last-Event-ID`, and `app.js` resets its error
-  counter on reconnect so a capped close is not mistaken for a failure. **The bound is raised,
-  not removed:** 16 concurrent long-lived streams would still starve the health check.
+  counter on reconnect so a capped close is not mistaken for a failure. **The mechanism is
+  unchanged and only the number moved:** measured, `/health` is healthy at 8 concurrent
+  streams, degraded at 15 (2.96s) and starved at 16. Honest tolerance is ~8-12 viewers.
+  A measured `gevent` alternative is flat to 24 streams but was not adopted; see the review
+  record for what would need validating first.
 - The website rendered no evidence, sources, dates or verification status at all — the
   renderers existed but nothing called them, so the "evidence-linked" promise held only in the
   Word export. Priority areas now carry their Traceability panel, and the detailed view carries
@@ -54,7 +57,7 @@ check, found the accompanying bomb test proved the wrong thing, and found the SS
 overstated. All were reproduced and fixed in a second pass; see the review record for the
 measurements and for the corrections made to that record itself.
 
-Provider-free suite: **1,563 passed** on **Python 3.13.12 with a real editable install**
+Provider-free suite: **1,564 passed** on **Python 3.13.12 with a real editable install**
 (the earlier 1,527 figure was produced on 3.11 via `PYTHONPATH`). Ruff is unchanged at
 pre-existing debt; the changed lines are clean.
 

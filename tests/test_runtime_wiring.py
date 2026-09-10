@@ -4214,6 +4214,25 @@ def test_runtime_primary_extraction_rejects_unusable_upload(monkeypatch, name, d
     assert calls == []
 
 
+def test_runtime_primary_reports_an_oversized_archive_as_too_large_not_unreadable():
+    """An image-heavy but legitimate DOCX must not be reported as corrupt.
+
+    The archive size gate and structural validation are different failures and the
+    reader needs to be told which one happened.
+    """
+    data = _docx_bytes(
+        10, extra_body_bytes=runtime.PRIMARY_MAX_UNCOMPRESSED_BYTES + 5_000_000
+    )
+
+    with pytest.raises(DocumentTooLarge):
+        runtime._extract_primary_document(data, "image-heavy-cpf.docx")
+
+    malformed = _docx_bytes(10)[:200]
+    with pytest.raises(DocumentUnreadable) as unreadable:
+        runtime._extract_primary_document(malformed, "corrupt.docx")
+    assert not isinstance(unreadable.value, DocumentTooLarge)
+
+
 def test_runtime_primary_extraction_rejects_oversized_archive_before_inflating_it():
     """A compression bomb is refused from the central directory, without inflating.
 
@@ -4227,7 +4246,7 @@ def test_runtime_primary_extraction_rejects_oversized_archive_before_inflating_i
 
     assert len(data) < 5_000_000
 
-    with pytest.raises(DocumentUnreadable):
+    with pytest.raises(DocumentTooLarge):
         runtime._extract_primary_document(data, "bomb.docx")
 
 
