@@ -1,6 +1,13 @@
 # Production readiness
 
-## Deployed pilot - 2026-09-10
+## Grounding release deployed - 2026-09-10
+
+Application **992c35a** (PR 36) is live with source-grounding and temporal-qualification
+instructions. Main CI: **1,619 passed**; exact-release health, homepage and static
+asset checks passed. No paid quality run on this release. Supervised expert-use
+limitations remain. See the [deployment record](validation/2026-09-10-grounding-deployment.md).
+
+## Earlier pilot release - 2026-09-10
 
 Application release **3904935** (PR 33) is live and health-verified. Diagnostic-date,
 priority-repair, extraction and worker fixes are deployed; the dashboard now uses
