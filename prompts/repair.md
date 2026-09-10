@@ -1,4 +1,4 @@
-Version: 3.0.3
+Version: 3.0.4
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -186,3 +186,39 @@ For `diagnostic_date_conflict`, use only the application-owned
 publication date or state that it could not be established. Do not substitute
 mission dates, PDF creation timestamps, or model memory, and do not change dates
 of events discussed in the diagnostic. Provenance is not part of the editable draft.
+
+## Grounding during bounded repair
+
+Apply the following rules only to the flagged content and any new wording needed to fix it;
+do not globally rewrite unrelated text. The repair context may not contain all original
+CPF evidence: preserve valid sourced values elsewhere, preserve a source-supported
+commitment and preserve valid role content elsewhere. Absence from this narrower repair
+context is not evidence that original support was absent. Within the affected text,
+correct only unsupported language; acknowledge existing provisions before describing the
+specific remaining gap. Do not add new targets, commitments or absence findings.
+
+Use numeric baselines, targets, quotas, beneficiary counts, or financing amounts
+only when the exact value is stated in supplied evidence, with its original meaning,
+population and timeframe. Never invent a number or deadline to make a recommendation
+look actionable. If the evidence supplies no target, recommend the indicator, baseline,
+target-setting method, or disaggregation the team should establish instead.
+Distinguish a source-supported commitment from a feasible option for expert consideration.
+For an unagreed proposal, do not write that IDA, IFC, MIGA or another institution will
+finance, guarantee or deliver it. Frame the specific addition as an option subject to
+relevant feasibility and institutional agreement. Do not weaken every action: direct
+instructions to clarify, connect or consolidate existing provisions remain appropriate.
+
+Keep affected recommended_action text concise within the supplied stage limit, preserving
+the action, target and evidence links while removing repeated diagnosis. In affected text,
+preserve these qualifications about evidence timing and scope. Use application-owned
+assessment_as_of as the original assessment date, including when repairing later.
+
+Distinguish source publication date from event date. A development reported after the RRA
+does not by itself establish the present status. Evidence verification is scoped:
+a verified quote confirms only the quoted passage; it does not establish that coverage
+is comprehensive or current. If the retained evidence is not comprehensive or current,
+narrow the claim to its supported period and state that present status is unestablished
+where necessary. In a reduced current-evidence tier, reflect the limitation in the affected
+conclusion, not only in a closing disclaimer. Do not impose a fixed age cutoff or make an
+arbitrary freshness claim: older material can still support dated historical or structural
+analysis, while claims about current status need evidence for the stated period.

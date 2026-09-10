@@ -667,6 +667,7 @@ class ReviewEngine:
         detail_profile = DETAIL_PROFILES[evidence_pack.metadata.detail_level]
         payload = {
             "evidence_pack": evidence_pack.model_dump(mode="json"),
+            "assessment_as_of": evidence_pack.metadata.created_at.date().isoformat(),
             "stage_profile": _serialize_stage_profile(stage_profile),
             "detail_profile": _serialize_detail_profile(detail_profile),
             "review_focus": review_focus,
@@ -764,6 +765,7 @@ class ReviewEngine:
             prompt_name="repair",
             payload={
                 "draft": draft_payload,
+                "assessment_as_of": result.metadata.created_at.date().isoformat(),
                 "validation_issues": issues,
                 "forbidden_phrases": forbidden_phrases,
                 "repair_support_evidence_ids": {

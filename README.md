@@ -29,9 +29,10 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
   paid correction. Evidence and citation failures retain their checks.
 
 **Readiness: supervised public-document pilot, not routine operational production.**
-The successful run still misdates the RRA as September 2022 (the cover says June 2023).
-Some proposed delivery changes require expert validation; source diversity and cross-country
-output quality need further acceptance. The live public service uses volatile storage,
+The 10 September paid test on `3904935` correctly uses the June 2023 RRA date.
+Unsupported proposed targets, commitment wording and overbroad gap findings remain
+quality concerns; source breadth and cross-country output quality need further acceptance.
+See the [paid test record](docs/validation/2026-09-10-guinea-paid-release-test.md). The live public service uses volatile storage,
 so restarts discard sessions. Use public or otherwise approved non-sensitive inputs only.
 See [readiness and remaining work](docs/PRODUCTION_READINESS.md),
 [project status](docs/PROJECT_STATUS.md), and

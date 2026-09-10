@@ -1,5 +1,16 @@
 # Project status
 
+## 2026-09-10 Candidate: grounded recommendations
+
+Candidate `f5af172` passed Linux CI: **1,619 tests**, including Gunicorn.
+It strengthens review, repair and follow-on instructions for source-backed
+numerical targets, qualified proposed commitments, recognition of existing CPF provisions,
+time-bounded claims and concise actions. Review and repair now receive the original
+application assessment date explicitly; research reuses its existing review date.
+No extra model calls or live deployment. See the
+[grounding follow-up](validation/2026-09-10-recommendation-grounding.md) for validation
+and the distinction between prompt-contract checks and live semantic acceptance.
+
 ## 2026-09-10 Guinea paid release test
 
 One paid assessment on **3904935** completed after one repair. Browser QA passed, including assistant restoration and both Word downloads. RRA date is June 2023; all three final priorities have matching summary links. Content acceptance remains qualified: numerical targets and institutional recommendations need stronger proposal/feasibility qualification, and current evidence is reduced to two items. See the [test record](validation/2026-09-10-guinea-paid-release-test.md). No second paid run was submitted.
