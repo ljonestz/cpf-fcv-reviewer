@@ -1,5 +1,18 @@
 # Production readiness
 
+## Deployed pilot - 2026-09-10
+
+Application release **3904935** (PR 33) is live and health-verified. Diagnostic-date,
+priority-repair, extraction and worker fixes are deployed; the dashboard now uses
+16 gthread threads. Candidate tests and merged-release CI passed, including real
+Gunicorn. No provider-backed quality run was performed for this release.
+
+The owner wants the site open without passwords or institutional sign-in. The paid
+instance still uses volatile storage. Readiness remains supervised expert use with
+public or approved non-sensitive documents; proposal feasibility and research breadth
+require expert judgment. See the [release record](validation/2026-09-10-pilot-release.md).
+The observations below describe earlier checkpoints.
+
 ## Current follow-up - 2026-09-10
 
 The owner continues a small supervised public-document pilot and has deferred access

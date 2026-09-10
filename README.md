@@ -1,10 +1,9 @@
 # CPF FCV Reviewer
 
-Hosting verified 10 September: live main commit `2fc2b77`, paid 0.5 CPU / 512 MB
-instance, still volatile storage and four request threads. The operational and
-review-quality fixes are candidates, not deployed. See the
-[operational follow-up](docs/validation/2026-09-10-operational-followup.md).
-`render.yaml` is a candidate durable configuration, not a dump of live dashboard settings.
+Application release **3904935** (PR 33) is deployed and health-verified on 10 September.
+The open pilot uses one paid 0.5 CPU / 512 MB instance and 16 request threads.
+Storage remains volatile. See the [release record](docs/validation/2026-09-10-pilot-release.md).
+`render.yaml` remains a candidate durable configuration, not a dump of live dashboard settings.
 
 An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN drafts. It supports expert judgment and practical options; it does not make policy, compliance, eligibility, endorsement, or clearance determinations.
 
