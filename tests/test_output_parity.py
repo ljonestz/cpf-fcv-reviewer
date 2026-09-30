@@ -104,7 +104,7 @@ def test_browser_json_exposes_evidence_status_from_review_metadata(make_valid_re
     )
 
 
-def test_browser_keeps_evidence_limitations_omitted_from_docx(make_valid_result):
+def test_browser_and_docx_preserve_material_current_context_limitation(make_valid_result):
     result, evidence = make_valid_result
     limitation = "Independent current-country research was unavailable."
     result = result.model_copy(
@@ -146,7 +146,8 @@ def test_browser_keeps_evidence_limitations_omitted_from_docx(make_valid_result)
     assert payload["metadata"]["current_evidence_limitation"] == limitation
     assert "Review based primarily on submitted documents" not in docx_text
     assert "Current evidence tier" not in docx_text
-    assert limitation not in docx_text
+    assert docx_text.count(limitation) == 1
+    assert docx_text.index(limitation) < docx_text.index("Overall assessment")
     assert limitation in payload["limitations"]
 
 
