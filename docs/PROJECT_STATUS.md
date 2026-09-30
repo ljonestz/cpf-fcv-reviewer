@@ -8,6 +8,7 @@ and material source-grounding and readout issues. The owner selected a public pi
 with four new paid assessments per UTC day. Candidate branch
 `fix/production-readiness-20260930` implements admission/concurrency limits, full readable
 primary/package evidence, safe failures, actual runtime provenance and bounded summaries.
+Engineering source `25437b3` passed Linux CI: **1,669 tests** including Gunicorn, plus Python name/import checks. Synthetic browser acceptance passed **12/12**, with saved screenshots, both Word exports and validated JSON.
 See the [repair acceptance record](validation/2026-09-30-production-readiness-repairs.md).
 
 Live release remains `992c35a` with volatile storage. Durable hosting and new model-quality

@@ -37,3 +37,4 @@ output/
 *.sqlite-shm
 *.sqlite3-wal
 *.sqlite3-shm
+evidence/20260930_production-readiness-repairs/

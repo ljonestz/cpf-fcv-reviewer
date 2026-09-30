@@ -62,13 +62,21 @@ are not a tested SQLite restore procedure.
 
 ## Verification
 
-Pending final suite and browser artifact completion. Focused repair suites already established
-full-primary extraction, metadata, diagnostic cover provenance, and summary/detailed parity.
-All 14 downloaded corpus files matched their recorded SHA-256 and sizes; seven primary PDFs
-fully extracted within extraction bounds. The Gambia primary-only compact estimate is 155,350
-input tokens; this excludes registry, context and mapped diagnostic, so complete input remains
-unverified. Chad CEN Annex/page ownership remains unresolved from extraction alone.
+Engineering source commit `25437b3` passed [Linux CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/36730723644): **1,669 provider-free tests** in 22.04 seconds, including real Gunicorn saturation with eight viewers, rejection of the ninth viewer and responsive health checks. Python name/import checks also passed. Windows Application Control blocks local Ruff; no policy bypass was attempted.
 
-Windows Application Control blocks Ruff execution; no policy bypass was attempted. Linux CI
-must provide Gunicorn coverage, which Windows cannot execute. A fresh paid quality assessment
-requires a new authorization after the original four-run audit ceiling; none was submitted.
+Synthetic browser acceptance passed **12/12 checks** with public admission enabled and no provider key or model calls: upload/country confirmation, stage selection, result retrieval, summary and detailed views, target-document display, assistant/history restoration, page refresh, correction rerun, mobile/long-paragraph wrapping, and safe injected submission failure. Both Word downloads opened as valid DOCX packages. This checks export structure and content; it does not certify Word page layout. The single priority card fills the available desktop width, and recovery sits directly below the stopped-review message.
+
+Artifacts remain local, outside Git, under `output/playwright/20260930_production_readiness_repairs/browser/synthetic-smoke-repairs-04/`: **12 PNGs, two DOCX downloads, two application-validated synthetic result JSON files and qa-status.json**. The coordinator directly inspected desktop, mobile, detailed and failure screenshots across the two successful flow runs. The final run had no JavaScript page errors. That run recorded one cosmetic missing-favicon console 404. The shared HTML head now suppresses that unused request; a subsequent no-submission Edge check passed with zero console or resource errors (`20260930_icon_preflight.json`). Earlier harness assertions were corrected to match the existing detailed target locator and safe failure copy; a subsequent local quota collision was avoided by assigning a fresh server port and verifying empty admission counters before starting.
+
+The browser saved its passing checks and artifacts before cleanup stalled. Only the exact QA execution was interrupted after its PASS marker; its ephemeral HTTP port was confirmed closed. This is a Windows automation teardown limitation, not a successful runner exit. The separately identified earlier provider-free smoke server was stopped by its verified PID; its HTTP port was confirmed closed.
+
+All **14 downloaded corpus files** matched their recorded SHA-256 and sizes; **seven primary PDFs** fully extracted within extraction bounds. The Gambia primary-only compact estimate is **155,350 input tokens**; this excludes registry, context and mapped diagnostic, so the complete request remains unverified. Oversized complete requests fail explicitly. Chad CEN Annex/page ownership remains unresolved from extraction alone and requires expert inspection of fresh output.
+
+## Remaining launch acceptance
+
+- Merge and deploy the reviewed candidate with the prepared 1GB persistent disk and fail-closed production persistence settings. The current live release is still `992c35a` with volatile storage; no deployment occurred during these repairs.
+- Verify live persistent health, restart behavior, quota enforcement, and a real backup/restore. Choose backup retention and off-disk recovery storage. Local WAL/quota restoration and reopen/restart regressions passed; these do not establish a live operational restore.
+- Set provider-account spending controls. The application admission ceilings bound starts and assistant use, rather than an exact dollar budget.
+- Obtain a renewed paid-validation ceiling and review fresh country output for source ownership, existing CPF provisions, historical/current distinctions, research breadth and practical recommendations. The original four paid audit attempts exhausted the approved ceiling; **zero additional paid runs** were submitted. Synthetic checks cannot establish analytical accuracy.
+
+The approved FCV Strategy registry v1.1.0 is embedded. No Strategy upload is needed. Production readiness remains conditional on the launch acceptance above.
