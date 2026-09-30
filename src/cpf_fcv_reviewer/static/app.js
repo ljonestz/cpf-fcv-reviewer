@@ -951,6 +951,14 @@ function renderFiveMinuteReadout(result) {
       "p",
       "For full findings, qualifications, and complete measures, see Detailed analysis.",
     ),
+  );
+  if (result.metadata?.current_evidence_limitation) {
+    fragment.append(labelledNarrative(
+      "Current context limitation", result.metadata.current_evidence_limitation,
+      "evidence-status-limitation",
+    ));
+  }
+  fragment.append(
     text("h2", "Overall assessment"),
     renderNarrative(
       summaryExcerpt(

@@ -280,6 +280,10 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         const view = hooks.renderDetailedAnalysis(result);
         const summary = hooks.renderFiveMinuteReadout(result);
         const summaryText = summary.textContent;
+        if (!summaryText.includes(result.metadata.current_evidence_limitation) ||
+            summaryText.indexOf(result.metadata.current_evidence_limitation) > summaryText.indexOf("Overall assessment")) {
+          throw Error("five-minute readout hid its material current-context limitation");
+        }
         if (!summaryText.includes("For full findings, qualifications, and complete measures, see Detailed analysis.")) {
           throw Error("five-minute readout omitted its detailed-analysis guidance");
         }

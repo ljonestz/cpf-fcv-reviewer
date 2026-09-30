@@ -762,6 +762,10 @@ def build_docx(
         document.add_paragraph(
             "For full findings, qualifications, and complete measures, see Detailed analysis."
         )
+    if result.metadata.current_evidence_limitation:
+        _add_labelled_paragraph(
+            document, "Current context limitation", result.metadata.current_evidence_limitation
+        )
 
     document.add_heading("Overall assessment", level=1)
     _add_readable_paragraph(

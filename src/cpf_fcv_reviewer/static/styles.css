@@ -78,7 +78,7 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .assistant-suggestion { background: var(--blue-soft); color: var(--navy); border: 1px solid #b8dfe8; padding: 8px 13px; font-size: .92rem; }
 .assistant-suggestion:hover:not(:disabled) { background: #d9f0f5; }
 .assistant-conversation { display: grid; gap: 10px; min-width: 0; margin: 20px 0; }
-.assistant-message { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; box-shadow: none; overflow-wrap: anywhere; }
+.assistant-message { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; box-shadow: none; overflow-wrap: anywhere; white-space: pre-wrap; }
 .assistant-message-user { border-left: 4px solid var(--blue); background: #f7fbfc; }
 .assistant-message-assistant { border-left: 4px solid var(--cyan); background: white; }
 .assistant-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }

@@ -613,7 +613,7 @@ def test_docx_empty_narrative_collections_have_explicit_empty_states(make_valid_
     ),
 )
 @pytest.mark.parametrize("summary", (False, True))
-def test_docx_omits_evidence_status_and_reader_limitations(
+def test_docx_keeps_current_context_caveat_without_technical_status(
     make_valid_result,
     tier,
     status,
@@ -654,9 +654,12 @@ def test_docx_omits_evidence_status_and_reader_limitations(
     assert status not in text
     assert "Current evidence tier" not in text
     if limitation is not None:
-        assert limitation not in text
+        assert text.count(limitation) == 1
+        assert text.index(limitation) < text.index("Overall assessment")
         assert limitation in result_limitations
-        assert result_current_limitation == limitation
+    else:
+        assert "Current context limitation" not in text
+    assert result_current_limitation == limitation
 
 def test_docx_visible_evidence_status_matches_html(make_valid_result):
     result, evidence = make_valid_result
@@ -682,7 +685,7 @@ def test_docx_visible_evidence_status_matches_html(make_valid_result):
 
     assert "Review based primarily on submitted documents" not in text
     assert "Current evidence tier" not in text
-    assert limitation not in text
+    assert text.count(limitation) == 1
 
 def test_export_route_requires_a_completed_traceable_result(make_valid_result):
     result, evidence = make_valid_result

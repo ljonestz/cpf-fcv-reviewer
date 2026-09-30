@@ -1,5 +1,20 @@
 # Project status
 
+## 2026-09-30 Renewed local quality acceptance
+
+The owner authorized four additional quality assessments and deferred new hosting cost.
+One local Guinea assessment on `389e110` completed after one bounded repair; nine browser
+checks and both Word downloads passed. Current research remains reduced and factual
+acceptance remains qualified. A source-month conflation and illustrative numerical triggers
+still need expert scrutiny. Three quality attempts remain authorized.
+
+The observed presentation defects are repaired: the material current-context caveat now
+appears before the short readout and both Word exports, assistant paragraphs retain line
+breaks, and follow-on prompt v1.1.2 requests concise plain-text management summaries.
+137 focused provider-free tests and the exact browser smoke passed. See the
+[renewed acceptance record](validation/2026-09-30-renewed-quality-acceptance.md).
+Live release remains `992c35a` with volatile storage; no merge or deployment occurred.
+
 ## 2026-09-30 Production repair candidate
 
 The four-country public-document audit identified an unbounded spending/queue risk,
