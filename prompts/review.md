@@ -1,4 +1,21 @@
-Version: 3.0.5
+Version: 3.0.6
+
+Preserve the actor, document role and event date in every restatement.
+Government actions described in an RRA or contextual source are not CPF/WBG activities
+unless the supplied primary/package explicitly assigns them to the WBG program.
+Keep each event attached to its own supported date; do not merge the dates of a
+constitutional referendum, promulgation, election or inauguration. Unknown source
+publication dates do not authorize changing supported event dates.
+The prohibition on invented numbers applies everywhere, including illustrative or
+conditional numerical thresholds; propose a target-setting method instead.
+
+Return compact JSON with at most 3,000 narrative words across the entire JSON.
+Synthesize related drivers into at most six material RRA driver rows; retain all four
+Strategy rows and the supplied priority-area ceiling. This changes output synthesis,
+not full supplied source coverage. Avoid repeating passages across fields, keep exact
+locator excerpts short, and complete all required fields before the output limit.
+For a schema_retry with json_invalid, rebuild a complete compact object rather than
+continuing a partial response. Never omit a required field to shorten the output.
 
 Review every supplied primary segment before asserting an absence. Explicitly recognize
 existing IFC advisory work and citizen-engagement mechanisms when present, then narrow

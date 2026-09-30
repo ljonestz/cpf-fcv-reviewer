@@ -1754,7 +1754,7 @@ class FakeMessages:
         self.response = response
         self.calls = []
 
-    def parse(self, **kwargs):
+    def create(self, **kwargs):
         self.calls.append(kwargs)
         return self.response
 
@@ -1767,7 +1767,10 @@ class FakeAnthropicClient:
 def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     meta = metadata()
     expected = draft_for(meta)
-    response = SimpleNamespace(parsed_output=expected)
+    response = SimpleNamespace(
+        stop_reason="end_turn",
+        content=[SimpleNamespace(type="text", text=expected.model_dump_json())],
+    )
     client = FakeAnthropicClient(response)
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
     gateway = AnthropicModelGateway("test-key", "test-model")
@@ -1782,22 +1785,48 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.5")
-    assert call["output_format"] is ReviewDraft
+    assert call["system"].startswith("Version: 3.0.6")
+    assert call["output_config"] == {
+        "format": {"type": "json_schema", "schema": transform_schema(ReviewDraft.model_json_schema())}
+    }
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
 
-def test_anthropic_gateway_rejects_missing_parsed_output(monkeypatch):
-    client = FakeAnthropicClient(SimpleNamespace(parsed_output=None))
+def test_anthropic_gateway_rejects_missing_json_output(monkeypatch):
+    client = FakeAnthropicClient(SimpleNamespace(stop_reason="end_turn", content=[]))
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
     gateway = AnthropicModelGateway("test-key", "test-model")
 
-    with pytest.raises(ValueError, match="no parsed output"):
+    with pytest.raises(ValueError, match="no JSON output"):
         gateway.generate(
             prompt_name="review",
             payload={"input": "bounded"},
             output_type=ReviewDraft,
         )
+
+
+@pytest.mark.parametrize(
+    ("stop_reason", "expected_code"),
+    [("max_tokens", "model_output_truncated"), ("refusal", "model_refusal"),
+     ("unexpected secret value", "model_output_unavailable")],
+)
+def test_gateway_withholds_incomplete_output_before_parsing_and_emits_only_safe_code(
+    monkeypatch, stop_reason, expected_code,
+):
+    from cpf_fcv_reviewer.orchestrator import safe_failure_data
+
+    client = FakeAnthropicClient(SimpleNamespace(
+        stop_reason=stop_reason,
+        content=[SimpleNamespace(type="text", text="PRIVATE rejected JSON fragment")],
+    ))
+    monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+    gateway = AnthropicModelGateway("test-key", "test-model")
+    with pytest.raises(model_gateway.ModelOutputUnavailable) as caught:
+        gateway.generate(prompt_name="review", payload={}, output_type=ReviewDraft)
+    assert safe_failure_data(caught.value) == {"error": expected_code}
+    assert "PRIVATE" not in str(caught.value)
+    assert "secret" not in str(caught.value)
+    assert len(client.messages.calls) == 1
 
 
 def test_prohibited_policy_repair_keeps_cleaned_rra_narrative():

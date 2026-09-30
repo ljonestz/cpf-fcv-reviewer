@@ -9,6 +9,7 @@ from .extraction import (
     PackageCoverageUnavailable,
     ReviewCoverageUnavailable,
 )
+from .model_gateway import ModelOutputUnavailable
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
 from .review_engine import ReviewSchemaUnavailable
@@ -29,6 +30,8 @@ SAFE_FAILURES = {
 
 
 def safe_failure_code(error: Exception) -> str:
+    if isinstance(error, ModelOutputUnavailable):
+        return error.failure_code
     if isinstance(error, ReviewSchemaUnavailable):
         return error.failure_code
     if isinstance(error, ResearchFailure):

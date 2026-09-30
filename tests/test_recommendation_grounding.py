@@ -7,6 +7,27 @@ def normalize_whitespace(content: str) -> str:
     return " ".join(content.split())
 
 
+@pytest.mark.parametrize("name", ["review", "repair", "follow_on"])
+def test_prompts_preserve_actor_event_date_and_do_not_invent_example_thresholds(name):
+    prompt = normalize_whitespace(load_prompt(name))
+    for phrase in (
+        "Preserve the actor, document role and event date",
+        "Government actions described in an RRA or contextual source",
+        "are not CPF/WBG activities",
+        "Keep each event attached to its own supported date",
+        "including illustrative or conditional numerical thresholds",
+    ):
+        assert phrase.casefold() in prompt.casefold()
+
+
+def test_review_prompt_bounds_complete_json_without_reducing_input_coverage():
+    prompt = normalize_whitespace(load_prompt("review"))
+    assert "at most 3,000 narrative words across the entire JSON" in prompt
+    assert "at most six material RRA driver rows" in prompt
+    assert "full supplied source coverage" in prompt
+    assert "complete all required fields before the output limit" in prompt
+
+
 @pytest.mark.parametrize("name", ["review", "repair"])
 def test_prompts_require_source_backed_numeric_targets_and_scoped_options(name):
     prompt = normalize_whitespace(load_prompt(name))

@@ -1,4 +1,13 @@
-Version: 3.0.5
+Version: 3.0.6
+
+In flagged content and new wording only, preserve the actor, document role and event date.
+Government actions described in an RRA or contextual source are not CPF/WBG activities
+unless the supplied primary/package explicitly assigns them to the WBG program.
+Keep each event attached to its own supported date; do not merge the dates of a
+constitutional referendum, promulgation, election or inauguration. Unknown source
+publication dates do not authorize changing supported event dates.
+The prohibition on invented numbers applies everywhere, including illustrative or
+conditional numerical thresholds; propose a target-setting method instead.
 
 For target_locator_mismatch, use only source_grounding_evidence to correct the
 document, physical PDF page and exact excerpt. Preserve the owning institution:
