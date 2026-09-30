@@ -3,11 +3,11 @@
 ## 2026-09-30 Renewed local quality acceptance
 
 The owner authorized four additional quality assessments and deferred new hosting cost.
-Guinea on `389e110` completed after one bounded repair; nine browser checks and both Word
-downloads passed, with qualified factual acceptance. Chad on `631e06c` safely failed after
-two invalid-JSON review attempts. Tajikistan on `6db3b7f` confirmed output truncation at
-12,000 tokens and safely stopped. One quality attempt remains. Guinea source ownership,
-event dates and illustrative thresholds exposed additional analytical weaknesses.
+All four admissions are consumed. Guinea on `389e110` completed with qualified factual
+acceptance; Chad failed schema validation, Tajikistan confirmed output truncation, and
+Afghanistan on `1272a28` failed after three residual locator mismatches. No unsafe findings
+were released by the failed cases and no paid repeat was made. Routine production
+acceptance remains unachieved: source grounding and cross-country reliability are blockers.
 
 The observed presentation defects are repaired: the material current-context caveat now
 appears before the short readout and both Word exports, assistant paragraphs retain line
@@ -15,8 +15,10 @@ breaks, and follow-on prompt v1.1.3 requests concise plain-text management summa
 The shared generation path now checks stop reason before parsing, with safe failure codes;
 review/repair v3.0.6 reinforce factual ownership and bound output synthesis. The response
 ceiling increases to 20,000 only for review/repair after observed truncation; admission and
-call-count caps remain. 166 focused capacity/grounding checks pass; earlier `6db3b7f` Linux
-CI passed 1,676 tests. Populated-caveat Word re-exports pass without another model call. See the
+call-count caps remain. `1272a28` Linux CI passed 1,679 tests. The fixed unsupported countdown
+now shows measured elapsed time and actual stages; 65 focused UI checks and final smoke
+06 (11/11, zero errors, normal exit 0) pass. Populated-caveat Word re-exports pass without
+another model call. Word visual layout and the new real assistant summary remain unverified. See the
 [renewed acceptance record](validation/2026-09-30-renewed-quality-acceptance.md).
 Live release remains `992c35a` with volatile storage; no merge or deployment occurred.
 

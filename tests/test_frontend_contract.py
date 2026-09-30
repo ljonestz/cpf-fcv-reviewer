@@ -366,7 +366,7 @@ def test_task9_progress_has_semantic_stages_and_live_message():
     assert 'id="progress-message" role="status" aria-live="polite"' in html
 
 
-def test_guided_journey_has_stage_timing_and_rotating_guidance():
+def test_guided_journey_has_elapsed_timing_and_rotating_guidance():
     html = HTML.read_text(encoding="utf-8")
     javascript = JS.read_text(encoding="utf-8")
 
@@ -380,7 +380,6 @@ def test_guided_journey_has_stage_timing_and_rotating_guidance():
         assert fragment in html
     assert html.count('data-progress-step="') == 3
     for fragment in (
-        "const stageEstimates",
         "const guidanceCards",
         "function startJourneyClock",
         "function updateJourneyClock",
@@ -392,24 +391,28 @@ def test_guided_journey_has_stage_timing_and_rotating_guidance():
         assert fragment in javascript
 
 
-def test_timer_formats_singular_and_range_copy():
+def test_timer_reports_actual_elapsed_time_without_an_unmeasured_countdown():
     javascript = JS.read_text(encoding="utf-8")
-    start = javascript.index("function formatRemainingTime(minimumMinutes, maximumMinutes)")
-    end = javascript.index("\n}\n", start) + 3
+    start = javascript.index("function formatElapsed(seconds)")
+    end = javascript.index("function rotateGuidanceCard()", start)
     function_source = javascript[start:end]
     script = f"""
 {function_source}
-const cases = [
-  [1, 1, "About 1 minute remaining"],
-  [1, 2, "About 1-2 minutes remaining"],
-  [2, 3, "About 2-3 minutes remaining"],
-];
-for (const [minimum, maximum, expected] of cases) {{
-  const actual = formatRemainingTime(minimum, maximum);
-  if (actual !== expected) {{
-    throw new Error(`${{minimum}}-${{maximum}}: ${{actual}} !== ${{expected}}`);
+let journeyStartedAt = 1000;
+const elapsedTime = {{textContent: ""}};
+const remainingTime = {{textContent: ""}};
+for (const [seconds, expected] of [[60, "1:00 elapsed"], [780, "13:00 elapsed"]]) {{
+  global.performance = {{now: () => 1000 + seconds * 1000}};
+  updateJourneyClock();
+  if (elapsedTime.textContent !== expected) throw Error("incorrect elapsed time");
+  if (remainingTime.textContent !== "Duration varies with the document package.") {{
+    throw Error("displayed an unmeasured remaining-time prediction");
   }}
 }}
+journeyStartedAt = undefined;
+elapsedTime.textContent = "preserve";
+updateJourneyClock();
+if (elapsedTime.textContent !== "preserve") throw Error("updated a stopped clock");
 """
 
     completed = subprocess.run(
@@ -814,7 +817,9 @@ def test_failure_screen_stops_presenting_a_running_review():
           throw Error("failure kicker still announces a running review");
         }
         if (!nodes["#progress-title"].focused) throw Error("focus did not move to the failure heading");
-        if (!nodes["#progress-message"].textContent.includes("Review stopped: Validation could not establish a reliable review.")) {
+        if (!nodes["#progress-message"].textContent.includes("The generated findings could not be grounded reliably")
+            || !nodes["#progress-message"].textContent.includes("No findings were released")
+            || !nodes["#progress-message"].textContent.includes("another assessment allowance")) {
           throw Error("failure message text changed");
         }
         if (nodes["#return-to-intake"].hidden) throw Error("failure was not recoverable");

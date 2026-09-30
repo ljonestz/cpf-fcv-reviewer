@@ -1,6 +1,10 @@
 # Renewed local quality acceptance 2026 09 30
 
 The owner authorized four additional assessments and configured the provider key locally.
+All four admissions are now consumed: Guinea completed with qualified factual acceptance;
+Chad, Tajikistan and Afghanistan failed safely. Routine production acceptance has not
+been achieved. Engineering regressions pass, but model reliability and source grounding
+remain material blockers. No fifth admission or paid repeat was made.
 Testing uses the repaired candidate with persistent local SQLite state. There is no new
 hosting charge, merge, deployment, or Render disk change. The live release remains
 `992c35a`. The original four-run audit and earlier repair records are historical.
@@ -9,7 +13,8 @@ hosting charge, merge, deployment, or Render disk change. The live release remai
 
 Use verified public World Bank source documents, preserve all readable primary/package
 text, and inspect application-validated output against the source PDFs. Before each paid
-case, exercise the exact browser runner with synthetic provider-free inputs. Save accepted
+series and after browser behavior changes, exercise the exact runner with synthetic
+provider-free inputs; reuse it while unchanged. Save accepted
 JSON, screenshots and Word exports outside Git; private assessment IDs remain in an OS
 temporary-directory handoff. Failed outputs are inspected through safe event codes and
 sanitized schema diagnostics only. Never store rejected provider output.
@@ -135,6 +140,49 @@ no matches. These are clearly labelled historical re-exports, not new quality ru
 Word visual pagination remains unverified because the available renderer cannot run and
 LibreOffice is unavailable; package/content checks do not establish page layout.
 
+## Afghanistan failed on 1272a28
+
+The fourth renewed admission used all 83 CPF pages and the 20-page RRA (19 readable).
+The RRA was recognized with its cover publication date unestablished. The 20,000-token
+allowance produced a complete structured draft and a complete bounded repair. This shows
+capacity progress on this case, not restored cross-country reliability. Initial validation
+identified seven fatal issues in date provenance, raw narrative IDs, unknown assessment
+evidence, target locators and prohibited policy language. After repair, three fatal
+`target_locator_mismatch` issues remained. The app terminated with `review_failed`,
+released no findings and made no assistant call. No second substantive repair or new
+assessment was started. Total browser-run time was approximately 18.4 minutes, with four
+screenshots and zero console/page/resource errors.
+
+The remaining rejected locators were not inspected as raw provider output. Safe codes
+establish failed grounding, but do not distinguish wrong document/page from a quote
+mismatch or an invented quotation. Do not claim these three case failures have been
+resolved by the prompt changes, the larger response ceiling or passing unit tests.
+Obtain renewed quality-test authorization before another paid attempt. Further locator
+diagnosis must use bounded, content-free reasons or independently supplied source anchors;
+do not release unvalidated drafts or weaken the existing check merely to obtain a pass.
+
+## Final UI verification and artifact state
+
+Observed paid runs took about 8.7-18.4 minutes, exceeding the fixed 4-11 minute waiting
+estimate. The unsupported countdown is removed; measured elapsed time and event-driven
+stages remain. Failure copy describes generated-findings grounding and the admission
+consequence, without implying the supplied public source documents caused the failure.
+The clock regression failed before repair. After intended failure-copy assertions were
+updated, 65 focused UI checks passed. Final renewed smoke 06 passed 11/11 with zero browser
+errors, nine screenshots, accepted synthetic JSON, assistant refresh and both Word
+downloads, and exited normally with code 0. This establishes browser mechanics; the
+synthetic fixture does not certify the changed management-summary word limit on real
+country output. The new real assistant prompt remains untested because all later paid
+assessments failed before the assistant stage.
+
+Historical Guinea re-exports establish populated current-caveat Word content parity.
+Rendered Word layout remains unverified. All accepted output, downloaded Word files,
+screenshots and safe failure records remain outside Git under
+`output/playwright/20260930_renewed_acceptance/`. Mechanical inventory and source/locator/
+Word verification JSON remain under `output/20260930_renewed_acceptance_preflight/`.
+The local SQLite admission counter was read-only verified at four, independently matching
+the four unique reserved labels in the ledger.
+
 ## Input preflight and remaining acceptance
 
 Provider-free full extraction and actual-registry estimates passed for Guinea, Chad,
@@ -144,6 +192,11 @@ map excerpts and current research. Gambia is only about 3,005 estimated tokens b
 quality case to avoid a predictable capacity failure. Afghanistan's uploaded RRA is
 recognized but its cover publication date is unestablished. It must not be invented.
 
-One authorized quality attempt remains. Afghanistan is pending.
+Zero authorized quality attempts remain. No additional paid assessment was used to remedy
+automation cleanup, the failed country cases or the source-grounding failures.
 Durable live hosting, provider-account budget controls, live restart and backup/restore
 acceptance remain outside this local validation. Production readiness is conditional.
+
+The public `/health` was rechecked at the end of testing: HTTP 200, release `992c35a`,
+volatile storage and in-process queue. No merge, deployment, disk change or new hosting
+charge occurred. The embedded approved Strategy registry v1.1.0 requires no upload.

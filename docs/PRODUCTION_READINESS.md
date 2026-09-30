@@ -1,5 +1,27 @@
 # Production readiness
 
+## Renewed acceptance - 2026-09-30
+
+Routine production acceptance is not achieved. Four newly authorized local admissions
+are consumed: Guinea completed with factual qualifications; Chad failed JSON validation;
+Tajikistan hit the response limit; Afghanistan produced structured JSON with the increased
+review/repair ceiling but failed three locator checks after bounded repair. No paid repeats
+or fifth admission were made. The app's fail-closed behavior worked; its 1/4 completion rate
+and the accepted Guinea factual defects do not establish dependable advisory output.
+
+Repairs include persisted public caps, complete readable input, source/date/locator guards,
+real provenance, material-caveat browser/Word parity, readable assistant paragraphs, safe
+failure diagnostics and measured elapsed timing. Capacity source `1272a28` passed 1,679
+Linux tests; final UI checks and synthetic browser flow passed. Actual Word page layout and
+the revised real assistant summary remain unverified. See the
+[renewed acceptance record](validation/2026-09-30-renewed-quality-acceptance.md).
+
+Further source-grounding diagnosis and fresh accepted country validation are required
+before routine launch. Another paid case needs new owner authorization; do not weaken
+validation or replay failed work automatically. The public site remains `992c35a` with
+volatile storage; hosting cost, merge/deployment and live durable restart/restore remain
+deferred. Four daily admissions are a count ceiling, not an exact provider dollar budget.
+
 ## Production repair candidate - 2026-09-30
 
 The owner selected open public access with a global four-assessment UTC-day ceiling.

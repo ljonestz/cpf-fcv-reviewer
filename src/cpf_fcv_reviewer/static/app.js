@@ -77,11 +77,6 @@ const retryableResearchCodes = new Set([
 
 const stageOrder = ["documents", "research", "note"];
 const progressPercent = {documents: 18, research: 58, note: 88};
-const stageEstimates = {
-  documents: [45, 120],
-  research: [90, 300],
-  note: [90, 240],
-};
 const guidanceCards = [
   "Strong FCV reviews connect context, design choices, delivery arrangements, and results.",
   "A useful recommendation identifies both the change and where it belongs in the draft.",
@@ -152,8 +147,6 @@ const gapLocusLabels = {
 };
 
 let journeyStartedAt;
-let journeyStageStartedAt;
-let journeyCurrentStage = "documents";
 let journeyClock;
 let guidanceRotation;
 let guidanceIndex = 0;
@@ -164,40 +157,12 @@ function formatElapsed(seconds) {
   return `${minutes}:${remainder}`;
 }
 
-function approximateMinutes(seconds) {
-  return Math.max(1, Math.ceil(seconds / 60));
-}
-
-function formatRemainingTime(minimumMinutes, maximumMinutes) {
-  if (minimumMinutes === 1 && maximumMinutes === 1) {
-    return "About 1 minute remaining";
-  }
-  return `About ${minimumMinutes}-${maximumMinutes} minutes remaining`;
-}
-
 function updateJourneyClock() {
   if (!journeyStartedAt) return;
   const currentTime = performance.now();
   const elapsedSeconds = Math.max(0, (currentTime - journeyStartedAt) / 1000);
-  const stageIndex = stageOrder.indexOf(journeyCurrentStage);
-  const currentStageElapsed = Math.max(0, (currentTime - journeyStageStartedAt) / 1000);
-  const remaining = stageOrder.slice(Math.max(0, stageIndex)).reduce(
-    (range, stage, index) => {
-      const [minimum, maximum] = stageEstimates[stage];
-      if (index === 0) {
-        return [
-          range[0] + Math.max(1, minimum - currentStageElapsed),
-          range[1] + Math.max(1, maximum - currentStageElapsed),
-        ];
-      }
-      return [range[0] + minimum, range[1] + maximum];
-    },
-    [0, 0],
-  );
-  const minimumMinutes = approximateMinutes(remaining[0]);
-  const maximumMinutes = Math.max(minimumMinutes, approximateMinutes(remaining[1]));
   elapsedTime.textContent = `${formatElapsed(elapsedSeconds)} elapsed`;
-  remainingTime.textContent = formatRemainingTime(minimumMinutes, maximumMinutes);
+  remainingTime.textContent = "Duration varies with the document package.";
 }
 
 function rotateGuidanceCard() {
@@ -213,8 +178,6 @@ function prefersReducedMotion() {
 function startJourneyClock() {
   stopJourneyClock();
   journeyStartedAt = performance.now();
-  journeyStageStartedAt = journeyStartedAt;
-  journeyCurrentStage = "documents";
   guidanceIndex = 0;
   rotateGuidanceCard();
   updateJourneyClock();
@@ -230,7 +193,6 @@ function stopJourneyClock() {
   journeyClock = undefined;
   guidanceRotation = undefined;
   journeyStartedAt = undefined;
-  journeyStageStartedAt = undefined;
 }
 
 function setProgressStages(activeIndex, complete = false) {
@@ -249,10 +211,6 @@ function setProgressStages(activeIndex, complete = false) {
 function updateProgress(stage) {
   const group = sseStageMap[stage];
   if (!group) return;
-  if (journeyCurrentStage !== group) {
-    journeyCurrentStage = group;
-    journeyStageStartedAt = performance.now();
-  }
   const activeIndex = stageOrder.indexOf(group);
   setProgressStages(activeIndex);
   if (progressFill.style) progressFill.style.width = `${progressPercent[group] || 0}%`;
@@ -266,7 +224,7 @@ function resetProgress() {
   if (progressFill.style) progressFill.style.width = "0%";
   setProgressStages(-1);
   elapsedTime.textContent = "0:00 elapsed";
-  remainingTime.textContent = "About 4-11 minutes remaining";
+  remainingTime.textContent = "Duration varies with the document package.";
 }
 
 const failureLabels = {
@@ -280,7 +238,7 @@ const failureLabels = {
   model_output_truncated: "The model reached its response limit before completing the review. No findings were released or automatically rerun. A new submission uses another assessment allowance.",
   model_refusal: "The model declined this request. No findings were released or automatically rerun.",
   model_output_unavailable: "The model did not complete the review safely. No findings were released or automatically rerun.",
-  review_failed: "Validation could not establish a reliable review. No findings were released. Check the source documents before starting another paid assessment.",
+  review_failed: "The generated findings could not be grounded reliably in the supplied evidence. No findings were released. A new submission uses another assessment allowance.",
   review_coverage_unavailable: "The primary document and package exceed the full-review input limit. Upload a shorter primary document or fewer annexes; text is never silently omitted.",
   assessment_interrupted: "The service restarted during this assessment. It was not automatically rerun. A new submission uses another assessment allowance.",
 };
