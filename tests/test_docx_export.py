@@ -76,8 +76,6 @@ def test_docx_reader_note_contains_synthesis_and_omits_technical_material(
         "Reproducibility information",
         "Current evidence tier",
         "Gap locus",
-        "Delivery mechanism",
-        "Result / indicator",
         "Source: CPF.docx | Results framework | paragraph 12",
         "Excerpt: The program will support access.",
     ):
@@ -236,7 +234,9 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
     )
     for label, value in (
         ("Driver", "Unequal territorial access"),
-        ("CPF response", "The CPF prioritizes lagging regions."),
+        ("CPF/package quotation", "The CPF prioritizes lagging regions."),
+        ("Delivery mechanism (analysis)", "Area-based delivery is proposed."),
+        ("Result / indicator (analysis)", "A service-access indicator is included."),
         ("Remaining gap", "Adaptation triggers are not defined."),
         ("Status and confidence", "Partially aligned - High confidence"),
     ):
@@ -252,8 +252,8 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
     assert "Strategic shift" in text
     assert "Assessment" in text
     assert "The CPF reflects this strategic shift in the response." in text
-    assert "Delivery mechanism" not in text
-    assert "Result / indicator" not in text
+    assert "Delivery mechanism (analysis)" in text
+    assert "Result / indicator (analysis)" in text
     assert "Gap locus" not in text
     assert "Source: CPF.docx | Results framework | paragraph 12" not in text
     assert "Excerpt: The program will support access." not in text
