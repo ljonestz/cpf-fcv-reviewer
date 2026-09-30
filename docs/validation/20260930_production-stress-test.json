@@ -1,0 +1,127 @@
+{
+  "audit_date": "2026-09-30",
+  "tested_release": "992c35a0331125aa3963d2cf424a7d5c582391c4",
+  "verdict": "not_ready_for_unsupervised_public_production",
+  "paid_assessments": 4,
+  "accepted_results": 3,
+  "failed_assessments": 1,
+  "strategy_registry_embedded": true,
+  "baseline_tests": {
+    "passed": 1618,
+    "skipped": 1,
+    "failed": 0
+  },
+  "findings": [
+    {
+      "id": "CA-01",
+      "severity": "Critical",
+      "title": "Live in-process queue starts one unbounded daemon thread per accepted review",
+      "observed": "A provider-free reproduction accepted 64 jobs and started 64 background runs with 64 additional threads. Root independently repeated it. The live service uses this in-process queue.",
+      "recommendation": "Use a bounded worker queue, cap queued and active work, reject excess submissions, and rate-limit before session or job allocation."
+    },
+    {
+      "id": "CA-02",
+      "severity": "High",
+      "title": "Model-visible primary CPF evidence is silently sampled and truncated",
+      "observed": "The actual review payload retains at most 12 primary excerpts, truncated to 1600 characters each. Measured text shares: Gambia 3.74%, Tajikistan 5.13%, Guinea overview 43.04%. Character share measures text availability, not semantic completeness. Chad output nevertheless claimed comprehensive complete coverage and misstated its primary PDF as 124 pages rather than 110. In the Tajikistan accepted output, PA001 says no financial-sector ASA/programmatic response; primary PDF pages25,40,51–52 contain IFC governance/risk management and financial-sector advisory measures. PA002 says no local accountability mechanisms; page93 is the CPF Citizen Engagement Country Roadmap for local voice/accountability. These existing provisions are missed, so weaknesses must be narrowed after full-document review.",
+      "recommendation": "Provide full primary coverage or fail closed; if sampling remains, disclose it, mark the role incomplete, and prohibit unsupported absence claims."
+    },
+    {
+      "id": "CA-03",
+      "severity": "High",
+      "title": "Invalid review stages reach research before late rejection",
+      "observed": "An invalid review_stage triggered one research-controller call before ValueError. Root independently repeated the provider-free probe; no live charge was caused by this test.",
+      "recommendation": "Validate the stage in the POST route before creating a session or enqueueing work; retain the engine check as defense in depth."
+    },
+    {
+      "id": "CA-04",
+      "severity": "Medium",
+      "title": "Assistant and DOCX-export failures log raw exception text and tracebacks",
+      "observed": "Injected exception content appeared in assistant and export logs; browser errors are sanitized but logging paths use raw tracebacks. This is a potential content disclosure through logs, not a demonstrated live breach.",
+      "recommendation": "Log safe event names, exception classes, and sanitized codes or cause chains using the existing background-failure pattern."
+    },
+    {
+      "id": "CA-05",
+      "severity": "Medium",
+      "title": "An undocumented 250-segment per-document package cap conflicts with the 400-segment aggregate",
+      "observed": "A 250-segment package document is accepted; a 251-segment document is rejected although the aggregate package budget is 400. The strongest impact is flowing text, where segments are smaller than PDF pages.",
+      "recommendation": "Use role- and format-specific per-document limits consistent with the aggregate package budget."
+    },
+    {
+      "id": "CA-06",
+      "severity": "Medium",
+      "title": "Exported reproducibility labels are hardcoded and stale",
+      "observed": "Paid exports label app_release 0.1.0, prompt bundle 1.0.0 and registry bundle 2026.08. The active registry is 1.1.0. The app label may represent package version, but no immutable deployed commit is included. Existing hashes partly mitigate this.",
+      "recommendation": "Populate metadata from runtime configuration and loaded bundles, and include an immutable deployed commit or release identifier."
+    },
+    {
+      "id": "OPS-01",
+      "severity": "High",
+      "title": "Live reviews depend on volatile storage",
+      "observed": "Live health reports storage=volatile; PERSISTENCE_PATH is unset and ALLOW_VOLATILE_PROTOTYPE is true. Durable SQLite recovery tests pass locally, but that configuration is not live.",
+      "recommendation": "Configure and validate durable storage and restart recovery on the target host before operational release; retain appropriate session retention controls."
+    },
+    {
+      "id": "QA-01",
+      "severity": "High",
+      "title": "Historical political context leaks into a current CPF edit",
+      "observed": "Guinea PA002 proposes describing an ongoing CNRD transition in the May 2026 CPF. The World Bank overview records December 2025 presidential elections and January 2026 inauguration. The output warns that current evidence is unavailable but still carries the older status into a proposed edit.",
+      "recommendation": "Separate RRA-era facts, CPF preparation facts and assessment-date evidence. Block unverified current-status assertions in proposed edits and preserve uncertainty at recommendation level."
+    },
+    {
+      "id": "QA-02",
+      "severity": "High",
+      "title": "Government action table is treated as the CEN results framework",
+      "observed": "Chad PA002 calls Result10 on PDF page51 a CEN results-framework result and recommends editing it. Page47 identifies its enclosing annex as the Government of Chad PRA Monitoring Table; the CEN's own results matrix starts on page24. PA001 also assigns an excerpt from the project descriptions to page15 although its quoted text is on page41. The review repeatedly uses government-table objectives as CEN objectives.",
+      "recommendation": "Preserve section and annex context, institutional owner, instrument and period in primary evidence. Verify exact locator text and distinguish government commitments from WBG commitments before producing edits."
+    },
+    {
+      "id": "QA-03",
+      "severity": "High",
+      "title": "A legitimate public diagnostic fails date validation after paid work",
+      "observed": "The Gambia run stopped after its one bounded repair still returned diagnostic_date_conflict. The app does not identify the uploaded Fragility Risk and Resilience Assessment for either Gambia country spelling; its June9 2017 cover date is unestablished by the month-year parser. These parser limitations are verified contributors to investigate, not a proven complete causal trace of the model output.",
+      "recommendation": "Support verified diagnostic title and date variants, expose a safe actionable failure category, and catch unsupported provenance before paid review work. Add a corpus regression for this exact public document."
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Operational hosting",
+      "recommended_path": "Bounded durable worker queue and persistent storage; validate on staging Linux/Render",
+      "acceptance": "Queue saturation rejection before provider calls; restart restores results and flags; measured concurrent viewer capacity"
+    },
+    {
+      "decision": "Access and spending controls",
+      "recommended_path": "Decide restricted pilot or authenticated public access; set rate and spend controls",
+      "acceptance": "Unauthorized/excess work rejected before allocation; documented retention and cost limits"
+    },
+    {
+      "decision": "Primary coverage",
+      "recommended_path": "Full primary coverage or explicit limited mode with prohibited absence claims",
+      "acceptance": "Long CPF provisions outside former sampled pages are correctly acknowledged; coverage measurements visible"
+    },
+    {
+      "decision": "Current evidence fallback",
+      "recommended_path": "Prefer a dated document-led retrospective review when verified current research is insufficient",
+      "acceptance": "No current political-status claim or prospective edit based only on model memory; limitations visible in summary and export"
+    },
+    {
+      "decision": "Review and editing depth",
+      "recommended_path": "Keep short thematic priorities; clearly label substantive additions and source ownership",
+      "acceptance": "Proposed safeguards or statistical tasks are options requiring confirmation; government annexes are not WBG commitments"
+    },
+    {
+      "decision": "User recovery",
+      "recommended_path": "Actionable safe failure codes and preserved input context; concise management readout; shorten management view toward800–1000words and keep detailed suggestions in the full note",
+      "acceptance": "A known date variant is handled before charged review; failed run tells user what to fix without blind paid retry; the Tajikistan five-minute export currently has1841words, about9.2minutes at200words/minute, versus1208words for Guinea"
+    }
+  ],
+  "limits": [
+    "No live saturation benchmark, authentication penetration test, backup restore drill or dollar-cost reconciliation. Do not treat this as exhaustive security certification or quantified model accuracy.",
+    "Windows sandbox permissions, inherited malformed certificates, blocked Ruff executable and slow browser process startup affected tooling. Clean-environment regression and unrestricted package smoke passed. These are separated from application defects.",
+    "No production changes or fixes were deployed. The report proposes a reviewable repair tranche; owner approval and subsequent staging verification remain before release.",
+    "Four full assessments do not establish production throughput. A staged Linux/Render concurrency, provider-rate-limit and restart test remains necessary before release."
+  ],
+  "artifact_location": "Local evidence at repository root 20260930_production-stress-test; raw PDFs, output JSON, screenshots and DOCX excluded from Git.",
+  "code_changes": false,
+  "deployed_changes": false
+}
