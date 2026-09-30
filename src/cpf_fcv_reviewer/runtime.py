@@ -1368,6 +1368,8 @@ def build_runtime_services(
                 "code": issue.code,
                 "message": issue.message,
                 "severity": getattr(issue, "severity", "fatal"),
+                **({"locator_reason": issue.locator_reason}
+                   if issue.locator_reason is not None else {}),
             }
             for issue in issues
         ]

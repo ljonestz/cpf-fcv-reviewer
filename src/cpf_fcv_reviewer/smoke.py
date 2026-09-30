@@ -239,7 +239,7 @@ class SmokeModelGateway:
                 RRADriverAssessment(
                     assessment_id="smoke-rra-1",
                     driver=f"{SMOKE_MARKER} Synthetic territorial exclusion driver",
-                    cpf_response=f"{SMOKE_MARKER} Synthetic CPF response",
+                    cpf_response=locator.excerpt,
                     delivery_mechanism=f"{SMOKE_MARKER} Synthetic delivery mechanism",
                     result_or_indicator=f"{SMOKE_MARKER} Synthetic access indicator",
                     remaining_gap=f"{SMOKE_MARKER} Synthetic adaptation trigger gap",

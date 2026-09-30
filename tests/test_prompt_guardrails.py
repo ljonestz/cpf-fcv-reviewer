@@ -72,17 +72,17 @@ def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
     assert "every-material-finding-and-recommendation" not in prompt
 
 
-def test_review_prompt_requires_concise_readouts_and_integrated_delivery_response():
+def test_review_prompt_separates_verified_quote_and_analytical_delivery_response():
     prompt = normalize_whitespace(load_prompt("review"))
 
     for phrase in (
         "alignment_readout",
         "strategy_readout",
         "no more than two short paragraphs",
-        "cpf_response to naturally incorporate the material delivery mechanism",
-        "result/indicator content",
+        "cpf_response must be a single exact quotation",
+        "primary/package document_fact in that row's evidence_ids",
         "delivery_mechanism and result_or_indicator",
-        "populated as structured fields",
+        "separate analytical fields",
     ):
         assert phrase in prompt
 
@@ -317,7 +317,7 @@ def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 
     for phrase in (
-        "Version: 3.0.6",
+        "Version: 3.0.8",
         "rra_driver_assessments",
         "fcv_strategy_assessments",
         "status",
@@ -418,7 +418,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
 
 @pytest.mark.parametrize(
     ("name", "version"),
-    [("diagnostic_map", "1.2.0"), ("review", "3.0.6"), ("repair", "3.0.6")],
+    [("diagnostic_map", "1.2.0"), ("review", "3.0.8"), ("repair", "3.0.8")],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)
@@ -527,3 +527,12 @@ def test_review_prompt_binds_current_claims_to_exact_source_support():
 
     assert "bounded source date and exact supporting quote" in prompt
     assert "Do not broaden its topic, direction, geography, or time scope" in prompt
+
+
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_reference_prompts_require_exact_cited_document_anchors(name):
+    prompt = normalize_whitespace(load_prompt(name))
+    assert "same priority's evidence_ids" in prompt
+    assert "is_paraphrase must be false" in prompt
+    assert "separate source-backed clause for each dated event" in prompt
+    assert "contextual government action is not a CPF commitment" in prompt

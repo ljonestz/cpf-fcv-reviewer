@@ -12,6 +12,16 @@ Never search uncited documents to rescue a generated reference. Reject unsupport
 paraphrases, empty normalized quotations, partial-word matches and ambiguous relocation.
 Keep source-grounding failures fatal and preserve priority coverage during repair.
 
+**Owner-approved addition:** Make each RRA row's `cpf_response` a literal quotation
+from its cited primary/package evidence. Keep delivery and results interpretation in
+the existing analytical fields, visible separately in the browser and Word export.
+For `not_evidenced` or `not_assessable` rows, allow only the fixed absence disclosure
+when no verified quotation exists; never invent a quotation to fill the column.
+Normalize verified wording from the source and reject unsupported narrative responses.
+The existing bounded repair may correct an invalid response and its known source links,
+while preserving valid rows, identities, standing and unrelated analysis. No new schema
+field, model call, provider allowance or hosting cost is introduced.
+
 **Stack:** Existing Python/Pydantic application and pytest; standard-library matching.
 No new dependency, model call, admission, output-token ceiling or hosting change.
 
@@ -33,6 +43,8 @@ No new dependency, model call, admission, output-token ceiling or hosting change
 - [ ] Update versioned review/repair prompts to require cited exact anchors and separate
   CPF commitments, contextual government acts, dated events and proposed measures.
   Do not represent prompt instructions as a deterministic factual verifier.
+- [ ] Add red/green quoted-response regressions for primary/package ownership, cited-ID
+  scope, source copying, absence disclosures, repair preservation and browser/Word parity.
 - [ ] Run focused provider-free tests, then the existing smoke/runtime checks and full
   Linux CI. Inspect the actual diff and inspect real source-anchor regression results.
   Preserve the earlier four-attempt ledger and safe-failure records unchanged.

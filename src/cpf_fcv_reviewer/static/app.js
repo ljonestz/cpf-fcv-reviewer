@@ -728,7 +728,17 @@ function renderRraAssessments(result) {
     const definitions = document.createElement("dl");
     definitions.className = "assessment-definitions";
     appendAssessmentField(definitions, "Driver", assessment.driver);
-    appendAssessmentField(definitions, "CPF response", assessment.cpf_response);
+    appendAssessmentField(definitions, "CPF/package quotation", assessment.cpf_response);
+    const quoteSource = (assessment.evidence_ids || [])
+      .map((id) => result.evidence_by_id?.[id])
+      .find((item) => item?.evidence_type === "document_fact"
+        && ["primary", "package"].includes(item.document_role)
+        && item.locator && item.text?.includes(assessment.cpf_response));
+    if (quoteSource) {
+      appendAssessmentField(definitions, "Quotation source", locatorLabel(quoteSource.locator));
+    }
+    appendAssessmentField(definitions, "Delivery mechanism (analysis)", assessment.delivery_mechanism);
+    appendAssessmentField(definitions, "Result / indicator (analysis)", assessment.result_or_indicator);
     appendAssessmentField(definitions, "Remaining gap", assessment.remaining_gap);
     appendAssessmentStanding(definitions, assessment.status, assessment.confidence);
     card.append(definitions);

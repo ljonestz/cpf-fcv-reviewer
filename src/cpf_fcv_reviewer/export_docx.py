@@ -23,6 +23,7 @@ from .contracts import (
     FCVStrategicShift,
     ReviewResult,
 )
+from .source_grounding import cited_document_evidence
 
 BLUE = RGBColor(0x15, 0x39, 0x56)
 DARK_BLUE = RGBColor(0x15, 0x39, 0x56)
@@ -508,6 +509,7 @@ def _add_assessment_evidence(
 def _add_rra_assessments(
     document: Document,
     result: ReviewResult,
+    evidence: dict[str, EvidenceItem],
 ) -> None:
     document.add_heading("RRA driver-to-response assessment", level=2)
     if not result.rra_driver_assessments:
@@ -526,11 +528,17 @@ def _add_rra_assessments(
         )
         for label, value in (
             ("Driver", assessment.driver),
-            ("CPF response", assessment.cpf_response),
+            ("CPF/package quotation", assessment.cpf_response),
+            ("Delivery mechanism (analysis)", assessment.delivery_mechanism),
+            ("Result / indicator (analysis)", assessment.result_or_indicator),
             ("Remaining gap", assessment.remaining_gap),
             ("Status and confidence", standing),
         ):
             _add_labelled_paragraph(document, label, value)
+        source = next((item for item in cited_document_evidence(assessment.evidence_ids, evidence)
+                       if assessment.cpf_response in item.text), None)
+        if source is not None:
+            _add_labelled_paragraph(document, "Quotation source", target_text(source.locator))
 
 
 def _add_strategy_assessments(
@@ -792,7 +800,7 @@ def build_docx(
         else result.alignment_readout,
     )
     if not summary:
-        _add_rra_assessments(document, result)
+        _add_rra_assessments(document, result, evidence)
     document.add_heading(STRATEGY_ALIGNMENT_QUESTION, level=2)
     _add_readable_paragraph(
         document,

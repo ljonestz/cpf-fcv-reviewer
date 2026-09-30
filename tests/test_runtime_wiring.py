@@ -460,18 +460,23 @@ def _test_rra_assessments(payload):
     if _assessment_mode(payload) != DiagnosticMode.RRA_ALIGNMENT.value:
         return ()
     _, document_ids = _assessment_evidence(payload)
+    primary = next((item for item in payload.get("evidence_pack", {}).get("evidence", ())
+                    if item.get("document_role") == "primary"), None)
+    source_row = next(iter(payload.get("draft", {}).get("rra_driver_assessments", ())), {})
     return (
         RRADriverAssessment(
             assessment_id="test-rra-driver-1",
             driver="The runtime fixture represents a territorial delivery constraint.",
-            cpf_response="The CPF fixture includes a bounded response to the constraint.",
+            cpf_response=primary["text"] if primary else source_row["cpf_response"],
             delivery_mechanism="The response uses targeted delivery arrangements.",
             result_or_indicator="The fixture includes a service-access indicator.",
             remaining_gap="Adaptation triggers remain to be specified.",
             status=AssessmentStatus.PARTIALLY_ALIGNED,
             confidence=AssessmentConfidence.MEDIUM,
             gap_locus=GapLocus.MONITORING_ADAPTATION,
-            evidence_ids=document_ids[:1],
+            evidence_ids=tuple(dict.fromkeys((
+                *((primary["evidence_id"],) if primary else ()), *document_ids[:1],
+            ))),
         ),
     )
 
@@ -3482,6 +3487,8 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
                 )
             captured["review_payload"] = payload
             deep_id = "diagnostic-page-102"
+            primary = next(item for item in payload["evidence_pack"]["evidence"]
+                           if item["document_role"] == "primary")
             return _valid_review_draft(
                 output_type,
                 payload,
@@ -3493,14 +3500,14 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
                     RRADriverAssessment(
                         assessment_id="deep-page-driver",
                         driver="The deep-page issue is material.",
-                        cpf_response="The CPF partly responds.",
+                        cpf_response=primary["text"],
                         delivery_mechanism="Targeted delivery is proposed.",
                         result_or_indicator="A service indicator is included.",
                         remaining_gap="The deep-page issue remains.",
                         status=AssessmentStatus.PARTIALLY_ALIGNED,
                         confidence=AssessmentConfidence.HIGH,
                         gap_locus=GapLocus.MONITORING_ADAPTATION,
-                        evidence_ids=(deep_id,),
+                        evidence_ids=(deep_id, primary["evidence_id"]),
                     ),
                 ),
                 institutional_referral_ids=(),
@@ -3585,7 +3592,9 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
     assert final_payload["diagnostic_entries"]
     assert [name for name, _ in calls if name == "diagnostic_map"] == ["diagnostic_map"]
     assert [name for name, _ in calls if name == "review"] == ["review"]
-    assert context["result"].rra_driver_assessments[0].evidence_ids == ("diagnostic-page-102",)
+    assert context["result"].rra_driver_assessments[0].evidence_ids == (
+        "diagnostic-page-102", "primary-001",
+    )
 
 
 def test_runtime_full_rra_limit_failure_skips_mapping_and_review(monkeypatch):

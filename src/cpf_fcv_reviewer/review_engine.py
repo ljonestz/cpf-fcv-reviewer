@@ -21,6 +21,12 @@ from .contracts import (
 from .extraction import ReviewCoverageUnavailable
 from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
+from .source_grounding import (
+    cited_document_evidence,
+    locator_failure_reason,
+    resolve_target_locator,
+    verified_cpf_response,
+)
 from .validators import has_diagnostic_date_conflict
 
 # "missing_current_context_support" is intentionally excluded: it is raised with
@@ -33,6 +39,8 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
         "diagnostic_date_conflict",
         "target_locator_mismatch",
         "unsupported_current_state",
+        "unsupported_numeric_recommendation",
+        "unsupported_cpf_response",
         "unknown_priority_area",
         "unknown_evidence",
         "raw_evidence_id_in_narrative",
@@ -601,7 +609,7 @@ def _document_names(evidence_pack: EvidencePack) -> dict[DocumentRole, tuple[str
     }
 
 
-def _preserve_priority_coverage(original, draft, issue_codes, available_evidence_ids):
+def _preserve_priority_coverage(original, draft, issue_codes, available_evidence_ids, evidence):
     """A repair may correct a priority, but cannot silently remove its assessment."""
     if not original.priority_areas:
         return draft
@@ -639,6 +647,14 @@ def _preserve_priority_coverage(original, draft, issue_codes, available_evidence
                     item for item in candidate.evidence_ids
                     if item in registry_ids and item not in area.evidence_ids
                 )
+            if "target_locator_mismatch" in issue_codes:
+                sources = cited_document_evidence(candidate.evidence_ids, evidence)
+                target = resolve_target_locator(candidate.target_locator, sources)
+                updates["evidence_ids"] += tuple(
+                    item.evidence_id for item in sources
+                    if item.evidence_id not in updates["evidence_ids"]
+                    and locator_failure_reason(target, (item,)) is None
+                )
         priorities.append(candidate.model_copy(update=updates))
     updates = {"priority_areas": tuple(priorities)}
     if original.revision_summary and "unknown_priority_area" not in issue_codes:
@@ -647,6 +663,24 @@ def _preserve_priority_coverage(original, draft, issue_codes, available_evidence
             summaries.get(item.priority_area_id, item) for item in original.revision_summary
         )
     return draft.model_copy(update=updates)
+
+
+def _resolve_cited_sources(
+    draft: ReviewDraft, evidence: Mapping[str, EvidenceItem],
+) -> ReviewDraft:
+    return draft.model_copy(update={
+        "rra_driver_assessments": tuple(
+            row.model_copy(update={"cpf_response": response})
+            if (response := verified_cpf_response(row, evidence)) is not None else row
+            for row in draft.rra_driver_assessments
+        ),
+        "priority_areas": tuple(
+            area.model_copy(update={"target_locator": resolve_target_locator(
+                area.target_locator, cited_document_evidence(area.evidence_ids, evidence),
+            )})
+            for area in draft.priority_areas
+        ),
+    })
 
 
 class ReviewEngine:
@@ -718,6 +752,9 @@ class ReviewEngine:
                 "Supporting context may be sampled; coverage limitations remain material."
             ),
         )
+        draft = _resolve_cited_sources(
+            draft, {item.evidence_id: item for item in evidence_pack.evidence},
+        )
         content = draft.model_dump(exclude={"coverage_note"})
         return ReviewResult(
             metadata=evidence_pack.metadata,
@@ -787,10 +824,14 @@ class ReviewEngine:
                 "repair_support_evidence": current_support,
                 "source_grounding_evidence": [
                     {"evidence_id": item.evidence_id, "text": item.text,
+                     "document_role": item.document_role,
                      "locator": item.locator.model_dump(mode="json") if item.locator else None}
                     for item in support_evidence.values()
-                    if item.document_role in {DocumentRole.PRIMARY, DocumentRole.PACKAGE}
-                ] if any(issue["code"] == "target_locator_mismatch" for issue in issues) else [],
+                    if item.evidence_type == "document_fact" and item.locator is not None
+                ] if any(issue["code"] in {
+                    "target_locator_mismatch", "unsupported_numeric_recommendation",
+                    "unknown_assessment_evidence", "unsupported_cpf_response",
+                } for issue in issues) else [],
                 "diagnostic_provenance": (
                     result.metadata.diagnostic_provenance.model_dump(mode="json")
                     if result.metadata.diagnostic_provenance is not None else None
@@ -841,7 +882,7 @@ class ReviewEngine:
                 preserved["institutional_referral_ids"] = draft.institutional_referral_ids
             draft = ReviewDraft.model_validate(preserved)
         draft = _preserve_priority_coverage(
-            result, draft, issue_codes, available_evidence_ids,
+            result, draft, issue_codes, available_evidence_ids, support_evidence,
         )
         allow_coverage_status_repair = any(
             issue["code"] == "incomplete_coverage_absence_claim"
@@ -874,6 +915,25 @@ class ReviewEngine:
             )
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
+        if "unsupported_cpf_response" in issue_codes:
+            candidates = {row.assessment_id: row
+                          for row in repaired_assessments.rra_driver_assessments}
+            rows = []
+            for row in draft.rra_driver_assessments:
+                candidate = candidates.get(row.assessment_id)
+                if candidate is not None and verified_cpf_response(row, support_evidence) is None:
+                    corrected = row.model_copy(update={
+                        "cpf_response": candidate.cpf_response,
+                        "evidence_ids": tuple(dict.fromkeys((*row.evidence_ids, *(
+                            item for item in candidate.evidence_ids
+                            if item in available_evidence_ids
+                        )))),
+                    })
+                    if verified_cpf_response(corrected, support_evidence) is not None:
+                        row = corrected
+                rows.append(row)
+            draft = draft.model_copy(update={"rra_driver_assessments": tuple(rows)})
+        draft = _resolve_cited_sources(draft, support_evidence)
         coverage = result.document_coverage
         content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})

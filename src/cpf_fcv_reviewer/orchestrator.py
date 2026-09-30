@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 
 from .extraction import (
@@ -13,6 +14,7 @@ from .model_gateway import ModelOutputUnavailable
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
 from .review_engine import ReviewSchemaUnavailable
+from .source_grounding import LOCATOR_FAILURE_REASONS
 
 Emitter = Callable[[str, dict], None]
 Step = Callable[[dict], dict]
@@ -84,6 +86,23 @@ class ReviewOrchestrator:
                             )
                         )
 
+                    def validation_data(issues):
+                        data = {"issue_count": len(issues), "codes": codes_of(issues)}
+                        reasons = Counter(
+                            issue["locator_reason"]
+                            for issue in issues
+                            if isinstance(issue, dict)
+                            and issue.get("code") == "target_locator_mismatch"
+                            and isinstance(issue.get("locator_reason"), str)
+                            and issue["locator_reason"] in LOCATOR_FAILURE_REASONS
+                        )
+                        if reasons:
+                            data["locator_diagnostics"] = [
+                                {"reason": reason, "count": count}
+                                for reason, count in sorted(reasons.items())
+                            ]
+                        return data
+
                     all_issues = list(context["validation_issues"])
                     fatal_issues = [i for i in all_issues if not is_advisory(i)]
                     advisory_issues = [i for i in all_issues if is_advisory(i)]
@@ -100,10 +119,7 @@ class ReviewOrchestrator:
                             raise ValueError("Validation failed after the only repair.")
                         emit(
                             "repair_start",
-                            {
-                                "issue_count": len(fatal_issues),
-                                "codes": codes_of(fatal_issues),
-                            },
+                            validation_data(fatal_issues),
                         )
                         context = self.repair(context, fatal_issues)
                         repaired = True
@@ -115,10 +131,7 @@ class ReviewOrchestrator:
                         if remaining_fatal:
                             emit(
                                 "repair_failed",
-                                {
-                                    "issue_count": len(remaining_fatal),
-                                    "codes": codes_of(remaining_fatal),
-                                },
+                                validation_data(remaining_fatal),
                             )
                             raise ValueError("Validation failed after the only repair.")
                 emit("step_complete", {"step": name})

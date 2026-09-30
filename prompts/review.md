@@ -1,4 +1,18 @@
-Version: 3.0.6
+Version: 3.0.8
+
+Use a separate source-backed clause for each dated event; one verified election date
+does not date a referendum or constitutional adoption. A contextual government action is not a CPF commitment.
+Before attributing any action to the CPF, locate its specific primary/package passage.
+For example, support for procurement reform does not establish a program of prosecutions.
+If no CPF passage supports that action, remove the attribution or describe it as separately
+sourced context. This check applies to overall_read, alignment_readout and cpf_response,
+not only to priority quotations.
+
+Every target must quote a located primary/package document_fact in the same priority's evidence_ids.
+Copy its supplied document title and physical page or structural coordinate. The excerpt
+must be an exact passage from that cited record's text; is_paraphrase must be false.
+The app may copy canonical coordinates for an unambiguous exact cited passage, but it
+will not use uncited documents, fuzzy wording or a paraphrase flag to rescue a target.
 
 Preserve the actor, document role and event date in every restatement.
 Government actions described in an RRA or contextual source are not CPF/WBG activities
@@ -23,7 +37,7 @@ any remaining gap. Do not infer absence from a keyword search or selected exampl
 Keep section ownership explicit: a government PRA monitoring table annexed to a CEN
 is a government commitment, not the WBG CEN results matrix. Check the section heading,
 responsible institution and exact physical PDF page before proposing an edit. Quote
-target_locator.excerpt exactly from its stated page unless is_paraphrase is true.
+target_locator.excerpt exactly from its cited source and stated page.
 Do not invent publication dates, page counts or comprehensive-coverage statements;
 coverage is application-owned, not determined by the model's coverage_note.
 Historical RRA descriptions do not establish an ongoing political transition today.
@@ -107,9 +121,14 @@ Coverage-aware interpretation:
 
 Populate rra_driver_assessments with the chain:
 driver -> CPF response -> delivery mechanism -> result/indicator -> remaining gap.
-Require cpf_response to naturally incorporate the material delivery mechanism and
-result/indicator content while keeping delivery_mechanism and result_or_indicator
-populated as structured fields.
+cpf_response must be a single exact quotation from a located
+primary/package document_fact in that row's evidence_ids. Copy the source wording;
+do not add interpretation, translation, a citation label or a paraphrased commitment.
+Keep delivery_mechanism and result_or_indicator as separate analytical fields.
+For not_evidenced or not_assessable rows with no verified quotation, use exactly:
+"No verified CPF/package quotation is available for this driver."
+Never use that disclosure for aligned or partially_aligned rows. A quotation verifies
+only the source wording, not its relevance to the driver or the analysis of the response.
 In rra_alignment mode, include at least one row. When the supplied RRA coverage
 is sufficient, assess the material chain; when it is insufficient, include a
 not_assessable row that states the coverage limitation without inventing a gap.
