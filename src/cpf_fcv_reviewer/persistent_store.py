@@ -5,7 +5,7 @@ import json
 import sqlite3
 from collections import deque
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
 from uuid import uuid4
