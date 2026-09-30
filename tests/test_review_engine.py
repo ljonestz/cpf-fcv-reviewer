@@ -1764,7 +1764,13 @@ class FakeAnthropicClient:
         self.messages = FakeMessages(response)
 
 
-def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
+@pytest.mark.parametrize(
+    ("prompt_name", "max_tokens"),
+    [("review", 20000), ("repair", 20000), ("diagnostic_map", 12000), ("fcv_readout", 12000)],
+)
+def test_anthropic_gateway_sends_json_and_validates_model_response(
+    monkeypatch, prompt_name, max_tokens,
+):
     meta = metadata()
     expected = draft_for(meta)
     response = SimpleNamespace(
@@ -1776,7 +1782,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     gateway = AnthropicModelGateway("test-key", "test-model")
 
     actual = gateway.generate(
-        prompt_name="review",
+        prompt_name=prompt_name,
         payload={"accented": "Résilience"},
         output_type=ReviewDraft,
     )
@@ -1784,8 +1790,8 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     assert actual == expected
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
-    assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.6")
+    assert call["max_tokens"] == max_tokens
+    assert call["system"] == model_gateway.load_prompt(prompt_name)
     assert call["output_config"] == {
         "format": {"type": "json_schema", "schema": transform_schema(ReviewDraft.model_json_schema())}
     }

@@ -58,7 +58,9 @@ class AnthropicModelGateway:
 
         response = self.client.messages.create(
             model=self.model_id,
-            max_tokens=12000,
+            # Full ReviewDraft JSON exceeded 12k in paid acceptance. Keep the
+            # larger allowance confined to review/repair, with no extra calls.
+            max_tokens=20000 if prompt_name in {"review", "repair"} else 12000,
             system=load_prompt(prompt_name),
             messages=[
                 {

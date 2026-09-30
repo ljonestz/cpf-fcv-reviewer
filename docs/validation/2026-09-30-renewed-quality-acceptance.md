@@ -99,6 +99,42 @@ verifier or evidence that the failed Chad output was repaired. New tests failed 
 these changes; 184 focused provider-free checks now pass. Local Ruff execution remains
 blocked by Windows Application Control; the Linux CI name check is authoritative.
 
+## Tajikistan failed on 6db3b7f; response-capacity repair
+
+The third renewed admission used all 99 CPF pages and the 46-page RRA (45 readable).
+Extraction through mapping completed, but the review generation ended with the provider's
+`max_tokens` stop reason. The safe terminal code is `model_output_truncated`; no findings,
+Word downloads or assistant response were released, and no identical schema retry was
+made. The saved failure screenshot explains the limit and that a new submission consumes
+another allowance. Four screenshots have zero console, page or resource errors. Total
+elapsed time was approximately 8.7 minutes. This is the third consumed admission.
+
+The shorter-output prompt alone did not prevent truncation. The review and repair output
+ceiling is now 20,000 tokens; diagnostic mapping and FCV readout stay at 12,000. Four new
+admissions per UTC day, assistant quotas, input bounds and internal call-count bounds are
+unchanged. This increases the maximum possible output charge inside an assessment; it
+does not add a paid assessment or hosting cost. The owner-approved ceiling is a count of
+assessments, not an exact monetary limit. Provider-account budgets remain required for a
+monetary ceiling. The provider's read-only Models API returned HTTP 200 for the configured
+Sonnet 4.5 alias and a 64,000-token output maximum; no generation was made by that check.
+[Anthropic's structured-output guidance](https://platform.claude.com/docs/en/build-with-claude/structured-outputs#invalid-outputs)
+also documents incomplete JSON at the output limit. Two capacity regressions failed before
+the change, and 166 focused provider-free checks passed afterward. Full paid acceptance
+of this increased capacity remains pending; Chad and Tajikistan were not repeated.
+
+Full Linux CI on `6db3b7f` passed 1,676 tests and the Python name checks. Independent
+gateway review found no concrete defect and verified schema equivalence with the prior
+SDK path, safe failure propagation and no new rejected-content logging. The unchanged
+browser runner's renewed smoke 05 saved 11 passing checks and nine screenshots with zero
+browser errors, then stalled during teardown and was interrupted after PASS.
+
+Historical accepted Guinea was re-exported through the repaired Word builder without
+provider calls. Both new DOCX packages reopen and preserve the exact populated metadata
+limitation once before Overall assessment. An 84-identifier paragraph/XML scan found
+no matches. These are clearly labelled historical re-exports, not new quality runs.
+Word visual pagination remains unverified because the available renderer cannot run and
+LibreOffice is unavailable; package/content checks do not establish page layout.
+
 ## Input preflight and remaining acceptance
 
 Provider-free full extraction and actual-registry estimates passed for Guinea, Chad,
@@ -108,6 +144,6 @@ map excerpts and current research. Gambia is only about 3,005 estimated tokens b
 quality case to avoid a predictable capacity failure. Afghanistan's uploaded RRA is
 recognized but its cover publication date is unestablished. It must not be invented.
 
-Two authorized quality attempts remain. Tajikistan and Afghanistan are pending.
+One authorized quality attempt remains. Afghanistan is pending.
 Durable live hosting, provider-account budget controls, live restart and backup/restore
 acceptance remain outside this local validation. Production readiness is conditional.
