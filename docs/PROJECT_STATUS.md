@@ -1,5 +1,21 @@
 # Project status
 
+## 2026-09-30 Source reference follow-up
+
+The owner approved verified CPF/package quotations in the RRA response column, with
+separate delivery/results analysis. Candidate `88220ed` implements this, source-location
+display, cited-only target resolution, preservation of repaired source links, bounded
+percentage guards and safe locator reason/count diagnostics. Final focused checks passed
+105 tests; final synthetic Edge acceptance passed 11/11 with screenshots, JSON and both
+Word downloads. The independent public-source check passed 17/17 across four PDFs. Full
+Linux CI for Word-expectation follow-up `90a8379` passed 1,715 tests and Python name/import
+checks. See the
+[source-reference record](validation/2026-09-30-source-reference-reliability.md).
+
+No new paid assessment or deployment occurred. The earlier four renewed admissions are
+consumed; fresh country factual acceptance, the real assistant, Word visual pagination
+and durable hosting remain outstanding. Routine production acceptance is not achieved.
+
 ## 2026-09-30 Renewed local quality acceptance
 
 The owner authorized four additional quality assessments and deferred new hosting cost.

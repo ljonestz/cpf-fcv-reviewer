@@ -27,30 +27,30 @@ No new dependency, model call, admission, output-token ceiling or hosting change
 
 ## Work and acceptance
 
-- [ ] Add failing regressions in `tests/test_source_grounding.py` for cited-ID scope,
+- [x] Add failing regressions in `tests/test_source_grounding.py` for cited-ID scope,
   paraphrase bypass, punctuation-only/partial-word excerpts and safe reason categories.
   Add `tests/test_reference_resolution.py` for exact source copying, unique cited-source
   resolution, preserved ambiguity, and both initial review and repair integration.
-- [ ] Implement the shared matcher in `src/cpf_fcv_reviewer/source_grounding.py`.
+- [x] Implement the shared matcher in `src/cpf_fcv_reviewer/source_grounding.py`.
   Use it in `validators.py` and `review_engine.py`; preserve the public result contract.
-- [ ] Carry only allowlisted locator reason/count aggregates through `runtime.py` and
+- [x] Carry only allowlisted locator reason/count aggregates through `runtime.py` and
   `orchestrator.py`. Add red/green event tests proving no messages, IDs or rejected values
   enter public failure events. Preserve the existing bounded repair-call behavior.
-- [ ] Add a narrow source-backed percentage recommendation guard and regressions for
+- [x] Add a narrow source-backed percentage recommendation guard and regressions for
   the observed invented numerical triggers. It checks stated values, not semantic
   entailment: matching a number never establishes the underlying recommendation's truth.
   Supply source text/roles needed by the existing repair rather than making new calls.
-- [ ] Update versioned review/repair prompts to require cited exact anchors and separate
+- [x] Update versioned review/repair prompts to require cited exact anchors and separate
   CPF commitments, contextual government acts, dated events and proposed measures.
   Do not represent prompt instructions as a deterministic factual verifier.
-- [ ] Add red/green quoted-response regressions for primary/package ownership, cited-ID
+- [x] Add red/green quoted-response regressions for primary/package ownership, cited-ID
   scope, source copying, absence disclosures, repair preservation and browser/Word parity.
-- [ ] Run focused provider-free tests, then the existing smoke/runtime checks and full
+- [x] Run focused provider-free tests, then the existing smoke/runtime checks and full
   Linux CI. Inspect the actual diff and inspect real source-anchor regression results.
   Preserve the earlier four-attempt ledger and safe-failure records unchanged.
-- [ ] Check an installed no-cost Word-rendering path; visually verify new exports if
+- [x] Check an installed no-cost Word-rendering path; visually verify new exports if
   available, otherwise record the exact blocker without installing software.
-- [ ] Commit/push logical checkpoints and update draft PR 39, project status and a new
+- [x] Commit/push logical checkpoints and update draft PR 39, project status and a new
   dated validation record. Keep known date/actor semantic defects pending fresh source
   acceptance; do not release unvalidated output, merge or deploy.
 

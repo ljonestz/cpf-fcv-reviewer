@@ -1,5 +1,22 @@
 # Production readiness
 
+## Source reference follow-up - 2026-09-30
+
+The candidate now verifies RRA CPF responses as quotations from their cited CPF/package
+records and shows analytical delivery/results fields separately, with a readable source
+location. It resolves target coordinates only from unambiguous cited passages, preserves
+repaired source links and rejects unsupported percentage recommendations. Final focused
+checks passed 105 tests, synthetic Edge acceptance passed 11/11 and four-source mechanical
+checks passed 17/17. Full Linux CI for `90a8379` passed 1,715 tests and Python name/import
+checks. The
+[dated source-reference record](validation/2026-09-30-source-reference-reliability.md)
+states the limits of these checks.
+
+Production acceptance remains unachieved: fresh country factual/model acceptance,
+the revised real assistant, Word pagination and durable storage/restart/restore still need
+verification. All earlier four renewed paid admissions remain consumed; no new paid run,
+merge, deployment or hosting charge occurred.
+
 ## Renewed acceptance - 2026-09-30
 
 Routine production acceptance is not achieved. Four newly authorized local admissions
