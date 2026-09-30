@@ -141,12 +141,31 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         global.EventSource = FakeSource;
         global.fetch = () => { lifecycleMarks.push("result-load"); return new Promise(() => {}); };
 
-        const sentence = (number) => `Sentence ${number} explains the evidenced point.`;
-        const longNarrative = Array.from({length: 9}, (_, index) => sentence(index + 1)).join(" ");
+        const sentenceOf = (prefix, words) => {
+          const parts = prefix.split(/\s+/);
+          return [...parts, ...Array(words - parts.length).fill("detail")].join(" ") + ".";
+        };
+        const narrativeOf = (prefix, count, words) =>
+          Array.from({length: count}, (_, index) =>
+            sentenceOf(`${prefix} ${index + 1} explains the evidenced point`, words)
+          ).join(" ");
+        const longNarrative = narrativeOf("Sentence", 9, 40);
+        const longWhyNarrative = narrativeOf("Violence pathway", 9, 40);
+        const actionSentences = Array.from({length: 9}, (_, index) => sentenceOf(
+          index === 0
+            ? "Proceed only after independent access and conflict-sensitivity checks confirm safe implementation"
+            : `Action ${index + 1} preserves the response while local conditions remain uncertain`,
+          40,
+        ));
+        const longActionNarrative = actionSentences.join(" ");
+        const pathologicalNarrative = sentenceOf(
+          "A single long sentence keeps its complete qualifications and action available to experts",
+          120,
+        );
         const result = {
           metadata: {current_evidence_tier: "reduced", current_evidence_limitation: "Some current evidence was unavailable."},
           overall_read: longNarrative,
-          alignment_readout: longNarrative,
+          alignment_readout: pathologicalNarrative,
           strategy_readout: "Strategy prose.",
           revision_summary: [
             {priority_area_id: "delivery#1", title: "Delivery pathway"},
@@ -162,7 +181,7 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
           }],
           priority_areas: [{
             priority_area_id: "delivery#1", heading: "Delivery pathway", assessment: longNarrative,
-            why_it_matters: longNarrative, recommended_action: longNarrative,
+            why_it_matters: longWhyNarrative, recommended_action: longActionNarrative,
             target_locator: null, comment_reference: null, evidence_ids: [],
           }, {
             priority_area_id: "inclusion#2", heading: "Inclusive services",
@@ -174,7 +193,7 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
             priority_area_id: "jobs#3", heading: "Jobs and livelihoods",
             assessment: "The jobs gap needs a clearer response.",
             why_it_matters: "Livelihoods shape resilience.",
-            recommended_action: "Clarify the jobs pathway and delivery roles.",
+            recommended_action: pathologicalNarrative,
             target_locator: null, comment_reference: null, evidence_ids: [],
           }, {
             priority_area_id: "finance#4", heading: "Climate finance",
@@ -261,15 +280,27 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         const view = hooks.renderDetailedAnalysis(result);
         const summary = hooks.renderFiveMinuteReadout(result);
         const summaryText = summary.textContent;
+        if (!summaryText.includes("For full findings, qualifications, and complete measures, see Detailed analysis.")) {
+          throw Error("five-minute readout omitted its detailed-analysis guidance");
+        }
         if (!(summaryText.indexOf("Overall assessment") < summaryText.indexOf("How well does the CPF respond") &&
               summaryText.indexOf("How well does the CPF respond") < summaryText.indexOf("Strategy prose.") &&
               summaryText.indexOf("Strategy prose.") < summaryText.indexOf("Priority measures"))) {
           throw Error("five-minute hierarchy is incorrect");
         }
+        const overallSummary = findAll(summary, (item) => item?.className?.includes("overall-read"))
+          .map((item) => item.textContent).join(" ");
+        const summarySentences = hooks.splitNarrativeIntoChunks(longNarrative).flat();
+        if (!overallSummary.includes(summarySentences[0] + " " + summarySentences[1]) ||
+            overallSummary.includes(summarySentences[2])) {
+          throw Error("overall summary did not use its complete-sentence word bound");
+        }
+        if (!summaryText.includes("See Detailed analysis for this assessment and its complete qualifications.")) {
+          throw Error("overlong readout sentence was omitted without an explicit pointer");
+        }
         if (!summaryText.includes("The inclusion gap is not yet explicit.") ||
             !summaryText.includes("Name the inclusion response in the CPF.") ||
-            !summaryText.includes("The jobs gap needs a clearer response.") ||
-            !summaryText.includes("Clarify the jobs pathway and delivery roles.")) {
+            !summaryText.includes("The jobs gap needs a clearer response.")) {
           throw Error("priority summaries omitted their gap and response content");
         }
         const summaryPriorityCards = findAll(summary, (item) => item?.className === "priority-area");
@@ -282,17 +313,28 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         }
         const delivery = summaryPriorityCards[0];
         const overview = delivery.children.find((item) => item.className === "priority-assessment");
-        const sentences = hooks.splitNarrativeIntoChunks(longNarrative).flat();
-        const expectedOverview = sentences.slice(0, 2)
-          .concat(sentences.slice(0, 1)).join(" ");
+        const assessmentSentences = hooks.splitNarrativeIntoChunks(longNarrative).flat();
+        const whySentences = hooks.splitNarrativeIntoChunks(longWhyNarrative).flat();
+        const expectedOverview = assessmentSentences.slice(0, 1)
+          .concat(whySentences.slice(0, 1)).join(" ");
         if (overview?.textContent !== expectedOverview || overview.children.length) {
-          throw Error("priority overview must be three plain-text sentences");
+          throw Error("priority overview must keep whole sentences within both word limits");
         }
         const response = delivery.children.find((item) => item.className === "recommended-action");
-        if (!response?.textContent.includes(longNarrative) ||
+        const expectedActionExcerpt = actionSentences.slice(0, 2).join(" ");
+        if (!response?.textContent.includes(expectedActionExcerpt) ||
+            response.textContent.includes(actionSentences[2]) ||
             findAll(response, (item) => item.tagName === "strong")
               .some((item) => item.textContent !== "Recommended response. ")) {
-          throw Error("priority response must preserve the full action without bolding its prose");
+          throw Error("priority response must keep whole qualified sentences within the word bound");
+        }
+        if (!summaryText.includes("See Detailed analysis for the complete recommended measure.")) {
+          throw Error("overlong recommended measure was omitted without an explicit pointer");
+        }
+        if (!view.textContent.includes(summarySentences[8]) ||
+            !view.textContent.includes(actionSentences[8]) ||
+            !view.textContent.includes(pathologicalNarrative)) {
+          throw Error("detailed view lost authoritative full text");
         }
         const detailedPriorityCards = findAll(view, (item) => item?.className === "priority-area");
         if (detailedPriorityCards.length !== 5) throw Error("detailed analysis did not retain all five priority areas");

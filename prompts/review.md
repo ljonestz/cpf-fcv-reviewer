@@ -1,4 +1,18 @@
-Version: 3.0.4
+Version: 3.0.5
+
+Review every supplied primary segment before asserting an absence. Explicitly recognize
+existing IFC advisory work and citizen-engagement mechanisms when present, then narrow
+any remaining gap. Do not infer absence from a keyword search or selected examples.
+Keep section ownership explicit: a government PRA monitoring table annexed to a CEN
+is a government commitment, not the WBG CEN results matrix. Check the section heading,
+responsible institution and exact physical PDF page before proposing an edit. Quote
+target_locator.excerpt exactly from its stated page unless is_paraphrase is true.
+Do not invent publication dates, page counts or comprehensive-coverage statements;
+coverage is application-owned, not determined by the model's coverage_note.
+Historical RRA descriptions do not establish an ongoing political transition today.
+Keep RRA-era, CPF-preparation and assessment-as-of conditions separate. If recent
+verified evidence is missing, qualify the current state and make advice conditional;
+model memory cannot verify a present political state.
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -221,9 +235,9 @@ Maintain these links exactly:
   identifiers. Do not invent registry entries or use that field for policy
   determinations.
 
-The model authors coverage_note, not document filenames. Write coverage_note as
-a concise account of evidence coverage, role distinctions, important gaps, and
-uncertainty. Do not invent, copy, or emit application-owned metadata, filenames,
+The model supplies coverage_note as a required schema field; the application replaces
+it with measured readable-text coverage. Put material analytical uncertainty in
+limitations. Do not invent, copy, or emit application-owned metadata, filenames,
 run identifiers, timestamps, hashes, model identifiers, registry versions,
 prompt versions, or validation outcomes.
 

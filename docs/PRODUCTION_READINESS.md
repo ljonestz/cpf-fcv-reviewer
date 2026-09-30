@@ -1,5 +1,15 @@
 # Production readiness
 
+## Production repair candidate - 2026-09-30
+
+The owner selected open public access with a global four-assessment UTC-day ceiling.
+Candidate repairs add persistent quotas, bounded review/assistant/stream capacity,
+complete readable primary/package input, actual provenance and concise summary views.
+The [dated acceptance record](validation/2026-09-30-production-readiness-repairs.md)
+separates mechanical verification from model-quality acceptance and lists the durable
+Render configuration and SQLite backup/restore procedure. No new paid assessment or
+live deployment is recorded. Routine production acceptance remains pending those checks.
+
 ## Grounding release deployed - 2026-09-10
 
 Application **992c35a** (PR 36) is live with source-grounding and temporal-qualification

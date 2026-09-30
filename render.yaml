@@ -30,6 +30,20 @@ services:
         value: "86400"
       - key: WORKER_POLL_SECONDS
         value: "1"
+      - key: ALLOW_VOLATILE_PROTOTYPE
+        value: "false"
+      - key: PUBLIC_REVIEW_DAILY_LIMIT
+        value: "4"
+      - key: TRUST_RENDER_PROXY
+        value: "true"
+      - key: PUBLIC_CLIENT_REVIEW_HOURLY_LIMIT
+        value: "2"
+      - key: PUBLIC_ASSISTANT_DAILY_LIMIT
+        value: "12"
+      - key: MAX_PENDING_ASSESSMENTS
+        value: "4"
+      - key: MAX_EVENT_STREAMS
+        value: "8"
       - key: REGISTRY_BUNDLE_PATH
         value: registry_bundles/cpf_fcv_reviewer_public_guardrails_v1.1.0.json
       - key: REGISTRY_BUNDLE_SHA256

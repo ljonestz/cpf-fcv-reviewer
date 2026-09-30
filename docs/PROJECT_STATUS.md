@@ -1,5 +1,20 @@
 # Project status
 
+## 2026-09-30 Production repair candidate
+
+The four-country public-document audit identified an unbounded spending/queue risk,
+partial primary coverage, inconsistent package bounds, metadata/diagnostic-date defects,
+and material source-grounding and readout issues. The owner selected a public pilot
+with four new paid assessments per UTC day. Candidate branch
+`fix/production-readiness-20260930` implements admission/concurrency limits, full readable
+primary/package evidence, safe failures, actual runtime provenance and bounded summaries.
+See the [repair acceptance record](validation/2026-09-30-production-readiness-repairs.md).
+
+Live release remains `992c35a` with volatile storage. Durable hosting and new model-quality
+acceptance remain pending. The original four paid audit assessments exhausted that
+validation ceiling; no additional paid assessment was submitted. Historical records below
+remain descriptions of their respective releases.
+
 ## 2026-09-10 Deployed: grounded recommendations
 
 PR 36 is merged; **992c35a** is live. Render and TLS-verified health confirm the

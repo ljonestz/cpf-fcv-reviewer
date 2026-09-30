@@ -277,7 +277,9 @@ const failureLabels = {
   diagnostic_coverage_unavailable: "The uploaded diagnostic could not be assessed in full. Upload a shorter or text-searchable version, or start a new review without it.",
   package_coverage_unavailable: "The accompanying package could not be reviewed in full. Upload fewer, shorter, or text-searchable package documents.",
   review_schema_invalid: "The review could not be completed.",
-  review_failed: "The review could not be completed.",
+  review_failed: "Validation could not establish a reliable review. No findings were released. Check the source documents before starting another paid assessment.",
+  review_coverage_unavailable: "The primary document and package exceed the full-review input limit. Upload a shorter primary document or fewer annexes; text is never silently omitted.",
+  assessment_interrupted: "The service restarted during this assessment. It was not automatically rerun. A new submission uses another assessment allowance.",
 };
 
 function setProgressRunningPresentation(running) {
@@ -523,6 +525,30 @@ function splitNarrativeIntoChunks(value) {
     chunks.push(sentences.slice(index, index + 4));
   }
   return chunks;
+}
+
+async function safeRequestMessage(response, fallback) {
+  if (response.status !== 429 && response.status !== 503 && response.status !== 400) return fallback;
+  try {
+    const body = await response.json();
+    return typeof body?.error === "string" ? body.error : fallback;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function summaryExcerpt(value, maxSentences, maxWords, placeholder) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+  const selected = [];
+  let wordCount = 0;
+  for (const sentence of splitNarrativeIntoChunks(source).flat()) {
+    const sentenceWords = sentence.split(/\s+/).filter(Boolean).length;
+    if (selected.length === maxSentences || wordCount + sentenceWords > maxWords) break;
+    selected.push(sentence);
+    wordCount += sentenceWords;
+  }
+  return selected.join(" ") || placeholder;
 }
 
 function renderNarrative(value, className = "") {
@@ -803,15 +829,31 @@ function renderRevisionSummary(result, anchorIds) {
     const anchorId = anchorIds.get(String(priorityAreaIndex));
     const card = document.createElement("section");
     card.className = "priority-area";
+    const overview = [
+      summaryExcerpt(
+        area?.assessment,
+        2,
+        55,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
+      summaryExcerpt(
+        area?.why_it_matters,
+        1,
+        40,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
+    ].filter(Boolean).join(" ");
     card.append(
       text("h3", item.title),
-      text("p", [
-        ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
-        ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
-      ].join(" "), "priority-assessment"),
+      text("p", overview, "priority-assessment"),
       labelledParagraph(
         "Recommended response",
-        area?.recommended_action || "",
+        summaryExcerpt(
+          area?.recommended_action,
+          3,
+          80,
+          "See Detailed analysis for the complete recommended measure.",
+        ),
         "recommended-action",
       ),
     );
@@ -905,16 +947,38 @@ function renderFiveMinuteReadout(result) {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
   fragment.append(
     text("p", "Five-minute readout", "read-time"),
+    text(
+      "p",
+      "For full findings, qualifications, and complete measures, see Detailed analysis.",
+    ),
     text("h2", "Overall assessment"),
-    renderNarrative(result.overall_read, "overall-read"),
+    renderNarrative(
+      summaryExcerpt(
+        result.overall_read,
+        3,
+        100,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
+      "overall-read",
+    ),
     renderReadoutPanel(
       "How well does the CPF respond to the RRA and current FCV dynamics?",
-      result.alignment_readout,
+      summaryExcerpt(
+        result.alignment_readout,
+        3,
+        100,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
       "readout-panel-rra",
     ),
     renderReadoutPanel(
       "How does the CPF contribute to current FCV Strategy priorities?",
-      result.strategy_readout,
+      summaryExcerpt(
+        result.strategy_readout,
+        3,
+        100,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
       "readout-panel-strategy",
     ),
     text("h2", "Priority measures to strengthen the CPF / CEN"),
@@ -1171,7 +1235,12 @@ async function sendAssistantMessage(event) {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({message}),
     });
-    if (!response.ok) throw new Error("Assistant request failed.");
+    if (!response.ok) {
+      failed = true;
+      assistantMessage.remove();
+      setAssistantStatus(await safeRequestMessage(response, "The assistant is unavailable. Try later."));
+      return;
+    }
     await consumeAssistantStream(response, (eventName, data) => {
       if (
         requestAssessmentId !== assessmentId
@@ -1337,13 +1406,13 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
   });
   source.addEventListener("expired", () => {
     if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
-    showRecoverableFailure("This volatile review session expired. Upload again.");
+    showRecoverableFailure("This review session expired. Start a new assessment if needed.");
   });
   source.onerror = () => {
     if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
     sourceErrors += 1;
     if (sourceErrors >= SOURCE_ERROR_LIMIT && closeActiveSource(source)) {
-      showRecoverableFailure("The review connection was interrupted. Return to intake and try again.");
+      showRecoverableFailure("The review connection was interrupted. Refresh this page to reconnect to the existing assessment.");
     }
   };
 }
@@ -1365,7 +1434,7 @@ form.addEventListener("submit", async (event) => {
     });
     if (!isCurrentOperation(operation)) return;
     if (!response.ok) {
-      showRecoverableFailure("The review could not start. Return to intake and try again.");
+      showRecoverableFailure(await safeRequestMessage(response, "The review could not start. Return to intake and try again."));
       return;
     }
     const created = await response.json();
@@ -1392,9 +1461,9 @@ async function retryResearch() {
     if (!isCurrentOperation(operation)) return;
     if (!response.ok) {
       if (response.status === 410) {
-        showRecoverableFailure("This volatile review session expired. Upload again.");
+        showRecoverableFailure("This review session expired. Start a new assessment if needed.");
       } else {
-        showResearchFailure("Research could not restart. Retry research, or start a new review.");
+        showResearchFailure(await safeRequestMessage(response, "Research could not restart. Retry research, or start a new review."));
       }
       return;
     }
@@ -1424,7 +1493,7 @@ submitCorrection.addEventListener("click", async () => {
     });
     if (!isCurrentOperation(operation)) return;
     if (!response.ok) {
-      showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
+      showRecoverableFailure(await safeRequestMessage(response, "The correction could not be applied. Return to intake and try again."));
       return;
     }
     const child = await response.json();
@@ -1563,7 +1632,7 @@ async function resetReview() {
     if (isCurrentOperation(resetEpoch)) {
       const notice = purgeConfirmed
         ? ""
-        : "The review was cleared from this browser, but server purge was not confirmed. Any remaining volatile state will expire.";
+        : "The review was cleared from this browser, but server purge was not confirmed. Any remaining review state will expire.";
       showLanding(notice);
     }
     resetPending = false;

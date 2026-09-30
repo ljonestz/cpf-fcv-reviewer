@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import datetime
 from hashlib import sha256
@@ -12,6 +13,25 @@ def sha256_bytes(value: bytes) -> str:
     return sha256(value).hexdigest()
 
 
+def _registry_bundle_version(registry_bundle: bytes) -> str:
+    try:
+        bundle = json.loads(registry_bundle)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return "unknown"
+    version = bundle.get("version") if isinstance(bundle, dict) else None
+    return version.strip() if isinstance(version, str) and version.strip() else "unknown"
+
+
+def _prompt_bundle_version(prompt_bytes: Mapping[str, bytes]) -> str:
+    versions = []
+    for name, content in sorted(prompt_bytes.items()):
+        header = content.partition(b"\n")[0].decode("utf-8", errors="replace").strip()
+        declared = header.partition(":")[2].strip() if header.startswith("Version:") else ""
+        version = declared or f"sha256:{sha256_bytes(content)}"
+        versions.append(f"{name}:{version}")
+    return ";".join(versions) if versions else "none"
+
+
 def build_run_metadata(
     *,
     run_id: str,
@@ -21,6 +41,9 @@ def build_run_metadata(
     diagnostic_mode: DiagnosticMode | str,
     current_evidence_tier: CurrentEvidenceTier | str = CurrentEvidenceTier.FULL,
     current_evidence_limitation: str | None = None,
+    app_release: str | None = None,
+    prompt_bundle_version: str | None = None,
+    registry_bundle_version: str | None = None,
     documents: Mapping[str, bytes],
     registry_bundle: bytes,
     guidance: str,
@@ -40,11 +63,13 @@ def build_run_metadata(
         review_stage=review_stage,
         detail_level=detail_level,
         diagnostic_mode=diagnostic_mode,
-        app_release="0.1.0",
+        app_release=app_release or "dev",
         schema_version="1.0.0",
         rubric_version="1.0.0",
-        prompt_bundle_version="1.0.0",
-        registry_versions={"bundle": "2026.08"},
+        prompt_bundle_version=prompt_bundle_version or _prompt_bundle_version(prompt_bytes),
+        registry_versions={
+            "bundle": registry_bundle_version or _registry_bundle_version(registry_bundle)
+        },
         model_id=model_id,
         current_evidence_tier=current_evidence_tier,
         current_evidence_limitation=current_evidence_limitation,

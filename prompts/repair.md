@@ -1,4 +1,13 @@
-Version: 3.0.4
+Version: 3.0.5
+
+For target_locator_mismatch, use only source_grounding_evidence to correct the
+document, physical PDF page and exact excerpt. Preserve the owning institution:
+government annex commitments must not become WBG CPF/CEN results. If no supplied
+source supports the target, do not invent one; unresolved output will be withheld.
+For unsupported_current_state, remove or qualify the ongoing-transition assertion
+unless supplied recent verified evidence supports it. Historical RRA conditions and
+model memory do not verify a present political state. Preserve actual CPF provisions
+before describing any remaining gap. The application owns document coverage.
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is

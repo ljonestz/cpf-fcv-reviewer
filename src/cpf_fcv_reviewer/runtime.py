@@ -39,6 +39,7 @@ from .extraction import (
     DocumentUnreadable,
     ExtractionLimitExceeded,
     PackageCoverageUnavailable,
+    ReviewCoverageUnavailable,
     extract_document,
     require_readable_primary,
 )
@@ -60,7 +61,8 @@ from .research_controller import (
     ResearchMode,
     ResearchRequest,
 )
-from .review_engine import ReviewEngine
+from .review_engine import REVIEW_MAX_ESTIMATED_INPUT_TOKENS, ReviewEngine
+from .review_profiles import STAGE_PROFILES
 from .sources import choose_authoritative_source
 from .validators import (
     matched_prohibited_policy_phrases,
@@ -588,7 +590,7 @@ def _extract_optional_uploads(
                     name,
                     max_pdf_pages=OPTIONAL_PDF_SAMPLE_PAGES,
                     sample_pdf_across_document=True,
-                    max_segments=DIAGNOSTIC_MAX_PAGES,
+                    max_segments=PACKAGE_MAX_SEGMENTS_TOTAL if strict_package else DIAGNOSTIC_MAX_PAGES,
                     max_characters=DIAGNOSTIC_MAX_CHARACTERS,
                     max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
                 )
@@ -596,7 +598,7 @@ def _extract_optional_uploads(
                 document = extract_document(
                     data,
                     name,
-                    max_segments=DIAGNOSTIC_MAX_PAGES,
+                    max_segments=PACKAGE_MAX_SEGMENTS_TOTAL if strict_package else DIAGNOSTIC_MAX_PAGES,
                     max_characters=DIAGNOSTIC_MAX_CHARACTERS,
                     max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
                 )
@@ -642,6 +644,21 @@ def _validate_full_package_documents(documents: tuple) -> None:
         raise PackageCoverageUnavailable("Package character budget exceeded.")
 
 
+def _require_review_input_budget(context: dict) -> None:
+    """Reject a known raw-text overflow before paid research; final payload is checked later."""
+    documents = [context["primary_document"]]
+    diagnostic_position = (context.get("diagnostic_document_position")
+                           if context.get("diagnostic_document_role") is DocumentRole.PACKAGE
+                           and context.get("full_diagnostic_document") is not None else None)
+    documents.extend(document for index, document in enumerate(context.get("package_documents", ()))
+                     if index != diagnostic_position)
+    # Diagnostic mapping replaces its raw pages in the final review; do not count them twice.
+    serialized = json.dumps([segment.text for document in documents for segment in document.segments],
+                            ensure_ascii=False, separators=(",", ":"))
+    if (max(len(serialized), len(serialized.encode("utf-8"))) + 2) // 3 > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
+        raise ReviewCoverageUnavailable("Complete documents exceed the safe review input budget.")
+
+
 def _reextract_full_package_documents(context: dict) -> None:
     documents = list(context.get("package_documents", ()))
     uploads = tuple(context.get("package_document_uploads", ()))
@@ -657,10 +674,10 @@ def _reextract_full_package_documents(context: dict) -> None:
             document = extract_document(
                 upload["bytes"],
                 upload["name"],
-                max_pdf_pages=DIAGNOSTIC_MAX_PAGES,
+                max_pdf_pages=PACKAGE_MAX_SEGMENTS_TOTAL,
                 sample_pdf_across_document=False,
-                max_segments=DIAGNOSTIC_MAX_PAGES,
-                max_characters=DIAGNOSTIC_MAX_CHARACTERS,
+                max_segments=PACKAGE_MAX_SEGMENTS_TOTAL,
+                max_characters=PACKAGE_MAX_CHARACTERS_TOTAL,
                 max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
             )
         except EXPECTED_OPTIONAL_EXTRACTION_ERRORS as exc:
@@ -954,6 +971,8 @@ def build_runtime_services(
         payload = context.get("payload")
         if not payload or "cpf" not in payload:
             return context
+        if "review_stage" in payload and payload["review_stage"] not in STAGE_PROFILES:
+            raise ValueError("Unsupported review stage.")
         primary = payload["cpf"]
         primary_document = _extract_primary_document(primary["bytes"], primary["name"])
         require_readable_primary(primary_document)
@@ -1006,9 +1025,8 @@ def build_runtime_services(
                     for index, document in enumerate(context_documents)
                     if index != diagnostic_position
                 )
-        selected_segments = _select_role_segments(
-            DocumentRole.PRIMARY, (primary_document,), 12
-        )
+        selected_segments = tuple((primary_document, segment, DocumentRole.PRIMARY)
+                                  for segment in primary_document.segments)
         context_segments = _select_role_segments(
             DocumentRole.CONTEXT, context_documents, 16
         )
@@ -1023,13 +1041,13 @@ def build_runtime_services(
                         f"{role_counts[document_role]:03d}"
                     ),
                     evidence_type="document_fact",
-                    text=_truncate_at_word_boundary(segment.text, 1600),
+                    text=segment.text,
                     locator=EvidenceLocator(
                         document_title=document.name,
                         page=segment.page,
                         heading=segment.heading,
                         element=segment.element,
-                        excerpt=_truncate_at_word_boundary(segment.text, 600),
+                        excerpt=_truncate_at_word_boundary(segment.text, 160),
                     ),
                     confidence="high",
                     document_role=document_role,
@@ -1195,6 +1213,8 @@ def build_runtime_services(
             guidance=review_focus,
             prompt_bytes=prompt_bytes,
             model_id=config["ANTHROPIC_MODEL_ID"],
+            app_release=config.get("APP_RELEASE", "dev"),
+            registry_bundle_version=bundle.version,
             source_scan_at=datetime.now(UTC),
             output_language="en",
             evidence=tuple(evidence),
@@ -1442,6 +1462,7 @@ def build_runtime_services(
                         + full_diagnostic.warnings
                     )
                 _reextract_full_package_documents(context)
+                _require_review_input_budget(context)
                 review_date = review_date_provider()
                 dated_diagnostic = (
                     uploaded_diagnostic

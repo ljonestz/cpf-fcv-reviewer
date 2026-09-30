@@ -96,6 +96,12 @@ def test_browser_json_exposes_evidence_status_from_review_metadata(make_valid_re
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["metadata"] == result.metadata.model_dump(mode="json")
+    assert payload["overall_read"] == result.overall_read
+    assert payload["alignment_readout"] == result.alignment_readout
+    assert payload["strategy_readout"] == result.strategy_readout
+    assert payload["priority_areas"][0]["recommended_action"] == (
+        result.priority_areas[0].recommended_action
+    )
 
 
 def test_browser_keeps_evidence_limitations_omitted_from_docx(make_valid_result):

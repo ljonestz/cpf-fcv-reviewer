@@ -18,7 +18,7 @@ from .contracts import (
     ReviewDraft,
     ReviewResult,
 )
-from .extraction import PackageCoverageUnavailable
+from .extraction import ReviewCoverageUnavailable
 from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 from .validators import has_diagnostic_date_conflict
@@ -31,6 +31,8 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
     {
         "limited_mode_overclaim",
         "diagnostic_date_conflict",
+        "target_locator_mismatch",
+        "unsupported_current_state",
         "unknown_priority_area",
         "unknown_evidence",
         "raw_evidence_id_in_narrative",
@@ -615,7 +617,8 @@ def _preserve_priority_coverage(original, draft, issue_codes, available_evidence
             continue
         candidate = matches[0]
         updates = {
-            "target_locator": area.target_locator,
+            "target_locator": (candidate.target_locator if "target_locator_mismatch" in issue_codes
+                               else area.target_locator),
             "gap_locus": area.gap_locus,
             "sensitivity": area.sensitivity,
         }
@@ -666,7 +669,7 @@ class ReviewEngine:
         stage_profile = STAGE_PROFILES[stage]
         detail_profile = DETAIL_PROFILES[evidence_pack.metadata.detail_level]
         payload = {
-            "evidence_pack": evidence_pack.model_dump(mode="json"),
+            "evidence_pack": evidence_pack.model_dump(mode="json", exclude_none=True),
             "assessment_as_of": evidence_pack.metadata.created_at.date().isoformat(),
             "stage_profile": _serialize_stage_profile(stage_profile),
             "detail_profile": _serialize_detail_profile(detail_profile),
@@ -678,7 +681,7 @@ class ReviewEngine:
         if current_context_readout is not None:
             payload["current_context_readout"] = current_context_readout
         if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
-            raise PackageCoverageUnavailable(
+            raise ReviewCoverageUnavailable(
                 "Complete review request exceeds the safe request budget."
             )
         try:
@@ -693,7 +696,7 @@ class ReviewEngine:
                 "schema_retry": {"issues": _safe_schema_issues(error)},
             }
             if _estimated_input_tokens(retry_payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
-                raise PackageCoverageUnavailable(
+                raise ReviewCoverageUnavailable(
                     "Complete review request exceeds the safe request budget."
                 )
             try:
@@ -708,7 +711,12 @@ class ReviewEngine:
             primary_document=names[DocumentRole.PRIMARY][0],
             package_documents=names[DocumentRole.PACKAGE],
             context_documents=names[DocumentRole.CONTEXT],
-            coverage_note=draft.coverage_note,
+            coverage_note=(
+                f"All {sum(item.document_role == DocumentRole.PRIMARY for item in evidence_pack.evidence)} "
+                "readable primary segments and all retained package segments were supplied to the review. "
+                "This covers extracted text, not non-extractable figures or images. "
+                "Supporting context may be sampled; coverage limitations remain material."
+            ),
         )
         content = draft.model_dump(exclude={"coverage_note"})
         return ReviewResult(
@@ -761,9 +769,7 @@ class ReviewEngine:
             and item.source_url
             and item.supporting_quote
         ]
-        draft = self.gateway.generate(
-            prompt_name="repair",
-            payload={
+        repair_payload = {
                 "draft": draft_payload,
                 "assessment_as_of": result.metadata.created_at.date().isoformat(),
                 "validation_issues": issues,
@@ -779,6 +785,12 @@ class ReviewEngine:
                     ),
                 },
                 "repair_support_evidence": current_support,
+                "source_grounding_evidence": [
+                    {"evidence_id": item.evidence_id, "text": item.text,
+                     "locator": item.locator.model_dump(mode="json") if item.locator else None}
+                    for item in support_evidence.values()
+                    if item.document_role in {DocumentRole.PRIMARY, DocumentRole.PACKAGE}
+                ] if any(issue["code"] == "target_locator_mismatch" for issue in issues) else [],
                 "diagnostic_provenance": (
                     result.metadata.diagnostic_provenance.model_dump(mode="json")
                     if result.metadata.diagnostic_provenance is not None else None
@@ -787,9 +799,11 @@ class ReviewEngine:
                 "review_stage": stage,
                 "stage_profile": _serialize_stage_profile(stage_profile),
                 "detail_profile": _serialize_detail_profile(detail_profile),
-            },
-            output_type=ReviewDraft,
-        )
+            }
+        if _estimated_input_tokens(repair_payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
+            raise ReviewCoverageUnavailable("Complete repair request exceeds the safe request budget.")
+        draft = self.gateway.generate(prompt_name="repair", payload=repair_payload,
+                                      output_type=ReviewDraft)
         issue_codes = {issue["code"] for issue in issues}
         if issue_codes and issue_codes <= {
             "stage_length_overreach", "unknown_institutional_referral",
@@ -860,9 +874,7 @@ class ReviewEngine:
             )
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
-        coverage = result.document_coverage.model_copy(
-            update={"coverage_note": draft.coverage_note}
-        )
+        coverage = result.document_coverage
         content = draft.model_dump(exclude={"coverage_note"})
         metadata = result.metadata.model_copy(update={"repair_count": 1})
         return ReviewResult(

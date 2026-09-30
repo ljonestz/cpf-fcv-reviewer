@@ -110,7 +110,8 @@ def test_guided_landing_separates_essential_and_optional_inputs():
     assert 'id="primary-upload"' in html
     assert '<details id="additional-guidance">' in html
     assert "What should the review pay particular attention to?" in html
-    assert "held only for this session" in html
+    assert "retained for 24 hours" in html
+    assert "public pilot" in html.lower()
 
 
 def test_guided_landing_has_three_upload_zones_and_process_dialog():
@@ -813,7 +814,7 @@ def test_failure_screen_stops_presenting_a_running_review():
           throw Error("failure kicker still announces a running review");
         }
         if (!nodes["#progress-title"].focused) throw Error("focus did not move to the failure heading");
-        if (!nodes["#progress-message"].textContent.includes("Review stopped: The review could not be completed.")) {
+        if (!nodes["#progress-message"].textContent.includes("Review stopped: Validation could not establish a reliable review.")) {
           throw Error("failure message text changed");
         }
         if (nodes["#return-to-intake"].hidden) throw Error("failure was not recoverable");

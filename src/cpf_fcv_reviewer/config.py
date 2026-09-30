@@ -47,6 +47,7 @@ def build_config(
         "REGISTRY_BUNDLE_PATH": environment("REGISTRY_BUNDLE_PATH", ""),
         "REGISTRY_BUNDLE_SHA256": environment("REGISTRY_BUNDLE_SHA256", ""),
         "ALLOW_SYNTHETIC_REGISTRY": False,
+        "TRUST_RENDER_PROXY": _environment_bool("TRUST_RENDER_PROXY", use_environment=use_environment),
         "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
         "RESEARCH_MAX_ATTEMPTS": int(environment("RESEARCH_MAX_ATTEMPTS", "1")),
         "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": float(
@@ -80,13 +81,19 @@ def build_config(
             environment("EVENT_STREAM_MAX_SECONDS", "90")
         ),
         "START_BACKGROUND_RUNS": True,
+        "PUBLIC_LIMITS_ENABLED": not overrides.get("TESTING", False),
+        "PUBLIC_REVIEW_DAILY_LIMIT": int(environment("PUBLIC_REVIEW_DAILY_LIMIT", "4")),
+        "PUBLIC_CLIENT_REVIEW_HOURLY_LIMIT": int(environment("PUBLIC_CLIENT_REVIEW_HOURLY_LIMIT", "2")),
+        "PUBLIC_ASSISTANT_DAILY_LIMIT": int(environment("PUBLIC_ASSISTANT_DAILY_LIMIT", "12")),
+        "MAX_PENDING_ASSESSMENTS": int(environment("MAX_PENDING_ASSESSMENTS", "4")),
+        "MAX_EVENT_STREAMS": int(environment("MAX_EVENT_STREAMS", "8")),
         "TESTING": False,
     }
     config.update(overrides or {})
     if not isinstance(config["APP_ENV"], str) or not config["APP_ENV"].strip():
         raise ValueError("APP_ENV must be a nonblank string.")
     config["APP_ENV"] = config["APP_ENV"].strip().casefold()
-    for name in ("SMOKE_MODE", "ALLOW_VOLATILE_PROTOTYPE"):
+    for name in ("SMOKE_MODE", "ALLOW_VOLATILE_PROTOTYPE", "PUBLIC_LIMITS_ENABLED", "TRUST_RENDER_PROXY"):
         if type(config[name]) is not bool:
             raise ValueError(f"{name} must be a boolean.")
     if config["SMOKE_MODE"] and config["APP_ENV"] != "development":
@@ -96,6 +103,11 @@ def build_config(
         "RESEARCH_MINIMUM_CLAIMS",
         "RESEARCH_MINIMUM_PUBLISHERS",
         "SESSION_TTL_SECONDS",
+        "PUBLIC_REVIEW_DAILY_LIMIT",
+        "PUBLIC_CLIENT_REVIEW_HOURLY_LIMIT",
+        "PUBLIC_ASSISTANT_DAILY_LIMIT",
+        "MAX_PENDING_ASSESSMENTS",
+        "MAX_EVENT_STREAMS",
     ):
         if type(config[name]) is not int or config[name] <= 0:
             raise ValueError(f"{name} must be a positive integer.")

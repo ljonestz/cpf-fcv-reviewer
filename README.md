@@ -1,5 +1,10 @@
 # CPF FCV Reviewer
 
+A production repair candidate is available on `fix/production-readiness-20260930`: public
+access with four paid assessment admissions per UTC day, durable quotas, bounded workers
+and streams, full readable primary evidence and concise management views. It is not yet
+deployed. See the [repair acceptance record](docs/validation/2026-09-30-production-readiness-repairs.md).
+
 Application release **992c35a** (PR 36) is deployed and health-verified on 10 September.
 Main CI passed 1,619 tests. Grounding improvements are live; no new paid assessment.
 The open pilot uses one paid 0.5 CPU / 512 MB instance and 16 request threads.
@@ -80,6 +85,17 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 - `PERSISTENCE_PATH` (required in production; use the mounted disk path)
 - `ALLOW_VOLATILE_PROTOTYPE` (set to `true` only for the non-production Render test site)
 - `SESSION_TTL_SECONDS` (optional; production default is 24 hours)
+- `PUBLIC_REVIEW_DAILY_LIMIT` (default 4, global UTC-day admission ceiling)
+- `PUBLIC_CLIENT_REVIEW_HOURLY_LIMIT` (default 2; corrections/research retries also count)
+- `PUBLIC_ASSISTANT_DAILY_LIMIT` (default 12; separate from full assessments)
+- `MAX_PENDING_ASSESSMENTS` (default 4) and `MAX_EVENT_STREAMS` (default 8)
+- `TRUST_RENDER_PROXY` (false locally; true only behind Render's public Cloudflare edge)
+
+Deploy one process/instance. Public limits are enabled outside test fixtures; counters share
+SQLite persistence and cannot be reset by deleting reviews. Admitted failures use an allowance.
+Provider-account spending controls remain necessary for an exact dollar ceiling.
+Use `python -m cpf_fcv_reviewer.database_backup SOURCE NEW_DESTINATION` for a consistent,
+integrity-checked backup; keep backups outside Git.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
@@ -87,7 +103,7 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Download five-minute readout** or **Download full detailed note** before the retained review expires or is reset. The five-minute readout combines up to two assessment sentences and one FCV-relevance sentence per priority, and retains the full recommended action. Both Word downloads carry a short caution about findings and exact dates, with advice to consult a country or FCV expert. The basis/limitations section stays on the website. Word uses standard one-inch margins, left-aligned Calibri text, navy headings, a full-width navy running-header banner that reaches the top page edge, with white text and a teal rule, and subtle shaded action paragraphs; the detailed note retains all assessment sections.
+Use **Download five-minute readout** or **Download full detailed note** before the retained review expires or is reset. The five-minute readout uses whole sentences within explicit word limits for assessments, FCV relevance and recommended responses. It directs readers to Detailed analysis for complete measures and qualifications; the detailed view retains the full text. Both Word downloads carry a short caution about findings and exact dates, with advice to consult a country or FCV expert. The basis/limitations section stays on the website. Word uses standard one-inch margins, left-aligned Calibri text, navy headings, a full-width navy running-header banner that reaches the top page edge, with white text and a teal rule, and subtle shaded action paragraphs; the detailed note retains all assessment sections.
 
 ## Validation and API-cost control
 

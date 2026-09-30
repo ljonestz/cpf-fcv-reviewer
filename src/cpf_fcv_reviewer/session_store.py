@@ -155,7 +155,19 @@ class VolatileSessionStore:
             for candidate_id in lineage_ids:
                 self._items.pop(candidate_id, None)
 
+    def discard_one(self, session_id: str) -> None:
+        """Remove only this session, without following correction lineage."""
+        with self._lock:
+            self._purge_expired(self._clock())
+            self._items.pop(session_id, None)
+
     def count(self) -> int:
         with self._lock:
             self._purge_expired(self._clock())
             return len(self._items)
+
+    def active_count(self) -> int:
+        with self._lock:
+            self._purge_expired(self._clock())
+            return sum(state.payload.get("status") in {"created", "queued", "running"}
+                       for state in self._items.values())

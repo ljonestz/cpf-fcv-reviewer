@@ -60,7 +60,7 @@ def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
         "detail_profile.priority_area_range",
         "every revision_summary priority_area_id resolves to exactly one area",
         "response_to_comments requires comment_reference",
-        "model authors coverage_note",
+        "application replaces it with measured readable-text coverage",
         "Direct evidence_ids are required on every priority area",
         "overall_read synthesizes the evidenced priority areas",
         "revision_summary inherits support through priority_area_id",
@@ -317,7 +317,7 @@ def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 
     for phrase in (
-        "Version: 3.0.4",
+        "Version: 3.0.5",
         "rra_driver_assessments",
         "fcv_strategy_assessments",
         "status",
@@ -418,7 +418,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
 
 @pytest.mark.parametrize(
     ("name", "version"),
-    [("diagnostic_map", "1.2.0"), ("review", "3.0.4"), ("repair", "3.0.4")],
+    [("diagnostic_map", "1.2.0"), ("review", "3.0.5"), ("repair", "3.0.5")],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)

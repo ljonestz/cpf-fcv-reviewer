@@ -33,6 +33,12 @@ ADVISORY_NOTE = (
     "dates with caution, and always use it in consultation with a country or FCV expert. "
     "It is an advisory input, not an institutional clearance or policy determination."
 )
+SUMMARY_ASSESSMENT_PLACEHOLDER = (
+    "See Detailed analysis for this assessment and its complete qualifications."
+)
+SUMMARY_MEASURE_PLACEHOLDER = (
+    "See Detailed analysis for the complete recommended measure."
+)
 
 PAGE_WIDTH_DXA = 9360
 LIST_TEXT_INDENT_DXA = 720
@@ -403,6 +409,26 @@ def _sentence_parts(text: str) -> tuple[str, ...]:
     return tuple(parts)
 
 
+def _summary_excerpt(
+    text: str,
+    *,
+    max_sentences: int,
+    max_words: int,
+    placeholder: str,
+) -> str:
+    if not text.strip():
+        return ""
+    selected = []
+    word_count = 0
+    for sentence in _sentence_parts(text):
+        sentence_words = len(sentence.split())
+        if len(selected) == max_sentences or word_count + sentence_words > max_words:
+            break
+        selected.append(sentence)
+        word_count += sentence_words
+    return " ".join(selected) or placeholder
+
+
 def _readable_chunks(text: str, *, max_sentences: int = 4) -> tuple[str, ...]:
     sentences = _sentence_parts(text)
     return tuple(
@@ -732,15 +758,49 @@ def build_docx(
 
     document.add_heading("Five-minute readout" if summary else "CPF FCV Review", level=0)
     document.add_paragraph(ADVISORY_NOTE)
+    if summary:
+        document.add_paragraph(
+            "For full findings, qualifications, and complete measures, see Detailed analysis."
+        )
 
     document.add_heading("Overall assessment", level=1)
-    _add_readable_paragraph(document, result.overall_read)
+    _add_readable_paragraph(
+        document,
+        _summary_excerpt(
+            result.overall_read,
+            max_sentences=3,
+            max_words=100,
+            placeholder=SUMMARY_ASSESSMENT_PLACEHOLDER,
+        )
+        if summary
+        else result.overall_read,
+    )
     document.add_heading(RRA_ALIGNMENT_QUESTION, level=2)
-    _add_readable_paragraph(document, result.alignment_readout)
+    _add_readable_paragraph(
+        document,
+        _summary_excerpt(
+            result.alignment_readout,
+            max_sentences=3,
+            max_words=100,
+            placeholder=SUMMARY_ASSESSMENT_PLACEHOLDER,
+        )
+        if summary
+        else result.alignment_readout,
+    )
     if not summary:
         _add_rra_assessments(document, result)
     document.add_heading(STRATEGY_ALIGNMENT_QUESTION, level=2)
-    _add_readable_paragraph(document, result.strategy_readout)
+    _add_readable_paragraph(
+        document,
+        _summary_excerpt(
+            result.strategy_readout,
+            max_sentences=3,
+            max_words=100,
+            placeholder=SUMMARY_ASSESSMENT_PLACEHOLDER,
+        )
+        if summary
+        else result.strategy_readout,
+    )
     if not summary:
         _add_strategy_assessments(document, result)
 
@@ -752,13 +812,34 @@ def build_docx(
             area = areas[item.priority_area_id]
             document.add_heading(item.title, level=2)
             overview = (
-                *_sentence_parts(area.assessment)[:2],
-                *_sentence_parts(area.why_it_matters)[:1],
+                *_sentence_parts(
+                    _summary_excerpt(
+                        area.assessment,
+                        max_sentences=2,
+                        max_words=55,
+                        placeholder=SUMMARY_ASSESSMENT_PLACEHOLDER,
+                    )
+                ),
+                *_sentence_parts(
+                    _summary_excerpt(
+                        area.why_it_matters,
+                        max_sentences=1,
+                        max_words=40,
+                        placeholder=SUMMARY_ASSESSMENT_PLACEHOLDER,
+                    )
+                ),
             )
             document.add_paragraph(" ".join(overview))
             response = document.add_paragraph()
             response.add_run("Recommended response: ").bold = True
-            response.add_run(area.recommended_action)
+            response.add_run(
+                _summary_excerpt(
+                    area.recommended_action,
+                    max_sentences=3,
+                    max_words=80,
+                    placeholder=SUMMARY_MEASURE_PLACEHOLDER,
+                )
+            )
         if not items:
             document.add_paragraph("No revision summary was returned for this review.")
     else:

@@ -445,7 +445,9 @@ def test_every_stage_and_detail_injects_serialized_profiles(stage, detail):
         "priority_area_range": list(DETAIL_PROFILES[detail].priority_area_range),
     }
     assert payload["review_focus"] == "Focus on delivery realism."
-    assert payload["evidence_pack"] == evidence_pack(meta).model_dump(mode="json")
+    assert payload["evidence_pack"] == evidence_pack(meta).model_dump(
+        mode="json", exclude_none=True
+    )
     json.dumps(payload)
 
 
@@ -466,7 +468,11 @@ def test_review_derives_deduplicated_role_coverage_and_excludes_model_note():
     )
     assert "Primary.docx" not in result.document_coverage.package_documents
     assert "Primary.docx" not in result.document_coverage.context_documents
-    assert result.document_coverage.coverage_note == "Model-authored note."
+    assert result.document_coverage.coverage_note == (
+        "All 1 readable primary segments and all retained package segments were supplied "
+        "to the review. This covers extracted text, not non-extractable figures or images. "
+        "Supporting context may be sampled; coverage limitations remain material."
+    )
     assert "coverage_note" not in result.model_dump(exclude={"document_coverage"})
     assert gateway.calls[0][2] is ReviewDraft
 
@@ -501,7 +507,7 @@ def test_review_request_budget_allows_exact_boundary_and_rejects_one_token_over(
         candidate = evidence_pack_with_package_text("Evidence from Package-A.docx." + "x" * suffix_length)
         candidate_payload = {
             **payload,
-            "evidence_pack": candidate.model_dump(mode="json"),
+            "evidence_pack": candidate.model_dump(mode="json", exclude_none=True),
         }
         if review_engine._estimated_input_tokens(candidate_payload) == ceiling + 1:
             one_token_over = candidate
@@ -735,7 +741,7 @@ def test_unsupported_review_stage_is_rejected_before_gateway_call():
     assert gateway.calls == []
 
 
-def test_repair_preserves_application_coverage_and_updates_only_note():
+def test_repair_preserves_application_coverage_note_against_model_override():
     meta = metadata()
     initial = result_for(meta)
     repaired_draft = draft_for(meta, coverage_note="Updated coverage note.")
@@ -755,7 +761,7 @@ def test_repair_preserves_application_coverage_and_updates_only_note():
     assert repaired.document_coverage.primary_document == "Primary.docx"
     assert repaired.document_coverage.package_documents == ("Package.docx",)
     assert repaired.document_coverage.context_documents == ("Context.docx",)
-    assert repaired.document_coverage.coverage_note == "Updated coverage note."
+    assert repaired.document_coverage.coverage_note == "Existing coverage note."
     assert repaired.metadata == meta.model_copy(update={"repair_count": 1})
 
 
@@ -825,7 +831,7 @@ def test_repair_scrubs_known_raw_evidence_ids_only_from_narrative_fields():
     assert "the cited evidence" in repaired.fcv_strategy_assessments[0].assessment
     assert "ev-primary-10" in repaired.priority_areas[0].recommended_action
     assert repaired.priority_areas[0].evidence_ids == ("ev-primary-1",)
-    assert repaired.document_coverage.coverage_note == "Coverage includes the cited evidence."
+    assert repaired.document_coverage.coverage_note == "Existing coverage note."
 
 
 def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
@@ -863,6 +869,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         "forbidden_phrases": ("forbidden",),
         "repair_support_evidence_ids": {"current_context": [], "registry_language": []},
         "repair_support_evidence": [],
+        "source_grounding_evidence": [],
         "diagnostic_provenance": None,
         "diagnostic_mode": "rra_alignment",
         "review_stage": "concept_review",
@@ -1775,7 +1782,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.4")
+    assert call["system"].startswith("Version: 3.0.5")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 

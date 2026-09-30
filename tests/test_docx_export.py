@@ -13,6 +13,7 @@ from cpf_fcv_reviewer.contracts import (
     AssessmentStatus,
     CurrentEvidenceTier,
     DiagnosticMode,
+    RevisionSummaryItem,
 )
 from cpf_fcv_reviewer.export_docx import (
     RRA_ALIGNMENT_QUESTION,
@@ -786,3 +787,140 @@ def test_five_minute_export_preserves_actions_and_limits_detail(make_valid_resul
     assert not any(run.bold for run in overview.runs)
     action = next(p for p in paragraphs if "First action." in p.text)
     assert all(not run.bold for run in action.runs if "First action." in run.text)
+
+
+def test_five_minute_summary_is_concise_without_cutting_sentences(make_valid_result):
+    result, evidence = make_valid_result
+
+    def sentence(prefix, words):
+        parts = prefix.split()
+        return " ".join(
+            (*parts, *(f"detail{index}" for index in range(words - len(parts) - 1)), "confirmed.")
+        )
+
+    def field(label, count, words):
+        return " ".join(
+            sentence(
+                f"The {label} finding {index + 1} remains advisory until "
+                "independent checks confirm",
+                words,
+            )
+            for index in range(count)
+        )
+
+    areas = []
+    summaries = []
+    full_actions = []
+    for index in range(1, 4):
+        area_id = f"pa-{index}"
+        action_sentences = tuple(
+            sentence(prefix, 26)
+            for prefix in (
+                "Proceed only after independent access checks confirm safe implementation",
+                "Keep the response phased while local conditions remain uncertain",
+                "Use existing systems where they can reach affected communities",
+                "Retain the complete measure in the detailed analysis",
+            )
+        )
+        areas.append(
+            result.priority_areas[0].model_copy(
+                update={
+                    "priority_area_id": area_id,
+                    "heading": f"Priority area {index}",
+                    "assessment": field("access risk", 3, 26),
+                    "why_it_matters": " ".join(
+                        (
+                            sentence(
+                                "Violence can disrupt service delivery and deepen exclusion "
+                                "through loss of access",
+                                36,
+                            ),
+                            sentence(
+                                "A later implication should remain in the detailed assessment",
+                                36,
+                            ),
+                        )
+                    ),
+                    "recommended_action": " ".join(action_sentences),
+                }
+            )
+        )
+        full_actions.append(action_sentences)
+        summaries.append(
+            RevisionSummaryItem(
+                priority_area_id=area_id,
+                title=f"Priority measure {index}",
+            )
+        )
+
+    overall_read = field("overall", 3, 40)
+    result = result.model_copy(
+        update={
+            "overall_read": overall_read,
+            "alignment_readout": field("RRA alignment", 3, 40),
+            "strategy_readout": field("strategy alignment", 3, 40),
+            "revision_summary": tuple(summaries),
+            "priority_areas": tuple(areas),
+        }
+    )
+
+    summary_document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=(), summary=True))
+    )
+    summary_text = "\n".join(paragraph.text for paragraph in summary_document.paragraphs)
+    detail_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    )
+
+    assert 800 <= len(summary_text.split()) <= 1000
+    assert (
+        "For full findings, qualifications, and complete measures, see Detailed analysis."
+        in summary_text
+    )
+    assert full_actions[0][0] in summary_text
+    assert full_actions[0][3] not in summary_text
+    assert "Retain the complete measure in the detailed analysis" in detail_text
+    assert full_actions[0][3] in detail_text
+    assert overall_read.split(". ")[2] not in summary_text
+    assert overall_read.split(". ")[2] in detail_text
+
+
+def test_summary_points_to_full_text_when_first_sentence_exceeds_word_bound(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    assessment = "This finding remains conditional on verified access before implementation " + (
+        "detailed " * 110
+    ) + "confirmed."
+    measure = "Proceed only after independent conflict and access checks support implementation " + (
+        "safeguard " * 110
+    ) + "confirmed."
+    area = result.priority_areas[0].model_copy(
+        update={"recommended_action": measure}
+    )
+    result = result.model_copy(
+        update={"overall_read": assessment, "priority_areas": (area,)}
+    )
+
+    summary_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(
+                build_docx(result, evidence=evidence, hydrated_referrals=(), summary=True)
+            )
+        ).paragraphs
+    )
+    detail_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    )
+
+    assert "See Detailed analysis for this assessment and its complete qualifications." in summary_text
+    assert "See Detailed analysis for the complete recommended measure." in summary_text
+    assert assessment not in summary_text and assessment in detail_text
+    assert measure not in summary_text and measure in detail_text

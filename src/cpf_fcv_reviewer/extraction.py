@@ -31,6 +31,10 @@ class PackageCoverageUnavailable(ExtractionLimitExceeded):
     """Raised when supplied package documents cannot be reviewed in full."""
 
 
+class ReviewCoverageUnavailable(PackageCoverageUnavailable):
+    """Full primary/package review input exceeds the bounded model request."""
+
+
 @dataclass(frozen=True)
 class ExtractedSegment:
     text: str

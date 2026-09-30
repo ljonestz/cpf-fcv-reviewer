@@ -206,6 +206,8 @@ class ValidationIssue:
 ValidationIssueCode = Literal[
     "incomplete_reproducibility_metadata",
     "diagnostic_date_conflict",
+    "target_locator_mismatch",
+    "unsupported_current_state",
     "limited_mode_overclaim",
     "unknown_priority_area",
     "unknown_evidence",
@@ -550,6 +552,7 @@ def validate_review(
             priority_area.evidence_ids,
             evidence_ids,
         )
+        _append_source_grounding_issues(issues, priority_area, evidence or {}, result)
         _append_current_context_support_issue(
             issues,
             priority_area,
@@ -592,6 +595,59 @@ def validate_review(
         issues.append(ValidationIssue("prohibited_policy_language", str(exc)))
 
     return tuple(issues)
+
+
+_CURRENT_TRANSITION = re.compile(
+    r"\b(?:ongoing|current|continuing)\s+(?:(?:political|military|CNRD)\s+)?transition\b|"
+    r"\b(?:political|military|CNRD)\s+transition\s+(?:is|remains)\s+(?:ongoing|underway)\b",
+    re.I,
+)
+_TRANSITION_CONDITION_PREFIX = re.compile(r"\b(?:verify\s+whether|whether|if)\s+(?:the\s+)?$", re.I)
+_HISTORICAL_TRANSITION_ATTRIBUTION = re.compile(
+    r"^\s*(?:The\s+)?historical\s+(?:RRA|diagnostic|document)\s+(?:describes|reported|records)\b", re.I)
+
+
+def _normalized_quote(value: str) -> str:
+    return " ".join(re.findall(r"\w+", value.casefold()))
+
+
+def _append_source_grounding_issues(issues, area, evidence, result):
+    located = [item for item in evidence.values()
+               if item.document_role in {DocumentRole.PRIMARY, DocumentRole.PACKAGE}
+               and item.locator is not None]
+    if located:
+        target = area.target_locator
+        matches = [item for item in located
+                   if item.locator.document_title == target.document_title
+                   and (item.locator.page == target.page if target.page is not None
+                        else item.locator.element == target.element
+                        or (target.heading and item.locator.heading == target.heading))]
+        quote = _normalized_quote(target.excerpt)
+        if not matches or (not target.is_paraphrase and not any(
+                quote in _normalized_quote(item.text) for item in matches)):
+            issues.append(ValidationIssue("target_locator_mismatch",
+                                          f"{area.priority_area_id} target is not supported at its stated source location."))
+    for text in (area.assessment, area.why_it_matters, area.recommended_action):
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            match = _CURRENT_TRANSITION.search(sentence)
+            if match is None:
+                continue
+            # A condition must qualify this assertion, not an unrelated delivery risk.
+            if (_TRANSITION_CONDITION_PREFIX.search(sentence[:match.start()])
+                    or _HISTORICAL_TRANSITION_ATTRIBUTION.search(sentence)):
+                continue
+            supported = any(
+                item.evidence_type == "current_context"
+                and item.source_date is not None
+                and 0 <= (result.metadata.created_at.date() - item.source_date).days <= 365
+                and _CURRENT_TRANSITION.search(item.supporting_quote or "")
+                and ("cnrd" not in sentence.casefold() or "cnrd" in (item.supporting_quote or "").casefold())
+                for evidence_id in area.evidence_ids
+                if (item := evidence.get(evidence_id)) is not None)
+            if not supported:
+                issues.append(ValidationIssue("unsupported_current_state",
+                                              f"{area.priority_area_id} ongoing-transition claim needs recent supporting evidence or qualification."))
+                return
 
 
 def _append_raw_evidence_id_issue(

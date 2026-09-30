@@ -142,6 +142,16 @@ def test_normalizes_the_republic_prefix_case_insensitively():
     assert result.country == "The Gambia"
 
 
+@pytest.mark.parametrize("country_name", ["The Gambia", "Gambia"])
+def test_detects_both_gambia_title_aliases(country_name):
+    result = detect_country(
+        document(f"Country Partnership Framework for {country_name} for FY27")
+    )
+
+    assert result.country == "The Gambia"
+    assert result.confidence == "high"
+
+
 def test_ambiguous_title_requires_confirmation():
     result = detect_country(document("Regional country partnership discussion draft"))
 

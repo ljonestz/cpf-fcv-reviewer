@@ -7,6 +7,7 @@ from .extraction import (
     DocumentTooLarge,
     DocumentUnreadable,
     PackageCoverageUnavailable,
+    ReviewCoverageUnavailable,
 )
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
@@ -19,6 +20,7 @@ Repair = Callable[[dict, list], dict]
 SAFE_FAILURES = {
     TimeoutError: "model_timeout",
     DiagnosticCoverageUnavailable: "diagnostic_coverage_unavailable",
+    ReviewCoverageUnavailable: "review_coverage_unavailable",
     PackageCoverageUnavailable: "package_coverage_unavailable",
     RegistryUnavailable: "registry_unavailable",
     DocumentUnreadable: "document_unreadable",

@@ -319,6 +319,15 @@ class SQLiteSessionStore:
             for candidate_id in lineage_ids:
                 self._next_offsets.pop(candidate_id, None)
 
+    def discard_one(self, session_id: str) -> None:
+        """Remove only this session, without following correction lineage."""
+        now = self._now()
+        with self._lock, self._connect() as connection:
+            self._purge_expired(connection, now)
+            connection.execute(
+                "DELETE FROM sessions WHERE session_id = ?", (session_id,)
+            )
+
     def count(self) -> int:
         now = self._now()
         with self._lock, self._connect() as connection:
@@ -343,6 +352,35 @@ class SQLiteSessionStore:
                     "UPDATE session_values SET value = ? WHERE session_id = ? AND name = 'status'",
                     (_encode("queued"), session_id),
                 )
+            return len(rows)
+
+    def active_count(self) -> int:
+        with self._lock, self._connect() as connection:
+            self._purge_expired(connection, self._now())
+            return connection.execute("SELECT COUNT(*) FROM sessions "
+                                      "WHERE status IN ('created','queued','running')").fetchone()[0]
+
+    def interrupt_running(self) -> int:
+        """Do not replay partially paid work on restart; queued work remains claimable."""
+        now = self._now()
+        with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._purge_expired(connection, now)
+            rows = connection.execute("SELECT session_id FROM sessions WHERE status='running'").fetchall()
+            for session_id, in rows:
+                connection.execute("UPDATE sessions SET status='failed',updated_at=? WHERE session_id=?",
+                                   (now, session_id))
+                connection.execute("DELETE FROM session_values WHERE session_id=? AND name IN "
+                                   "('result','evidence_by_id','validation_issues')", (session_id,))
+                connection.executemany("INSERT INTO session_values VALUES (?, ?, ?) "
+                                       "ON CONFLICT(session_id,name) DO UPDATE SET value=excluded.value",
+                                       [(session_id, "status", _encode("failed")),
+                                        (session_id, "failure_code", _encode("assessment_interrupted"))])
+                sequence = connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM events "
+                                              "WHERE session_id=?", (session_id,)).fetchone()[0]
+                connection.execute("INSERT INTO events VALUES (?, ?, ?)",
+                                   (session_id, sequence, _encode({"type": "run_failed", "data": {
+                                       "error": "assessment_interrupted"}})))
             return len(rows)
 
     def claim_next(self) -> str | None:
