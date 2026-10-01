@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Mapping
 import re
 
@@ -896,6 +897,24 @@ class ReviewEngine:
             issue["code"] == "incomplete_strategy_assessment"
             for issue in issues
         )
+        if "unsupported_cpf_response" in issue_codes:
+            # Recover a renamed row only from a unique, unchanged driver. Keep its
+            # original identity; the existing quote transfer still verifies content.
+            originals = result.rra_driver_assessments
+            candidates = draft.rra_driver_assessments
+            original_id_counts = Counter(row.assessment_id for row in originals)
+            candidate_ids = {row.assessment_id for row in candidates}
+            original_counts = Counter(row.driver for row in originals)
+            candidate_counts = Counter(row.driver for row in candidates)
+            identities = {row.driver: row.assessment_id for row in originals}
+            draft = draft.model_copy(update={"rra_driver_assessments": tuple(
+                row.model_copy(update={"assessment_id": identities[row.driver]})
+                if row.assessment_id not in original_id_counts
+                and original_counts[row.driver] == candidate_counts[row.driver] == 1
+                and original_id_counts[identities[row.driver]] == 1
+                and identities[row.driver] not in candidate_ids else row
+                for row in candidates
+            )})
         repaired_assessments = draft
         draft = _normalize_repaired_assessments(
             result,
@@ -916,8 +935,11 @@ class ReviewEngine:
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
         if "unsupported_cpf_response" in issue_codes:
+            repaired_id_counts = Counter(row.assessment_id
+                                         for row in repaired_assessments.rra_driver_assessments)
             candidates = {row.assessment_id: row
-                          for row in repaired_assessments.rra_driver_assessments}
+                          for row in repaired_assessments.rra_driver_assessments
+                          if original_id_counts[row.assessment_id] == repaired_id_counts[row.assessment_id] == 1}
             rows = []
             for row in draft.rra_driver_assessments:
                 candidate = candidates.get(row.assessment_id)

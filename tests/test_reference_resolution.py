@@ -213,3 +213,100 @@ def test_invalid_cpf_quote_repair_remains_fatal(make_valid_result):
     assert any(i.code == "unsupported_cpf_response" for i in validate_review(
         actual, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
     ))
+
+
+@pytest.mark.parametrize("quote_valid", [True, False])
+def test_renamed_cpf_quote_repair_keeps_original_driver_identity(make_valid_result, quote_valid):
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0]
+    evidence["ev-2"] = evidence["ev-1"].model_copy(update={
+        "evidence_id": "ev-2", "text": "The CPF supports procurement reform.",
+    })
+    candidate = original.model_copy(update={
+        "assessment_id": "renamed-rra-row",
+        "cpf_response": evidence["ev-2"].text if quote_valid else "Unsupported claim.",
+        "evidence_ids": ("ev-2",),
+        "remaining_gap": "An unrelated replacement gap.",
+    })
+    gateway = FixedGateway(draft.model_copy(update={"rra_driver_assessments": (candidate,)}))
+    actual = ReviewEngine(gateway).repair(
+        result, [{"code": "unsupported_cpf_response"}],
+        evidence_ids=set(evidence), evidence=evidence,
+    )
+    assert len(actual.rra_driver_assessments) == 1
+    row = actual.rra_driver_assessments[0]
+    for field in ("assessment_id", "driver", "delivery_mechanism", "result_or_indicator",
+                  "remaining_gap", "status", "confidence", "gap_locus"):
+        assert getattr(row, field) == getattr(original, field)
+    assert row.cpf_response == ("The CPF supports procurement reform" if quote_valid
+                                else original.cpf_response)
+    assert row.evidence_ids == (("ev-1", "ev-2") if quote_valid else original.evidence_ids)
+    issues = validate_review(actual, evidence_ids=set(evidence), evidence=evidence,
+                             prohibited_terms=set())
+    assert any(issue.code == "unsupported_cpf_response" for issue in issues) == (not quote_valid)
+    assert len(gateway.calls) == 1
+
+
+@pytest.mark.parametrize("duplicate_side", ["original", "repaired"])
+def test_renamed_cpf_quote_repair_does_not_guess_ambiguous_identity(make_valid_result, duplicate_side):
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0]
+    candidate = original.model_copy(update={
+        "assessment_id": "renamed-rra-row", "cpf_response": evidence["ev-1"].text,
+    })
+    if duplicate_side == "original":
+        result = result.model_copy(update={"rra_driver_assessments": (
+            original, original.model_copy(update={"assessment_id": "another-original"}),
+        )})
+        candidates = (candidate,)
+    else:
+        candidates = (candidate, candidate.model_copy(update={"assessment_id": "another-repaired"}))
+    actual = ReviewEngine(FixedGateway(draft.model_copy(update={
+        "rra_driver_assessments": candidates,
+    }))).repair(result, [{"code": "unsupported_cpf_response"}],
+               evidence_ids=set(evidence), evidence=evidence)
+    assert actual.rra_driver_assessments[:len(result.rra_driver_assessments)] == result.rra_driver_assessments
+    assert any(issue.code == "unsupported_cpf_response" for issue in validate_review(
+        actual, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
+    ))
+
+
+@pytest.mark.parametrize("renamed", [True, False])
+def test_cpf_quote_repair_does_not_cross_wire_duplicate_original_ids(make_valid_result, renamed):
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0]
+    second = original.model_copy(update={"driver": "A different RRA driver."})
+    result = result.model_copy(update={"rra_driver_assessments": (original, second)})
+    evidence["ev-2"] = evidence["ev-1"].model_copy(update={
+        "evidence_id": "ev-2", "text": "The CPF supports procurement reform.",
+    })
+    candidates = (
+        original.model_copy(update={"assessment_id": "renamed-first" if renamed else original.assessment_id,
+                                    "cpf_response": evidence["ev-1"].text}),
+        second.model_copy(update={"assessment_id": "renamed-second" if renamed else second.assessment_id,
+                                  "cpf_response": evidence["ev-2"].text,
+                                  "evidence_ids": ("ev-2",)}),
+    )
+    actual = ReviewEngine(FixedGateway(draft.model_copy(update={
+        "rra_driver_assessments": candidates,
+    }))).repair(result, [{"code": "unsupported_cpf_response"}],
+               evidence_ids=set(evidence), evidence=evidence)
+    assert actual.rra_driver_assessments[:2] == (original, second)
+    assert sum(issue.code == "unsupported_cpf_response" for issue in validate_review(
+        actual, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
+    )) == 2
+
+
+def test_cpf_quote_repair_does_not_guess_between_duplicate_candidate_ids(make_valid_result):
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0]
+    first = original.model_copy(update={"cpf_response": evidence["ev-1"].text})
+    second = first.model_copy(update={"driver": "A different RRA driver."})
+    actual = ReviewEngine(FixedGateway(draft.model_copy(update={
+        "rra_driver_assessments": (first, second),
+    }))).repair(result, [{"code": "unsupported_cpf_response"}],
+               evidence_ids=set(evidence), evidence=evidence)
+    assert actual.rra_driver_assessments == (original,)
+    assert any(issue.code == "unsupported_cpf_response" for issue in validate_review(
+        actual, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
+    ))

@@ -50,3 +50,30 @@ Production acceptance remains unachieved. Cross-country model reliability, the r
 real assistant and the owner-deferred live durable-storage/restart/restore gate remain
 open. Word visual pagination and local browser/state recovery now have provider-free
 acceptance evidence in the linked record.
+
+## Synthetic identity defect and narrow repair follow-up
+
+Provider-free FakeGateway controls reproduced a code defect after the paid test.
+With the same row ID, a verified replacement quote transfers to the original row and
+passes the quotation guard. When repair changes the ID but preserves driver text,
+`_merge_rra_assessments` appends a second row; the valid quotation survives there but
+the invalid original remains. The quote-transfer step only looked up the original ID.
+This proves that synthetic defect, not that it caused the paid Guinea failure.
+
+The existing owner-approved identity/quotation design is preserved: only during
+`unsupported_cpf_response` repair, restore the original ID when exact driver text is
+unique in both original and repaired rows, the original ID itself is unique, and that
+ID is absent from the candidate. Quote transfer also requires unique original and
+repaired IDs. Ambiguous, changed-driver or colliding-ID cases receive no inferred identity.
+The existing merge and literal source verification then transfer only a valid quote
+and known evidence links. Original standing and analytical fields remain preserved.
+No new dependency, prompt, schema, model call, retry or spending allowance is added.
+
+Five permanent regression cases failed first: duplicated renamed rows and quote
+cross-wiring through duplicate original/candidate IDs. After the narrow engine change,
+all 143 reference/source/engine tests and 51 smoke/orchestrator tests passed (194 total).
+Both ambiguous-driver identity controls remained fail-closed. Independent review found
+the ID collision, which was reproduced and guarded before committing the fix.
+The saved synthetic comparison is under
+`output/20261001_provider_free_closure/quote-repair-diagnosis/`; the paid output remains
+uninspected. This local fix still requires fresh model acceptance, which was not repeated.

@@ -1,5 +1,19 @@
 # Production readiness
 
+## Quotation repair identity follow-up - 2026-10-01
+
+A synthetic comparison established that a renamed repaired RRA row duplicates its
+driver while leaving the original unsupported response. The narrow local fix restores
+the original ID only for a unique exact driver match during quote repair, requires unique
+original/repaired IDs and then uses the existing literal source check. Ambiguous identity
+and unsupported quotation controls remain fail-closed. Reference/source/engine tests passed 143 and smoke/orchestrator tests
+passed 51 after test-first failures. See the
+[provider-free diagnosis](validation/2026-10-01-guinea-quotation-acceptance.md).
+
+This does not establish the historical paid failure's cause or fresh model reliability.
+No extra paid run, model call, allowance or hosting change was introduced. Production
+acceptance remains pending the open gates below.
+
 ## Free gates closed; one new quotation acceptance failed - 2026-10-01
 
 Local state/quota/backup restoration passed. The target-source synthetic browser

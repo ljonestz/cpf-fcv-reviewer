@@ -1,5 +1,19 @@
 # Project status
 
+## 2026-10-01 Quotation repair identity follow-up
+
+Synthetic controls found that a renamed RRA repair row was appended beside the
+invalid original. The candidate now restores the original ID only for one exact,
+unambiguous driver match during quotation repair. Original and repaired ID uniqueness
+also prevents cross-wiring; existing source verification, standing and analytical
+fields remain. Five regression cases failed before the fix; 143 reference/source/engine
+checks and 51 smoke/orchestrator checks now pass.
+See the [diagnosis and local repair](validation/2026-10-01-guinea-quotation-acceptance.md).
+
+This proves the local defect and repair, not the cause of the failed paid case or
+fresh model acceptance. No second paid assessment, model-call increase or deployment
+followed. The remaining production gates below stay open.
+
 ## 2026-10-01 Free gates closed; Guinea quotation acceptance failed
 
 Provider-free acceptance now covers local SQLite state/quota backup restoration,
