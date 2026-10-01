@@ -1,5 +1,25 @@
 # Project status
 
+## 2026-10-01 Paid acceptance of the quotation repair failed on a locator
+
+The owner authorized one further assessment on `c272e79` (application source `b5f0578`).
+The exact runner first passed 11/11 free smoke checks; candidate CI was green. Guinea
+then failed safely after bounded repair with one `target_locator_mismatch`, reason
+`coordinate_not_cited`. The policy-language issue cleared; no unsupported-quotation
+code appeared in the reported blocking sets. No findings or accepted exports were
+released. Overall runner time was 788.53 seconds, with normal exit 1 and no browser errors.
+
+Paid testing stopped. The ledger preserves its prior five reservations plus this one;
+read-only global quota inspection confirms four admissions on 30 September and two
+on 1 October, with no reset. Four public-source controls and ten relevant engine/validator
+tests passed; no reproducible resolver defect was found, and no app code was changed.
+See the [latest paid outcome and provider-free diagnosis](validation/2026-10-01-guinea-quotation-fix-paid-acceptance.md).
+
+Production acceptance remains unachieved. Reliable source-target selection/repair,
+fresh factual acceptance, the real assistant, cross-country reliability and deferred
+live durable hosting remain open. No replacement assessment, merge, deployment or
+hosting change occurred. Earlier records below retain their historical scope.
+
 ## 2026-10-01 Quotation repair identity follow-up
 
 Synthetic controls found that a renamed RRA repair row was appended beside the

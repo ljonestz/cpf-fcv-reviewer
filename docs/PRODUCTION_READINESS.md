@@ -1,5 +1,27 @@
 # Production readiness
 
+## Quotation-repair paid acceptance failed on a locator - 2026-10-01
+
+One owner-authorized Guinea assessment on `c272e79` failed safely after bounded repair:
+one `target_locator_mismatch` remained, with the safe reason `coordinate_not_cited`.
+The policy-language issue cleared, and no unsupported-quotation code appeared in the
+reported blocking sets. No findings were released; factual and analytical acceptance
+could not be assessed. The runner took 788.53 seconds overall and exited normally with
+code 1 and zero browser errors. See the
+[paid acceptance and provider-free follow-up](validation/2026-10-01-guinea-quotation-fix-paid-acceptance.md).
+
+The exact runner passed all 11 synthetic smoke checks before submission. After failure,
+four public-source resolver controls and ten relevant engine/validator tests passed.
+No reproducible resolver defect was found, so no speculative source change or further
+paid call was made. Reliable target selection/repair remains a production blocker;
+its provider-free contract review should precede any further paid acceptance.
+
+The ledger now preserves six reservations. Global daily counters are four for
+30 September and two for 1 October. No quota reset, replacement assessment, real
+assistant request, deployment, merge or hosting change occurred. Fresh model/factual
+acceptance, assistant and cross-country reliability, plus owner-deferred live durable
+hosting, remain open. Historical records below are unchanged.
+
 ## Quotation repair identity follow-up - 2026-10-01
 
 A synthetic comparison established that a renamed repaired RRA row duplicates its
