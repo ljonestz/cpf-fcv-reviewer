@@ -1,5 +1,16 @@
 # Project status
 
+## 2026-10-01 Provider-free closure
+
+A new isolated synthetic SQLite rehearsal preserved review data, events, assistant
+history, Word downloads and the four-per-day admission cap through application
+reinitialization and native backup restoration. Browser keyboard, download retry,
+result-fetch recovery and mocked expiry assertions were reached; the runner then
+stalled during cleanup, so normal teardown remains unverified. No application
+change or paid call occurred. Word pagination, long-lived stream recovery, real
+model-quality acceptance and live durable hosting remain pending. See the
+[provider-free record and release gates](validation/2026-10-01-provider-free-closure.md).
+
 ## 2026-09-30 Source reference follow-up
 
 The owner approved verified CPF/package quotations in the RRA response column, with
