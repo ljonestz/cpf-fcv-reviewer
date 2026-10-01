@@ -1,5 +1,24 @@
 # Project status
 
+## 2026-10-01 Free gates closed; Guinea quotation acceptance failed
+
+Provider-free acceptance now covers local SQLite state/quota backup restoration,
+six target-source browser interruption/recovery checks with normal cleanup, and
+all 17 pages of four Word exports. The exact `a1f12f5` candidate's CI passed.
+See the [closed free gates and frozen criteria](validation/2026-10-01-provider-free-release-gates.md).
+
+The owner accepted one further local assessment. Guinea on `a1f12f5` failed after
+the bounded repair: two `unsupported_cpf_response` issues remained. No findings,
+Word exports or assistant output were produced; the runner exited normally with
+exit 1 and no browser errors. Paid testing stopped. The existing renewed ledger
+retains its four prior reservations plus this one; no quota reset occurred.
+See the [safe failure and provider-free diagnosis](validation/2026-10-01-guinea-quotation-acceptance.md).
+
+Routine production acceptance remains unachieved. Fresh country model/factual
+acceptance, the revised real assistant, cross-country reliability and the
+owner-deferred live durable-hosting gate remain open. No merge, deployment or
+hosting change occurred. Historical observations below remain unchanged.
+
 ## 2026-10-01 Provider-free closure
 
 A new isolated synthetic SQLite rehearsal preserved review data, events, assistant

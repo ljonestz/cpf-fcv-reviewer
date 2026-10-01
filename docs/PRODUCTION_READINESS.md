@@ -1,5 +1,26 @@
 # Production readiness
 
+## Free gates closed; one new quotation acceptance failed - 2026-10-01
+
+Local state/quota/backup restoration passed. The target-source synthetic browser
+check passed 6/6, reconnecting the same in-progress review after a local EventSource
+abort, with one submission and normal teardown. Physical network loss is unverified.
+Native Word rendering and inspection passed for all 17 pages across four exports,
+including a twelve-page detailed layout fixture. See the
+[provider-free gates and frozen acceptance criteria](validation/2026-10-01-provider-free-release-gates.md).
+
+The owner accepted one additional local assessment after those gates. Guinea on
+`a1f12f5` failed safely with two unsupported CPF-response quotations remaining after
+one bounded repair. No findings were released; no replacement assessment or assistant
+request followed. The existing ledger now preserves four prior admissions plus this
+one, with no reset. See the [safe acceptance record](validation/2026-10-01-guinea-quotation-acceptance.md).
+
+Routine production acceptance remains unachieved. Generation/repair reliability,
+fresh factual acceptance, the real assistant and live durable-storage/restart/restore
+still need acceptance. New paid testing remains deferred after the failure; hosting
+cost, merge and deployment remain owner-deferred. No application change has yet been
+made in this closure pass; the failed candidate's exact-head CI was successful.
+
 ## Source reference follow-up - 2026-09-30
 
 The candidate now verifies RRA CPF responses as quotations from their cited CPF/package
