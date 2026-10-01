@@ -8,6 +8,9 @@ unambiguous driver match during quotation repair. Original and repaired ID uniqu
 also prevents cross-wiring; existing source verification, standing and analytical
 fields remain. Five regression cases failed before the fix; 143 reference/source/engine
 checks and 51 smoke/orchestrator checks now pass.
+Exact code commit `b5f0578` also passed all 1,722 provider-free Linux tests,
+including Gunicorn concurrency, and Python name/import checks in
+[CI run 36843940184](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/36843940184).
 See the [diagnosis and local repair](validation/2026-10-01-guinea-quotation-acceptance.md).
 
 This proves the local defect and repair, not the cause of the failed paid case or

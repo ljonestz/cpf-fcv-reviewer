@@ -77,3 +77,9 @@ the ID collision, which was reproduced and guarded before committing the fix.
 The saved synthetic comparison is under
 `output/20261001_provider_free_closure/quote-repair-diagnosis/`; the paid output remains
 uninspected. This local fix still requires fresh model acceptance, which was not repeated.
+
+Exact repair commit `b5f057872e03b308d8847159f760fb3c93381226` passed all 1,722
+provider-free Linux tests in 26.59 seconds, including Gunicorn concurrency, and
+Python name/import checks. The completed
+[CI run 36843940184](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/36843940184)
+establishes code-test acceptance; it does not replace fresh model/factual acceptance.
