@@ -317,7 +317,7 @@ def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 
     for phrase in (
-        "Version: 3.0.9",
+        "Version: 3.0.10",
         "rra_driver_assessments",
         "fcv_strategy_assessments",
         "status",
@@ -418,7 +418,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
 
 @pytest.mark.parametrize(
     ("name", "version"),
-    [("diagnostic_map", "1.2.0"), ("review", "3.0.8"), ("repair", "3.0.9")],
+    [("diagnostic_map", "1.2.0"), ("review", "3.0.9"), ("repair", "3.0.10")],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):
     prompt = load_prompt(name)
@@ -544,3 +544,14 @@ def test_policy_and_date_quote_repairs_keep_exact_source_support():
     assert "Do not paraphrase a quotation to remove the flagged wording" in prompt
     assert "attach the replacement passage's existing evidence_id" in prompt
     assert "A verified quotation does not exempt policy-determination language" in prompt
+
+
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_prompts_prefer_app_owned_source_selection_with_literal_backup(name):
+    prompt = normalize_whitespace(load_prompt(name))
+    for instruction in (
+        "cpf_quote_index", "CPF_QUOTE:", "same row's evidence_ids",
+        "complete source passage", "preview is only a navigation aid",
+        "existing exact quotation remains a supported fallback",
+    ):
+        assert instruction in prompt

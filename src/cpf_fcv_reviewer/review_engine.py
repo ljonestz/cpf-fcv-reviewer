@@ -24,7 +24,9 @@ from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
 from .source_grounding import (
     cited_document_evidence,
+    cpf_quote_index,
     locator_failure_reason,
+    resolve_cpf_response,
     resolve_target_locator,
     verified_cpf_response,
 )
@@ -342,6 +344,7 @@ def _merge_rra_assessments(
     *,
     allow_coverage_status_repair: bool = False,
     allow_new_rra_rows: bool = False,
+    preserve_rra_ids: frozenset[str] = frozenset(),
 ):
     merged = []
     used_ids = set()
@@ -381,6 +384,10 @@ def _merge_rra_assessments(
                 continue
             if not original_is_evidence_safe:
                 used_ids.add(original_row.assessment_id)
+        if original_row.assessment_id in preserve_rra_ids:
+            merged.append(original_row)
+            used_ids.add(original_row.assessment_id)
+            continue
         if original_is_evidence_safe:
             merged.append(original_row)
             used_ids.add(original_row.assessment_id)
@@ -414,6 +421,7 @@ def _normalize_repaired_assessments(
     allow_coverage_status_repair: bool = False,
     allow_new_rra_rows: bool = False,
     allow_missing_strategy_rows: bool = False,
+    preserve_rra_ids: frozenset[str] = frozenset(),
 ) -> ReviewDraft:
     allowed_evidence_ids = (
         set(evidence_ids)
@@ -519,6 +527,7 @@ def _normalize_repaired_assessments(
                 allowed_evidence_ids,
                 allow_coverage_status_repair=allow_coverage_status_repair,
                 allow_new_rra_rows=allow_new_rra_rows,
+                preserve_rra_ids=preserve_rra_ids,
             ),
             "fcv_strategy_assessments": tuple(normalized_strategy),
         }
@@ -559,11 +568,13 @@ def _repair_cpf_response(original, candidate, evidence, available_evidence_ids):
     """Transfer a quotation and its known sources together, preserving analysis."""
     corrected = original.model_copy(update={
         "cpf_response": candidate.cpf_response,
-        "evidence_ids": tuple(dict.fromkeys((*original.evidence_ids, *(
-            item for item in candidate.evidence_ids if item in available_evidence_ids
-        )))),
+        "evidence_ids": tuple(dict.fromkeys(
+            item for item in (*original.evidence_ids, *candidate.evidence_ids)
+            if item in available_evidence_ids
+        )),
     })
-    return corrected if verified_cpf_response(corrected, evidence) is not None else original
+    response = resolve_cpf_response(corrected, evidence)
+    return corrected.model_copy(update={"cpf_response": response}) if response is not None else original
 
 
 def _preserve_cleaned_assessment_text(
@@ -689,7 +700,7 @@ def _resolve_cited_sources(
     return draft.model_copy(update={
         "rra_driver_assessments": tuple(
             row.model_copy(update={"cpf_response": response})
-            if (response := verified_cpf_response(row, evidence)) is not None else row
+            if (response := resolve_cpf_response(row, evidence)) is not None else row
             for row in draft.rra_driver_assessments
         ),
         "priority_areas": tuple(
@@ -722,6 +733,7 @@ class ReviewEngine:
         detail_profile = DETAIL_PROFILES[evidence_pack.metadata.detail_level]
         payload = {
             "evidence_pack": evidence_pack.model_dump(mode="json", exclude_none=True),
+            "cpf_quote_index": cpf_quote_index({item.evidence_id: item for item in evidence_pack.evidence}),
             "assessment_as_of": evidence_pack.metadata.created_at.date().isoformat(),
             "stage_profile": _serialize_stage_profile(stage_profile),
             "detail_profile": _serialize_detail_profile(detail_profile),
@@ -732,6 +744,9 @@ class ReviewEngine:
             payload["diagnostic_provenance"] = provenance.model_dump(mode="json")
         if current_context_readout is not None:
             payload["current_context_readout"] = current_context_readout
+        if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
+            # Keep every source passage; the optional index must not shrink coverage.
+            payload.pop("cpf_quote_index", None)
         if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
             raise ReviewCoverageUnavailable(
                 "Complete review request exceeds the safe request budget."
@@ -747,6 +762,9 @@ class ReviewEngine:
                 **payload,
                 "schema_retry": {"issues": _safe_schema_issues(error)},
             }
+            if _estimated_input_tokens(retry_payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
+                # Keep every source passage; the optional index must not shrink coverage.
+                retry_payload.pop("cpf_quote_index", None)
             if _estimated_input_tokens(retry_payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
                 raise ReviewCoverageUnavailable(
                     "Complete review request exceeds the safe request budget."
@@ -872,6 +890,14 @@ class ReviewEngine:
                 "stage_profile": _serialize_stage_profile(stage_profile),
                 "detail_profile": _serialize_detail_profile(detail_profile),
             }
+        if source_grounding_repair or quote_guardrail_repair:
+            repair_payload["cpf_quote_index"] = cpf_quote_index({
+                key: item for key, item in support_evidence.items()
+                if key in available_evidence_ids
+            })
+        if _estimated_input_tokens(repair_payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
+            # Keep every source passage; the optional index must not shrink coverage.
+            repair_payload.pop("cpf_quote_index", None)
         if _estimated_input_tokens(repair_payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
             raise ReviewCoverageUnavailable("Complete repair request exceeds the safe request budget.")
         draft = self.gateway.generate(prompt_name="repair", payload=repair_payload,
@@ -926,7 +952,18 @@ class ReviewEngine:
             issue["code"] == "incomplete_strategy_assessment"
             for issue in issues
         )
-        if "unsupported_cpf_response" in issue_codes:
+        quote_repair = "unsupported_cpf_response" in issue_codes or quote_guardrail_repair
+        preserve_rra_ids = frozenset(
+            row.assessment_id for row in result.rra_driver_assessments
+            if quote_repair and (
+                verified_cpf_response(row, support_evidence) is None
+                or any(phrase.casefold() in row.cpf_response.casefold()
+                       for phrase in forbidden_phrases if phrase.strip())
+                or has_diagnostic_date_conflict(row.cpf_response,
+                                                result.metadata.diagnostic_provenance)
+            )
+        )
+        if quote_repair:
             # Recover a renamed row only from a unique, unchanged driver. Keep its
             # original identity; the existing quote transfer still verifies content.
             originals = result.rra_driver_assessments
@@ -952,6 +989,7 @@ class ReviewEngine:
             allow_coverage_status_repair=allow_coverage_status_repair,
             allow_new_rra_rows=allow_new_rra_rows,
             allow_missing_strategy_rows=allow_missing_strategy_rows,
+            preserve_rra_ids=preserve_rra_ids,
         )
         if issue_codes & {"prohibited_policy_language", "diagnostic_date_conflict"}:
             draft = _preserve_cleaned_assessment_text(

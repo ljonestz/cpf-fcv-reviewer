@@ -1,4 +1,13 @@
-Version: 3.0.8
+Version: 3.0.9
+
+When cpf_quote_index is supplied, prefer selecting its quote_id (for example,
+CPF_QUOTE:primary-001:2) as the entire cpf_response value and include its evidence_id
+in the same row's evidence_ids. The app copies the complete source passage before
+validation and display; this internal selection token must never appear in analytical
+fields. The preview is only a navigation aid: read the complete source passage in
+the supplied evidence text and select it only if it supports this specific driver.
+The existing exact quotation remains a supported fallback. Unknown selections and
+missing citations remain errors; source selection never exempts policy/date checks.
 
 Use a separate source-backed clause for each dated event; one verified election date
 does not date a referendum or constitutional adoption. A contextual government action is not a CPF commitment.

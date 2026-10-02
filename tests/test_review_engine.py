@@ -425,6 +425,7 @@ def test_every_stage_and_detail_injects_serialized_profiles(stage, detail):
 
     payload = gateway.calls[0][1]
     assert set(payload) == {
+        "cpf_quote_index",
         "assessment_as_of",
         "evidence_pack",
         "stage_profile",
@@ -496,7 +497,9 @@ def test_review_request_budget_allows_exact_boundary_and_rejects_one_token_over(
     monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", 10**9)
 
     ReviewEngine(gateway).review(pack)
-    payload = gateway.calls[-1][1]
+    payload = dict(gateway.calls[-1][1])
+    # The hard boundary applies after the optional navigation index is removed.
+    payload.pop("cpf_quote_index", None)
     ceiling = review_engine._estimated_input_tokens(payload)
     monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", ceiling)
 

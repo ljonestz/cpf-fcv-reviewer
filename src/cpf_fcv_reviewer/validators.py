@@ -20,7 +20,9 @@ from .contracts import (
 from .review_profiles import STAGE_PROFILES
 from .source_grounding import (
     LocatorFailureReason,
+    QuoteFailureReason,
     cited_document_evidence,
+    cpf_response_failure_reason,
     locator_failure_reason,
     percentage_values,
     verified_cpf_response,
@@ -209,6 +211,8 @@ class ValidationIssue:
     message: str
     severity: Literal["fatal", "advisory"] = "fatal"
     locator_reason: LocatorFailureReason | None = None
+    quote_reason: QuoteFailureReason | None = None
+    assessment_index: int | None = None
 
 
 ValidationIssueCode = Literal[
@@ -459,12 +463,14 @@ def validate_review(
             )
         )
 
-    for assessment in result.rra_driver_assessments:
+    for assessment_index, assessment in enumerate(result.rra_driver_assessments):
         if evidence is not None and verified_cpf_response(assessment, evidence) is None:
             issues.append(ValidationIssue(
                 "unsupported_cpf_response",
                 "CPF response requires an exact quotation from its cited primary/package "
                 "evidence, or the fixed no-quotation disclosure for an absence/unassessable row.",
+                quote_reason=cpf_response_failure_reason(assessment, evidence),
+                assessment_index=assessment_index,
             ))
         _append_unknown_evidence_issue(
             issues,

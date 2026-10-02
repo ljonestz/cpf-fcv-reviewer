@@ -14,7 +14,7 @@ from .model_gateway import ModelOutputUnavailable
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
 from .review_engine import ReviewSchemaUnavailable
-from .source_grounding import LOCATOR_FAILURE_REASONS
+from .source_grounding import LOCATOR_FAILURE_REASONS, QUOTE_FAILURE_REASONS
 
 Emitter = Callable[[str, dict], None]
 Step = Callable[[dict], dict]
@@ -100,6 +100,18 @@ class ReviewOrchestrator:
                             data["locator_diagnostics"] = [
                                 {"reason": reason, "count": count}
                                 for reason, count in sorted(reasons.items())
+                            ]
+                        quote_reasons = Counter(
+                            issue["quote_reason"] for issue in issues
+                            if isinstance(issue, dict)
+                            and issue.get("code") == "unsupported_cpf_response"
+                            and isinstance(issue.get("quote_reason"), str)
+                            and issue["quote_reason"] in QUOTE_FAILURE_REASONS
+                        )
+                        if quote_reasons:
+                            data["quote_diagnostics"] = [
+                                {"reason": reason, "count": count}
+                                for reason, count in sorted(quote_reasons.items())
                             ]
                         return data
 

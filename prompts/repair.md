@@ -1,4 +1,16 @@
-Version: 3.0.9
+Version: 3.0.10
+
+When cpf_quote_index is supplied, prefer selecting its quote_id (for example,
+CPF_QUOTE:primary-001:2) as the entire cpf_response value and include its evidence_id
+in the same row's evidence_ids. The app copies the complete source passage before
+validation and display; this internal selection token must never appear in analytical
+fields. The preview is only a navigation aid: read the complete source passage in
+the supplied evidence text and select it only if it supports this specific driver.
+The existing exact quotation remains a supported fallback. Unknown selections and
+missing citations remain errors; source selection never exempts policy/date checks.
+
+For quotation errors, assessment_index identifies the zero-based row in the supplied
+draft; quote_reason explains the failed check. Preserve its assessment_id and driver.
 
 For unsupported_cpf_response, replace only the affected row's cpf_response with a
 single exact quotation from supplied primary/package source_grounding_evidence and
