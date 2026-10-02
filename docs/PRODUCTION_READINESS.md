@@ -1,5 +1,26 @@
 # Production readiness
 
+## 2026-10-02 Repaired candidate paid test still blocked by one quotation
+
+One owner-approved Guinea run on `5cfb641` (application repair `54cdf2a`) failed safely.
+Initial validation had three blocking issues across quotation and policy checks; bounded
+repair left one `unsupported_cpf_response`. The policy code cleared in this attempt,
+but no accepted result/export was released and factual acceptance remains ungraded.
+Runner exited normally with code 1 after 879.20 seconds overall, with zero browser errors.
+Exact-candidate CI and the exact runner's 11 free browser checks passed before submission.
+See the [paid acceptance and launch-access record](validation/2026-10-02-policy-repair-paid-acceptance.md).
+
+Paid work stopped after this one assessment, with no real assistant request. Eight renewed
+reservations are now consumed; the prior seven are unchanged. No quota reset, application
+edit, merge, deployment or hosting charge occurred. The next engineering gate is a
+reproducible quotation failure with safe reason-level diagnostics, not an unchanged paid retry.
+
+Render API access and provider authentication work. The public site still runs `992c35a`
+with volatile storage. Disk/shell dashboard control and direct SSH were not verified due
+to timeouts. The prepared 1 GB persistent setup, live restart/backup acceptance, backup
+retention/off-disk destination and provider-account spending controls remain outstanding.
+Production readiness remains unachieved; earlier entries below retain their original scope.
+
 ## Quotation/policy repair interaction corrected - 2026-10-02
 
 Synthetic regressions reproduced a citation-dropping defect and unsafe quotation
