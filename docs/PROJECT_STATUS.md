@@ -1,5 +1,31 @@
 # Project status
 
+## 2026-10-02 Owner-authorized unchanged Guinea repeat failed
+
+One explicitly authorized repeat on `b8f9970` (unchanged application source `b5f0578`)
+failed safely. After bounded repair, one `unsupported_cpf_response` and one
+`prohibited_policy_language` issue remained; no findings or accepted exports were
+released. The runner exited normally with code 1 after 664.58 seconds overall and
+zero browser errors. The exact runner first passed 11/11 free checks with normal exit 0;
+candidate CI was successful. See the [paid repeat record](validation/2026-10-02-guinea-paid-repeat.md).
+
+Paid testing stopped after this one assessment, with no real assistant request. The
+six prior reservations are unchanged; the ledger now has seven. Read-only daily counts
+are four on 30 September, two on 1 October and one on 2 October, with no reset.
+Four screenshots and safe diagnostics were retained; rejected content was not inspected.
+No application code, merge, deployment or hosting change occurred.
+
+Read-only Render API inspection found no error-level app entries or matching 5xx
+request entries in the 24 hours ending at 10:16 UTC. Live `/health` returned 200 on
+older release `992c35a` with volatile state; sampled memory was about 265/512 MiB.
+These checks do not cover the repaired local candidate or close durable-hosting acceptance.
+
+Production acceptance remains unachieved. Provider-free diagnosis of quotation and
+policy repair should precede further paid acceptance. A repeated run's different error
+codes do not establish that earlier locator failures are fixed. Fresh factual and
+assistant acceptance, cross-country reliability and deferred live durable hosting remain
+open. Earlier records below retain their historical scope.
+
 ## 2026-10-01 Paid acceptance of the quotation repair failed on a locator
 
 The owner authorized one further assessment on `c272e79` (application source `b5f0578`).

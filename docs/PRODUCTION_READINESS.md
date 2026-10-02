@@ -1,5 +1,32 @@
 # Production readiness
 
+## Unchanged Guinea repeat failed on quotation and policy repair - 2026-10-02
+
+The owner explicitly authorized one repeat on `b8f9970`, with application source still
+`b5f0578`. It failed safely after bounded repair: one `unsupported_cpf_response` and
+one `prohibited_policy_language` issue remained. No findings or accepted exports were
+released, so factual and analytical acceptance remain ungraded. The runner exited
+normally with code 1 after 664.58 seconds overall and zero browser errors. The exact
+runner's 11 free checks and candidate CI passed before submission. See the
+[paid repeat record](validation/2026-10-02-guinea-paid-repeat.md).
+
+Seven renewed reservations are now consumed; the six preceding entries are unchanged.
+Global daily counters are four for 30 September, two for 1 October and one for 2 October.
+Paid work stopped after the one new assessment, with no quota reset, real assistant
+request, application edit, merge, deployment or hosting change.
+
+Read-only Render service/deploy/log/metric checks confirm the older live `992c35a`
+deployment. `/health` returned 200 with volatile state. No error-level app or matching
+5xx request entries appeared in the queried 24-hour window; sampled memory was about
+265/512 MiB. This is a separate quiet-service observation, not repaired-candidate,
+live-load or durable-hosting acceptance.
+
+Reliable quotation and policy repair remain production blockers. Safe aggregate codes
+do not disclose the rejected draft or its precise cause; no speculative fix followed.
+Provider-free diagnosis should precede another paid acceptance. Fresh factual and
+assistant acceptance, cross-country reliability and deferred live durable hosting remain
+open. Earlier locator failures are not closed by their absence from this run's codes.
+
 ## Quotation-repair paid acceptance failed on a locator - 2026-10-01
 
 One owner-authorized Guinea assessment on `c272e79` failed safely after bounded repair:
