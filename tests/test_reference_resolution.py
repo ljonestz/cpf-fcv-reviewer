@@ -310,3 +310,128 @@ def test_cpf_quote_repair_does_not_guess_between_duplicate_candidate_ids(make_va
     assert any(issue.code == "unsupported_cpf_response" for issue in validate_review(
         actual, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
     ))
+
+
+@pytest.mark.parametrize("codes", [
+    ["prohibited_policy_language"],
+    ["prohibited_policy_language", "unsupported_cpf_response"],
+])
+def test_policy_quote_repair_keeps_the_verified_replacement_source(make_valid_result, codes):
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0].model_copy(update={
+        "cpf_response": "The country is not on the list of FCV-affected countries.",
+    })
+    evidence["ev-1"] = evidence["ev-1"].model_copy(update={"text": original.cpf_response})
+    evidence["ev-2"] = evidence["ev-1"].model_copy(update={
+        "evidence_id": "ev-2", "text": "The CPF supports local procurement reform.",
+        "locator": evidence["ev-1"].locator.model_copy(update={"page": 8}),
+    })
+    evidence["context-1"] = evidence["ev-1"].model_copy(update={
+        "evidence_id": "context-1", "document_role": DocumentRole.CONTEXT,
+    })
+    result = result.model_copy(update={"rra_driver_assessments": (original,)})
+    candidate = original.model_copy(update={
+        "cpf_response": evidence["ev-2"].text, "evidence_ids": ("ev-2",),
+    })
+    gateway = FixedGateway(draft.model_copy(update={"rra_driver_assessments": (candidate,)}))
+    actual = ReviewEngine(gateway).repair(
+        result, [{"code": code} for code in codes],
+        forbidden_phrases=("is not on the list of fcv-affected countries",),
+        evidence_ids=set(evidence), evidence=evidence,
+    )
+    row = actual.rra_driver_assessments[0]
+    assert row.evidence_ids == ("ev-1", "ev-2")
+    assert row.cpf_response == "The CPF supports local procurement reform"
+    assert row.driver == original.driver and row.status == original.status
+    assert gateway.calls[0]["payload"]["source_grounding_evidence"]
+    if codes == ["prohibited_policy_language"]:
+        assert {item["evidence_id"] for item in
+                gateway.calls[0]["payload"]["source_grounding_evidence"]} == {"ev-1", "ev-2"}
+    assert len(gateway.calls) == 1
+    assert not {"unsupported_cpf_response", "prohibited_policy_language"} & {
+        issue.code for issue in validate_review(
+            actual, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
+        )
+    }
+
+
+@pytest.mark.parametrize("context_quote", [False, True])
+def test_policy_quote_repair_rejects_paraphrases_and_context(make_valid_result, context_quote):
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0].model_copy(update={
+        "cpf_response": "The country is eligible for support.",
+    })
+    evidence["ev-1"] = evidence["ev-1"].model_copy(update={"text": original.cpf_response})
+    result = result.model_copy(update={"rra_driver_assessments": (original,)})
+    candidate = original.model_copy(update={"cpf_response": "The CPF considers support."})
+    if context_quote:
+        evidence["context-1"] = evidence["ev-1"].model_copy(update={
+            "evidence_id": "context-1", "document_role": DocumentRole.CONTEXT,
+            "text": candidate.cpf_response,
+        })
+        candidate = candidate.model_copy(update={"evidence_ids": ("context-1",)})
+    actual = ReviewEngine(FixedGateway(draft.model_copy(update={
+        "rra_driver_assessments": (candidate,),
+    }))).repair(result, [{"code": "prohibited_policy_language"}],
+               forbidden_phrases=("eligible for",), evidence_ids=set(evidence), evidence=evidence)
+    assert actual.rra_driver_assessments[0].cpf_response == "The country is eligible for support"
+    assert actual.rra_driver_assessments[0].evidence_ids == original.evidence_ids
+    codes = {issue.code for issue in validate_review(
+        actual, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
+    )}
+    assert "prohibited_policy_language" in codes
+    assert "unsupported_cpf_response" not in codes
+
+
+@pytest.mark.parametrize("duplicate_side", ["original", "repaired"])
+def test_policy_repair_cannot_bypass_ambiguous_quote_identity(make_valid_result, duplicate_side):
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0].model_copy(update={
+        "cpf_response": "The CPF is eligible for unsupported financing.",
+    })
+    candidate = original.model_copy(update={"cpf_response": evidence["ev-1"].text})
+    originals = (original,)
+    candidates = (candidate,)
+    if duplicate_side == "original":
+        originals += (original.model_copy(update={"driver": "A different original driver."}),)
+    else:
+        candidates += (candidate.model_copy(update={"driver": "A different candidate driver."}),)
+    result = result.model_copy(update={"rra_driver_assessments": originals})
+    actual = ReviewEngine(FixedGateway(draft.model_copy(update={
+        "rra_driver_assessments": candidates,
+    }))).repair(result, [{"code": "unsupported_cpf_response"}, {"code": "prohibited_policy_language"}],
+               forbidden_phrases=("eligible for",), evidence_ids=set(evidence), evidence=evidence)
+    assert actual.rra_driver_assessments == originals
+
+
+def test_date_quote_repair_keeps_its_source_and_publication_provenance(make_valid_result):
+    from datetime import date
+    from cpf_fcv_reviewer.contracts import DiagnosticProvenance
+
+    result, draft, evidence = reference_case(make_valid_result)
+    original = result.rra_driver_assessments[0].model_copy(update={
+        "cpf_response": "The June 2022 RRA identifies unequal access.",
+    })
+    evidence["ev-1"] = evidence["ev-1"].model_copy(update={"text": original.cpf_response})
+    evidence["ev-2"] = evidence["ev-1"].model_copy(update={
+        "evidence_id": "ev-2", "text": "The June 2023 RRA identifies unequal access.",
+    })
+    provenance = DiagnosticProvenance(
+        document_title="Public RRA.pdf", publication_date=date(2023, 6, 1), date_basis="cover",
+        locator=evidence["ev-1"].locator.model_copy(update={"document_title": "Public RRA.pdf"}),
+    )
+    result = result.model_copy(update={
+        "rra_driver_assessments": (original,),
+        "metadata": result.metadata.model_copy(update={"diagnostic_provenance": provenance}),
+    })
+    candidate = original.model_copy(update={"cpf_response": evidence["ev-2"].text,
+                                             "evidence_ids": ("ev-2",)})
+    gateway = FixedGateway(draft.model_copy(update={"rra_driver_assessments": (candidate,)}))
+    actual = ReviewEngine(gateway).repair(
+        result, [{"code": "diagnostic_date_conflict"}],
+        evidence_ids=set(evidence), evidence=evidence,
+    )
+    assert actual.rra_driver_assessments[0].evidence_ids == ("ev-1", "ev-2")
+    assert actual.rra_driver_assessments[0].cpf_response == evidence["ev-2"].text.rstrip(".")
+    assert actual.metadata.diagnostic_provenance == provenance
+    assert gateway.calls[0]["payload"]["source_grounding_evidence"]
