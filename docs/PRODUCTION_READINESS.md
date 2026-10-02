@@ -1,5 +1,26 @@
 # Production readiness
 
+## Quotation/policy repair interaction corrected - 2026-10-02
+
+Synthetic regressions reproduced a citation-dropping defect and unsafe quotation
+replacement through policy cleanup, including duplicate row IDs. Both repair paths now
+verify quotation text and its source links together and reject ambiguous identity.
+The repair receives primary/package passages when policy/date wording affects a quotation;
+prompt v3.0.9 requires an exact supported replacement. No validator, registry, call ceiling
+or admission limit was relaxed. See the
+[provider-free diagnosis](validation/2026-10-02-quote-policy-repair.md).
+
+Four cases failed before the fix. Final reference/runtime checks passed 173 cases,
+prompt/smoke/orchestrator checks passed 100, and three controls using public Guinea
+passages passed. Exact code commit `54cdf2a` passed all **1,730** provider-free Linux
+tests and Python name/import checks in [CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37000380354).
+The public controls are synthetic repair tests, not country factual acceptance.
+
+Production acceptance remains open. The rejected paid draft was not inspected, so its
+precise cause is unconfirmed. Fresh model/factual acceptance, the revised assistant,
+cross-country/source-target reliability and deferred durable hosting remain. No paid
+assessment, merge, deployment or hosting change occurred during this repair.
+
 ## Unchanged Guinea repeat failed on quotation and policy repair - 2026-10-02
 
 The owner explicitly authorized one repeat on `b8f9970`, with application source still

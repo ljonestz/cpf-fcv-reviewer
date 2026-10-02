@@ -1,5 +1,26 @@
 # Project status
 
+## 2026-10-02 Reproduced quotation/policy repair defects fixed and CI verified
+
+Provider-free diagnosis found that policy cleanup could lose the citation for a valid
+replacement quotation, overwrite a quotation with a paraphrase and bypass duplicate-ID
+protection. Quotation and source links now transfer together through the existing exact
+verifier, with unique RRA row identities. Policy/date corrections to quotations receive
+the necessary primary/package evidence; repair prompt v3.0.9 requires an exact supported
+replacement. Existing policy rules, analysis, admission caps and call limits remain.
+
+Four regression cases failed before the fix. Final reference/runtime checks passed 173
+cases, prompt/smoke/orchestrator checks passed 100, and three actual public Guinea
+passage controls passed. Exact code commit `54cdf2a` passed all **1,730** provider-free
+Linux tests, including Gunicorn concurrency, and Python name/import checks in
+[CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37000380354). See the
+[diagnosis and repair record](validation/2026-10-02-quote-policy-repair.md).
+
+This proves code defects and their repair, not the precise cause of the rejected paid
+draft. No model calls, deployment or hosting changes occurred. Production acceptance
+remains open; the paid ledger still contains seven reservations. Earlier entries below
+describe their original candidates and outcomes.
+
 ## 2026-10-02 Owner-authorized unchanged Guinea repeat failed
 
 One explicitly authorized repeat on `b8f9970` (unchanged application source `b5f0578`)
