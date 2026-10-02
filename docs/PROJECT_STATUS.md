@@ -1,5 +1,25 @@
 # Project status
 
+## 2026-10-03 Source-selection recovery verified without paid calls
+
+Commit `09805d6` adds deterministic source-passage selection with the existing literal
+quotation fallback, safe reason-level diagnostics, mixed-error identity preservation,
+policy/date row recovery and a budget fallback that retains all evidence text.
+Explicit coverage repair remains supported; oversized passages are excluded from the
+optional index rather than silently truncated.
+
+All **1,755 Linux tests** and Python name/import checks passed in
+[CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37073544182).
+The final candidate completed a deliberately broken synthetic quotation through one
+repair, all 11 browser checks, refresh/assistant history, and both Word downloads.
+Public controls verified 10,251 passage round trips across seven CPF/CEN files.
+Local SQLite backup integrity and table-count equality passed.
+
+See the [implementation and evidence record](validation/2026-10-03-source-selection-recovery.md).
+No paid assessment, merge or deployment occurred. Paid factual acceptance and the
+previously recorded production persistence/backup/spending controls remain open.
+Earlier entries below are historical and retain their original scope.
+
 ## 2026-10-02 Repaired candidate paid test still blocked by one quotation
 
 One owner-approved Guinea run on `5cfb641` (application repair `54cdf2a`) failed safely.
