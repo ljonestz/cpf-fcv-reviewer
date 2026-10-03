@@ -1,5 +1,27 @@
 # Production readiness
 
+## 2026-10-03 Paid Guinea execution passed; analytical acceptance held
+
+One authorized assessment on `ab3b532` (application `09805d6`) completed normally in
+599.57 seconds. All **9 paid-run browser checks passed**, with zero browser errors,
+refresh recovery and both Word downloads. No quotation error occurred; one bounded
+repair cleared an unknown institutional referral. Independent checks passed all
+**5 CPF quotations** and **3 recommendation anchors** against their cited PDF pages.
+All five RRA drivers and four embedded Strategy shifts were considered.
+
+The accepted output still overstates some source claims and proposed arrangements,
+loses current-context qualifications in its opening, and has a summary/detail
+inconsistency. Both Word files are readable (12 pages inspected); driver numbering,
+duplicate page labels and nearly empty summary continuation need provider-free fixes.
+See the [paid acceptance and findings record](validation/2026-10-03-quote-selection-paid-acceptance.md).
+
+Functional acceptance passed; factual acceptance and public production readiness remain
+held. Reuse the saved result for free corrections before considering another paid run.
+Nine renewed ledger reservations are recorded; prior eight are unchanged. No paid
+assistant, application edit, merge, deployment, hosting charge or manual quota reset
+occurred. Live persistence/backup/spending controls, real-provider assistant and
+cross-country acceptance remain open. Earlier entries retain their historical scope.
+
 ## 2026-10-03 Source-selection recovery verified without paid calls
 
 Commit `09805d6` adds deterministic source-passage selection with the existing literal
