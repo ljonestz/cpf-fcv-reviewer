@@ -839,7 +839,8 @@ class ReviewEngine:
                 "evidence_id": item.evidence_id,
                 "publisher": (item.source_publisher or "")[:200],
                 "source_title": (item.source_title or "")[:500],
-                "source_date": item.source_date.isoformat(),
+                "source_date": item.source_date.isoformat() if item.source_date else None,
+                "verification": item.verification,
                 "source_url": (item.source_url or "")[:2000],
                 "supporting_quote": (item.supporting_quote or "")[:1500],
                 "source_relevance": (item.source_relevance or "")[:1000],
@@ -852,13 +853,14 @@ class ReviewEngine:
             and item.evidence_type == "current_context"
             and item.source_publisher
             and item.source_title
-            and item.source_date is not None
             and item.source_url
             and item.supporting_quote
         ]
         repair_payload = {
                 "draft": draft_payload,
                 "assessment_as_of": result.metadata.created_at.date().isoformat(),
+                "current_evidence_tier": result.metadata.current_evidence_tier.value,
+                "current_evidence_limitation": result.metadata.current_evidence_limitation,
                 "validation_issues": issues,
                 "forbidden_phrases": forbidden_phrases,
                 "repair_support_evidence_ids": {

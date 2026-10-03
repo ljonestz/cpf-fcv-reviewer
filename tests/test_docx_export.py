@@ -19,6 +19,7 @@ from cpf_fcv_reviewer.export_docx import (
     RRA_ALIGNMENT_QUESTION,
     STRATEGY_ALIGNMENT_QUESTION,
     build_docx,
+    target_text,
 )
 from cpf_fcv_reviewer.registry import load_registry_bundle
 
@@ -257,6 +258,33 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
     assert "Gap locus" not in text
     assert "Source: CPF.docx | Results framework | paragraph 12" not in text
     assert "Excerpt: The program will support access." not in text
+
+
+def test_docx_uses_neutral_display_order_for_rra_assessment_headings(make_valid_result):
+    result, evidence = make_valid_result
+
+    document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+    headings = [
+        paragraph.text
+        for paragraph in document.paragraphs
+        if paragraph.style.name == "Heading 3"
+    ]
+
+    assert "Driver assessment 1" in headings
+    assert "RRA driver 1" not in headings
+
+
+def test_target_text_deduplicates_only_matching_page_element(make_valid_result):
+    _, evidence = make_valid_result
+    locator = evidence["ev-1"].locator.model_copy(
+        update={"page": 5, "heading": "Results", "element": "page 5"}
+    )
+    distinct = locator.model_copy(update={"element": "paragraph 12"})
+
+    assert target_text(locator) == "CPF.docx | page 5 | Results"
+    assert target_text(distinct) == "CPF.docx | page 5 | Results | paragraph 12"
 
 def test_docx_uses_distinct_empty_rra_messages(make_valid_result):
     result, evidence = make_valid_result
@@ -790,6 +818,92 @@ def test_five_minute_export_preserves_actions_and_limits_detail(make_valid_resul
     assert not any(run.bold for run in overview.runs)
     action = next(p for p in paragraphs if "First action." in p.text)
     assert all(not run.bold for run in action.runs if "First action." in run.text)
+
+
+def test_summary_uses_tighter_paragraph_spacing_than_detailed_note(make_valid_result):
+    result, evidence = make_valid_result
+
+    summary = Document(
+        BytesIO(
+            build_docx(
+                result,
+                evidence=evidence,
+                hydrated_referrals=(),
+                summary=True,
+            )
+        )
+    )
+    detail = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+
+    assert summary.styles["Normal"].paragraph_format.space_after < (
+        detail.styles["Normal"].paragraph_format.space_after
+    )
+
+
+def test_summary_keeps_each_priority_heading_overview_and_response_together(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+
+    document = Document(
+        BytesIO(
+            build_docx(
+                result,
+                evidence=evidence,
+                hydrated_referrals=(),
+                summary=True,
+            )
+        )
+    )
+    paragraphs = document.paragraphs
+    heading_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text == result.revision_summary[0].title
+    )
+    heading, overview, response = paragraphs[heading_index : heading_index + 3]
+
+    assert heading.style.paragraph_format.keep_with_next is True
+    assert overview.paragraph_format.keep_with_next is True
+    assert response.text.startswith("Recommended response:")
+    assert response.paragraph_format.keep_together is True
+
+
+def test_detailed_note_keeps_locator_with_the_content_it_locates(make_valid_result):
+    result, evidence = make_valid_result
+    assessment = result.rra_driver_assessments[0]
+    evidence = {
+        **evidence,
+        assessment.evidence_ids[0]: evidence[assessment.evidence_ids[0]].model_copy(
+            update={
+                "text": assessment.cpf_response,
+                "evidence_type": "document_fact",
+                "document_role": "primary",
+            }
+        ),
+    }
+
+    document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+    paragraphs = document.paragraphs
+    quote_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text.startswith("CPF/package quotation:")
+    )
+    action_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text.startswith("Recommended action:")
+    )
+
+    assert paragraphs[quote_index + 1].text.startswith("Quotation source:")
+    assert paragraphs[quote_index].paragraph_format.keep_with_next is True
+    assert paragraphs[action_index + 1].text.startswith("Target:")
+    assert paragraphs[action_index].paragraph_format.keep_with_next is True
 
 
 def test_five_minute_summary_is_concise_without_cutting_sentences(make_valid_result):

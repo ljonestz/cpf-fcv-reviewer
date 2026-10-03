@@ -590,9 +590,10 @@ class ResearchController:
             claim for claim in claims if self._is_recent(claim, request)
         )
         recent_count = len(recent_claims)
+        as_of = f"Assessment as of {request.review_date.isoformat()}: "
         if not recent_claims and claims:
             return (
-                f"Retrieved {len(claims)} source-linked contextual "
+                as_of + f"Retrieved {len(claims)} source-linked contextual "
                 f"observation{'s' if len(claims) != 1 else ''} without "
                 "publication dates; verify timing before treating them as current. "
                 "Dated current developments could not be established."
@@ -622,12 +623,22 @@ class ResearchController:
             "recent": "recent evidence",
         }
         gaps = ", ".join(labels.get(item, item) for item in missing)
+        dates = sorted({claim.source_date.isoformat() for claim in recent_claims})
+        date_range = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}"
+        undated_count = sum(claim.source_date is None for claim in claims)
+        undated_note = (
+            f" {undated_count} additional observation{'s have' if undated_count != 1 else ' has'} "
+            "no established publication date."
+            if undated_count else ""
+        )
         return (
-            f"{recent_count_word} recent {observation_word} across {source_count_word} "
+            as_of + f"{recent_count_word} dated {observation_word} across {source_count_word} "
             f"distinct {url_word} and {publisher_count_word} originating "
-            f"{publisher_word} {verb} established; "
-            "this is sufficient for a reduced current update, while broader "
-            f"coverage remains unavailable for {gaps}."
+            f"{publisher_word} {verb} retained. "
+            f"Source publication dates: {date_range}. These are publication dates, not event dates. "
+            "Source-linked observations do not by themselves establish present conditions."
+            + undated_note
+            + (f" Broader coverage remains unavailable for {gaps}." if gaps else "")
         )
 
     def _prompt(

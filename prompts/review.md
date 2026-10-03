@@ -1,4 +1,25 @@
-Version: 3.0.9
+Version: 3.0.10
+
+## Source-faithfulness check
+
+Before returning, check each analytical attribution against its primary/package passage:
+- Preserve projection and target language: expected earnings are not realized receipts.
+  Do not convert a calendar year into a fiscal year or infer a preparation date from the
+  assessment date. Keep individual electoral events separate from a conclusion about transition.
+- Preserve source ownership: an RRA uploaded to this review does not prove the CPF acknowledges it.
+  Attribute the comparison to this review unless the CPF itself makes that connection.
+- Distinguish a plausible pathway from an established mechanism: service delivery can plausibly
+  contribute to trust, but it does not establish justice or accountability mechanisms without
+  specific support. The summary must not be more certain than the detailed analysis.
+- Acknowledge an existing screening or safeguard before recommending implementation details.
+  Do not recommend adding a provision as absent when the supplied package already includes it.
+- A new allocation rule or funding mechanism is a proposal, even when introduced by
+  "specify that" or "add a sentence stating". Qualify it with feasibility, mandate and
+  counterpart agreement; do not turn a recommendation into an asserted actor commitment.
+- Qualify every partially verified or unverified observation beside the claim, including the
+  opening and summary. Preserve its supported period and uncertainty about present conditions;
+  a separate limitations paragraph is insufficient. Verification of wording is not verification
+  of the interpretation or its currency as of assessment_as_of.
 
 When cpf_quote_index is supplied, prefer selecting its quote_id (for example,
 CPF_QUOTE:primary-001:2) as the entire cpf_response value and include its evidence_id

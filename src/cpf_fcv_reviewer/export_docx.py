@@ -298,11 +298,13 @@ def _configure_document(document: Document, *, created_at: datetime) -> tuple[in
 
 def target_text(locator: EvidenceLocator) -> str:
     parts = [locator.document_title]
+    page_label = None
     if locator.page is not None:
-        parts.append(f"page {locator.page}")
+        page_label = f"page {locator.page}"
+        parts.append(page_label)
     if locator.heading:
         parts.append(locator.heading)
-    if locator.element:
+    if locator.element and locator.element.strip() != page_label:
         parts.append(locator.element)
     return " | ".join(parts)
 
@@ -470,13 +472,21 @@ def _add_readable_paragraph(
     return tuple(paragraphs)
 
 
-def _add_labelled_paragraph(document: Document, label: str, value: str) -> None:
+def _add_labelled_paragraph(
+    document: Document,
+    label: str,
+    value: str,
+    *,
+    keep_with_next: bool = False,
+) -> None:
     chunks = _readable_chunks(value) or ("",)
     for index, chunk in enumerate(chunks):
         paragraph = document.add_paragraph()
         if index == 0:
             paragraph.add_run(f"{label}: ").bold = True
         _append_bold_lead_sentence(paragraph, chunk)
+        if keep_with_next and index == len(chunks) - 1:
+            paragraph.paragraph_format.keep_with_next = True
 
 
 def _add_readable_list_paragraph(
@@ -521,24 +531,37 @@ def _add_rra_assessments(
         document.add_paragraph(message)
         return
     for index, assessment in enumerate(result.rra_driver_assessments, start=1):
-        document.add_heading(f"RRA driver {index}", level=3)
+        document.add_heading(f"Driver assessment {index}", level=3)
         standing = (
             f"{ASSESSMENT_STATUS_LABELS[assessment.status]} - "
             f"{ASSESSMENT_CONFIDENCE_LABELS[assessment.confidence]} confidence"
         )
+        _add_labelled_paragraph(document, "Driver", assessment.driver)
+        source = next(
+            (
+                item
+                for item in cited_document_evidence(assessment.evidence_ids, evidence)
+                if assessment.cpf_response in item.text
+            ),
+            None,
+        )
+        _add_labelled_paragraph(
+            document,
+            "CPF/package quotation",
+            assessment.cpf_response,
+            keep_with_next=source is not None,
+        )
+        if source is not None:
+            _add_labelled_paragraph(
+                document, "Quotation source", target_text(source.locator)
+            )
         for label, value in (
-            ("Driver", assessment.driver),
-            ("CPF/package quotation", assessment.cpf_response),
             ("Delivery mechanism (analysis)", assessment.delivery_mechanism),
             ("Result / indicator (analysis)", assessment.result_or_indicator),
             ("Remaining gap", assessment.remaining_gap),
             ("Status and confidence", standing),
         ):
             _add_labelled_paragraph(document, label, value)
-        source = next((item for item in cited_document_evidence(assessment.evidence_ids, evidence)
-                       if assessment.cpf_response in item.text), None)
-        if source is not None:
-            _add_labelled_paragraph(document, "Quotation source", target_text(source.locator))
 
 
 def _add_strategy_assessments(
@@ -578,7 +601,10 @@ def _add_evidence_register(
             references.setdefault(evidence_id, []).append(used_for)
 
     for index, assessment in enumerate(result.rra_driver_assessments, start=1):
-        register(assessment.evidence_ids, f"RRA driver {index}: {assessment.driver}")
+        register(
+            assessment.evidence_ids,
+            f"Driver assessment {index}: {assessment.driver}",
+        )
     for assessment in result.fcv_strategy_assessments:
         shift = STRATEGIC_SHIFT_LABELS[assessment.strategic_shift]
         register(assessment.evidence_ids, f"FCV Strategy: {shift}")
@@ -681,6 +707,9 @@ def _shade_paragraph(paragraph, fill: str, *, accent: bool = False) -> None:
 
 def _apply_report_layout(document: Document, *, summary: bool, created_at: datetime) -> None:
     """Apply a restrained editorial layout without changing assessment content."""
+    if summary:
+        document.styles["Normal"].paragraph_format.space_after = Pt(4)
+        document.styles["Heading 2"].paragraph_format.space_before = Pt(9)
     for paragraph in document.paragraphs:
         paragraph.paragraph_format.widow_control = True
         if paragraph.style.name == "Title":
@@ -703,7 +732,7 @@ def _apply_report_layout(document: Document, *, summary: bool, created_at: datet
                 run.font.size = Pt(9)
                 run.font.color.rgb = MUTED
         elif paragraph.style.name == "Heading 1":
-            paragraph.paragraph_format.space_before = Pt(18)
+            paragraph.paragraph_format.space_before = Pt(14 if summary else 18)
         elif paragraph.style.name == "Heading 3":
             _shade_paragraph(paragraph, "F0F4F7")
         elif paragraph.text.startswith(("Recommended action:", "Recommended response:")):
@@ -841,8 +870,10 @@ def build_docx(
                     )
                 ),
             )
-            document.add_paragraph(" ".join(overview))
+            overview_paragraph = document.add_paragraph(" ".join(overview))
+            overview_paragraph.paragraph_format.keep_with_next = True
             response = document.add_paragraph()
+            response.paragraph_format.keep_together = True
             response.add_run("Recommended response: ").bold = True
             response.add_run(
                 _summary_excerpt(
@@ -861,7 +892,12 @@ def build_docx(
                 document.add_heading(area.heading, level=2)
                 _add_readable_paragraph(document, area.assessment)
                 _add_readable_paragraph(document, area.why_it_matters)
-                _add_labelled_paragraph(document, "Recommended action", area.recommended_action)
+                _add_labelled_paragraph(
+                    document,
+                    "Recommended action",
+                    area.recommended_action,
+                    keep_with_next=True,
+                )
                 _add_labelled_paragraph(document, "Target", target_text(area.target_locator))
                 if area.comment_reference:
                     _add_labelled_paragraph(document, "Comment addressed", area.comment_reference)

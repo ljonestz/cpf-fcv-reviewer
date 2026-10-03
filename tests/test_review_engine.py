@@ -867,6 +867,8 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
     expected_draft["coverage_note"] = initial.document_coverage.coverage_note
     assert payload == {
         "assessment_as_of": meta.created_at.date().isoformat(),
+        "current_evidence_tier": "full",
+        "current_evidence_limitation": None,
         "draft": expected_draft,
         "validation_issues": issues,
         "forbidden_phrases": ("forbidden",),
@@ -1939,6 +1941,7 @@ def test_repair_receives_bounded_current_source_support_records():
             "publisher": "Reuters",
             "source_title": "Guinea update",
             "source_date": "2026-08-30",
+            "verification": "unverified",
             "source_url": current.source_url,
             "supporting_quote": "Political violence increased in Guinea.",
             "source_relevance": "Selected-country FCV relevance.",
@@ -2147,3 +2150,30 @@ def test_review_and_repair_share_original_application_assessment_date():
         "2024-02-29", "2024-02-29",
     ]
     assert repaired.metadata.created_at == meta.created_at
+
+
+def test_repair_keeps_undated_context_grade_and_application_limitation():
+    from cpf_fcv_reviewer.contracts import CurrentEvidenceTier
+
+    meta = metadata().model_copy(update={
+        "current_evidence_tier": CurrentEvidenceTier.REDUCED,
+        "current_evidence_limitation": "Publication date unavailable; present status unestablished.",
+    })
+    current = EvidenceItem(
+        evidence_id="current-001", evidence_type="current_context",
+        text="A presidential election was reported.", confidence="medium",
+        verification="unverified", source_publisher="World Bank",
+        source_title="Country overview", source_url="https://www.worldbank.org/en/country/benin",
+        source_date=None, supporting_quote="A presidential election was reported.",
+    )
+    gateway = FakeGateway(draft_for(meta))
+    ReviewEngine(gateway).repair(
+        result_for(meta), [{"code": "missing_registry_support"}],
+        evidence_ids={current.evidence_id}, evidence={current.evidence_id: current},
+    )
+    payload = gateway.calls[0][1]
+    assert len(gateway.calls) == 1
+    assert payload["current_evidence_tier"] == "reduced"
+    assert payload["current_evidence_limitation"] == meta.current_evidence_limitation
+    assert payload["repair_support_evidence"][0]["verification"] == "unverified"
+    assert payload["repair_support_evidence"][0]["source_date"] is None

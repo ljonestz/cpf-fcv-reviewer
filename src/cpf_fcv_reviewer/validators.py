@@ -36,7 +36,7 @@ DETERMINATION_PATTERNS = (
     r"\bcriteria are met\b",
     r"\bhas cleared\b",
     r"\bconstitutes clearance\b",
-    r"\bis(?:\s+not|n't)?(?:\s+listed)?\s+on\s+(?:the\s+)?"
+    r"\bis(?:\s+not|n't|\s+no\s+longer)?(?:\s+listed)?\s+on\s+(?:the\s+)?"
     r"(?:world\s+bank(?:\s+group)?\s+)?(?:fcv\s+list|list\s+of\s+"
     r"fcv(?:-affected)?\s+countries)\b",
 )

@@ -112,3 +112,20 @@ def test_follow_on_prompt_reuses_review_date_and_does_not_amplify_unsupported_de
         "Keep recommendations concise",
     ):
         assert phrase in prompt
+
+
+@pytest.mark.parametrize("name", ["review", "repair"])
+def test_source_faithfulness_check_covers_observed_analytical_overreach(name):
+    prompt = normalize_whitespace(load_prompt(name))
+    for phrase in (
+        "Preserve projection and target language",
+        "calendar year into a fiscal year",
+        "an RRA uploaded to this review does not prove the CPF acknowledges it",
+        "service delivery can plausibly contribute to trust",
+        "does not establish justice or accountability mechanisms",
+        "allocation rule or funding mechanism",
+        "existing screening or safeguard",
+        "summary must not be more certain than the detailed analysis",
+        "unverified observation beside the claim",
+    ):
+        assert phrase in prompt

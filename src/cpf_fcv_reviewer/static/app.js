@@ -545,11 +545,12 @@ function renderReadoutPanel(title, value, className) {
 
 function locatorLabel(locator) {
   if (!locator) return "";
+  const pageLabel = locator.page ? `page ${locator.page}` : "";
   return [
     locator.document_title,
-    locator.page ? `page ${locator.page}` : "",
+    pageLabel,
     locator.heading || "",
-    locator.element || "",
+    locator.element?.trim() === pageLabel ? "" : locator.element || "",
   ].filter(Boolean).join(" | ");
 }
 
