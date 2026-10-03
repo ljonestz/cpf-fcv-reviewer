@@ -1,5 +1,30 @@
 # Project status
 
+## 2026-10-03 Provider-free quality and presentation follow-up verified
+
+Code `9914483` passed **1,769 Linux tests** including Gunicorn and Python name/import
+checks ([CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37138656833)).
+Reduced-research notices now name the assessment/publication dates without asserting
+present conditions; repair preserves verification grades and undated support. The
+observed “no longer on the FCV list” claim is caught by the existing validator.
+Review 3.0.10 / repair 3.0.11 strengthen source attribution, projection/date accuracy,
+existing-provision acknowledgement, proposal qualification and summary consistency.
+These instruction tests do not establish real-model compliance.
+
+Neutral Word driver labels, duplicate-page suppression, quote/locator proximity and
+summary paragraph grouping are verified. Historical-result browser replay passed
+**6/6** checks; synthetic assessment/assistant browser flow passed **11/11**, both with
+zero browser errors. Nine detailed and three final summary Word pages were inspected.
+The summary retains three pages, with a complete priority on its last page.
+
+See the [finding-by-finding record](validation/2026-10-03-provider-free-quality-follow-up.md).
+Original paid outputs remain unchanged and retain their documented analytical defects.
+No new paid run, merge, deployment, hosting charge or quota reset occurred; the ledger
+still has nine reservations. PR 39 remains draft. Factual acceptance on the fixed
+candidate, real-provider assistant/cross-country checks, live persistence/restart/
+restore, off-disk backups and provider spending controls remain open. Earlier entries
+below are historical, not current claims that these presentation fixes are pending.
+
 ## 2026-10-03 Paid Guinea execution passed; analytical acceptance held
 
 One authorized assessment on `ab3b532` (application `09805d6`) completed normally in
