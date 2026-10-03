@@ -59,8 +59,9 @@ def test_canonical_assessments_are_represented_in_docx_with_resolved_evidence(
     assert "rra-1" not in docx_text
     assert "strategy-anticipate-better" not in docx_text
     assert "ev-1" not in docx_text
-    assert "Delivery mechanism" not in docx_text
-    assert "Result / indicator" not in docx_text
+    assert "CPF/package quotation" in docx_text
+    assert canonical["rra_driver_assessments"][0]["delivery_mechanism"] in docx_text
+    assert canonical["rra_driver_assessments"][0]["result_or_indicator"] in docx_text
     assert "Gap locus" not in docx_text
 
 def test_docx_and_web_note_share_empty_state_language(make_valid_result):
@@ -71,6 +72,23 @@ def test_docx_and_web_note_share_empty_state_language(make_valid_result):
 
     assert "No revision summary was returned for this review." not in text
     assert "No priority areas were returned for this review." in text
+
+
+def test_quoted_response_has_a_readable_source_location(make_valid_result):
+    from cpf_fcv_reviewer.contracts import DocumentRole
+    result, evidence = make_valid_result
+    evidence["ev-1"] = evidence["ev-1"].model_copy(update={
+        "document_role": DocumentRole.PRIMARY,
+    })
+    row = result.rra_driver_assessments[0].model_copy(update={
+        "cpf_response": evidence["ev-1"].text,
+    })
+    result = result.model_copy(update={"rra_driver_assessments": (row,)})
+    text = "\n".join(p.text for p in Document(BytesIO(
+        build_docx(result, evidence=evidence, hydrated_referrals=()),
+    )).paragraphs)
+    assert "Quotation source: CPF.docx | Results framework | paragraph 12" in text
+    assert "ev-1" not in text
 
 
 def test_browser_json_exposes_evidence_status_from_review_metadata(make_valid_result):
@@ -96,9 +114,15 @@ def test_browser_json_exposes_evidence_status_from_review_metadata(make_valid_re
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["metadata"] == result.metadata.model_dump(mode="json")
+    assert payload["overall_read"] == result.overall_read
+    assert payload["alignment_readout"] == result.alignment_readout
+    assert payload["strategy_readout"] == result.strategy_readout
+    assert payload["priority_areas"][0]["recommended_action"] == (
+        result.priority_areas[0].recommended_action
+    )
 
 
-def test_browser_keeps_evidence_limitations_omitted_from_docx(make_valid_result):
+def test_browser_and_docx_preserve_material_current_context_limitation(make_valid_result):
     result, evidence = make_valid_result
     limitation = "Independent current-country research was unavailable."
     result = result.model_copy(
@@ -140,7 +164,8 @@ def test_browser_keeps_evidence_limitations_omitted_from_docx(make_valid_result)
     assert payload["metadata"]["current_evidence_limitation"] == limitation
     assert "Review based primarily on submitted documents" not in docx_text
     assert "Current evidence tier" not in docx_text
-    assert limitation not in docx_text
+    assert docx_text.count(limitation) == 1
+    assert docx_text.index(limitation) < docx_text.index("Overall assessment")
     assert limitation in payload["limitations"]
 
 

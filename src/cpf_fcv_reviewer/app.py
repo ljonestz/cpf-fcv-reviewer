@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template
 
+from .admission import PublicAdmission
 from .background import InProcessAssessmentQueue, PersistentAssessmentWorker
 from .config import build_config
 from .persistent_store import SQLiteSessionStore
@@ -72,7 +73,10 @@ def create_app(
             app.extensions["assessment_queue"] = InProcessAssessmentQueue(
                 app,
                 enabled=app.config["START_BACKGROUND_RUNS"],
+                max_pending=app.config["MAX_PENDING_ASSESSMENTS"],
             )
+            atexit.register(app.extensions["assessment_queue"].stop)
+    app.extensions["public_admission"] = PublicAdmission(app.config, path=persistence_path)
     app.register_blueprint(review_blueprint)
 
     @app.get("/")

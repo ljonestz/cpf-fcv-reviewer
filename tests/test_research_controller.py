@@ -192,7 +192,7 @@ def test_thin_recent_public_evidence_returns_reduced_tier_with_limitation():
     ).run(holistic_request(), lambda *event: events.append(event))
 
     assert result.tier is CurrentEvidenceTier.REDUCED
-    assert "one recent observation across one distinct URL and one originating publisher was established;" in result.limitation
+    assert "one dated observation across one distinct URL and one originating publisher was retained." in result.limitation
     reduced = [data for kind, data in events if kind == "research_reduced"]
     assert len(reduced) == 1
     assert set(reduced[0]) == {"missing_coverage"}
@@ -209,7 +209,7 @@ def test_recent_claims_distinguish_claim_count_from_unique_source_count():
         max_attempts=1,
     ).run(holistic_request(), lambda *_: None)
 
-    assert "2 recent observations across 2 distinct URLs and 2 originating publishers were established;" in result.limitation
+    assert "2 dated observations across 2 distinct URLs and 2 originating publishers were retained." in result.limitation
     assert "Only 2 public sources" not in result.limitation
 
 
@@ -230,7 +230,7 @@ def test_duplicate_normalized_source_url_reduces_source_count_not_claim_count():
         holistic_request(),
     )
 
-    assert "2 recent observations across one distinct URL and 2 originating publishers were established;" in limitation
+    assert "2 dated observations across one distinct URL and 2 originating publishers were retained." in limitation
 
 
 def test_reduced_limitation_names_missing_thematic_coverage():
@@ -354,7 +354,7 @@ def test_trailing_dns_dot_counts_as_the_canonical_source_url():
         holistic_request(),
     )
 
-    assert "2 recent observations across one distinct URL and 2 originating publishers were established;" in limitation
+    assert "2 dated observations across one distinct URL and 2 originating publishers were retained." in limitation
 
 
 def test_one_recent_curated_fcv_report_completes_at_reduced_tier():
@@ -1985,3 +1985,33 @@ def test_research_prompt_grounds_current_status_to_application_assessment_date()
     assert "event dates distinct from publication dates" in " ".join(prompt.split())
     assert "latest status through the application assessment as-of date" in " ".join(prompt.split())
     assert prompt.count("2026-08-01") == 1
+
+
+def test_reduced_notice_dates_old_and_undated_evidence_without_claiming_currentness():
+    request = ResearchRequest("Benin", date(2026, 10, 3), ResearchMode.HOLISTIC)
+    dated = claim("dated", source_date=date(2024, 12, 19)).model_copy(
+        update={"verification": "verified"}
+    )
+    undated = claim("undated").model_copy(update={
+        "source_date": None, "verification": "unverified", "fcv_relevant": True,
+    })
+    gateway = ScriptedGateway(((dated, undated),))
+    result = controller(gateway, max_attempts=1).run(request, lambda *_: None)
+    assert result.tier is CurrentEvidenceTier.REDUCED
+    assert len(result.claims) == 2 and gateway.calls == 1
+    assert "2026-10-03" in result.limitation
+    assert "2024-12-19" in result.limitation
+    assert "1 additional observation has no established publication date" in result.limitation
+    assert "do not by themselves establish present conditions" in result.limitation
+    assert "recent observation" not in result.limitation
+    assert "sufficient for a reduced current update" not in result.limitation
+
+
+def test_reduced_notice_reports_publication_range_not_event_date_range():
+    claims = (claim("a", source_date=date(2025, 8, 1)),
+              claim("b", source_date=date(2026, 7, 1)))
+    limitation = controller(ScriptedGateway(()))._reduced_limitation(
+        claims, ("publishers",), holistic_request(),
+    )
+    assert "Source publication dates: 2025-08-01 to 2026-07-01" in limitation
+    assert "event dates" in limitation

@@ -142,9 +142,9 @@ def test_concurrent_event_streams_do_not_starve_the_health_check(tmp_path):
                     + log_path.read_text(encoding="utf-8", errors="replace")
                 )
 
-            assessment_ids = [
-                _create_pending_assessment(base_url) for _ in range(HELD_STREAMS)
-            ]
+            # Eight viewers may watch one admitted review. Keep public quotas active.
+            assessment_id = _create_pending_assessment(base_url)
+            assessment_ids = [assessment_id] * HELD_STREAMS
 
             def hold(assessment_id: str) -> None:
                 try:
@@ -174,6 +174,15 @@ def test_concurrent_event_streams_do_not_starve_the_health_check(tmp_path):
             assert connected == HELD_STREAMS, (
                 f"Only {connected}/{HELD_STREAMS} event streams connected"
             )
+            # Excess streams must fail promptly, leaving request threads for health.
+            with pytest.raises(urllib.error.HTTPError) as denied:
+                urllib.request.urlopen(
+                    f"{base_url}/api/reviews/{assessment_id}/events", timeout=5
+                )
+            assert denied.value.code == 503
+            assert denied.value.headers["Retry-After"] == "5"
+            assert json.loads(denied.value.read())["code"] == "event_stream_limit"
+
             latencies = []
             for _ in range(HEALTH_PROBES):
                 latencies.append(_probe_health(base_url))

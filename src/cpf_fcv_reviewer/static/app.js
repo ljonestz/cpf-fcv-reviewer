@@ -77,11 +77,6 @@ const retryableResearchCodes = new Set([
 
 const stageOrder = ["documents", "research", "note"];
 const progressPercent = {documents: 18, research: 58, note: 88};
-const stageEstimates = {
-  documents: [45, 120],
-  research: [90, 300],
-  note: [90, 240],
-};
 const guidanceCards = [
   "Strong FCV reviews connect context, design choices, delivery arrangements, and results.",
   "A useful recommendation identifies both the change and where it belongs in the draft.",
@@ -152,8 +147,6 @@ const gapLocusLabels = {
 };
 
 let journeyStartedAt;
-let journeyStageStartedAt;
-let journeyCurrentStage = "documents";
 let journeyClock;
 let guidanceRotation;
 let guidanceIndex = 0;
@@ -164,40 +157,12 @@ function formatElapsed(seconds) {
   return `${minutes}:${remainder}`;
 }
 
-function approximateMinutes(seconds) {
-  return Math.max(1, Math.ceil(seconds / 60));
-}
-
-function formatRemainingTime(minimumMinutes, maximumMinutes) {
-  if (minimumMinutes === 1 && maximumMinutes === 1) {
-    return "About 1 minute remaining";
-  }
-  return `About ${minimumMinutes}-${maximumMinutes} minutes remaining`;
-}
-
 function updateJourneyClock() {
   if (!journeyStartedAt) return;
   const currentTime = performance.now();
   const elapsedSeconds = Math.max(0, (currentTime - journeyStartedAt) / 1000);
-  const stageIndex = stageOrder.indexOf(journeyCurrentStage);
-  const currentStageElapsed = Math.max(0, (currentTime - journeyStageStartedAt) / 1000);
-  const remaining = stageOrder.slice(Math.max(0, stageIndex)).reduce(
-    (range, stage, index) => {
-      const [minimum, maximum] = stageEstimates[stage];
-      if (index === 0) {
-        return [
-          range[0] + Math.max(1, minimum - currentStageElapsed),
-          range[1] + Math.max(1, maximum - currentStageElapsed),
-        ];
-      }
-      return [range[0] + minimum, range[1] + maximum];
-    },
-    [0, 0],
-  );
-  const minimumMinutes = approximateMinutes(remaining[0]);
-  const maximumMinutes = Math.max(minimumMinutes, approximateMinutes(remaining[1]));
   elapsedTime.textContent = `${formatElapsed(elapsedSeconds)} elapsed`;
-  remainingTime.textContent = formatRemainingTime(minimumMinutes, maximumMinutes);
+  remainingTime.textContent = "Duration varies with the document package.";
 }
 
 function rotateGuidanceCard() {
@@ -213,8 +178,6 @@ function prefersReducedMotion() {
 function startJourneyClock() {
   stopJourneyClock();
   journeyStartedAt = performance.now();
-  journeyStageStartedAt = journeyStartedAt;
-  journeyCurrentStage = "documents";
   guidanceIndex = 0;
   rotateGuidanceCard();
   updateJourneyClock();
@@ -230,7 +193,6 @@ function stopJourneyClock() {
   journeyClock = undefined;
   guidanceRotation = undefined;
   journeyStartedAt = undefined;
-  journeyStageStartedAt = undefined;
 }
 
 function setProgressStages(activeIndex, complete = false) {
@@ -249,10 +211,6 @@ function setProgressStages(activeIndex, complete = false) {
 function updateProgress(stage) {
   const group = sseStageMap[stage];
   if (!group) return;
-  if (journeyCurrentStage !== group) {
-    journeyCurrentStage = group;
-    journeyStageStartedAt = performance.now();
-  }
   const activeIndex = stageOrder.indexOf(group);
   setProgressStages(activeIndex);
   if (progressFill.style) progressFill.style.width = `${progressPercent[group] || 0}%`;
@@ -266,7 +224,7 @@ function resetProgress() {
   if (progressFill.style) progressFill.style.width = "0%";
   setProgressStages(-1);
   elapsedTime.textContent = "0:00 elapsed";
-  remainingTime.textContent = "About 4-11 minutes remaining";
+  remainingTime.textContent = "Duration varies with the document package.";
 }
 
 const failureLabels = {
@@ -276,8 +234,13 @@ const failureLabels = {
   document_too_large: "The primary document is too large to review in full. Upload a shorter version, or split the annexes into package documents.",
   diagnostic_coverage_unavailable: "The uploaded diagnostic could not be assessed in full. Upload a shorter or text-searchable version, or start a new review without it.",
   package_coverage_unavailable: "The accompanying package could not be reviewed in full. Upload fewer, shorter, or text-searchable package documents.",
-  review_schema_invalid: "The review could not be completed.",
-  review_failed: "The review could not be completed.",
+  review_schema_invalid: "The model could not produce a complete valid review after one correction attempt. No findings were released. A new submission uses another assessment allowance.",
+  model_output_truncated: "The model reached its response limit before completing the review. No findings were released or automatically rerun. A new submission uses another assessment allowance.",
+  model_refusal: "The model declined this request. No findings were released or automatically rerun.",
+  model_output_unavailable: "The model did not complete the review safely. No findings were released or automatically rerun.",
+  review_failed: "The generated findings could not be grounded reliably in the supplied evidence. No findings were released. A new submission uses another assessment allowance.",
+  review_coverage_unavailable: "The primary document and package exceed the full-review input limit. Upload a shorter primary document or fewer annexes; text is never silently omitted.",
+  assessment_interrupted: "The service restarted during this assessment. It was not automatically rerun. A new submission uses another assessment allowance.",
 };
 
 function setProgressRunningPresentation(running) {
@@ -525,6 +488,30 @@ function splitNarrativeIntoChunks(value) {
   return chunks;
 }
 
+async function safeRequestMessage(response, fallback) {
+  if (response.status !== 429 && response.status !== 503 && response.status !== 400) return fallback;
+  try {
+    const body = await response.json();
+    return typeof body?.error === "string" ? body.error : fallback;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function summaryExcerpt(value, maxSentences, maxWords, placeholder) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+  const selected = [];
+  let wordCount = 0;
+  for (const sentence of splitNarrativeIntoChunks(source).flat()) {
+    const sentenceWords = sentence.split(/\s+/).filter(Boolean).length;
+    if (selected.length === maxSentences || wordCount + sentenceWords > maxWords) break;
+    selected.push(sentence);
+    wordCount += sentenceWords;
+  }
+  return selected.join(" ") || placeholder;
+}
+
 function renderNarrative(value, className = "") {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
   for (const sentences of splitNarrativeIntoChunks(value)) {
@@ -558,11 +545,12 @@ function renderReadoutPanel(title, value, className) {
 
 function locatorLabel(locator) {
   if (!locator) return "";
+  const pageLabel = locator.page ? `page ${locator.page}` : "";
   return [
     locator.document_title,
-    locator.page ? `page ${locator.page}` : "",
+    pageLabel,
     locator.heading || "",
-    locator.element || "",
+    locator.element?.trim() === pageLabel ? "" : locator.element || "",
   ].filter(Boolean).join(" | ");
 }
 
@@ -741,7 +729,17 @@ function renderRraAssessments(result) {
     const definitions = document.createElement("dl");
     definitions.className = "assessment-definitions";
     appendAssessmentField(definitions, "Driver", assessment.driver);
-    appendAssessmentField(definitions, "CPF response", assessment.cpf_response);
+    appendAssessmentField(definitions, "CPF/package quotation", assessment.cpf_response);
+    const quoteSource = (assessment.evidence_ids || [])
+      .map((id) => result.evidence_by_id?.[id])
+      .find((item) => item?.evidence_type === "document_fact"
+        && ["primary", "package"].includes(item.document_role)
+        && item.locator && item.text?.includes(assessment.cpf_response));
+    if (quoteSource) {
+      appendAssessmentField(definitions, "Quotation source", locatorLabel(quoteSource.locator));
+    }
+    appendAssessmentField(definitions, "Delivery mechanism (analysis)", assessment.delivery_mechanism);
+    appendAssessmentField(definitions, "Result / indicator (analysis)", assessment.result_or_indicator);
     appendAssessmentField(definitions, "Remaining gap", assessment.remaining_gap);
     appendAssessmentStanding(definitions, assessment.status, assessment.confidence);
     card.append(definitions);
@@ -803,15 +801,31 @@ function renderRevisionSummary(result, anchorIds) {
     const anchorId = anchorIds.get(String(priorityAreaIndex));
     const card = document.createElement("section");
     card.className = "priority-area";
+    const overview = [
+      summaryExcerpt(
+        area?.assessment,
+        2,
+        55,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
+      summaryExcerpt(
+        area?.why_it_matters,
+        1,
+        40,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
+    ].filter(Boolean).join(" ");
     card.append(
       text("h3", item.title),
-      text("p", [
-        ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
-        ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
-      ].join(" "), "priority-assessment"),
+      text("p", overview, "priority-assessment"),
       labelledParagraph(
         "Recommended response",
-        area?.recommended_action || "",
+        summaryExcerpt(
+          area?.recommended_action,
+          3,
+          80,
+          "See Detailed analysis for the complete recommended measure.",
+        ),
         "recommended-action",
       ),
     );
@@ -905,16 +919,46 @@ function renderFiveMinuteReadout(result) {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
   fragment.append(
     text("p", "Five-minute readout", "read-time"),
+    text(
+      "p",
+      "For full findings, qualifications, and complete measures, see Detailed analysis.",
+    ),
+  );
+  if (result.metadata?.current_evidence_limitation) {
+    fragment.append(labelledNarrative(
+      "Current context limitation", result.metadata.current_evidence_limitation,
+      "evidence-status-limitation",
+    ));
+  }
+  fragment.append(
     text("h2", "Overall assessment"),
-    renderNarrative(result.overall_read, "overall-read"),
+    renderNarrative(
+      summaryExcerpt(
+        result.overall_read,
+        3,
+        100,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
+      "overall-read",
+    ),
     renderReadoutPanel(
       "How well does the CPF respond to the RRA and current FCV dynamics?",
-      result.alignment_readout,
+      summaryExcerpt(
+        result.alignment_readout,
+        3,
+        100,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
       "readout-panel-rra",
     ),
     renderReadoutPanel(
       "How does the CPF contribute to current FCV Strategy priorities?",
-      result.strategy_readout,
+      summaryExcerpt(
+        result.strategy_readout,
+        3,
+        100,
+        "See Detailed analysis for this assessment and its complete qualifications.",
+      ),
       "readout-panel-strategy",
     ),
     text("h2", "Priority measures to strengthen the CPF / CEN"),
@@ -1171,7 +1215,12 @@ async function sendAssistantMessage(event) {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({message}),
     });
-    if (!response.ok) throw new Error("Assistant request failed.");
+    if (!response.ok) {
+      failed = true;
+      assistantMessage.remove();
+      setAssistantStatus(await safeRequestMessage(response, "The assistant is unavailable. Try later."));
+      return;
+    }
     await consumeAssistantStream(response, (eventName, data) => {
       if (
         requestAssessmentId !== assessmentId
@@ -1337,13 +1386,13 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
   });
   source.addEventListener("expired", () => {
     if (!isCurrentOperation(operation) || !closeActiveSource(source)) return;
-    showRecoverableFailure("This volatile review session expired. Upload again.");
+    showRecoverableFailure("This review session expired. Start a new assessment if needed.");
   });
   source.onerror = () => {
     if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
     sourceErrors += 1;
     if (sourceErrors >= SOURCE_ERROR_LIMIT && closeActiveSource(source)) {
-      showRecoverableFailure("The review connection was interrupted. Return to intake and try again.");
+      showRecoverableFailure("The review connection was interrupted. Refresh this page to reconnect to the existing assessment.");
     }
   };
 }
@@ -1365,7 +1414,7 @@ form.addEventListener("submit", async (event) => {
     });
     if (!isCurrentOperation(operation)) return;
     if (!response.ok) {
-      showRecoverableFailure("The review could not start. Return to intake and try again.");
+      showRecoverableFailure(await safeRequestMessage(response, "The review could not start. Return to intake and try again."));
       return;
     }
     const created = await response.json();
@@ -1392,9 +1441,9 @@ async function retryResearch() {
     if (!isCurrentOperation(operation)) return;
     if (!response.ok) {
       if (response.status === 410) {
-        showRecoverableFailure("This volatile review session expired. Upload again.");
+        showRecoverableFailure("This review session expired. Start a new assessment if needed.");
       } else {
-        showResearchFailure("Research could not restart. Retry research, or start a new review.");
+        showResearchFailure(await safeRequestMessage(response, "Research could not restart. Retry research, or start a new review."));
       }
       return;
     }
@@ -1424,7 +1473,7 @@ submitCorrection.addEventListener("click", async () => {
     });
     if (!isCurrentOperation(operation)) return;
     if (!response.ok) {
-      showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
+      showRecoverableFailure(await safeRequestMessage(response, "The correction could not be applied. Return to intake and try again."));
       return;
     }
     const child = await response.json();
@@ -1563,7 +1612,7 @@ async function resetReview() {
     if (isCurrentOperation(resetEpoch)) {
       const notice = purgeConfirmed
         ? ""
-        : "The review was cleared from this browser, but server purge was not confirmed. Any remaining volatile state will expire.";
+        : "The review was cleared from this browser, but server purge was not confirmed. Any remaining review state will expire.";
       showLanding(notice);
     }
     resetPending = false;

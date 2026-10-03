@@ -6,6 +6,7 @@ from datetime import date
 from typing import Literal
 
 from .contracts import DiagnosticProvenance, EvidenceLocator
+from .country_detection import COUNTRY_ALIASES
 from .extraction import ExtractedDocument
 
 DiagnosticKind = Literal["rra", "accepted_equivalent"]
@@ -27,8 +28,12 @@ MONTHS = {
     "november": 11,
     "december": 12,
 }
-MONTH_YEAR_PATTERN = re.compile(
-    r"\b(" + "|".join(MONTHS) + r")\s+(\d{4})\b",
+_MONTH_NAME_TEXT = r"(?:" + "|".join(MONTHS) + r")"
+_PUBLICATION_DATE_PATTERN = re.compile(
+    rf"\b(?:(?P<month>{_MONTH_NAME_TEXT})\s+"
+    r"(?:(?P<month_day>\d{1,2}),?\s+)?(?P<month_year>\d{4})|"
+    rf"(?P<day>\d{{1,2}})\s+(?P<day_month>{_MONTH_NAME_TEXT})\s+"
+    r"(?P<day_year>\d{4}))\b",
     re.IGNORECASE,
 )
 
@@ -43,31 +48,47 @@ class UploadedDiagnostic:
 
 def _candidate_text(document: ExtractedDocument) -> str:
     segment_text = " ".join(segment.text for segment in document.segments[:4])
-    return f"{document.name} {segment_text}"[:6000]
+    return re.sub(r"\s+", " ", f"{document.name} {segment_text}")[:6000]
 
 
 def _publication_date(text: str) -> date | None:
-    dates = {
-        (int(year), MONTHS[month.lower()])
-        for month, year in MONTH_YEAR_PATTERN.findall(text)
-    }
+    dates = set()
+    for match in _PUBLICATION_DATE_PATTERN.finditer(text):
+        if match.group("month"):
+            month = MONTHS[match.group("month").lower()]
+            year = int(match.group("month_year"))
+            day = int(match.group("month_day") or 1)
+        else:
+            month = MONTHS[match.group("day_month").lower()]
+            year = int(match.group("day_year"))
+            day = int(match.group("day"))
+        try:
+            date(year, month, day)
+        except ValueError:
+            return None
+        dates.add((year, month))
     if len(dates) != 1:
         return None
     year, month = next(iter(dates))
-    return date(year, month, 1) if year > 0 else None
+    return date(year, month, 1)
 
 
-_MONTH_YEAR_TEXT = r"(?:" + "|".join(MONTHS) + r")\s+\d{4}"
+_PUBLICATION_DATE_TEXT = (
+    rf"(?:{_MONTH_NAME_TEXT}\s+(?:\d{{1,2}},?\s+)?\d{{4}}|"
+    rf"\d{{1,2}}\s+{_MONTH_NAME_TEXT}\s+\d{{4}})"
+)
 _PUBLICATION_STATEMENT = re.compile(
     rf"\b(?:publication(?:\s+date)?|date\s+of\s+publication|published|issued)"
-    rf"\s*[:,-]?\s*(?:in\s+)?(?P<date>{_MONTH_YEAR_TEXT})\b", re.I,
+    rf"\s*[:,-]?\s*(?:in\s+)?(?P<date>{_PUBLICATION_DATE_TEXT})\b", re.I,
 )
 _TITLE_DATE = re.compile(
     r"\b(?:risk\s+(?:and|&)\s+resilience\s+assessment|rra|"
     r"accepted\s+equivalent\s+diagnostic|fcv\s+risk\s+assessment)"
-    rf"\s*[,:(.-]?\s*(?P<date>{_MONTH_YEAR_TEXT})\b", re.I,
+    rf"\s*[,:(.-]?\s*(?P<date>{_PUBLICATION_DATE_TEXT})\b", re.I,
 )
-_STANDALONE_DATE = re.compile(rf"^\s*(?P<date>{_MONTH_YEAR_TEXT})[.\s]*$", re.I | re.M)
+_STANDALONE_DATE = re.compile(
+    rf"^\s*(?P<date>{_PUBLICATION_DATE_TEXT})[.\s]*$", re.I | re.M,
+)
 
 
 def diagnostic_provenance(document: ExtractedDocument) -> DiagnosticProvenance:
@@ -125,10 +146,20 @@ def identify_uploaded_diagnostic(
         return None
 
     matches: list[UploadedDiagnostic] = []
+    country_names = (normalized_country,)
+    for canonical, aliases in COUNTRY_ALIASES.items():
+        names = (canonical, *aliases)
+        if normalized_country in {name.casefold() for name in names}:
+            country_names = tuple(name.casefold() for name in names)
+            break
+    country_pattern = (
+        r"(?<!\w)(?:"
+        + "|".join(re.escape(name) for name in country_names)
+        + r")(?!\w)"
+    )
     for source_index, document in enumerate(documents):
         text = _candidate_text(document)
         lowered = text.casefold()
-        country_pattern = rf"(?<!\w){re.escape(normalized_country)}(?!\w)"
         if re.search(country_pattern, lowered) is None:
             continue
         has_rra_marker = any(marker in lowered for marker in RRA_MARKERS)

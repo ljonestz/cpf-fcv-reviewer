@@ -237,10 +237,10 @@ def test_runtime_full_package_reextract_does_not_sample_pdf(monkeypatch):
     runtime._reextract_full_package_documents(context)
 
     expected = {
-        "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+        "max_pdf_pages": runtime.PACKAGE_MAX_SEGMENTS_TOTAL,
         "sample_pdf_across_document": False,
-        "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
-        "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+        "max_segments": runtime.PACKAGE_MAX_SEGMENTS_TOTAL,
+        "max_characters": runtime.PACKAGE_MAX_CHARACTERS_TOTAL,
         "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
     }
     assert calls == [("annex.pdf", expected)]
@@ -393,10 +393,10 @@ def test_runtime_full_package_reextract_skips_recognized_rra_position(monkeypatc
             b"annex",
             "annex.pdf",
             {
-                "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_pdf_pages": runtime.PACKAGE_MAX_SEGMENTS_TOTAL,
                 "sample_pdf_across_document": False,
-                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
-                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_segments": runtime.PACKAGE_MAX_SEGMENTS_TOTAL,
+                "max_characters": runtime.PACKAGE_MAX_CHARACTERS_TOTAL,
                 "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
             },
         )
@@ -460,18 +460,23 @@ def _test_rra_assessments(payload):
     if _assessment_mode(payload) != DiagnosticMode.RRA_ALIGNMENT.value:
         return ()
     _, document_ids = _assessment_evidence(payload)
+    primary = next((item for item in payload.get("evidence_pack", {}).get("evidence", ())
+                    if item.get("document_role") == "primary"), None)
+    source_row = next(iter(payload.get("draft", {}).get("rra_driver_assessments", ())), {})
     return (
         RRADriverAssessment(
             assessment_id="test-rra-driver-1",
             driver="The runtime fixture represents a territorial delivery constraint.",
-            cpf_response="The CPF fixture includes a bounded response to the constraint.",
+            cpf_response=primary["text"] if primary else source_row["cpf_response"],
             delivery_mechanism="The response uses targeted delivery arrangements.",
             result_or_indicator="The fixture includes a service-access indicator.",
             remaining_gap="Adaptation triggers remain to be specified.",
             status=AssessmentStatus.PARTIALLY_ALIGNED,
             confidence=AssessmentConfidence.MEDIUM,
             gap_locus=GapLocus.MONITORING_ADAPTATION,
-            evidence_ids=document_ids[:1],
+            evidence_ids=tuple(dict.fromkeys((
+                *((primary["evidence_id"],) if primary else ()), *document_ids[:1],
+            ))),
         ),
     )
 
@@ -990,6 +995,37 @@ def _runtime_services(monkeypatch):
     return build_runtime_services(production_config(ALLOW_SYNTHETIC_REGISTRY=True))
 
 
+def test_model_visible_primary_keeps_every_segment_and_all_text(monkeypatch):
+    services = _runtime_services(monkeypatch)
+    steps = dict(services["review_orchestrator"].steps)
+    primary = ExtractedDocument("synthetic-cpf.pdf", tuple(
+        ExtractedSegment(f"Page {index}: " + "Existing CPF provision. " * 100,
+                         index, None, f"page {index}") for index in range(1, 26)), ())
+    context = steps["build_evidence"]({
+        "assessment_id": "synthetic-complete-primary", "primary_document": primary,
+        "payload": {"country": "Benin", "review_stage": "concept_review",
+                    "cpf": {"name": primary.name, "bytes": b"synthetic"}},
+        "research_result": ResearchResult(_current_claims(), {}, 1, CurrentEvidenceTier.FULL),
+    })
+    primary_items = [item for item in context["evidence_pack"].evidence
+                     if item.document_role is DocumentRole.PRIMARY]
+    assert len(primary_items) == len(primary.segments)
+    assert [item.text for item in primary_items] == [segment.text for segment in primary.segments]
+    assert [item.locator.page for item in primary_items] == list(range(1, 26))
+
+
+def test_package_preflight_uses_aggregate_segment_bound(monkeypatch):
+    calls = []
+    def extract(data, name, **bounds):
+        calls.append(bounds)
+        return ExtractedDocument(name, (ExtractedSegment("Readable package " * 20, None,
+                                                       None, "paragraph 1"),), ())
+    monkeypatch.setattr(runtime, "extract_document", extract)
+    runtime._extract_optional_uploads([{"name": "package.txt", "bytes": b"synthetic"}],
+                                     strict_package=True)
+    assert calls[0]["max_segments"] == runtime.PACKAGE_MAX_SEGMENTS_TOTAL
+
+
 def test_runtime_resolve_sources_prefers_direct_original(monkeypatch):
     services = _runtime_services(monkeypatch)
     steps = dict(services["review_orchestrator"].steps)
@@ -1190,6 +1226,11 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                 for item in pack.evidence
                 if item.evidence_type == "document_fact"
             )
+            source_locator = next(
+                item.locator
+                for item in pack.evidence
+                if item.evidence_id == evidence_id and item.locator is not None
+            )
             current_context_evidence_id = next(
                 item.evidence_id
                 for item in pack.evidence
@@ -1211,11 +1252,7 @@ def test_runtime_builds_evidence_and_completes_an_uploaded_review(monkeypatch):
                         assessment="The constraint is described in the uploaded draft.",
                         why_it_matters="It may affect implementation.",
                         recommended_action="Clarify the delivery constraint.",
-                        target_locator=EvidenceLocator(
-                            document_title="benin-cpf.txt",
-                            heading="Paragraph 1",
-                            excerpt="Material FCV delivery constraint.",
-                        ),
+                        target_locator=source_locator,
                         recommendation_scale=RecommendationScale.FINE_TUNING,
                         evidence_ids=(evidence_id,),
                         sensitivity=SensitivityCategory.CAUTIOUS,
@@ -2576,10 +2613,10 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
         role: [item for item in captured["pack"].evidence if item.document_role == role]
         for role in DocumentRole
     }
-    assert len(by_role[DocumentRole.PRIMARY]) == 12
+    assert len(by_role[DocumentRole.PRIMARY]) == 20
     assert len(by_role[DocumentRole.PACKAGE]) == 30
     assert len(by_role[DocumentRole.CONTEXT]) == 16
-    assert sum(len(items) for items in by_role.values()) == 58
+    assert sum(len(items) for items in by_role.values()) == 66
     assert len(
         [item for item in captured["pack"].evidence if item.evidence_type == "current_context"]
     ) == 2
@@ -2632,11 +2669,9 @@ def test_runtime_evidence_truncation_keeps_complete_words(monkeypatch):
         if item.evidence_type == "document_fact"
     )
 
-    assert len(evidence.text) <= 1600
-    assert len(evidence.locator.excerpt) <= 600
-    assert evidence.text.endswith("y")
+    assert evidence.text == segment_text
+    assert len(evidence.locator.excerpt) <= 160
     assert evidence.locator.excerpt.endswith("x")
-    assert segment_text[len(evidence.text)].isspace()
     assert segment_text[len(evidence.locator.excerpt)].isspace()
 
 
@@ -3342,10 +3377,10 @@ def test_runtime_resolves_duplicate_name_to_context_rra_and_preserves_package_ev
         (
             b"package-bytes",
             {
-                "max_pdf_pages": runtime.DIAGNOSTIC_MAX_PAGES,
+                "max_pdf_pages": runtime.PACKAGE_MAX_SEGMENTS_TOTAL,
                 "sample_pdf_across_document": False,
-                "max_segments": runtime.DIAGNOSTIC_MAX_PAGES,
-                "max_characters": runtime.DIAGNOSTIC_MAX_CHARACTERS,
+                "max_segments": runtime.PACKAGE_MAX_SEGMENTS_TOTAL,
+                "max_characters": runtime.PACKAGE_MAX_CHARACTERS_TOTAL,
                 "max_uncompressed_bytes": runtime.DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
             },
         ),
@@ -3452,6 +3487,8 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
                 )
             captured["review_payload"] = payload
             deep_id = "diagnostic-page-102"
+            primary = next(item for item in payload["evidence_pack"]["evidence"]
+                           if item["document_role"] == "primary")
             return _valid_review_draft(
                 output_type,
                 payload,
@@ -3463,14 +3500,14 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
                     RRADriverAssessment(
                         assessment_id="deep-page-driver",
                         driver="The deep-page issue is material.",
-                        cpf_response="The CPF partly responds.",
+                        cpf_response=primary["text"],
                         delivery_mechanism="Targeted delivery is proposed.",
                         result_or_indicator="A service indicator is included.",
                         remaining_gap="The deep-page issue remains.",
                         status=AssessmentStatus.PARTIALLY_ALIGNED,
                         confidence=AssessmentConfidence.HIGH,
                         gap_locus=GapLocus.MONITORING_ADAPTATION,
-                        evidence_ids=(deep_id,),
+                        evidence_ids=(deep_id, primary["evidence_id"]),
                     ),
                 ),
                 institutional_referral_ids=(),
@@ -3555,7 +3592,9 @@ def test_runtime_maps_complete_selected_rra_and_keeps_deep_page_excerpt(monkeypa
     assert final_payload["diagnostic_entries"]
     assert [name for name, _ in calls if name == "diagnostic_map"] == ["diagnostic_map"]
     assert [name for name, _ in calls if name == "review"] == ["review"]
-    assert context["result"].rra_driver_assessments[0].evidence_ids == ("diagnostic-page-102",)
+    assert context["result"].rra_driver_assessments[0].evidence_ids == (
+        "diagnostic-page-102", "primary-001",
+    )
 
 
 def test_runtime_full_rra_limit_failure_skips_mapping_and_review(monkeypatch):

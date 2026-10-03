@@ -514,7 +514,7 @@ def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_
             status: "partially_aligned",
             confidence: "high",
             gap_locus: "monitoring_adaptation",
-            evidence_ids: ["rra-evidence"],
+            evidence_ids: ["rra-evidence", "cpf-source"],
           }],
           fcv_strategy_assessments: [
             {
@@ -542,6 +542,11 @@ def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_
             coverage_note: "Synthetic coverage.",
           },
           evidence_by_id: {
+            "cpf-source": {
+              evidence_type: "document_fact", document_role: "primary",
+              text: "CPF prioritizes lagging regions.",
+              locator: {document_title: "Verified CPF.pdf", page: 6},
+            },
             "rra-evidence": {
               locator: {
                 document_title: "RRA.docx",
@@ -598,6 +603,11 @@ def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_
             "RRA driver-to-response assessment",
             "Unequal access to services",
             "CPF prioritizes lagging regions.",
+            "CPF/package quotation",
+            "Quotation source",
+            "Verified CPF.pdf",
+            "Area-based delivery is proposed.",
+            "Service access indicator.",
             "Partially aligned - High confidence",
             "2026-2030 FCV Strategy alignment",
             "Anticipate better",
@@ -609,7 +619,7 @@ def test_task6_result_rendering_uses_human_assessment_labels_and_truthful_empty_
           ]) {
             if (!renderedText.includes(visibleText)) throw Error("result omitted " + visibleText);
           }
-          for (const rawId of ["rra-evidence", "strategy-evidence", "missing-evidence"]) {
+          for (const rawId of ["rra-evidence", "strategy-evidence", "missing-evidence", "cpf-source"]) {
             if (renderedText.includes(rawId)) throw Error("raw evidence ID was rendered: " + rawId);
           }
           if (countTag(nodes["#results"], "section") < 2) throw Error("assessment sections were not rendered");

@@ -99,6 +99,32 @@ def test_repair_start_exposes_only_safe_validation_metadata():
     assert sensitive_id not in str(repair_event)
 
 
+def test_locator_events_include_only_allowlisted_aggregate_reasons():
+    events = []
+    issues = [
+        {"code": "target_locator_mismatch", "locator_reason": "excerpt_mismatch",
+         "message": "SECRET PASSAGE", "assessment_id": "SECRET ID"},
+        {"code": "target_locator_mismatch", "locator_reason": "excerpt_mismatch"},
+        {"code": "target_locator_mismatch", "locator_reason": "SECRET VALUE"},
+        {"code": "target_locator_mismatch", "locator_reason": {"value": "SECRET VALUE"}},
+        {"code": "unknown_evidence", "locator_reason": "document_not_cited"},
+    ]
+
+    def validate(context):
+        context["validation_issues"] = issues
+        return context
+
+    with pytest.raises(ValueError, match="only repair"):
+        ReviewOrchestrator(
+            steps=(("validate", validate),), repair=lambda context, _: context,
+        ).run({}, lambda kind, data: events.append((kind, data)))
+
+    for kind in ("repair_start", "repair_failed"):
+        data = next(data for event, data in events if event == kind)
+        assert data["locator_diagnostics"] == [{"reason": "excerpt_mismatch", "count": 2}]
+        assert "SECRET" not in str(data)
+
+
 def test_failed_repair_emits_terminal_failure_without_completion():
     events = []
     sensitive_message = "Sensitive evidence excerpt: operation quartz-739."

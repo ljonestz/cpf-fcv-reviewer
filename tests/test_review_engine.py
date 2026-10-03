@@ -425,6 +425,7 @@ def test_every_stage_and_detail_injects_serialized_profiles(stage, detail):
 
     payload = gateway.calls[0][1]
     assert set(payload) == {
+        "cpf_quote_index",
         "assessment_as_of",
         "evidence_pack",
         "stage_profile",
@@ -445,7 +446,9 @@ def test_every_stage_and_detail_injects_serialized_profiles(stage, detail):
         "priority_area_range": list(DETAIL_PROFILES[detail].priority_area_range),
     }
     assert payload["review_focus"] == "Focus on delivery realism."
-    assert payload["evidence_pack"] == evidence_pack(meta).model_dump(mode="json")
+    assert payload["evidence_pack"] == evidence_pack(meta).model_dump(
+        mode="json", exclude_none=True
+    )
     json.dumps(payload)
 
 
@@ -466,7 +469,11 @@ def test_review_derives_deduplicated_role_coverage_and_excludes_model_note():
     )
     assert "Primary.docx" not in result.document_coverage.package_documents
     assert "Primary.docx" not in result.document_coverage.context_documents
-    assert result.document_coverage.coverage_note == "Model-authored note."
+    assert result.document_coverage.coverage_note == (
+        "All 1 readable primary segments and all retained package segments were supplied "
+        "to the review. This covers extracted text, not non-extractable figures or images. "
+        "Supporting context may be sampled; coverage limitations remain material."
+    )
     assert "coverage_note" not in result.model_dump(exclude={"document_coverage"})
     assert gateway.calls[0][2] is ReviewDraft
 
@@ -490,7 +497,9 @@ def test_review_request_budget_allows_exact_boundary_and_rejects_one_token_over(
     monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", 10**9)
 
     ReviewEngine(gateway).review(pack)
-    payload = gateway.calls[-1][1]
+    payload = dict(gateway.calls[-1][1])
+    # The hard boundary applies after the optional navigation index is removed.
+    payload.pop("cpf_quote_index", None)
     ceiling = review_engine._estimated_input_tokens(payload)
     monkeypatch.setattr(review_engine, "REVIEW_MAX_ESTIMATED_INPUT_TOKENS", ceiling)
 
@@ -501,7 +510,7 @@ def test_review_request_budget_allows_exact_boundary_and_rejects_one_token_over(
         candidate = evidence_pack_with_package_text("Evidence from Package-A.docx." + "x" * suffix_length)
         candidate_payload = {
             **payload,
-            "evidence_pack": candidate.model_dump(mode="json"),
+            "evidence_pack": candidate.model_dump(mode="json", exclude_none=True),
         }
         if review_engine._estimated_input_tokens(candidate_payload) == ceiling + 1:
             one_token_over = candidate
@@ -735,7 +744,7 @@ def test_unsupported_review_stage_is_rejected_before_gateway_call():
     assert gateway.calls == []
 
 
-def test_repair_preserves_application_coverage_and_updates_only_note():
+def test_repair_preserves_application_coverage_note_against_model_override():
     meta = metadata()
     initial = result_for(meta)
     repaired_draft = draft_for(meta, coverage_note="Updated coverage note.")
@@ -755,7 +764,7 @@ def test_repair_preserves_application_coverage_and_updates_only_note():
     assert repaired.document_coverage.primary_document == "Primary.docx"
     assert repaired.document_coverage.package_documents == ("Package.docx",)
     assert repaired.document_coverage.context_documents == ("Context.docx",)
-    assert repaired.document_coverage.coverage_note == "Updated coverage note."
+    assert repaired.document_coverage.coverage_note == "Existing coverage note."
     assert repaired.metadata == meta.model_copy(update={"repair_count": 1})
 
 
@@ -825,7 +834,7 @@ def test_repair_scrubs_known_raw_evidence_ids_only_from_narrative_fields():
     assert "the cited evidence" in repaired.fcv_strategy_assessments[0].assessment
     assert "ev-primary-10" in repaired.priority_areas[0].recommended_action
     assert repaired.priority_areas[0].evidence_ids == ("ev-primary-1",)
-    assert repaired.document_coverage.coverage_note == "Coverage includes the cited evidence."
+    assert repaired.document_coverage.coverage_note == "Existing coverage note."
 
 
 def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
@@ -858,11 +867,14 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
     expected_draft["coverage_note"] = initial.document_coverage.coverage_note
     assert payload == {
         "assessment_as_of": meta.created_at.date().isoformat(),
+        "current_evidence_tier": "full",
+        "current_evidence_limitation": None,
         "draft": expected_draft,
         "validation_issues": issues,
         "forbidden_phrases": ("forbidden",),
         "repair_support_evidence_ids": {"current_context": [], "registry_language": []},
         "repair_support_evidence": [],
+        "source_grounding_evidence": [],
         "diagnostic_provenance": None,
         "diagnostic_mode": "rra_alignment",
         "review_stage": "concept_review",
@@ -1747,7 +1759,7 @@ class FakeMessages:
         self.response = response
         self.calls = []
 
-    def parse(self, **kwargs):
+    def create(self, **kwargs):
         self.calls.append(kwargs)
         return self.response
 
@@ -1757,16 +1769,25 @@ class FakeAnthropicClient:
         self.messages = FakeMessages(response)
 
 
-def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
+@pytest.mark.parametrize(
+    ("prompt_name", "max_tokens"),
+    [("review", 20000), ("repair", 20000), ("diagnostic_map", 12000), ("fcv_readout", 12000)],
+)
+def test_anthropic_gateway_sends_json_and_validates_model_response(
+    monkeypatch, prompt_name, max_tokens,
+):
     meta = metadata()
     expected = draft_for(meta)
-    response = SimpleNamespace(parsed_output=expected)
+    response = SimpleNamespace(
+        stop_reason="end_turn",
+        content=[SimpleNamespace(type="text", text=expected.model_dump_json())],
+    )
     client = FakeAnthropicClient(response)
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
     gateway = AnthropicModelGateway("test-key", "test-model")
 
     actual = gateway.generate(
-        prompt_name="review",
+        prompt_name=prompt_name,
         payload={"accented": "Résilience"},
         output_type=ReviewDraft,
     )
@@ -1774,23 +1795,49 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     assert actual == expected
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
-    assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.4")
-    assert call["output_format"] is ReviewDraft
+    assert call["max_tokens"] == max_tokens
+    assert call["system"] == model_gateway.load_prompt(prompt_name)
+    assert call["output_config"] == {
+        "format": {"type": "json_schema", "schema": transform_schema(ReviewDraft.model_json_schema())}
+    }
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
 
-def test_anthropic_gateway_rejects_missing_parsed_output(monkeypatch):
-    client = FakeAnthropicClient(SimpleNamespace(parsed_output=None))
+def test_anthropic_gateway_rejects_missing_json_output(monkeypatch):
+    client = FakeAnthropicClient(SimpleNamespace(stop_reason="end_turn", content=[]))
     monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
     gateway = AnthropicModelGateway("test-key", "test-model")
 
-    with pytest.raises(ValueError, match="no parsed output"):
+    with pytest.raises(ValueError, match="no JSON output"):
         gateway.generate(
             prompt_name="review",
             payload={"input": "bounded"},
             output_type=ReviewDraft,
         )
+
+
+@pytest.mark.parametrize(
+    ("stop_reason", "expected_code"),
+    [("max_tokens", "model_output_truncated"), ("refusal", "model_refusal"),
+     ("unexpected secret value", "model_output_unavailable")],
+)
+def test_gateway_withholds_incomplete_output_before_parsing_and_emits_only_safe_code(
+    monkeypatch, stop_reason, expected_code,
+):
+    from cpf_fcv_reviewer.orchestrator import safe_failure_data
+
+    client = FakeAnthropicClient(SimpleNamespace(
+        stop_reason=stop_reason,
+        content=[SimpleNamespace(type="text", text="PRIVATE rejected JSON fragment")],
+    ))
+    monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+    gateway = AnthropicModelGateway("test-key", "test-model")
+    with pytest.raises(model_gateway.ModelOutputUnavailable) as caught:
+        gateway.generate(prompt_name="review", payload={}, output_type=ReviewDraft)
+    assert safe_failure_data(caught.value) == {"error": expected_code}
+    assert "PRIVATE" not in str(caught.value)
+    assert "secret" not in str(caught.value)
+    assert len(client.messages.calls) == 1
 
 
 def test_prohibited_policy_repair_keeps_cleaned_rra_narrative():
@@ -1894,6 +1941,7 @@ def test_repair_receives_bounded_current_source_support_records():
             "publisher": "Reuters",
             "source_title": "Guinea update",
             "source_date": "2026-08-30",
+            "verification": "unverified",
             "source_url": current.source_url,
             "supporting_quote": "Political violence increased in Guinea.",
             "source_relevance": "Selected-country FCV relevance.",
@@ -2102,3 +2150,30 @@ def test_review_and_repair_share_original_application_assessment_date():
         "2024-02-29", "2024-02-29",
     ]
     assert repaired.metadata.created_at == meta.created_at
+
+
+def test_repair_keeps_undated_context_grade_and_application_limitation():
+    from cpf_fcv_reviewer.contracts import CurrentEvidenceTier
+
+    meta = metadata().model_copy(update={
+        "current_evidence_tier": CurrentEvidenceTier.REDUCED,
+        "current_evidence_limitation": "Publication date unavailable; present status unestablished.",
+    })
+    current = EvidenceItem(
+        evidence_id="current-001", evidence_type="current_context",
+        text="A presidential election was reported.", confidence="medium",
+        verification="unverified", source_publisher="World Bank",
+        source_title="Country overview", source_url="https://www.worldbank.org/en/country/benin",
+        source_date=None, supporting_quote="A presidential election was reported.",
+    )
+    gateway = FakeGateway(draft_for(meta))
+    ReviewEngine(gateway).repair(
+        result_for(meta), [{"code": "missing_registry_support"}],
+        evidence_ids={current.evidence_id}, evidence={current.evidence_id: current},
+    )
+    payload = gateway.calls[0][1]
+    assert len(gateway.calls) == 1
+    assert payload["current_evidence_tier"] == "reduced"
+    assert payload["current_evidence_limitation"] == meta.current_evidence_limitation
+    assert payload["repair_support_evidence"][0]["verification"] == "unverified"
+    assert payload["repair_support_evidence"][0]["source_date"] is None

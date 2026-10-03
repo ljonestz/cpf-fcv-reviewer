@@ -78,7 +78,7 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .assistant-suggestion { background: var(--blue-soft); color: var(--navy); border: 1px solid #b8dfe8; padding: 8px 13px; font-size: .92rem; }
 .assistant-suggestion:hover:not(:disabled) { background: #d9f0f5; }
 .assistant-conversation { display: grid; gap: 10px; min-width: 0; margin: 20px 0; }
-.assistant-message { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; box-shadow: none; overflow-wrap: anywhere; }
+.assistant-message { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; box-shadow: none; overflow-wrap: anywhere; white-space: pre-wrap; }
 .assistant-message-user { border-left: 4px solid var(--blue); background: #f7fbfc; }
 .assistant-message-assistant { border-left: 4px solid var(--cyan); background: white; }
 .assistant-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
@@ -100,7 +100,7 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .readout-panel h2 { margin: 0 0 10px; font-size: 1.18rem; line-height: 1.35; }
 .readout-panel-rra { border-left-color: var(--blue); }
 .readout-panel-strategy { border-left-color: var(--cyan); }
-.priority-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 18px 0 8px; }
+.priority-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 16px; margin: 18px 0 8px; }
 .readout-prose .narrative-chunk:last-child { margin-bottom: 0; }
 .narrative-chunk { max-width: 78ch; margin: 0 0 12px; }
 .narrative-chunk > strong { color: var(--navy); }
@@ -261,6 +261,9 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 }
 .progress-timing span:first-child { color: var(--navy); font-weight: 700; }
 #progress { min-height: min(680px, calc(100vh - 150px)); display: grid; place-items: center; padding: 0; background: transparent; border: 0; box-shadow: none; }
+/* Stopped reviews keep recovery beside the message instead of below a full-height holding view. */
+#progress:has(#progress-steps[hidden]) { min-height: auto; }
+#return-to-intake { display: block; margin: 16px auto; }
 #progress-message { margin: 18px 0 0; color: var(--navy); font-weight: 700; }
 #while-we-work {
   margin: 25px auto 0;

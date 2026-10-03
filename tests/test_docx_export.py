@@ -13,11 +13,13 @@ from cpf_fcv_reviewer.contracts import (
     AssessmentStatus,
     CurrentEvidenceTier,
     DiagnosticMode,
+    RevisionSummaryItem,
 )
 from cpf_fcv_reviewer.export_docx import (
     RRA_ALIGNMENT_QUESTION,
     STRATEGY_ALIGNMENT_QUESTION,
     build_docx,
+    target_text,
 )
 from cpf_fcv_reviewer.registry import load_registry_bundle
 
@@ -75,8 +77,6 @@ def test_docx_reader_note_contains_synthesis_and_omits_technical_material(
         "Reproducibility information",
         "Current evidence tier",
         "Gap locus",
-        "Delivery mechanism",
-        "Result / indicator",
         "Source: CPF.docx | Results framework | paragraph 12",
         "Excerpt: The program will support access.",
     ):
@@ -235,7 +235,9 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
     )
     for label, value in (
         ("Driver", "Unequal territorial access"),
-        ("CPF response", "The CPF prioritizes lagging regions."),
+        ("CPF/package quotation", "The CPF prioritizes lagging regions."),
+        ("Delivery mechanism (analysis)", "Area-based delivery is proposed."),
+        ("Result / indicator (analysis)", "A service-access indicator is included."),
         ("Remaining gap", "Adaptation triggers are not defined."),
         ("Status and confidence", "Partially aligned - High confidence"),
     ):
@@ -251,11 +253,38 @@ def test_docx_exports_structured_assessments_with_human_labels_and_evidence(
     assert "Strategic shift" in text
     assert "Assessment" in text
     assert "The CPF reflects this strategic shift in the response." in text
-    assert "Delivery mechanism" not in text
-    assert "Result / indicator" not in text
+    assert "Delivery mechanism (analysis)" in text
+    assert "Result / indicator (analysis)" in text
     assert "Gap locus" not in text
     assert "Source: CPF.docx | Results framework | paragraph 12" not in text
     assert "Excerpt: The program will support access." not in text
+
+
+def test_docx_uses_neutral_display_order_for_rra_assessment_headings(make_valid_result):
+    result, evidence = make_valid_result
+
+    document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+    headings = [
+        paragraph.text
+        for paragraph in document.paragraphs
+        if paragraph.style.name == "Heading 3"
+    ]
+
+    assert "Driver assessment 1" in headings
+    assert "RRA driver 1" not in headings
+
+
+def test_target_text_deduplicates_only_matching_page_element(make_valid_result):
+    _, evidence = make_valid_result
+    locator = evidence["ev-1"].locator.model_copy(
+        update={"page": 5, "heading": "Results", "element": "page 5"}
+    )
+    distinct = locator.model_copy(update={"element": "paragraph 12"})
+
+    assert target_text(locator) == "CPF.docx | page 5 | Results"
+    assert target_text(distinct) == "CPF.docx | page 5 | Results | paragraph 12"
 
 def test_docx_uses_distinct_empty_rra_messages(make_valid_result):
     result, evidence = make_valid_result
@@ -612,7 +641,7 @@ def test_docx_empty_narrative_collections_have_explicit_empty_states(make_valid_
     ),
 )
 @pytest.mark.parametrize("summary", (False, True))
-def test_docx_omits_evidence_status_and_reader_limitations(
+def test_docx_keeps_current_context_caveat_without_technical_status(
     make_valid_result,
     tier,
     status,
@@ -653,9 +682,12 @@ def test_docx_omits_evidence_status_and_reader_limitations(
     assert status not in text
     assert "Current evidence tier" not in text
     if limitation is not None:
-        assert limitation not in text
+        assert text.count(limitation) == 1
+        assert text.index(limitation) < text.index("Overall assessment")
         assert limitation in result_limitations
-        assert result_current_limitation == limitation
+    else:
+        assert "Current context limitation" not in text
+    assert result_current_limitation == limitation
 
 def test_docx_visible_evidence_status_matches_html(make_valid_result):
     result, evidence = make_valid_result
@@ -681,7 +713,7 @@ def test_docx_visible_evidence_status_matches_html(make_valid_result):
 
     assert "Review based primarily on submitted documents" not in text
     assert "Current evidence tier" not in text
-    assert limitation not in text
+    assert text.count(limitation) == 1
 
 def test_export_route_requires_a_completed_traceable_result(make_valid_result):
     result, evidence = make_valid_result
@@ -786,3 +818,226 @@ def test_five_minute_export_preserves_actions_and_limits_detail(make_valid_resul
     assert not any(run.bold for run in overview.runs)
     action = next(p for p in paragraphs if "First action." in p.text)
     assert all(not run.bold for run in action.runs if "First action." in run.text)
+
+
+def test_summary_uses_tighter_paragraph_spacing_than_detailed_note(make_valid_result):
+    result, evidence = make_valid_result
+
+    summary = Document(
+        BytesIO(
+            build_docx(
+                result,
+                evidence=evidence,
+                hydrated_referrals=(),
+                summary=True,
+            )
+        )
+    )
+    detail = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+
+    assert summary.styles["Normal"].paragraph_format.space_after < (
+        detail.styles["Normal"].paragraph_format.space_after
+    )
+
+
+def test_summary_keeps_each_priority_heading_overview_and_response_together(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+
+    document = Document(
+        BytesIO(
+            build_docx(
+                result,
+                evidence=evidence,
+                hydrated_referrals=(),
+                summary=True,
+            )
+        )
+    )
+    paragraphs = document.paragraphs
+    heading_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text == result.revision_summary[0].title
+    )
+    heading, overview, response = paragraphs[heading_index : heading_index + 3]
+
+    assert heading.style.paragraph_format.keep_with_next is True
+    assert overview.paragraph_format.keep_with_next is True
+    assert response.text.startswith("Recommended response:")
+    assert response.paragraph_format.keep_together is True
+
+
+def test_detailed_note_keeps_locator_with_the_content_it_locates(make_valid_result):
+    result, evidence = make_valid_result
+    assessment = result.rra_driver_assessments[0]
+    evidence = {
+        **evidence,
+        assessment.evidence_ids[0]: evidence[assessment.evidence_ids[0]].model_copy(
+            update={
+                "text": assessment.cpf_response,
+                "evidence_type": "document_fact",
+                "document_role": "primary",
+            }
+        ),
+    }
+
+    document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+    )
+    paragraphs = document.paragraphs
+    quote_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text.startswith("CPF/package quotation:")
+    )
+    action_index = next(
+        index
+        for index, paragraph in enumerate(paragraphs)
+        if paragraph.text.startswith("Recommended action:")
+    )
+
+    assert paragraphs[quote_index + 1].text.startswith("Quotation source:")
+    assert paragraphs[quote_index].paragraph_format.keep_with_next is True
+    assert paragraphs[action_index + 1].text.startswith("Target:")
+    assert paragraphs[action_index].paragraph_format.keep_with_next is True
+
+
+def test_five_minute_summary_is_concise_without_cutting_sentences(make_valid_result):
+    result, evidence = make_valid_result
+
+    def sentence(prefix, words):
+        parts = prefix.split()
+        return " ".join(
+            (*parts, *(f"detail{index}" for index in range(words - len(parts) - 1)), "confirmed.")
+        )
+
+    def field(label, count, words):
+        return " ".join(
+            sentence(
+                f"The {label} finding {index + 1} remains advisory until "
+                "independent checks confirm",
+                words,
+            )
+            for index in range(count)
+        )
+
+    areas = []
+    summaries = []
+    full_actions = []
+    for index in range(1, 4):
+        area_id = f"pa-{index}"
+        action_sentences = tuple(
+            sentence(prefix, 26)
+            for prefix in (
+                "Proceed only after independent access checks confirm safe implementation",
+                "Keep the response phased while local conditions remain uncertain",
+                "Use existing systems where they can reach affected communities",
+                "Retain the complete measure in the detailed analysis",
+            )
+        )
+        areas.append(
+            result.priority_areas[0].model_copy(
+                update={
+                    "priority_area_id": area_id,
+                    "heading": f"Priority area {index}",
+                    "assessment": field("access risk", 3, 26),
+                    "why_it_matters": " ".join(
+                        (
+                            sentence(
+                                "Violence can disrupt service delivery and deepen exclusion "
+                                "through loss of access",
+                                36,
+                            ),
+                            sentence(
+                                "A later implication should remain in the detailed assessment",
+                                36,
+                            ),
+                        )
+                    ),
+                    "recommended_action": " ".join(action_sentences),
+                }
+            )
+        )
+        full_actions.append(action_sentences)
+        summaries.append(
+            RevisionSummaryItem(
+                priority_area_id=area_id,
+                title=f"Priority measure {index}",
+            )
+        )
+
+    overall_read = field("overall", 3, 40)
+    result = result.model_copy(
+        update={
+            "overall_read": overall_read,
+            "alignment_readout": field("RRA alignment", 3, 40),
+            "strategy_readout": field("strategy alignment", 3, 40),
+            "revision_summary": tuple(summaries),
+            "priority_areas": tuple(areas),
+        }
+    )
+
+    summary_document = Document(
+        BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=(), summary=True))
+    )
+    summary_text = "\n".join(paragraph.text for paragraph in summary_document.paragraphs)
+    detail_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    )
+
+    assert 800 <= len(summary_text.split()) <= 1000
+    assert (
+        "For full findings, qualifications, and complete measures, see Detailed analysis."
+        in summary_text
+    )
+    assert full_actions[0][0] in summary_text
+    assert full_actions[0][3] not in summary_text
+    assert "Retain the complete measure in the detailed analysis" in detail_text
+    assert full_actions[0][3] in detail_text
+    assert overall_read.split(". ")[2] not in summary_text
+    assert overall_read.split(". ")[2] in detail_text
+
+
+def test_summary_points_to_full_text_when_first_sentence_exceeds_word_bound(
+    make_valid_result,
+):
+    result, evidence = make_valid_result
+    assessment = "This finding remains conditional on verified access before implementation " + (
+        "detailed " * 110
+    ) + "confirmed."
+    measure = "Proceed only after independent conflict and access checks support implementation " + (
+        "safeguard " * 110
+    ) + "confirmed."
+    area = result.priority_areas[0].model_copy(
+        update={"recommended_action": measure}
+    )
+    result = result.model_copy(
+        update={"overall_read": assessment, "priority_areas": (area,)}
+    )
+
+    summary_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(
+                build_docx(result, evidence=evidence, hydrated_referrals=(), summary=True)
+            )
+        ).paragraphs
+    )
+    detail_text = "\n".join(
+        paragraph.text
+        for paragraph in Document(
+            BytesIO(build_docx(result, evidence=evidence, hydrated_referrals=()))
+        ).paragraphs
+    )
+
+    assert "See Detailed analysis for this assessment and its complete qualifications." in summary_text
+    assert "See Detailed analysis for the complete recommended measure." in summary_text
+    assert assessment not in summary_text and assessment in detail_text
+    assert measure not in summary_text and measure in detail_text

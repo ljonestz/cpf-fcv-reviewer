@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CPF FCV Reviewer</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -32,7 +33,8 @@
           </div>
           <button id="open-process-dialog" class="button-secondary" type="button">How it works</button>
         </div>
-        <p class="helper"><span aria-hidden="true">*</span> Required. Your files and review are held only for this session.</p>
+        <p class="helper"><span aria-hidden="true">*</span> Required. Reviews are retained for 24 hours. Download your results before they expire.</p>
+        <p class="helper">Public pilot: up to {{ config.PUBLIC_REVIEW_DAILY_LIMIT }} new assessments per UTC day across all users. Corrections and research retries also use this allowance; assistant requests are separately limited.</p>
 
         <div class="upload-zones">
           <label class="upload-zone upload-zone-primary" id="primary-upload" for="cpf">
@@ -112,7 +114,7 @@
           <p class="progress-timing" aria-label="Review timing">
             <span id="elapsed-time">0:00 elapsed</span>
             <span aria-hidden="true">·</span>
-            <span id="remaining-time">Estimating time remaining</span>
+            <span id="remaining-time">Duration varies with the document package.</span>
           </p>
           <p id="progress-message" role="status" aria-live="polite"></p>
           <aside id="while-we-work" aria-live="off" aria-labelledby="while-we-work-title">

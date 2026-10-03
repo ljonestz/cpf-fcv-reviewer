@@ -5,12 +5,15 @@ import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
+from ipaddress import ip_address
 from threading import RLock
 from time import monotonic, sleep
 from uuid import uuid4
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
+from .admission import AdmissionDenied
+from .background import AssessmentQueueFull
 from .contracts import DetailLevel, EvidenceItem, ReviewResult
 from .country_detection import (
     COUNTRY_DETECTION_MAX_ARCHIVE_MEMBERS,
@@ -29,6 +32,7 @@ from .export_docx import (
 from .extraction import extract_document, require_readable_primary
 from .orchestrator import safe_failure_code, safe_failure_data
 from .session_store import SessionExpired
+from .review_profiles import STAGE_PROFILES
 from .validators import validate_reproducibility_metadata
 
 bp = Blueprint("reviews", __name__)
@@ -61,6 +65,62 @@ def _reject_legacy_result(result_payload):
 
 def store():
     return current_app.extensions["session_store"]
+
+
+def admission():
+    return current_app.extensions["public_admission"]
+
+
+def client_address():
+    # Only enable behind Render's Cloudflare edge, which overwrites this header.
+    if current_app.config["TRUST_RENDER_PROXY"]:
+        try:
+            return str(ip_address(request.headers.get("CF-Connecting-IP", "")))
+        except ValueError:
+            pass
+    return request.remote_addr or "unknown"
+
+
+@bp.errorhandler(AdmissionDenied)
+def admission_denied(error):
+    response = jsonify(error=error.message, code=error.code)
+    response.status_code = error.status
+    response.headers["Retry-After"] = str(error.retry_after)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.before_request
+def limit_upload_requests():
+    if request.method == "POST":
+        admission().check_and_record("request", client_address())
+
+
+def _release_once(slot):
+    lock, released = RLock(), False
+    def release():
+        nonlocal released
+        with lock:
+            if not released:
+                released = True
+                slot.release()
+    return release
+
+
+def _submit_payload(payload):
+    guard = admission()
+    session_store = store()
+    with guard.lock:
+        guard.require_capacity(session_store)
+        guard.check_and_record("review", client_address())
+        assessment_id = session_store.create(payload() if callable(payload) else payload)
+        try:
+            current_app.extensions["assessment_queue"].enqueue(assessment_id)
+        except AssessmentQueueFull:
+            session_store.discard_one(assessment_id)
+            raise AdmissionDenied("assessment_queue_full", "The assessment queue is full. Try later.",
+                                  status=503) from None
+        return assessment_id
 
 
 def _partial_research_keys(payload: dict) -> tuple[str, ...]:
@@ -151,9 +211,11 @@ def assistant_response(assessment_id):
     if len(message) > ASSISTANT_MESSAGE_MAX_LENGTH:
         return jsonify(error="Assistant message is too long."), 400
 
+    session_store = store()
+    application = current_app._get_current_object()
     with _ASSISTANT_REQUEST_LOCK:
         try:
-            state = store().get(assessment_id)
+            state = session_store.get(assessment_id)
             review, evidence, history = _assistant_context(state.payload)
         except SessionExpired:
             return jsonify(error="Assessment expired."), 410
@@ -164,16 +226,54 @@ def assistant_response(assessment_id):
             and state.payload.get("assistant_active_owner") == ASSISTANT_PROCESS_OWNER
         ):
             return jsonify(error="An assistant response is already in progress."), 409
-        store().update(
-            assessment_id,
-            assistant_active=True,
-            assistant_active_owner=ASSISTANT_PROCESS_OWNER,
-        )
+        gateway = current_app.extensions.get("follow_on_gateway")
+        if gateway is None:
+            return jsonify(error="Assistant is temporarily unavailable."), 503
+        slot = admission().assistant_slots
+        if not slot.acquire(blocking=False):
+            raise AdmissionDenied("assistant_busy", "The assistant is busy. Try again shortly.", status=503)
+        release_slot = _release_once(slot)
+        try:
+            admission().check_and_record("assistant", client_address(),
+                                         assessment_id=assessment_id)
+        except Exception:
+            release_slot()
+            raise
+        cleanup_lock = RLock()
+        cleaned_up = False
 
-    gateway = current_app.extensions.get("follow_on_gateway")
-    if gateway is None:
-        store().update(assessment_id, assistant_active=False)
-        return jsonify(error="Assistant is temporarily unavailable."), 503
+        def cleanup():
+            nonlocal cleaned_up
+            with cleanup_lock:
+                if cleaned_up:
+                    return
+                cleaned_up = True
+            release_slot()
+            try:
+                session_store.update(
+                    assessment_id,
+                    assistant_active=False,
+                    assistant_active_owner=None,
+                )
+            except Exception as error:
+                application.logger.error(
+                    "assistant_state_cleanup_failed error_type=%s",
+                    type(error).__name__,
+                )
+
+        try:
+            session_store.update(
+                assessment_id,
+                assistant_active=True,
+                assistant_active_owner=ASSISTANT_PROCESS_OWNER,
+            )
+        except Exception as error:
+            cleanup()
+            application.logger.error(
+                "assistant_state_start_failed error_type=%s",
+                type(error).__name__,
+            )
+            return jsonify(error="Assistant is temporarily unavailable."), 503
 
     def generate():
         chunks = []
@@ -196,7 +296,7 @@ def assistant_response(assessment_id):
                 {"role": "user", "content": message},
                 {"role": "assistant", "content": response_text},
             ][-ASSISTANT_HISTORY_MAX_MESSAGES:]
-            store().update(assessment_id, assistant_history=updated_history)
+            session_store.update(assessment_id, assistant_history=updated_history)
             yield "event: done\ndata: {}\n\n"
         except SessionExpired:
             expired_payload = {
@@ -207,38 +307,60 @@ def assistant_response(assessment_id):
                 "event: error\ndata: "
                 f"{json.dumps(expired_payload)}\n\n"
             )
-        except Exception:
-            current_app.logger.exception("follow_on_assistant_failed")
+        except Exception as error:
+            application.logger.error(
+                "follow_on_assistant_failed error_type=%s", type(error).__name__
+            )
             yield (
                 "event: error\ndata: "
                 f"{json.dumps({'error': ASSISTANT_RETRY_MESSAGE, 'retryable': True})}\n\n"
             )
         finally:
-            try:
-                store().update(assessment_id, assistant_active=False)
-            except SessionExpired:
-                pass
+            cleanup()
 
-    return Response(
+    response = Response(
         stream_with_context(generate()),
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-store"},
     )
+    response.call_on_close(cleanup)
+    return response
 
 
 @bp.post("/api/reviews/<assessment_id>/retry-research")
 def retry_research(assessment_id):
-    try:
-        reset = store().reset_failed_research(
-            assessment_id,
-            RETRYABLE_RESEARCH_CODES,
-        )
-    except SessionExpired:
-        return jsonify(error="Assessment expired."), 410
-    if not reset:
-        return jsonify(error="Research retry is unavailable."), 409
-
-    current_app.extensions["assessment_queue"].enqueue(assessment_id)
+    guard = admission()
+    session_store = store()
+    with guard.lock:
+        try:
+            state = session_store.get(assessment_id)
+            if (state.payload.get("status") != "failed"
+                    or state.payload.get("failure_code") not in RETRYABLE_RESEARCH_CODES):
+                return jsonify(error="Research retry is unavailable."), 409
+            guard.require_capacity(session_store)
+            guard.check_and_record("review", client_address())
+            session_store.reset_failed_research(assessment_id, RETRYABLE_RESEARCH_CODES)
+        except SessionExpired:
+            return jsonify(error="Assessment expired."), 410
+        try:
+            current_app.extensions["assessment_queue"].enqueue(assessment_id)
+        except AssessmentQueueFull:
+            failure_code = state.payload["failure_code"]
+            try:
+                session_store.update(assessment_id, **state.payload)
+                session_store.emit(
+                    assessment_id, "run_failed", {"error": failure_code}
+                )
+            except Exception as error:
+                current_app.logger.error(
+                    "research_retry_restore_failed error_type=%s",
+                    type(error).__name__,
+                )
+            raise AdmissionDenied(
+                "assessment_queue_full",
+                "The assessment queue is full. Try later.",
+                status=503,
+            ) from None
 
     base = f"/api/reviews/{assessment_id}"
     return (
@@ -300,6 +422,9 @@ def create_review():
         )
     except ValueError:
         return jsonify(error="Unsupported detail level."), 400
+    review_stage = request.form.get("review_stage", "").strip()
+    if review_stage not in STAGE_PROFILES:
+        return jsonify(error="Unsupported review stage."), 400
 
     def uploaded_files(field_name: str) -> list[dict[str, object]]:
         return [
@@ -308,21 +433,20 @@ def create_review():
             if item.filename
         ]
 
-    payload = {
-        "country": country,
-        "review_stage": request.form.get("review_stage", "").strip(),
-        "detail_level": detail_level.value,
-        "cpf": {"name": cpf.filename, "bytes": cpf.read()},
-        "package_documents": uploaded_files("package_documents"),
-        "context_documents": uploaded_files("context_documents"),
-        "review_focus": request.form.get("review_focus", "").strip()[:4000],
-        "corrections": [],
-        "status": "created",
-    }
-    assessment_id = store().create(payload)
+    def payload():
+        return {
+            "country": country,
+            "review_stage": review_stage,
+            "detail_level": detail_level.value,
+            "cpf": {"name": cpf.filename, "bytes": cpf.read()},
+            "package_documents": uploaded_files("package_documents"),
+            "context_documents": uploaded_files("context_documents"),
+            "review_focus": request.form.get("review_focus", "").strip()[:4000],
+            "corrections": [],
+            "status": "created",
+        }
+    assessment_id = _submit_payload(payload)
     base = f"/api/reviews/{assessment_id}"
-
-    current_app.extensions["assessment_queue"].enqueue(assessment_id)
 
     return (
         jsonify(
@@ -336,6 +460,11 @@ def create_review():
 
 @bp.get("/api/reviews/<assessment_id>/events")
 def review_events(assessment_id):
+    slot = admission().stream_slots
+    if not slot.acquire(blocking=False):
+        raise AdmissionDenied("event_stream_limit", "Too many active review connections. Try shortly.",
+                              status=503, retry_after=5)
+    release_slot = _release_once(slot)
     raw_cursor = request.headers.get("Last-Event-ID") or request.args.get("after", "0")
     try:
         initial_cursor = max(0, int(raw_cursor))
@@ -367,11 +496,19 @@ def review_events(assessment_id):
                     return
                 sleep(EVENT_STREAM_KEEPALIVE_SECONDS)
 
-    return Response(
-        stream_with_context(generate()),
+    def leased_events():
+        try:
+            yield from generate()
+        finally:
+            release_slot()
+
+    response = Response(
+        stream_with_context(leased_events()),
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
+    response.call_on_close(release_slot)
+    return response
 
 
 @bp.get("/api/reviews/<assessment_id>/result")
@@ -462,8 +599,8 @@ def export_review(assessment_id):
         )
     except EvidenceCompletenessError:
         return jsonify(error="Traceable evidence is invalid."), 409
-    except Exception:
-        current_app.logger.exception("docx_export_failed assessment_id=%s", assessment_id)
+    except Exception as error:
+        current_app.logger.error("docx_export_failed error_type=%s", type(error).__name__)
         return jsonify(error="DOCX export failed."), 500
     return send_file(
         BytesIO(data),
@@ -536,8 +673,7 @@ def add_correction(assessment_id):
     child_payload.pop("assistant_active", None)
     child_payload.pop("assistant_active_owner", None)
 
-    child_id = store().create(child_payload)
-    current_app.extensions["assessment_queue"].enqueue(child_id)
+    child_id = _submit_payload(child_payload)
     base = f"/api/reviews/{child_id}"
     return (
         jsonify(

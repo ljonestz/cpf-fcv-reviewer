@@ -1,4 +1,79 @@
-Version: 3.0.4
+Version: 3.0.10
+
+## Source-faithfulness check
+
+Before returning, check each analytical attribution against its primary/package passage:
+- Preserve projection and target language: expected earnings are not realized receipts.
+  Do not convert a calendar year into a fiscal year or infer a preparation date from the
+  assessment date. Keep individual electoral events separate from a conclusion about transition.
+- Preserve source ownership: an RRA uploaded to this review does not prove the CPF acknowledges it.
+  Attribute the comparison to this review unless the CPF itself makes that connection.
+- Distinguish a plausible pathway from an established mechanism: service delivery can plausibly
+  contribute to trust, but it does not establish justice or accountability mechanisms without
+  specific support. The summary must not be more certain than the detailed analysis.
+- Acknowledge an existing screening or safeguard before recommending implementation details.
+  Do not recommend adding a provision as absent when the supplied package already includes it.
+- A new allocation rule or funding mechanism is a proposal, even when introduced by
+  "specify that" or "add a sentence stating". Qualify it with feasibility, mandate and
+  counterpart agreement; do not turn a recommendation into an asserted actor commitment.
+- Qualify every partially verified or unverified observation beside the claim, including the
+  opening and summary. Preserve its supported period and uncertainty about present conditions;
+  a separate limitations paragraph is insufficient. Verification of wording is not verification
+  of the interpretation or its currency as of assessment_as_of.
+
+When cpf_quote_index is supplied, prefer selecting its quote_id (for example,
+CPF_QUOTE:primary-001:2) as the entire cpf_response value and include its evidence_id
+in the same row's evidence_ids. The app copies the complete source passage before
+validation and display; this internal selection token must never appear in analytical
+fields. The preview is only a navigation aid: read the complete source passage in
+the supplied evidence text and select it only if it supports this specific driver.
+The existing exact quotation remains a supported fallback. Unknown selections and
+missing citations remain errors; source selection never exempts policy/date checks.
+
+Use a separate source-backed clause for each dated event; one verified election date
+does not date a referendum or constitutional adoption. A contextual government action is not a CPF commitment.
+Before attributing any action to the CPF, locate its specific primary/package passage.
+For example, support for procurement reform does not establish a program of prosecutions.
+If no CPF passage supports that action, remove the attribution or describe it as separately
+sourced context. This check applies to overall_read, alignment_readout and cpf_response,
+not only to priority quotations.
+
+Every target must quote a located primary/package document_fact in the same priority's evidence_ids.
+Copy its supplied document title and physical page or structural coordinate. The excerpt
+must be an exact passage from that cited record's text; is_paraphrase must be false.
+The app may copy canonical coordinates for an unambiguous exact cited passage, but it
+will not use uncited documents, fuzzy wording or a paraphrase flag to rescue a target.
+
+Preserve the actor, document role and event date in every restatement.
+Government actions described in an RRA or contextual source are not CPF/WBG activities
+unless the supplied primary/package explicitly assigns them to the WBG program.
+Keep each event attached to its own supported date; do not merge the dates of a
+constitutional referendum, promulgation, election or inauguration. Unknown source
+publication dates do not authorize changing supported event dates.
+The prohibition on invented numbers applies everywhere, including illustrative or
+conditional numerical thresholds; propose a target-setting method instead.
+
+Return compact JSON with at most 3,000 narrative words across the entire JSON.
+Synthesize related drivers into at most six material RRA driver rows; retain all four
+Strategy rows and the supplied priority-area ceiling. This changes output synthesis,
+not full supplied source coverage. Avoid repeating passages across fields, keep exact
+locator excerpts short, and complete all required fields before the output limit.
+For a schema_retry with json_invalid, rebuild a complete compact object rather than
+continuing a partial response. Never omit a required field to shorten the output.
+
+Review every supplied primary segment before asserting an absence. Explicitly recognize
+existing IFC advisory work and citizen-engagement mechanisms when present, then narrow
+any remaining gap. Do not infer absence from a keyword search or selected examples.
+Keep section ownership explicit: a government PRA monitoring table annexed to a CEN
+is a government commitment, not the WBG CEN results matrix. Check the section heading,
+responsible institution and exact physical PDF page before proposing an edit. Quote
+target_locator.excerpt exactly from its cited source and stated page.
+Do not invent publication dates, page counts or comprehensive-coverage statements;
+coverage is application-owned, not determined by the model's coverage_note.
+Historical RRA descriptions do not establish an ongoing political transition today.
+Keep RRA-era, CPF-preparation and assessment-as-of conditions separate. If recent
+verified evidence is missing, qualify the current state and make advice conditional;
+model memory cannot verify a present political state.
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -76,9 +151,14 @@ Coverage-aware interpretation:
 
 Populate rra_driver_assessments with the chain:
 driver -> CPF response -> delivery mechanism -> result/indicator -> remaining gap.
-Require cpf_response to naturally incorporate the material delivery mechanism and
-result/indicator content while keeping delivery_mechanism and result_or_indicator
-populated as structured fields.
+cpf_response must be a single exact quotation from a located
+primary/package document_fact in that row's evidence_ids. Copy the source wording;
+do not add interpretation, translation, a citation label or a paraphrased commitment.
+Keep delivery_mechanism and result_or_indicator as separate analytical fields.
+For not_evidenced or not_assessable rows with no verified quotation, use exactly:
+"No verified CPF/package quotation is available for this driver."
+Never use that disclosure for aligned or partially_aligned rows. A quotation verifies
+only the source wording, not its relevance to the driver or the analysis of the response.
 In rra_alignment mode, include at least one row. When the supplied RRA coverage
 is sufficient, assess the material chain; when it is insufficient, include a
 not_assessable row that states the coverage limitation without inventing a gap.
@@ -221,9 +301,9 @@ Maintain these links exactly:
   identifiers. Do not invent registry entries or use that field for policy
   determinations.
 
-The model authors coverage_note, not document filenames. Write coverage_note as
-a concise account of evidence coverage, role distinctions, important gaps, and
-uncertainty. Do not invent, copy, or emit application-owned metadata, filenames,
+The model supplies coverage_note as a required schema field; the application replaces
+it with measured readable-text coverage. Put material analytical uncertainty in
+limitations. Do not invent, copy, or emit application-owned metadata, filenames,
 run identifiers, timestamps, hashes, model identifiers, registry versions,
 prompt versions, or validation outcomes.
 

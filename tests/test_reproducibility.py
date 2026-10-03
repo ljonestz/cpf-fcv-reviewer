@@ -59,6 +59,77 @@ def test_metadata_records_every_reproducibility_input():
     assert metadata.current_evidence_limitation is None
 
 
+def test_metadata_defaults_to_versions_in_the_loaded_registry_and_prompts():
+    metadata = build_run_metadata(
+        run_id="run-bundle-versions",
+        created_at=datetime(2026, 8, 10, tzinfo=UTC),
+        review_stage="early_draft",
+        diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+        documents={},
+        registry_bundle=b'{"version":"9.8.7"}',
+        guidance="guidance",
+        prompt_bytes={
+            "review": b"Version: 3.2.1\nReview prompt",
+            "diagnostic_map": b"Version: 1.2.0\nDiagnostic prompt",
+        },
+        model_id="test-model",
+        source_scan_at=datetime(2026, 8, 10, tzinfo=UTC),
+        output_language="en",
+    )
+
+    assert metadata.app_release == "dev"
+    assert metadata.prompt_bundle_version == "diagnostic_map:1.2.0;review:3.2.1"
+    assert metadata.registry_versions == {"bundle": "9.8.7"}
+    assert metadata.prompt_hashes == {
+        "diagnostic_map": sha256_bytes(b"Version: 1.2.0\nDiagnostic prompt"),
+        "review": sha256_bytes(b"Version: 3.2.1\nReview prompt"),
+    }
+
+
+def test_metadata_accepts_explicit_versions_and_hashes_unversioned_prompts():
+    metadata = build_run_metadata(
+        run_id="run-explicit-versions",
+        created_at=datetime(2026, 8, 10, tzinfo=UTC),
+        review_stage="early_draft",
+        diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+        documents={},
+        registry_bundle=b"not-json",
+        guidance="guidance",
+        prompt_bytes={"unversioned": b"prompt text"},
+        model_id="test-model",
+        source_scan_at=datetime(2026, 8, 10, tzinfo=UTC),
+        output_language="en",
+        app_release="release-abc123",
+        prompt_bundle_version="prompt-set-7",
+        registry_bundle_version="1.1.0",
+    )
+
+    assert metadata.app_release == "release-abc123"
+    assert metadata.prompt_bundle_version == "prompt-set-7"
+    assert metadata.registry_versions == {"bundle": "1.1.0"}
+    assert metadata.prompt_hashes == {"unversioned": sha256_bytes(b"prompt text")}
+
+
+def test_prompt_bundle_version_falls_back_to_each_unversioned_prompt_hash():
+    metadata = build_run_metadata(
+        run_id="run-prompt-hash-version",
+        created_at=datetime(2026, 8, 10, tzinfo=UTC),
+        review_stage="early_draft",
+        diagnostic_mode=DiagnosticMode.LIMITED_FRAMING,
+        documents={},
+        registry_bundle=b"registry",
+        guidance="guidance",
+        prompt_bytes={"unversioned": b"prompt text"},
+        model_id="test-model",
+        source_scan_at=datetime(2026, 8, 10, tzinfo=UTC),
+        output_language="en",
+    )
+
+    assert metadata.prompt_bundle_version == (
+        f"unversioned:sha256:{sha256_bytes(b'prompt text')}"
+    )
+
+
 def test_metadata_threads_reduced_evidence_status_without_changing_hashes():
     common = dict(
         run_id="run-status",
@@ -156,11 +227,17 @@ def test_evidence_pack_builder_constructs_metadata_before_model_use():
         material_diagnostic_ids=(),
         current_evidence_tier=CurrentEvidenceTier.DOCUMENT_LED,
         current_evidence_limitation="Independent current-country research was unavailable.",
+        app_release="release-abc123",
+        prompt_bundle_version="review:3.0.4",
+        registry_bundle_version="1.1.0",
     )
 
     assert pack.metadata.document_fingerprints == {"CPF draft": sha256_bytes(b"synthetic document")}
     assert pack.metadata.registry_bundle_hash == sha256_bytes(b"synthetic registry")
     assert pack.metadata.prompt_hashes == {"review": sha256_bytes(b"review prompt")}
+    assert pack.metadata.app_release == "release-abc123"
+    assert pack.metadata.prompt_bundle_version == "review:3.0.4"
+    assert pack.metadata.registry_versions == {"bundle": "1.1.0"}
     assert pack.metadata.detail_level is DetailLevel.IN_DEPTH
     assert pack.metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
     assert (

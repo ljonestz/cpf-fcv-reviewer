@@ -1,5 +1,261 @@
 # Project status
 
+## 2026-10-03 Provider-free quality and presentation follow-up verified
+
+Code `9914483` passed **1,769 Linux tests** including Gunicorn and Python name/import
+checks ([CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37138656833)).
+Reduced-research notices now name the assessment/publication dates without asserting
+present conditions; repair preserves verification grades and undated support. The
+observed “no longer on the FCV list” claim is caught by the existing validator.
+Review 3.0.10 / repair 3.0.11 strengthen source attribution, projection/date accuracy,
+existing-provision acknowledgement, proposal qualification and summary consistency.
+These instruction tests do not establish real-model compliance.
+
+Neutral Word driver labels, duplicate-page suppression, quote/locator proximity and
+summary paragraph grouping are verified. Historical-result browser replay passed
+**6/6** checks; synthetic assessment/assistant browser flow passed **11/11**, both with
+zero browser errors. Nine detailed and three final summary Word pages were inspected.
+The summary retains three pages, with a complete priority on its last page.
+
+See the [finding-by-finding record](validation/2026-10-03-provider-free-quality-follow-up.md).
+Original paid outputs remain unchanged and retain their documented analytical defects.
+No new paid run, merge, deployment, hosting charge or quota reset occurred; the ledger
+still has nine reservations. PR 39 remains draft. Factual acceptance on the fixed
+candidate, real-provider assistant/cross-country checks, live persistence/restart/
+restore, off-disk backups and provider spending controls remain open. Earlier entries
+below are historical, not current claims that these presentation fixes are pending.
+
+## 2026-10-03 Paid Guinea execution passed; analytical acceptance held
+
+One authorized assessment on `ab3b532` (application `09805d6`) completed normally in
+599.57 seconds. All **9 paid-run browser checks passed**, with zero browser errors,
+refresh recovery and both Word downloads. No quotation error occurred; one bounded
+repair cleared an unknown institutional referral. Independent checks passed all
+**5 CPF quotations** and **3 recommendation anchors** against their cited PDF pages.
+All five RRA drivers and four embedded Strategy shifts were considered.
+
+The accepted output still overstates some source claims and proposed arrangements,
+loses current-context qualifications in its opening, and has a summary/detail
+inconsistency. Both Word files are readable (12 pages inspected); driver numbering,
+duplicate page labels and nearly empty summary continuation need provider-free fixes.
+See the [paid acceptance and findings record](validation/2026-10-03-quote-selection-paid-acceptance.md).
+
+Functional acceptance passed; factual acceptance and public production readiness remain
+held. Reuse the saved result for free corrections before considering another paid run.
+Nine renewed ledger reservations are recorded; prior eight are unchanged. No paid
+assistant, application edit, merge, deployment, hosting charge or manual quota reset
+occurred. Live persistence/backup/spending controls, real-provider assistant and
+cross-country acceptance remain open. Earlier entries retain their historical scope.
+
+## 2026-10-03 Source-selection recovery verified without paid calls
+
+Commit `09805d6` adds deterministic source-passage selection with the existing literal
+quotation fallback, safe reason-level diagnostics, mixed-error identity preservation,
+policy/date row recovery and a budget fallback that retains all evidence text.
+Explicit coverage repair remains supported; oversized passages are excluded from the
+optional index rather than silently truncated.
+
+All **1,755 Linux tests** and Python name/import checks passed in
+[CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37073544182).
+The final candidate completed a deliberately broken synthetic quotation through one
+repair, all 11 browser checks, refresh/assistant history, and both Word downloads.
+Public controls verified 10,251 passage round trips across seven CPF/CEN files.
+Local SQLite backup integrity and table-count equality passed.
+
+See the [implementation and evidence record](validation/2026-10-03-source-selection-recovery.md).
+No paid assessment, merge or deployment occurred. Paid factual acceptance and the
+previously recorded production persistence/backup/spending controls remain open.
+Earlier entries below are historical and retain their original scope.
+
+## 2026-10-02 Repaired candidate paid test still blocked by one quotation
+
+One owner-approved Guinea run on `5cfb641` (application repair `54cdf2a`) failed safely.
+Initial validation had three blocking issues across quotation and policy checks; bounded
+repair left one `unsupported_cpf_response`. The policy code cleared in this attempt,
+but no accepted result/export was released and factual acceptance remains ungraded.
+Runner exited normally with code 1 after 879.20 seconds overall, with zero browser errors.
+Exact-candidate CI and the exact runner's 11 free browser checks passed before submission.
+See the [paid acceptance and launch-access record](validation/2026-10-02-policy-repair-paid-acceptance.md).
+
+Paid work stopped after this one assessment, with no real assistant request. Eight renewed
+reservations are now consumed; the prior seven are unchanged. No quota reset, application
+edit, merge, deployment or hosting charge occurred. The next engineering gate is a
+reproducible quotation failure with safe reason-level diagnostics, not an unchanged paid retry.
+
+Render API access and provider authentication work. The public site still runs `992c35a`
+with volatile storage. Disk/shell dashboard control and direct SSH were not verified due
+to timeouts. The prepared 1 GB persistent setup, live restart/backup acceptance, backup
+retention/off-disk destination and provider-account spending controls remain outstanding.
+Production readiness remains unachieved; earlier entries below retain their original scope.
+
+## 2026-10-02 Reproduced quotation/policy repair defects fixed and CI verified
+
+Provider-free diagnosis found that policy cleanup could lose the citation for a valid
+replacement quotation, overwrite a quotation with a paraphrase and bypass duplicate-ID
+protection. Quotation and source links now transfer together through the existing exact
+verifier, with unique RRA row identities. Policy/date corrections to quotations receive
+the necessary primary/package evidence; repair prompt v3.0.9 requires an exact supported
+replacement. Existing policy rules, analysis, admission caps and call limits remain.
+
+Four regression cases failed before the fix. Final reference/runtime checks passed 173
+cases, prompt/smoke/orchestrator checks passed 100, and three actual public Guinea
+passage controls passed. Exact code commit `54cdf2a` passed all **1,730** provider-free
+Linux tests, including Gunicorn concurrency, and Python name/import checks in
+[CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37000380354). See the
+[diagnosis and repair record](validation/2026-10-02-quote-policy-repair.md).
+
+This proves code defects and their repair, not the precise cause of the rejected paid
+draft. No model calls, deployment or hosting changes occurred. Production acceptance
+remains open; the paid ledger still contains seven reservations. Earlier entries below
+describe their original candidates and outcomes.
+
+## 2026-10-02 Owner-authorized unchanged Guinea repeat failed
+
+One explicitly authorized repeat on `b8f9970` (unchanged application source `b5f0578`)
+failed safely. After bounded repair, one `unsupported_cpf_response` and one
+`prohibited_policy_language` issue remained; no findings or accepted exports were
+released. The runner exited normally with code 1 after 664.58 seconds overall and
+zero browser errors. The exact runner first passed 11/11 free checks with normal exit 0;
+candidate CI was successful. See the [paid repeat record](validation/2026-10-02-guinea-paid-repeat.md).
+
+Paid testing stopped after this one assessment, with no real assistant request. The
+six prior reservations are unchanged; the ledger now has seven. Read-only daily counts
+are four on 30 September, two on 1 October and one on 2 October, with no reset.
+Four screenshots and safe diagnostics were retained; rejected content was not inspected.
+No application code, merge, deployment or hosting change occurred.
+
+Read-only Render API inspection found no error-level app entries or matching 5xx
+request entries in the 24 hours ending at 10:16 UTC. Live `/health` returned 200 on
+older release `992c35a` with volatile state; sampled memory was about 265/512 MiB.
+These checks do not cover the repaired local candidate or close durable-hosting acceptance.
+
+Production acceptance remains unachieved. Provider-free diagnosis of quotation and
+policy repair should precede further paid acceptance. A repeated run's different error
+codes do not establish that earlier locator failures are fixed. Fresh factual and
+assistant acceptance, cross-country reliability and deferred live durable hosting remain
+open. Earlier records below retain their historical scope.
+
+## 2026-10-01 Paid acceptance of the quotation repair failed on a locator
+
+The owner authorized one further assessment on `c272e79` (application source `b5f0578`).
+The exact runner first passed 11/11 free smoke checks; candidate CI was green. Guinea
+then failed safely after bounded repair with one `target_locator_mismatch`, reason
+`coordinate_not_cited`. The policy-language issue cleared; no unsupported-quotation
+code appeared in the reported blocking sets. No findings or accepted exports were
+released. Overall runner time was 788.53 seconds, with normal exit 1 and no browser errors.
+
+Paid testing stopped. The ledger preserves its prior five reservations plus this one;
+read-only global quota inspection confirms four admissions on 30 September and two
+on 1 October, with no reset. Four public-source controls and ten relevant engine/validator
+tests passed; no reproducible resolver defect was found, and no app code was changed.
+See the [latest paid outcome and provider-free diagnosis](validation/2026-10-01-guinea-quotation-fix-paid-acceptance.md).
+
+Production acceptance remains unachieved. Reliable source-target selection/repair,
+fresh factual acceptance, the real assistant, cross-country reliability and deferred
+live durable hosting remain open. No replacement assessment, merge, deployment or
+hosting change occurred. Earlier records below retain their historical scope.
+
+## 2026-10-01 Quotation repair identity follow-up
+
+Synthetic controls found that a renamed RRA repair row was appended beside the
+invalid original. The candidate now restores the original ID only for one exact,
+unambiguous driver match during quotation repair. Original and repaired ID uniqueness
+also prevents cross-wiring; existing source verification, standing and analytical
+fields remain. Five regression cases failed before the fix; 143 reference/source/engine
+checks and 51 smoke/orchestrator checks now pass.
+Exact code commit `b5f0578` also passed all 1,722 provider-free Linux tests,
+including Gunicorn concurrency, and Python name/import checks in
+[CI run 36843940184](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/36843940184).
+See the [diagnosis and local repair](validation/2026-10-01-guinea-quotation-acceptance.md).
+
+This proves the local defect and repair, not the cause of the failed paid case or
+fresh model acceptance. No second paid assessment, model-call increase or deployment
+followed. The remaining production gates below stay open.
+
+## 2026-10-01 Free gates closed; Guinea quotation acceptance failed
+
+Provider-free acceptance now covers local SQLite state/quota backup restoration,
+six target-source browser interruption/recovery checks with normal cleanup, and
+all 17 pages of four Word exports. The exact `a1f12f5` candidate's CI passed.
+See the [closed free gates and frozen criteria](validation/2026-10-01-provider-free-release-gates.md).
+
+The owner accepted one further local assessment. Guinea on `a1f12f5` failed after
+the bounded repair: two `unsupported_cpf_response` issues remained. No findings,
+Word exports or assistant output were produced; the runner exited normally with
+exit 1 and no browser errors. Paid testing stopped. The existing renewed ledger
+retains its four prior reservations plus this one; no quota reset occurred.
+See the [safe failure and provider-free diagnosis](validation/2026-10-01-guinea-quotation-acceptance.md).
+
+Routine production acceptance remains unachieved. Fresh country model/factual
+acceptance, the revised real assistant, cross-country reliability and the
+owner-deferred live durable-hosting gate remain open. No merge, deployment or
+hosting change occurred. Historical observations below remain unchanged.
+
+## 2026-10-01 Provider-free closure
+
+A new isolated synthetic SQLite rehearsal preserved review data, events, assistant
+history, Word downloads and the four-per-day admission cap through application
+reinitialization and native backup restoration. Browser keyboard, download retry,
+result-fetch recovery and mocked expiry assertions were reached; the runner then
+stalled during cleanup, so normal teardown remains unverified. No application
+change or paid call occurred. Word pagination, long-lived stream recovery, real
+model-quality acceptance and live durable hosting remain pending. See the
+[provider-free record and release gates](validation/2026-10-01-provider-free-closure.md).
+
+## 2026-09-30 Source reference follow-up
+
+The owner approved verified CPF/package quotations in the RRA response column, with
+separate delivery/results analysis. Candidate `88220ed` implements this, source-location
+display, cited-only target resolution, preservation of repaired source links, bounded
+percentage guards and safe locator reason/count diagnostics. Final focused checks passed
+105 tests; final synthetic Edge acceptance passed 11/11 with screenshots, JSON and both
+Word downloads. The independent public-source check passed 17/17 across four PDFs. Full
+Linux CI for Word-expectation follow-up `90a8379` passed 1,715 tests and Python name/import
+checks. See the
+[source-reference record](validation/2026-09-30-source-reference-reliability.md).
+
+No new paid assessment or deployment occurred. The earlier four renewed admissions are
+consumed; fresh country factual acceptance, the real assistant, Word visual pagination
+and durable hosting remain outstanding. Routine production acceptance is not achieved.
+
+## 2026-09-30 Renewed local quality acceptance
+
+The owner authorized four additional quality assessments and deferred new hosting cost.
+All four admissions are consumed. Guinea on `389e110` completed with qualified factual
+acceptance; Chad failed schema validation, Tajikistan confirmed output truncation, and
+Afghanistan on `1272a28` failed after three residual locator mismatches. No unsafe findings
+were released by the failed cases and no paid repeat was made. Routine production
+acceptance remains unachieved: source grounding and cross-country reliability are blockers.
+
+The observed presentation defects are repaired: the material current-context caveat now
+appears before the short readout and both Word exports, assistant paragraphs retain line
+breaks, and follow-on prompt v1.1.3 requests concise plain-text management summaries.
+The shared generation path now checks stop reason before parsing, with safe failure codes;
+review/repair v3.0.6 reinforce factual ownership and bound output synthesis. The response
+ceiling increases to 20,000 only for review/repair after observed truncation; admission and
+call-count caps remain. `1272a28` Linux CI passed 1,679 tests. The fixed unsupported countdown
+now shows measured elapsed time and actual stages; 65 focused UI checks and final smoke
+06 (11/11, zero errors, normal exit 0) pass. Populated-caveat Word re-exports pass without
+another model call. Word visual layout and the new real assistant summary remain unverified. See the
+[renewed acceptance record](validation/2026-09-30-renewed-quality-acceptance.md).
+Live release remains `992c35a` with volatile storage; no merge or deployment occurred.
+
+## 2026-09-30 Production repair candidate
+
+The four-country public-document audit identified an unbounded spending/queue risk,
+partial primary coverage, inconsistent package bounds, metadata/diagnostic-date defects,
+and material source-grounding and readout issues. The owner selected a public pilot
+with four new paid assessments per UTC day. Candidate branch
+`fix/production-readiness-20260930` implements admission/concurrency limits, full readable
+primary/package evidence, safe failures, actual runtime provenance and bounded summaries.
+Engineering source `25437b3` passed Linux CI: **1,669 tests** including Gunicorn, plus Python name/import checks. Synthetic browser acceptance passed **12/12**, with saved screenshots, both Word exports and validated JSON.
+See the [repair acceptance record](validation/2026-09-30-production-readiness-repairs.md).
+
+Live release remains `992c35a` with volatile storage. Durable hosting and new model-quality
+acceptance remain pending. The original four paid audit assessments exhausted that
+validation ceiling; no additional paid assessment was submitted. Historical records below
+remain descriptions of their respective releases.
+
 ## 2026-09-10 Deployed: grounded recommendations
 
 PR 36 is merged; **992c35a** is live. Render and TLS-verified health confirm the

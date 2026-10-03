@@ -28,3 +28,13 @@ output/playwright/
 Thumbs.db
 desktop.ini
 .worktrees/
+
+# Local QA, session databases, and backups contain uploaded documents.
+output/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+evidence/20260930_production-readiness-repairs/

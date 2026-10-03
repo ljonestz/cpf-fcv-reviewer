@@ -1,6 +1,7 @@
 from datetime import date
 from io import BytesIO
 
+import pytest
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
@@ -129,6 +130,76 @@ def test_identifies_fcv_risk_assessment_cover_title_as_accepted_equivalent():
 
     assert result is not None
     assert result.kind == "accepted_equivalent"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Fragility Risk and\nResilience Assessment",
+        "Fragility Risk &\nResilience Assessment",
+    ],
+)
+def test_identifies_rra_title_when_extracted_words_wrap_across_lines(title):
+    result = identify_uploaded_diagnostic(
+        (
+            document(
+                "uploaded.pdf",
+                f"The Gambia\n{title}",
+            ),
+        ),
+        country="The Gambia",
+    )
+
+    assert result is not None
+    assert result.kind == "rra"
+
+
+def test_matches_selected_country_and_document_country_aliases():
+    for selected_country, source_country in (
+        ("The Gambia", "Gambia"),
+        ("Gambia", "The Gambia"),
+    ):
+        result = identify_uploaded_diagnostic(
+            (
+                document(
+                    "uploaded.pdf",
+                    f"{source_country}\nRisk and Resilience Assessment",
+                ),
+            ),
+            country=selected_country,
+        )
+
+        assert result is not None
+        assert result.kind == "rra"
+
+
+def test_recognizes_line_wrapped_gambia_diagnostic_and_normalizes_cover_date():
+    source = ExtractedDocument("uploaded.pdf", (
+        ExtractedSegment(
+            "Gambia\nFragility Risk and\nResilience Assessment\nJune 9, 2017",
+            1,
+            None,
+            "page 1",
+        ),
+    ), ())
+
+    result = identify_uploaded_diagnostic((source,), country="The Gambia")
+
+    assert result is not None
+    assert result.kind == "rra"
+    assert result.publication_date == date(2017, 6, 1)
+
+
+def test_country_alias_matching_respects_word_boundaries():
+    assert identify_uploaded_diagnostic(
+        (
+            document(
+                "uploaded.pdf",
+                "Gambian context\nRisk and Resilience Assessment",
+            ),
+        ),
+        country="The Gambia",
+    ) is None
 
 
 def test_retains_undated_rra_with_no_publication_date():
@@ -267,4 +338,82 @@ def test_invalid_calendar_year_remains_unestablished():
     from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
 
     source = document("RRA.docx", "Publication: June 0000")
+    assert diagnostic_provenance(source).publication_date is None
+
+
+@pytest.mark.parametrize("cover_date", ["June 9, 2017", "9 June 2017"])
+def test_full_cover_dates_normalize_to_publication_month(cover_date):
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = ExtractedDocument("public RRA.pdf", (
+        ExtractedSegment(
+            f"Fragility Risk and Resilience Assessment\n{cover_date}",
+            1,
+            None,
+            "page 1",
+        ),
+    ), ())
+
+    provenance = diagnostic_provenance(source)
+
+    assert provenance.publication_date == date(2017, 6, 1)
+    assert provenance.date_basis == "cover"
+    assert provenance.locator.page == 1
+    assert provenance.locator.excerpt == cover_date
+
+
+@pytest.mark.parametrize("publication_date", ["June 9, 2017", "9 June 2017"])
+def test_full_publication_statement_dates_normalize_to_publication_month(publication_date):
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = ExtractedDocument("public RRA.pdf", (
+        ExtractedSegment(f"Publication date: {publication_date}", 4, None, "page 4"),
+    ), ())
+
+    provenance = diagnostic_provenance(source)
+
+    assert provenance.publication_date == date(2017, 6, 1)
+    assert provenance.date_basis == "publication_statement"
+    assert provenance.locator.page == 4
+    assert provenance.locator.excerpt == publication_date
+
+
+def test_conflicting_full_cover_and_publication_dates_remain_unknown():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = ExtractedDocument("public RRA.pdf", (
+        ExtractedSegment("Risk and Resilience Assessment\nJune 9, 2017", 1, None, "page 1"),
+        ExtractedSegment("Publication date: September 2, 2017", 2, None, "page 2"),
+    ), ())
+
+    provenance = diagnostic_provenance(source)
+
+    assert provenance.publication_date is None
+    assert provenance.date_basis == "unestablished"
+    assert provenance.locator is None
+
+
+def test_filename_and_body_event_full_dates_are_not_publication_evidence():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = ExtractedDocument("Risk and Resilience Assessment June 9, 2017.pdf", (
+        ExtractedSegment("Risk and Resilience Assessment", 1, None, "page 1"),
+        ExtractedSegment("Mission: 9 June 2017", 2, None, "page 2"),
+    ), ())
+
+    provenance = diagnostic_provenance(source)
+
+    assert provenance.publication_date is None
+    assert provenance.date_basis == "unestablished"
+    assert provenance.locator is None
+
+
+def test_invalid_full_cover_calendar_date_remains_unestablished():
+    from cpf_fcv_reviewer.diagnostic_sources import diagnostic_provenance
+
+    source = document(
+        "RRA.docx",
+        "Risk and Resilience Assessment, June 31, 2017",
+    )
+
     assert diagnostic_provenance(source).publication_date is None

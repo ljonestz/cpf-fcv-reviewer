@@ -1,30 +1,59 @@
 from __future__ import annotations
 
 import logging
-from threading import Condition, Event, Thread
+from queue import Empty, Full, Queue
+from threading import Condition, Event, Lock, Thread
 
 logger = logging.getLogger(__name__)
 
 
+class AssessmentQueueFull(RuntimeError):
+    """The bounded development queue has no free pending slot."""
+
+
 class InProcessAssessmentQueue:
-    """Development queue preserving deterministic in-process behaviour."""
+    """Bounded single-worker queue for development and the volatile prototype."""
 
     mode = "in_process"
 
-    def __init__(self, app, enabled: bool) -> None:
+    def __init__(self, app, enabled: bool, *, max_pending: int = 4) -> None:
         self._app = app
         self._enabled = enabled
+        self._jobs = Queue(maxsize=max_pending)
+        self._stop = Event()
+        self._lock = Lock()
+        self._thread = None
 
     def enqueue(self, assessment_id: str) -> None:
         if not self._enabled:
             return
-        from .routes import run_assessment
+        with self._lock:
+            try:
+                self._jobs.put_nowait(assessment_id)
+            except Full as error:
+                raise AssessmentQueueFull() from error
+            if self._thread is None:
+                self._thread = Thread(target=self._run, name="cpf-fcv-development-worker", daemon=True)
+                self._thread.start()
 
-        Thread(
-            target=run_assessment,
-            args=(self._app, assessment_id),
-            daemon=True,
-        ).start()
+    def _run(self) -> None:
+        from .routes import run_assessment
+        while not self._stop.is_set():
+            try:
+                assessment_id = self._jobs.get(timeout=0.1)
+            except Empty:
+                continue
+            try:
+                run_assessment(self._app, assessment_id)
+            except Exception as error:
+                logger.error("development_worker_failed error_type=%s", type(error).__name__)
+            finally:
+                self._jobs.task_done()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1)
 
 
 class PersistentAssessmentWorker:
@@ -51,7 +80,10 @@ class PersistentAssessmentWorker:
         )
 
     def start(self) -> None:
-        self._store.requeue_stale(0)
+        if hasattr(self._store, "interrupt_running"):
+            self._store.interrupt_running()
+        else:
+            self._store.requeue_stale(0)
         self._thread.start()
 
     def enqueue(self, assessment_id: str) -> None:

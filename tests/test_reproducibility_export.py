@@ -53,7 +53,14 @@ def test_complete_reproducibility_metadata_passes_and_defaults_fail(make_valid_r
 
 def test_docx_omits_internal_reproducibility_metadata(make_valid_result):
     result, evidence = make_valid_result
-    result = result.model_copy(update={"metadata": complete_metadata(result.metadata)})
+    metadata = complete_metadata(result.metadata).model_copy(
+        update={
+            "app_release": "release-internal-marker",
+            "prompt_bundle_version": "prompt-internal-marker",
+            "registry_versions": {"bundle": "registry-internal-marker"},
+        }
+    )
+    result = result.model_copy(update={"metadata": metadata})
 
     data = build_docx(result, evidence=evidence, hydrated_referrals=())
     document = Document(BytesIO(data))
@@ -70,6 +77,9 @@ def test_docx_omits_internal_reproducibility_metadata(make_valid_result):
         "Correction: c-1",
         "Parent run: run-0",
         "Output language: en",
+        "release-internal-marker",
+        "prompt-internal-marker",
+        "registry-internal-marker",
     ):
         assert expected not in text
 

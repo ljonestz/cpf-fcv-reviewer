@@ -18,6 +18,15 @@ from .contracts import (
     RunMetadata,
 )
 from .review_profiles import STAGE_PROFILES
+from .source_grounding import (
+    LocatorFailureReason,
+    QuoteFailureReason,
+    cited_document_evidence,
+    cpf_response_failure_reason,
+    locator_failure_reason,
+    percentage_values,
+    verified_cpf_response,
+)
 
 DETERMINATION_PATTERNS = (
     r"\beligible for\b",
@@ -27,7 +36,7 @@ DETERMINATION_PATTERNS = (
     r"\bcriteria are met\b",
     r"\bhas cleared\b",
     r"\bconstitutes clearance\b",
-    r"\bis(?:\s+not|n't)?(?:\s+listed)?\s+on\s+(?:the\s+)?"
+    r"\bis(?:\s+not|n't|\s+no\s+longer)?(?:\s+listed)?\s+on\s+(?:the\s+)?"
     r"(?:world\s+bank(?:\s+group)?\s+)?(?:fcv\s+list|list\s+of\s+"
     r"fcv(?:-affected)?\s+countries)\b",
 )
@@ -201,11 +210,18 @@ class ValidationIssue:
     code: ValidationIssueCode
     message: str
     severity: Literal["fatal", "advisory"] = "fatal"
+    locator_reason: LocatorFailureReason | None = None
+    quote_reason: QuoteFailureReason | None = None
+    assessment_index: int | None = None
 
 
 ValidationIssueCode = Literal[
     "incomplete_reproducibility_metadata",
     "diagnostic_date_conflict",
+    "target_locator_mismatch",
+    "unsupported_current_state",
+    "unsupported_numeric_recommendation",
+    "unsupported_cpf_response",
     "limited_mode_overclaim",
     "unknown_priority_area",
     "unknown_evidence",
@@ -447,7 +463,15 @@ def validate_review(
             )
         )
 
-    for assessment in result.rra_driver_assessments:
+    for assessment_index, assessment in enumerate(result.rra_driver_assessments):
+        if evidence is not None and verified_cpf_response(assessment, evidence) is None:
+            issues.append(ValidationIssue(
+                "unsupported_cpf_response",
+                "CPF response requires an exact quotation from its cited primary/package "
+                "evidence, or the fixed no-quotation disclosure for an absence/unassessable row.",
+                quote_reason=cpf_response_failure_reason(assessment, evidence),
+                assessment_index=assessment_index,
+            ))
         _append_unknown_evidence_issue(
             issues,
             assessment.assessment_id,
@@ -550,6 +574,16 @@ def validate_review(
             priority_area.evidence_ids,
             evidence_ids,
         )
+        _append_source_grounding_issues(issues, priority_area, evidence or {}, result)
+        cited_sources = cited_document_evidence(priority_area.evidence_ids, evidence or {})
+        supported_percentages = set().union(*(percentage_values(item.text)
+                                             for item in cited_sources))
+        if percentage_values(priority_area.recommended_action) - supported_percentages:
+            issues.append(ValidationIssue(
+                "unsupported_numeric_recommendation",
+                f"{priority_area.priority_area_id} proposes a percentage "
+                "without cited CPF/package support.",
+            ))
         _append_current_context_support_issue(
             issues,
             priority_area,
@@ -592,6 +626,53 @@ def validate_review(
         issues.append(ValidationIssue("prohibited_policy_language", str(exc)))
 
     return tuple(issues)
+
+
+_CURRENT_TRANSITION = re.compile(
+    r"\b(?:ongoing|current|continuing)\s+(?:(?:political|military|CNRD)\s+)?transition\b|"
+    r"\b(?:political|military|CNRD)\s+transition\s+(?:is|remains)\s+(?:ongoing|underway)\b",
+    re.I,
+)
+_TRANSITION_CONDITION_PREFIX = re.compile(r"\b(?:verify\s+whether|whether|if)\s+(?:the\s+)?$", re.I)
+_HISTORICAL_TRANSITION_ATTRIBUTION = re.compile(
+    r"^\s*(?:The\s+)?historical\s+(?:RRA|diagnostic|document)\s+(?:describes|reported|records)\b", re.I)
+
+
+def _append_source_grounding_issues(issues, area, evidence, result):
+    located = [item for item in evidence.values()
+               if item.document_role in {DocumentRole.PRIMARY, DocumentRole.PACKAGE}
+               and item.locator is not None]
+    if located:
+        reason = locator_failure_reason(
+            area.target_locator, cited_document_evidence(area.evidence_ids, evidence),
+        )
+        if reason is not None:
+            issues.append(ValidationIssue(
+                "target_locator_mismatch",
+                f"{area.priority_area_id} target is not supported at its stated source location.",
+                locator_reason=reason,
+            ))
+    for text in (area.assessment, area.why_it_matters, area.recommended_action):
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            match = _CURRENT_TRANSITION.search(sentence)
+            if match is None:
+                continue
+            # A condition must qualify this assertion, not an unrelated delivery risk.
+            if (_TRANSITION_CONDITION_PREFIX.search(sentence[:match.start()])
+                    or _HISTORICAL_TRANSITION_ATTRIBUTION.search(sentence)):
+                continue
+            supported = any(
+                item.evidence_type == "current_context"
+                and item.source_date is not None
+                and 0 <= (result.metadata.created_at.date() - item.source_date).days <= 365
+                and _CURRENT_TRANSITION.search(item.supporting_quote or "")
+                and ("cnrd" not in sentence.casefold() or "cnrd" in (item.supporting_quote or "").casefold())
+                for evidence_id in area.evidence_ids
+                if (item := evidence.get(evidence_id)) is not None)
+            if not supported:
+                issues.append(ValidationIssue("unsupported_current_state",
+                                              f"{area.priority_area_id} ongoing-transition claim needs recent supporting evidence or qualification."))
+                return
 
 
 def _append_raw_evidence_id_issue(

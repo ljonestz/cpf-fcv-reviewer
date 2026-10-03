@@ -28,7 +28,9 @@ The public Render prototype and the future internal ITS version are separate tra
 Use **Download five-minute readout** or **Download full detailed note** for an active review.
 Both use `GET /api/reviews/<assessment_id>/export.docx`; add `?view=summary` for the five-minute Word download.
 Word exports omit the website-only basis/limitations section and start with a language-model
-caution about findings, exact dates and expert consultation. Keep layouts editable: native
+caution about findings, exact dates and expert consultation. Preserve the application's
+material current-context limitation before the findings in both Word views and the short
+browser readout. Keep layouts editable: native
 paragraph styles, left alignment, one-inch margins and no floating text boxes. The
 full-width navy running banner uses one header paragraph with shading, negative
 horizontal indents, zero header distance, exact 42.5-point line height, white text,
