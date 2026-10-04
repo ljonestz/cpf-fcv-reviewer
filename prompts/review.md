@@ -1,4 +1,4 @@
-Version: 3.0.11
+Version: 3.0.12
 
 ## Source-faithfulness check
 
@@ -33,6 +33,8 @@ For target_locator.excerpt, you may also select the quote_id of the exact primar
 passage to edit. Include its evidence_id in the priority's evidence_ids. The app supplies
 the selected passage's original text and coordinates. If the response schema requires
 quote IDs, select them instead of transcribing quotations in both fields.
+If target_locator itself is a string in the response schema, return only the quote_id
+there; the application supplies the selected source's complete locator.
 
 Use a separate source-backed clause for each dated event; one verified election date
 does not date a referendum or constitutional adoption. A contextual government action is not a CPF commitment.

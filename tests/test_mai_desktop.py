@@ -40,8 +40,33 @@ def test_mai_schema_requires_source_selection_for_quotes_and_targets(prompt):
     response_schema = definitions["RRADriverAssessment"]["properties"]["cpf_response"]
     assert {"const": NO_CPF_QUOTE, "type": "string"} in response_schema["anyOf"]
     target = definitions["PriorityArea"]["properties"]["target_locator"]
-    assert target["properties"]["excerpt"] == {"$ref": "#/$defs/CPFQuoteSelection"}
-    assert "enum" not in definitions["EvidenceLocator"]["properties"]["excerpt"]
+    assert target == {"$ref": "#/$defs/CPFQuoteSelection"}
+    assert "EvidenceLocator" not in definitions
+
+
+@pytest.mark.parametrize("prompt", ["review", "repair"])
+@pytest.mark.parametrize("known", [True, False])
+def test_compact_target_selection_requires_a_known_document_source(make_valid_result, prompt, known):
+    from cpf_fcv_reviewer.contracts import ReviewDraft
+    from test_reference_resolution import reference_case
+    _, draft, evidence = reference_case(make_valid_result)
+    data = draft.model_dump(mode="json")
+    data["priority_areas"][0]["target_locator"] = "CPF_QUOTE:ev-1:1" if known else "CPF_QUOTE:invented:1"
+    model = gateway(lambda r: httpx.Response(200, json=response(json.dumps(data))))
+    item = evidence["ev-1"].model_dump(mode="json")
+    payload = {"cpf_quote_index": [{"quote_id": "CPF_QUOTE:ev-1:1", "evidence_id": "ev-1"}]}
+    payload.update({"evidence_pack": {"evidence": [item]}} if prompt == "review" else
+                   {"source_grounding_evidence": [item]})
+    if not known:
+        with pytest.raises(ValidationError):
+            model.generate(prompt_name=prompt, payload=payload, output_type=ReviewDraft)
+        return
+    actual = model.generate(prompt_name=prompt, payload=payload, output_type=ReviewDraft)
+    target = actual.priority_areas[0].target_locator
+    assert target.document_title == evidence["ev-1"].locator.document_title
+    assert target.page == evidence["ev-1"].locator.page
+    assert target.excerpt == "CPF_QUOTE:ev-1:1"
+    assert not target.is_paraphrase
 
 
 def response(text='{"connected":true}', stop="end_turn"):
@@ -99,6 +124,7 @@ def test_no_retry_redirect_or_provider_error_leak(status):
     with pytest.raises(MaiUnavailable) as caught:
         model.generate(prompt_name="review", payload={}, output_type=Answer)
     assert "sensitive-provider-body" not in str(caught.value)
+    assert caught.value.status_code == status
     assert handler.call_count == 1
 
 

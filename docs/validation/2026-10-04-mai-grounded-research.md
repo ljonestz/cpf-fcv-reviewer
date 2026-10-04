@@ -121,3 +121,33 @@ and relevance explanations adding facts absent from their selected passage. The
 selection instructions now prioritize uncovered topics and require relevance to
 preserve the passage's facts, uncertainty and time frame. A prompt regression failed
 before that change; live breadth and semantic fidelity still require assessment review.
+
+## Second full attempt and transport follow-up
+
+Candidate `671af409356f97aad9d41d6d4b8513eb1009fac6` passed 1,870 Linux tests
+and Python name/import lint ([CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37240343995)).
+Three stale prompt-version assertions found in the preceding CI were corrected;
+application behavior was unchanged by that test-only commit.
+
+Attempt 2 (`mai-grounded-02-guinea`) was submitted at 22:33 UTC on 4 October,
+completed research and RRA mapping, then stopped during review generation after
+137.61 seconds overall. Safe logs identify `MaiUnavailable`; no draft or provider
+response from that assessment was retrieved. No findings, exports or assistant call
+were released. Two full attempts are consumed; one remains. The existing two-per-hour
+limit is reached until the next UTC hour; it must not be bypassed.
+
+A bounded synthetic full-schema probe reproduced HTTP 400: compiled grammar too
+large. The earlier small enum/const probe did not expose this full-schema limit.
+Numeric selections, explicit required fields and locator-definition reuse did not
+resolve it. Selecting the target passage ID directly, without generating its redundant
+coordinate object, was accepted with HTTP 200. The application reconstructs the
+locator from supplied primary/package evidence, then applies the same own-citation
+and exact-passage validation. Unknown selections remain blocked. No numeric-choice
+fallback, relaxed validator or automatic model retry was introduced. HTTP failures
+now retain only their safe status code for the existing sanitized runtime logger.
+
+The compact-target conversion and schema regression failed before implementation;
+183 focused provider-free checks, including smoke and prompt guardrails, pass after it.
+The same complete schema also passed a 32-token synthetic transport probe with all
+260 source choices from the frozen corpus. Its deliberate token-limit stop is not
+an accepted assessment; it establishes schema compatibility only.
