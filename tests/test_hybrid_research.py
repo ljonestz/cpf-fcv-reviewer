@@ -1,5 +1,6 @@
 """Opt-in Anthropic research with mAI generation; all providers are test doubles."""
 
+from datetime import date
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -8,7 +9,7 @@ import pytest
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.config import build_config
 from cpf_fcv_reviewer.mai_desktop import MODEL_ID
-from cpf_fcv_reviewer.research_controller import ResearchController
+from cpf_fcv_reviewer.research_controller import ResearchController, ResearchMode, ResearchRequest
 
 
 def hybrid_config(**overrides):
@@ -94,3 +95,75 @@ def test_hybrid_intake_discloses_separate_research_cost_and_keeps_local_guards()
     assert "Local mAI development version" in page
     assert client.get("/health", environ_overrides={"REMOTE_ADDR": "192.0.2.10"}).status_code == 403
     assert client.get("/health", headers={"Origin": "https://example.org"}).status_code == 403
+
+
+@pytest.mark.parametrize("research_provider", ["anthropic", "institutional"])
+@pytest.mark.parametrize("diagnostic_prefix", [
+    "Guinea Risk and Resilience Assessment, March 2025. ",
+    "Guinea Risk and Resilience Assessment. ",
+    "Ordinary supporting document. ",
+])
+def test_mai_research_excludes_documents_from_search_retries_and_recovery(
+    monkeypatch, research_provider, diagnostic_prefix,
+):
+    from cpf_fcv_reviewer import runtime
+
+    search = Mock()
+    search.search.return_value = ()
+    recovery = Mock()
+    recovery.search.return_value = ()
+    controller = ResearchController(
+        search, recovery_gateway=recovery, max_attempts=2,
+        retry_backoff_seconds=0, sleep=lambda _: None,
+    )
+    registry = Path(__file__).resolve().parents[1] / "registry_bundles" / (
+        "cpf_fcv_reviewer_public_guardrails_v1.1.0.json")
+    config = hybrid_config(
+        RESEARCH_PROVIDER=research_provider,
+        REGISTRY_BUNDLE_PATH=str(registry),
+        REGISTRY_BUNDLE_SHA256=registry.with_suffix(".sha256").read_text().split()[0],
+    )
+    # Exercise extraction and the actual controller without any external service.
+    monkeypatch.setattr(runtime, "generate_fcv_readout", lambda *a, **kw: None)
+    services = runtime.build_runtime_services(
+        config, model_gateway=Mock(), follow_on_gateway=Mock(),
+        research_controller=controller, review_date_provider=lambda: date(2026, 10, 4),
+    )
+    steps = dict(services["review_orchestrator"].steps)
+    context = steps["extract"]({
+        "assessment_id": "synthetic-private-research-boundary",
+        "_emit": lambda *_: None,
+        "payload": {
+            "country": "Guinea", "review_stage": "finalization", "detail_level": "standard",
+            "cpf": {"name": "PRIVATE_CPF_NAME.txt", "bytes": b"PRIVATE_CPF_TEXT " * 30},
+            "package_documents": [],
+            "context_documents": [{"name": "PRIVATE_RRA_NAME.txt", "bytes": (
+                diagnostic_prefix + "PRIVATE_RRA_TEXT " * 30).encode()}],
+            "review_focus": "PRIVATE_REVIEW_NOTES", "corrections": [],
+        },
+    })
+    context = steps["research"](context)
+    assert search.search.call_count == 2
+    recovery.search.assert_called_once()
+    expected = ResearchRequest("Guinea", date(2026, 10, 4), ResearchMode.HOLISTIC)
+    assert recovery.search.call_args.args[0] == expected
+    for call in search.search.call_args_list:
+        prompt = call.args[0]
+        assert "PRIVATE_" not in prompt
+        assert "2025-03-01" not in prompt
+        assert "country: Guinea" in prompt
+        assert "review_date: 2026-10-04" in prompt
+        assert "research_mode: holistic" in prompt
+    # Removing external context must not remove the evidence used by mAI.
+    context = steps["build_evidence"](context)
+    texts = " ".join(item.text for item in context["evidence_pack"].evidence)
+    assert "PRIVATE_CPF_TEXT" in texts
+    if context["uploaded_diagnostic"] is not None:
+        # Recognized RRA evidence is supplied in full to the later mAI mapping step.
+        assert "PRIVATE_RRA_TEXT" in " ".join(
+            segment.text for segment in context["full_diagnostic_document"].segments
+        )
+        assert context["uploaded_diagnostic"].name == "PRIVATE_RRA_NAME.txt"
+    else:
+        assert "PRIVATE_RRA_TEXT" in texts
+    assert context["payload"]["review_focus"] == "PRIVATE_REVIEW_NOTES"

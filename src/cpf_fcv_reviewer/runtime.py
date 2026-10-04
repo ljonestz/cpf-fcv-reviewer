@@ -1530,6 +1530,14 @@ def build_runtime_services(
                         else ""
                     ),
                 )
+                if mai_desktop:
+                    # Allowlist public inputs before search, retries and recovery.
+                    # Keep uploaded evidence and review notes inside the mAI path.
+                    request = ResearchRequest(
+                        country=payload["country"],
+                        review_date=review_date,
+                        mode=ResearchMode.HOLISTIC,
+                    )
                 context["research_result"] = research_controller.run(
                     request,
                     context["_emit"],

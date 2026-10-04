@@ -1,5 +1,21 @@
 # Project status
 
+## 2026-10-04 Local external-research privacy follow-up
+
+The owner approved separating local Anthropic credentials and excluding document
+content from external research. In local mAI mode, research now receives only the
+selected country, application review date and fixed public-country research mode,
+including retries and institutional recovery. Full CPF/RRA evidence and review
+notes remain available to mAI. Direct-Anthropic public prototype behavior is unchanged.
+
+Starting from clean commit `50a8651`, six new cases failed before the boundary and
+then passed. All 14 hybrid tests pass; the broader batch passed 380 checks and two
+registry checks passed after their temporary-directory setup was corrected.
+The change remains on the existing draft PR 43 branch. No key was configured, model
+call made, service restarted, merge performed or deployment initiated. See the
+[privacy boundary and secure local setup](validation/2026-10-04-local-research-privacy.md).
+Live research breadth, Guinea grounding acceptance and production readiness remain open.
+
 ## 2026-10-04 Provider-free diagnosis and optional broader research
 
 Repair code `723645a` reproduces the six grounding failure categories synthetically,
