@@ -1,5 +1,18 @@
 # Project status
 
+## 2026-10-04 mAI-native Google research candidate
+
+The owner now prefers mAI-native research over the separate Anthropic API and
+authorized up to three new local full assessments. The candidate uses mAI Gemini
+Google discovery plus independently fetched original pages and mAI Sonnet passage
+selection. Documents and notes remain excluded from search. Quotation, country,
+date and source-quality checks remain enforced. No hosted access is implied.
+
+Preparation identified model transcription errors, conflicting publication dates
+and loss of publisher breadth within the existing source-bundle cap. Synthetic
+regressions precede repairs. Acceptance/comparison is in progress; production
+readiness is still held. See the [current validation record](validation/2026-10-04-mai-grounded-research.md).
+
 ## 2026-10-04 Local external-research privacy follow-up
 
 The owner approved separating local Anthropic credentials and excluding document

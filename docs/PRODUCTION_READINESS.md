@@ -1,5 +1,14 @@
 # Production readiness
 
+## 2026-10-04 mAI-native research acceptance in progress
+
+An mAI Google Search route now avoids a separate Anthropic API key. Preparation
+probes work but are not end-to-end acceptance. Three full local assessments are
+authorized for this cycle; their outcomes and comparison will be recorded in the
+[mAI research validation record](validation/2026-10-04-mai-grounded-research.md).
+All evidence and hosting gates remain in force. No production-ready claim, merge
+or deployment follows from research connectivity alone.
+
 ## 2026-10-04 Provider-free follow-up and research option
 
 Grounding/research repairs and an explicit Anthropic-research/mAI-generation option

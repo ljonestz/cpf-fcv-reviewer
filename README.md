@@ -1,5 +1,12 @@
 # CPF FCV Reviewer
 
+**mAI-native research candidate (4 October):** `RESEARCH_PROVIDER=mai_google`
+uses Google Search through mAI Factory and Sonnet through mAI, without a separate
+Anthropic API key. Only public country/date queries leave the document workflow.
+The owner authorized three new local full assessments; acceptance is in progress.
+See the [design, setup and acceptance record](docs/validation/2026-10-04-mai-grounded-research.md).
+No merge or hosted deployment has occurred; Desktop credentials remain local DEV only.
+
 **Local research privacy follow-up (4 October):** mAI-mode external research now
 receives country/date inputs and fixed public research instructions, excluding
 uploaded document content and review notes. See the

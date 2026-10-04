@@ -97,7 +97,7 @@ def test_hybrid_intake_discloses_separate_research_cost_and_keeps_local_guards()
     assert client.get("/health", headers={"Origin": "https://example.org"}).status_code == 403
 
 
-@pytest.mark.parametrize("research_provider", ["anthropic", "institutional"])
+@pytest.mark.parametrize("research_provider", ["anthropic", "institutional", "mai_google"])
 @pytest.mark.parametrize("diagnostic_prefix", [
     "Guinea Risk and Resilience Assessment, March 2025. ",
     "Guinea Risk and Resilience Assessment. ",

@@ -61,7 +61,7 @@ class MaiDesktopGateway:
         """Sign in on the main thread before background assessment work."""
         self._token()
 
-    def _complete(self, *, system, messages, max_tokens, schema=None):
+    def _complete(self, *, system, messages, max_tokens, schema=None, timeout_seconds=None):
         payload = {
             "system": [{"text": system}],
             "messages": [
@@ -80,7 +80,7 @@ class MaiDesktopGateway:
             response = self._client.post(ENDPOINT, json=payload, headers={
                 "Authorization": "Bearer " + self._token(),
                 "x-source-type": "interactive", "x-team-name": self.team_name,
-            })
+            }, **({"timeout": timeout_seconds} if timeout_seconds is not None else {}))
         except httpx.HTTPError:
             raise MaiUnavailable("mAI request failed; no automatic retry was made.") from None
         if response.status_code != 200:

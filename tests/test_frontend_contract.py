@@ -769,6 +769,26 @@ def _run_dom_harness(body):
     )
 
 
+def test_google_search_suggestions_use_an_opaque_scriptless_frame():
+    completed = _run_dom_harness("""
+        nodes['#research-attribution'] = node();
+        require(process.argv[1]);
+        const {renderSearchAttribution} = window.__cpfFcvReviewerTestHooks;
+        renderSearchAttribution({research_search_suggestions: '<div>Google</div>'});
+        const frame = nodes['#research-attribution'].children[0];
+        if (frame.tagName !== 'iframe') throw Error('Expected isolated frame');
+        const permissions = frame.attributes.sandbox;
+        if (permissions.includes('allow-scripts') || permissions.includes('allow-same-origin'))
+          throw Error('Unsafe sandbox');
+          if (!frame.srcdoc.includes("default-src 'none'")) throw Error('CSP missing');
+          if (!frame.srcdoc.includes('<base target="_blank">')) throw Error('Links would replace attribution');
+        if (frame.referrerPolicy !== 'no-referrer') throw Error('Referrer leak');
+        renderSearchAttribution({});
+        if (!nodes['#research-attribution'].hidden) throw Error('Stale suggestions');
+    """)
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_detailed_view_preserves_approved_plain_language_limitations():
     completed = _run_dom_harness(
         """

@@ -549,7 +549,14 @@ class ResearchController:
         retained: list[CurrentContextClaim] = []
         source_urls: set[str] = set()
         bundle_characters = 0
+        # Reserve a first opportunity for each originating publisher before a
+        # newer, verbose source consumes the bounded bundle by itself.
+        first_per_publisher, remaining_claims, publishers = [], [], set()
         for claim in qualifying:
+            publisher = claim.publisher.strip().casefold()
+            (remaining_claims if publisher in publishers else first_per_publisher).append(claim)
+            publishers.add(publisher)
+        for claim in first_per_publisher + remaining_claims:
             source_url = _normalize_source_url(claim.source_url or "")
             if source_url not in source_urls and len(source_urls) >= MAX_RETAINED_SOURCES:
                 continue

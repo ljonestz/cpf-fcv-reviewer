@@ -970,6 +970,12 @@ def build_runtime_services(
             )
             if institutional_research:
                 research_gateway = NoBroadWebSearch()
+            elif mai_desktop and config.get("RESEARCH_PROVIDER") == "mai_google":
+                from .mai_research import MaiGoogleResearchGateway
+
+                research_gateway = MaiGoogleResearchGateway(
+                    model_gateway, timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
+                )
             else:
                 research_gateway = AnthropicPublicResearchGateway(
                     config["ANTHROPIC_API_KEY"],
@@ -1543,6 +1549,10 @@ def build_runtime_services(
                     context["_emit"],
                     allow_document_led=_allow_document_led(context),
                 )
+                if mai_desktop and config.get("RESEARCH_PROVIDER") == "mai_google":
+                    suggestions = getattr(research_controller.gateway, "last_search_suggestions", "")
+                    if isinstance(suggestions, str) and len(suggestions) <= 30_000:
+                        context["research_search_suggestions"] = suggestions
                 if (
                     context["research_result"].tier
                     is CurrentEvidenceTier.DOCUMENT_LED
