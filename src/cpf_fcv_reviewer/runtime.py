@@ -924,6 +924,24 @@ def build_runtime_services(
                 f"registry entries: {missing}."
             )
 
+    mai_desktop = config.get("MODEL_PROVIDER") == "mai_desktop"
+    controller_type = ResearchController
+    if mai_desktop:
+        from .mai_desktop import (
+            InstitutionalResearchController,
+            MaiDesktopGateway,
+            NoBroadWebSearch,
+        )
+
+        if config.get("APP_ENV") != "development":
+            raise RuntimeError("mAI Desktop access is development only.")
+        if model_gateway is None or follow_on_gateway is None:
+            mai_gateway = MaiDesktopGateway(config["MAI_TEAM_NAME"])
+            if model_gateway is None:
+                model_gateway = mai_gateway
+            if follow_on_gateway is None:
+                follow_on_gateway = mai_gateway
+        controller_type = InstitutionalResearchController
     if model_gateway is None:
         model_gateway = AnthropicModelGateway(
             config["ANTHROPIC_API_KEY"],
@@ -948,14 +966,17 @@ def build_runtime_services(
                 ),
                 reliefweb_app_name=config.get("RELIEFWEB_APP_NAME", ""),
             )
-            research_gateway = AnthropicPublicResearchGateway(
-                config["ANTHROPIC_API_KEY"],
-                config["ANTHROPIC_MODEL_ID"],
-                timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
-            )
-        research_controller = ResearchController(
+            if mai_desktop:
+                research_gateway = NoBroadWebSearch()
+            else:
+                research_gateway = AnthropicPublicResearchGateway(
+                    config["ANTHROPIC_API_KEY"],
+                    config["ANTHROPIC_MODEL_ID"],
+                    timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
+                )
+        research_controller = controller_type(
             research_gateway,
-            max_attempts=config["RESEARCH_MAX_ATTEMPTS"],
+            max_attempts=1 if mai_desktop else config["RESEARCH_MAX_ATTEMPTS"],
             minimum_claims=config["RESEARCH_MINIMUM_CLAIMS"],
             minimum_publishers=config["RESEARCH_MINIMUM_PUBLISHERS"],
             total_budget_seconds=config["RESEARCH_TOTAL_BUDGET_SECONDS"],

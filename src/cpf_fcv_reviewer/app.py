@@ -3,8 +3,9 @@ from __future__ import annotations
 import atexit
 from hashlib import sha256
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 from .admission import PublicAdmission
 from .background import InProcessAssessmentQueue, PersistentAssessmentWorker
@@ -28,6 +29,18 @@ def create_app(
     ):
         raise RuntimeError("SMOKE_MODE must be created through create_smoke_app.")
     app.config.update(app_config)
+    if app_config["MODEL_PROVIDER"] == "mai_desktop":
+        @app.before_request
+        def require_local_desktop():
+            if (
+                request.remote_addr not in {"127.0.0.1", "::1"}
+                or urlsplit(request.host_url).hostname not in {"localhost", "127.0.0.1", "::1"}
+                or request.headers.get("Origin") not in {None, request.host_url.rstrip("/")}
+                or "Forwarded" in request.headers
+                or "X-Forwarded-For" in request.headers
+            ):
+                return jsonify(error="mAI Desktop is available for local testing only."), 403
+            return None
     persistence_path = str(app.config.get("PERSISTENCE_PATH", "")).strip()
     if services is None:
         services = {} if app.testing else build_runtime_services(app.config)

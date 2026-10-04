@@ -43,6 +43,8 @@ def build_config(
             use_environment=use_environment,
         ),
         "ANTHROPIC_API_KEY": environment("ANTHROPIC_API_KEY", ""),
+        "MODEL_PROVIDER": environment("MODEL_PROVIDER", "anthropic"),
+        "MAI_TEAM_NAME": environment("MAI_TEAM_NAME", ""),
         "ANTHROPIC_MODEL_ID": environment("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
         "REGISTRY_BUNDLE_PATH": environment("REGISTRY_BUNDLE_PATH", ""),
         "REGISTRY_BUNDLE_SHA256": environment("REGISTRY_BUNDLE_SHA256", ""),
@@ -140,6 +142,20 @@ def build_config(
         raise ValueError("RELIEFWEB_APP_NAME cannot contain control characters.")
     config["RELIEFWEB_APP_NAME"] = config["RELIEFWEB_APP_NAME"].strip()
     config["ANTHROPIC_API_KEY"] = config["ANTHROPIC_API_KEY"].strip()
-    if not config["TESTING"] and not config["ANTHROPIC_API_KEY"] and not config["SMOKE_MODE"]:
+    if config["MODEL_PROVIDER"] not in {"anthropic", "mai_desktop"}:
+        raise ValueError("MODEL_PROVIDER is invalid.")
+    if config["MODEL_PROVIDER"] == "mai_desktop":
+        from .mai_desktop import MODEL_ID
+
+        if config["APP_ENV"] != "development":
+            raise RuntimeError("mAI Desktop access is development only.")
+        team = config["MAI_TEAM_NAME"]
+        if (not isinstance(team, str) or not team.strip() or not team.isascii()
+                or any(ord(c) < 32 or ord(c) == 127 for c in team)):
+            raise ValueError("MAI_TEAM_NAME must be a nonblank ASCII header value.")
+        config["MAI_TEAM_NAME"] = team.strip()
+        config["ANTHROPIC_MODEL_ID"] = MODEL_ID
+    if (config["MODEL_PROVIDER"] == "anthropic" and not config["TESTING"]
+            and not config["ANTHROPIC_API_KEY"] and not config["SMOKE_MODE"]):
         raise RuntimeError("ANTHROPIC_API_KEY is required outside tests.")
     return config
