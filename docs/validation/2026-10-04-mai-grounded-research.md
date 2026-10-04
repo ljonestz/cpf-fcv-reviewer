@@ -78,3 +78,46 @@ Preparation has established mAI-native search connectivity and exact passage
 copying, but research breadth and end-to-end acceptance remain under test.
 Production readiness is not established by these preparation probes. Final test
 counts, full-run outcomes and comparison findings will be recorded after inspection.
+
+## First full attempt and focused follow-up
+
+Candidate `d5027efa66214cec6969722d45ed1e63f75e741d` passed 1,859 Linux tests
+and Python name/import lint. The exact browser runner passed 12 synthetic checks,
+assistant restoration and both exports (`synthetic-05`). Earlier screenshot-driven
+runner attempts exposed an iframe-navigation/scroll interaction; search links now
+open a separate tab and the runner verifies keyboard navigation. No paid assessment
+was spent diagnosing that runner. The original database was backed up with SQLite's
+backup API and an integrity check; its quota counters were preserved.
+
+New full attempt 1 (`mai-grounded-01-guinea`) was submitted at 22:03 UTC on 4 October
+and failed safely after 362.53 seconds overall. It reached research, full RRA mapping,
+review and repair. Six initial and six residual issues remained: three
+`unsupported_cpf_response` / `quote_not_in_cited_text`, and three
+`target_locator_mismatch` / `excerpt_mismatch`. Only safe codes and counts were read;
+no rejected draft was retrieved. No accepted report, export or assistant response
+was released. Research was reduced for claims, publishers and current developments.
+One of the new three full attempts is consumed; two remain.
+
+The follow-up reproduces that exact six-issue pattern synthetically. mAI review and
+repair schemas now constrain CPF response quotations and priority target excerpts
+to supplied passage IDs; the application supplies original text and coordinates.
+The existing quotation, own-citation, policy and date validators remain active.
+Literal quotation support remains for other transports or when no index is available.
+The installed SDK's schema transformer removed enum restrictions, so the supported
+Bedrock enum/const constraints are added after transformation. A tiny synthetic mAI
+probe verified these constraints without running an assessment. The new target
+selection and repair controls passed in a 407-test focused batch including smoke tests.
+
+Research follow-up found that ISS original pages expose explicit `Published on`
+dates without standard metadata. These dates are now parsed, with conflicting dates
+still withheld. Up to six fetched originals can be compared before the unchanged
+three-source, six-observation and 6,000-character final evidence limits apply. No
+publisher catalogue expansion or validation relaxation was needed.
+
+Replaying saved discovery with original-page fetches and one mAI normalization
+produced four accepted observations from Amnesty, ISS Africa and World Bank, meeting
+the controller's full-tier threshold. Inspection still found narrow topical coverage
+and relevance explanations adding facts absent from their selected passage. The
+selection instructions now prioritize uncovered topics and require relevance to
+preserve the passage's facts, uncertainty and time frame. A prompt regression failed
+before that change; live breadth and semantic fidelity still require assessment review.

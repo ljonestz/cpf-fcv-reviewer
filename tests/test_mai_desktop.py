@@ -24,6 +24,26 @@ class Answer(BaseModel):
     connected: bool
 
 
+@pytest.mark.parametrize("prompt", ["review", "repair"])
+def test_mai_schema_requires_source_selection_for_quotes_and_targets(prompt):
+    from cpf_fcv_reviewer.contracts import ReviewDraft
+    from cpf_fcv_reviewer.source_grounding import NO_CPF_QUOTE
+    model = gateway(lambda r: httpx.Response(200, json=response('{}')))
+    model._complete = Mock(return_value='{}')
+    with pytest.raises(ValidationError):
+        model.generate(prompt_name=prompt, payload={"cpf_quote_index": [{
+            "quote_id": "CPF_QUOTE:primary-1:1", "evidence_id": "primary-1", "preview": "Source"}]},
+            output_type=ReviewDraft)
+    schema = model._complete.call_args.kwargs["schema"]
+    definitions = schema["$defs"]
+    assert definitions["CPFQuoteSelection"]["enum"] == ["CPF_QUOTE:primary-1:1"]
+    response_schema = definitions["RRADriverAssessment"]["properties"]["cpf_response"]
+    assert {"const": NO_CPF_QUOTE, "type": "string"} in response_schema["anyOf"]
+    target = definitions["PriorityArea"]["properties"]["target_locator"]
+    assert target["properties"]["excerpt"] == {"$ref": "#/$defs/CPFQuoteSelection"}
+    assert "enum" not in definitions["EvidenceLocator"]["properties"]["excerpt"]
+
+
 def response(text='{"connected":true}', stop="end_turn"):
     return {"output": {"message": {"content": [{"text": text}]}}, "stopReason": stop}
 

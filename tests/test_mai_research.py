@@ -241,3 +241,45 @@ def test_non_country_passages_are_filtered_before_selection():
         200, text=html, headers={"content-type": "text/html"}))
     research.search("country: Guinea\nreview_date: 2026-10-04")
     assert foreign not in model._complete.call_args.kwargs["messages"][0]["content"]
+
+
+def test_original_iss_analysis_can_be_fetched_with_verified_publisher():
+    url = "https://issafrica.org/iss-today/guinea-analysis"
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(
+        200, text=HTML, headers={"content-type": "text/html"})))
+    article = fetch_public_article(url, client)
+    assert article is not None
+    assert article["publisher"] == "ISS Africa"
+    assert fetch_public_article(url.replace("issafrica.org", "issafrica.org.evil.example"), client) is None
+
+
+def test_explicit_visible_publication_date_is_used_and_conflicts_are_not_hidden():
+    url = "https://issafrica.org/iss-today/guinea-analysis"
+    visible = "<title>Guinea</title><p>Published on 11 August 2026 in ISS Today</p><p>" + QUOTE + "</p>"
+    def fetch(html):
+        return fetch_public_article(url, httpx.Client(transport=httpx.MockTransport(
+            lambda r: httpx.Response(200, text=html, headers={"content-type": "text/html"}))))
+    article = fetch(visible)
+    assert article["published_at"] == "2026-08-11"
+    assert article["publication_date_basis"] == "source_excerpt"
+    conflicted = fetch('<meta property="article:published_time" content="2026-08-12">' + visible)
+    assert conflicted["published_at"] is None
+    assert conflicted["publication_date_basis"] == "conflicting"
+
+
+def test_normalizer_can_consider_broader_sources_before_final_three_source_cap():
+    urls = ["https://www.amnesty.org/guinea", "https://www.hrw.org/guinea",
+            "https://issafrica.org/guinea", "https://www.worldbank.org/guinea"]
+    research, model, _ = gateway(reply=model_reply(chunks=[{"web": {"uri": u}} for u in urls]))
+    research.search("country: Guinea\nreview_date: 2026-10-04")
+    supplied = json.loads(model._complete.call_args.kwargs["messages"][0]["content"])["sources"]
+    assert {s["url"] for s in supplied} == set(urls)
+
+
+def test_research_selection_requires_topic_breadth_and_qualified_relevance():
+    research, model, _ = gateway()
+    research.search("country: Guinea\nreview_date: 2026-10-04")
+    prompt = model._complete.call_args.kwargs["system"]
+    assert "Prefer an uncovered topic over a second observation on the same issue" in prompt
+    assert "Do not add facts, statistics or dates absent from the selected passage" in prompt
+    assert "Preserve forecasts, uncertainty and the source's time frame" in prompt

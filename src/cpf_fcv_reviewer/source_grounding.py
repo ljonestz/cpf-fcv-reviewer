@@ -89,6 +89,8 @@ def locator_failure_reason(
         return "empty_excerpt"
     if target.is_paraphrase:
         return "paraphrase_unverified"
+    if target.excerpt.strip().startswith(QUOTE_SELECTION_PREFIX):
+        return "excerpt_mismatch"
     if not any(exact_source_excerpt(target.excerpt, item.text) is not None for item in located):
         return "excerpt_mismatch"
     return None
@@ -97,6 +99,13 @@ def locator_failure_reason(
 def resolve_target_locator(
     target: EvidenceLocator, evidence: Iterable[EvidenceItem],
 ) -> EvidenceLocator:
+    evidence = tuple(evidence)
+    if target.excerpt.strip().startswith(QUOTE_SELECTION_PREFIX):
+        selected = _quote_selection(target.excerpt, {item.evidence_id: item for item in evidence})
+        if selected is None:
+            return target
+        source, passage = selected
+        return source.locator.model_copy(update={"excerpt": passage, "is_paraphrase": False})
     candidates = [
         (item, excerpt)
         for item in evidence

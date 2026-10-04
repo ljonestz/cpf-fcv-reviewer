@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import ssl
+from copy import deepcopy
 from dataclasses import replace
 from threading import Lock
 
 import httpx
 
-from .contracts import CurrentEvidenceTier
+from .contracts import CurrentEvidenceTier, ReviewDraft
 from .model_gateway import ModelOutputUnavailable
 from .prompts import load_prompt
 from .research_controller import ResearchController
@@ -101,11 +102,27 @@ class MaiDesktopGateway:
     def generate(self, *, prompt_name, payload, output_type):
         from anthropic import transform_schema
 
+        schema = transform_schema(output_type.model_json_schema())
+        selections = payload.get("cpf_quote_index")
+        if output_type is ReviewDraft and selections:
+            from .source_grounding import NO_CPF_QUOTE
+
+            definitions = schema["$defs"]
+            definitions["CPFQuoteSelection"] = {
+                "type": "string", "enum": list(dict.fromkeys(item["quote_id"] for item in selections)),
+            }
+            definitions["RRADriverAssessment"]["properties"]["cpf_response"] = {"anyOf": [
+                {"$ref": "#/$defs/CPFQuoteSelection"}, {"const": NO_CPF_QUOTE, "type": "string"},
+            ]}
+            # Specialize only priority edit targets, not contextual/gap locators.
+            target = deepcopy(definitions["EvidenceLocator"])
+            target["properties"]["excerpt"] = {"$ref": "#/$defs/CPFQuoteSelection"}
+            definitions["PriorityArea"]["properties"]["target_locator"] = target
         text = self._complete(
             system=load_prompt(prompt_name),
             messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
             max_tokens=20000 if prompt_name in {"review", "repair"} else 12000,
-            schema=transform_schema(output_type.model_json_schema()),
+            schema=schema,
         )
         return output_type.model_validate_json(text)
 

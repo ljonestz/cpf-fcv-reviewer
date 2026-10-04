@@ -1,4 +1,4 @@
-Version: 3.0.10
+Version: 3.0.11
 
 ## Source-faithfulness check
 
@@ -29,6 +29,10 @@ fields. The preview is only a navigation aid: read the complete source passage i
 the supplied evidence text and select it only if it supports this specific driver.
 The existing exact quotation remains a supported fallback. Unknown selections and
 missing citations remain errors; source selection never exempts policy/date checks.
+For target_locator.excerpt, you may also select the quote_id of the exact primary/package
+passage to edit. Include its evidence_id in the priority's evidence_ids. The app supplies
+the selected passage's original text and coordinates. If the response schema requires
+quote IDs, select them instead of transcribing quotations in both fields.
 
 Use a separate source-backed clause for each dated event; one verified election date
 does not date a referendum or constitutional adoption. A contextual government action is not a CPF commitment.
