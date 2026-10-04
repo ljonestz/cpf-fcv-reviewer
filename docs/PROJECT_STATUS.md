@@ -1,5 +1,11 @@
 # Project status
 
+Continuation reference: [full 4 October handover](handover/20261004_cpf-mai-full-handover.md).
+Prepared on `docs/mai-session-handover`, based on validation-record commit
+`c3f9b64`; application code remains `05772b7`. Read it before resuming repair,
+model testing or hosting work. Shared setup guides have been reconciled with the
+live mAI tests and the newer verified internal Posit account setup.
+
 ## 2026-10-04 Local mAI full assessment withheld
 
 One authorized Guinea CPF/RRA assessment on application `05772b7` reached draft
