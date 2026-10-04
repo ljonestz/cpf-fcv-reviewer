@@ -7,14 +7,19 @@ institutional research and explicit limitations approved by the owner. It retain
 structured output/evidence validation, has no direct-provider fallback and rejects
 non-local/cross-site access. The local assistant returns one complete answer chunk.
 
-Desktop sign-in and three bounded connection/schema probes succeeded as documented
-(212 total tokens; the incompatible schema request returned plain text and was
+Desktop sign-in and four bounded connection/schema probes succeeded as documented
+(385 total tokens; the incompatible schema request returned plain text and was
 replaced with the verified Converse shape). No full assessment or direct Anthropic
 call occurred. **252 focused checks** passed, followed by **61 Desktop/smoke checks**
 after adding the cross-site guard. Local persistent-worker health and static assets
 passed. Browser inspection prompted a local-mode wording correction; **72 Desktop,
 smoke and frontend contract checks passed** on that update. See
 [the validation record](validation/2026-10-04-mai-desktop.md).
+
+Final code **05772b7** passed **1,796 Linux tests** and Python name/import lint.
+The exact app adapter's live structured-response check and corrected Edge intake
+checks passed; a full-page screenshot was saved and inspected. Draft PR 41 is
+pushed, unmerged and based on the Posit compatibility branch.
 
 Full provider-backed review acceptance and hosted Application access remain open.
 This branch does not change the deployed Render app or establish production readiness.

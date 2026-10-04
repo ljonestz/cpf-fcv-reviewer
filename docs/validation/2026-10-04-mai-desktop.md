@@ -10,15 +10,16 @@ The owner selected Sonnet 4.6 and supplied a team label. The gateway accepted th
 label; this does not establish its administrative allocation in ITSAI reporting.
 No token or credential was saved.
 
-Three non-sensitive, bounded DEV requests were made:
+Four non-sensitive, bounded DEV requests were made:
 
 | Check | HTTP | Outcome | Input / output tokens |
 |---|---|---|---|
 | Plain echo | 200 | Expected response | 15 / 5 |
 | Anthropic-style schema field | 200 | Plain text, not schema conforming | 19 / 5 |
 | Bedrock Converse schema field | 200 | Valid structured JSON, completed normally | 160 / 8 |
+| Exact application adapter (httpx/TLS/WAM) | 200 | Valid structured JSON, completed normally | 165 / 8 |
 
-Total reported usage: **212 tokens**. There were no direct Anthropic API calls
+Total reported usage: **385 tokens**. There were no direct Anthropic API calls
 and no full assessments. DEV quota usage is not a statement that all platform
 usage or eventual production usage is free.
 
@@ -61,6 +62,15 @@ research, the local admission ceiling and complete-answer assistant behavior.
 The wording regression failed before correction; **72 Desktop, smoke and frontend
 contract checks passed** after correction. Public-provider wording is preserved.
 
+Code **05772b7** passed the full Linux CI suite: **1,796 tests**, including Gunicorn,
+and Python name/import lint ([CI run](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37212892960)).
+The corrected intake was checked in Edge: local labels visible, submission disabled
+without a document, help dialog opens/closes, and no page errors. A full-page PNG
+was saved and visually inspected at ignored
+`output/mai-desktop/20261004_mai_desktop_intake.png`. Browser CLI refresh timed out,
+but a fresh snapshot confirmed the page and the installed Playwright library
+completed the isolated Edge checks without installing another browser dependency.
+
 The first broad focused run hit the workstation's pre-existing invalid
 `SSL_CERT_FILE` (21 failures, 225 passes). Re-running with a valid CA file set only
 for that process produced the 252 passes. TLS verification was not disabled.
@@ -72,6 +82,8 @@ were added to the existing mAI virtual environment; every pre-existing package
 version was preserved. The pre-install inventory is retained locally under ignored
 `output/mai-desktop/`.
 `pip check` reported no broken requirements after installation.
+The feature is saved in [draft PR 41](https://github.com/ljonestz/cpf-fcv-reviewer/pull/41),
+based on the Posit compatibility branch. It has not been merged or deployed.
 
 ## Running locally
 
