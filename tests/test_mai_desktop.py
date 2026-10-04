@@ -157,6 +157,10 @@ def test_desktop_http_access_is_loopback_only():
         "MAI_TEAM_NAME": "test-team", "START_BACKGROUND_RUNS": False,
     }, services={}, use_environment=False)
     client = app.test_client()
+    page = client.get("/").get_data(as_text=True)
+    assert "Local mAI development version" in page
+    assert "Public pilot:" not in page
+    assert "Institutional-source research only" in page
     assert client.get("/health").status_code == 200
     assert client.get("/health", environ_overrides={"REMOTE_ADDR": "192.0.2.10"}).status_code == 403
     assert client.get("/health", headers={"Origin": "https://example.org"}).status_code == 403

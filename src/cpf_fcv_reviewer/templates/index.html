@@ -8,12 +8,14 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body data-app-root="{{ request.script_root }}">
+  {% set local_mai = config.MODEL_PROVIDER == 'mai_desktop' %}
   <header class="site-header">
     <section class="hero" aria-labelledby="hero-title">
       <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
       <h1 id="hero-title">Strengthen the FCV framing of a CPF or CEN</h1>
       <p class="purpose">Get a concise, evidence-linked note with practical options to strengthen the draft.</p>
-      <p class="advisory"><strong>Public version.</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. Use public or non-sensitive material only. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
+      <p class="advisory"><strong>{% if local_mai %}Local mAI development version.{% else %}Public version.{% endif %}</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. Use public or non-sensitive material only. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
+      {% if local_mai %}<p class="advisory">Institutional-source research only; broad web search is not included. Uses your mAI DEV quota. Assistant replies appear when complete.</p>{% endif %}
       <ol class="steps" aria-label="How the review works">
         <li>Add the draft</li>
         <li>Add context</li>
@@ -34,7 +36,7 @@
           <button id="open-process-dialog" class="button-secondary" type="button">How it works</button>
         </div>
         <p class="helper"><span aria-hidden="true">*</span> Required. Reviews are retained for 24 hours. Download your results before they expire.</p>
-        <p class="helper">Public pilot: up to {{ config.PUBLIC_REVIEW_DAILY_LIMIT }} new assessments per UTC day across all users. Corrections and research retries also use this allowance; assistant requests are separately limited.</p>
+        <p class="helper">{% if local_mai %}Local testing: up to {{ config.PUBLIC_REVIEW_DAILY_LIMIT }} new assessments per UTC day in this local copy.{% else %}Public pilot: up to {{ config.PUBLIC_REVIEW_DAILY_LIMIT }} new assessments per UTC day across all users.{% endif %} Corrections and research retries also use this allowance; assistant requests are separately limited.</p>
 
         <div class="upload-zones">
           <label class="upload-zone upload-zone-primary" id="primary-upload" for="cpf">

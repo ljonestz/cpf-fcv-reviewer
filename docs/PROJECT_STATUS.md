@@ -12,7 +12,9 @@ Desktop sign-in and three bounded connection/schema probes succeeded as document
 replaced with the verified Converse shape). No full assessment or direct Anthropic
 call occurred. **252 focused checks** passed, followed by **61 Desktop/smoke checks**
 after adding the cross-site guard. Local persistent-worker health and static assets
-passed. See [the validation record](validation/2026-10-04-mai-desktop.md).
+passed. Browser inspection prompted a local-mode wording correction; **72 Desktop,
+smoke and frontend contract checks passed** on that update. See
+[the validation record](validation/2026-10-04-mai-desktop.md).
 
 Full provider-backed review acceptance and hosted Application access remain open.
 This branch does not change the deployed Render app or establish production readiness.

@@ -78,7 +78,7 @@ If a policy-boundary, registry, non-sensitive-input, or unexpected-output concer
 
 Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a virtual environment. Configure these environment variables without committing their values:
 
-- `ANTHROPIC_API_KEY` (required outside tests)
+- `ANTHROPIC_API_KEY` (required for the default Anthropic provider outside tests)
 - `ANTHROPIC_MODEL_ID` (optional model override)
 - `REGISTRY_BUNDLE_PATH` and `REGISTRY_BUNDLE_SHA256` (approved bundle and integrity check)
 - `APP_RELEASE` (deployment label)
@@ -90,6 +90,12 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 - `PUBLIC_ASSISTANT_DAILY_LIMIT` (default 12; separate from full assessments)
 - `MAX_PENDING_ASSESSMENTS` (default 4) and `MAX_EVENT_STREAMS` (default 8)
 - `TRUST_RENDER_PROXY` (false locally; true only behind Render's public Cloudflare edge)
+
+For local mAI Desktop DEV testing, use `scripts/20261004_run_mai_desktop.py` with
+the existing Desktop SDK environment and `MAI_TEAM_NAME`. This opt-in version uses
+Sonnet 4.6 and institutional research, requires no direct Anthropic key, and rejects
+non-local access. It is not a hosted Application integration. See the
+[setup, validation and limitations](docs/validation/2026-10-04-mai-desktop.md).
 
 Deploy one process/instance. Public limits are enabled outside test fixtures; counters share
 SQLite persistence and cannot be reset by deleting reviews. Admitted failures use an allowance.

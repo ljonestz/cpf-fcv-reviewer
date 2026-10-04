@@ -55,6 +55,12 @@ was implemented; **61 Desktop/smoke checks then passed**. Six changed Python fil
 were parsed successfully. The local Ruff executable is blocked by Windows
 Application Control, so local Ruff success is not claimed.
 
+Browser inspection then found inherited public-pilot wording on the local intake.
+The local header now identifies mAI development mode, DEV quota use, institutional
+research, the local admission ceiling and complete-answer assistant behavior.
+The wording regression failed before correction; **72 Desktop, smoke and frontend
+contract checks passed** after correction. Public-provider wording is preserved.
+
 The first broad focused run hit the workstation's pre-existing invalid
 `SSL_CERT_FILE` (21 failures, 225 passes). Re-running with a valid CA file set only
 for that process produced the 252 passes. TLS verification was not disabled.
@@ -65,6 +71,7 @@ a live persistent worker and status `ok`. Intake, JavaScript and CSS returned HT
 were added to the existing mAI virtual environment; every pre-existing package
 version was preserved. The pre-install inventory is retained locally under ignored
 `output/mai-desktop/`.
+`pip check` reported no broken requirements after installation.
 
 ## Running locally
 
