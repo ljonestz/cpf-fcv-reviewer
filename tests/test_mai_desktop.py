@@ -24,6 +24,51 @@ class Answer(BaseModel):
     connected: bool
 
 
+@pytest.mark.parametrize("prompt", ["review", "repair"])
+def test_mai_schema_requires_source_selection_for_quotes_and_targets(prompt):
+    from cpf_fcv_reviewer.contracts import ReviewDraft
+    from cpf_fcv_reviewer.source_grounding import NO_CPF_QUOTE
+    model = gateway(lambda r: httpx.Response(200, json=response('{}')))
+    model._complete = Mock(return_value='{}')
+    with pytest.raises(ValidationError):
+        model.generate(prompt_name=prompt, payload={"cpf_quote_index": [{
+            "quote_id": "CPF_QUOTE:primary-1:1", "evidence_id": "primary-1", "preview": "Source"}]},
+            output_type=ReviewDraft)
+    schema = model._complete.call_args.kwargs["schema"]
+    definitions = schema["$defs"]
+    assert definitions["CPFQuoteSelection"]["enum"] == ["CPF_QUOTE:primary-1:1"]
+    response_schema = definitions["RRADriverAssessment"]["properties"]["cpf_response"]
+    assert {"const": NO_CPF_QUOTE, "type": "string"} in response_schema["anyOf"]
+    target = definitions["PriorityArea"]["properties"]["target_locator"]
+    assert target == {"$ref": "#/$defs/CPFQuoteSelection"}
+    assert "EvidenceLocator" not in definitions
+
+
+@pytest.mark.parametrize("prompt", ["review", "repair"])
+@pytest.mark.parametrize("known", [True, False])
+def test_compact_target_selection_requires_a_known_document_source(make_valid_result, prompt, known):
+    from cpf_fcv_reviewer.contracts import ReviewDraft
+    from test_reference_resolution import reference_case
+    _, draft, evidence = reference_case(make_valid_result)
+    data = draft.model_dump(mode="json")
+    data["priority_areas"][0]["target_locator"] = "CPF_QUOTE:ev-1:1" if known else "CPF_QUOTE:invented:1"
+    model = gateway(lambda r: httpx.Response(200, json=response(json.dumps(data))))
+    item = evidence["ev-1"].model_dump(mode="json")
+    payload = {"cpf_quote_index": [{"quote_id": "CPF_QUOTE:ev-1:1", "evidence_id": "ev-1"}]}
+    payload.update({"evidence_pack": {"evidence": [item]}} if prompt == "review" else
+                   {"source_grounding_evidence": [item]})
+    if not known:
+        with pytest.raises(ValidationError):
+            model.generate(prompt_name=prompt, payload=payload, output_type=ReviewDraft)
+        return
+    actual = model.generate(prompt_name=prompt, payload=payload, output_type=ReviewDraft)
+    target = actual.priority_areas[0].target_locator
+    assert target.document_title == evidence["ev-1"].locator.document_title
+    assert target.page == evidence["ev-1"].locator.page
+    assert target.excerpt == "CPF_QUOTE:ev-1:1"
+    assert not target.is_paraphrase
+
+
 def response(text='{"connected":true}', stop="end_turn"):
     return {"output": {"message": {"content": [{"text": text}]}}, "stopReason": stop}
 
@@ -79,6 +124,7 @@ def test_no_retry_redirect_or_provider_error_leak(status):
     with pytest.raises(MaiUnavailable) as caught:
         model.generate(prompt_name="review", payload={}, output_type=Answer)
     assert "sensitive-provider-body" not in str(caught.value)
+    assert caught.value.status_code == status
     assert handler.call_count == 1
 
 
@@ -94,6 +140,21 @@ def test_follow_on_returns_only_complete_response():
     ]
     assert captured[0]["inferenceConfig"]["maxTokens"] == 4000
     assert "outputConfig" not in captured[0]
+
+
+@pytest.mark.parametrize("text", ["The CPF is approvable in its strategic orientation.",
+    "The project is approved.", "The CEN is endorsed.", "The framework is cleared."])
+def test_mai_assistant_withholds_policy_determinations_before_first_chunk(text):
+    stream = gateway(lambda request: httpx.Response(200, json=response(text))).stream(
+        review={}, evidence={}, history=(), message="Summarise for management")
+    with pytest.raises(ValueError, match="Unsupported policy"):
+        next(stream)
+
+
+def test_mai_assistant_preserves_advisory_disclaimer():
+    text = "This is advisory and does not provide approval or clearance. Consult the country team."
+    assert list(gateway(lambda r: httpx.Response(200, json=response(text))).stream(
+        review={}, evidence={}, history=(), message="Summarise")) == [text]
 
 
 def test_mai_development_needs_no_anthropic_key_and_records_actual_model():

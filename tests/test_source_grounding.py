@@ -41,6 +41,33 @@ def test_valid_target_remains_accepted(make_valid_result):
     assert "target_locator_mismatch" not in codes(result, evidence)
 
 
+def test_selected_target_copies_exact_source_and_coordinates(make_valid_result):
+    from cpf_fcv_reviewer.review_engine import _resolve_cited_sources
+    result, evidence = grounded_case(make_valid_result)
+    area = result.priority_areas[0]
+    selected = area.target_locator.model_copy(update={
+        "excerpt": "CPF_QUOTE:ev-1:1", "page": 99, "document_title": "Wrong.pdf"})
+    result = result.model_copy(update={"priority_areas": (area.model_copy(
+        update={"target_locator": selected}),)})
+    resolved = _resolve_cited_sources(result, evidence)
+    target = resolved.priority_areas[0].target_locator
+    assert target.excerpt == "The program will support access."
+    assert target.page == evidence["ev-1"].locator.page
+    assert target.document_title == evidence["ev-1"].locator.document_title
+    assert "target_locator_mismatch" not in codes(resolved, evidence)
+
+
+@pytest.mark.parametrize("selection", ["CPF_QUOTE:uncited:1", "CPF_QUOTE:ev-1:99"])
+def test_unknown_or_uncited_target_selection_remains_blocking(make_valid_result, selection):
+    from cpf_fcv_reviewer.review_engine import _resolve_cited_sources
+    result, evidence = grounded_case(make_valid_result)
+    evidence["uncited"] = evidence["ev-1"].model_copy(update={"evidence_id": "uncited"})
+    area = result.priority_areas[0]
+    result = result.model_copy(update={"priority_areas": (area.model_copy(update={
+        "target_locator": area.target_locator.model_copy(update={"excerpt": selection})}),)})
+    assert "target_locator_mismatch" in codes(_resolve_cited_sources(result, evidence), evidence)
+
+
 def test_ongoing_transition_cannot_be_carried_forward_from_old_rra(make_valid_result):
     result, evidence = grounded_case(make_valid_result)
     area = result.priority_areas[0].model_copy(update={

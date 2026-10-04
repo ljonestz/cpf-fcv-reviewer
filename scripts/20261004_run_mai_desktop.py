@@ -25,7 +25,7 @@ def main():
                               if research_provider == "anthropic" else ""),
         "RESEARCH_PROVIDER": research_provider,
         "RESEARCH_MODEL_ID": os.environ.get("RESEARCH_MODEL_ID", "claude-sonnet-4-5"),
-        "APP_RELEASE": "mai-desktop-development",
+        "APP_RELEASE": os.environ.get("APP_RELEASE", "mai-desktop-development"),
         "REGISTRY_BUNDLE_PATH": str(registry),
         "REGISTRY_BUNDLE_SHA256": registry.with_suffix(".sha256").read_text().split()[0],
         "PERSISTENCE_PATH": str(output / "sessions.sqlite3"),

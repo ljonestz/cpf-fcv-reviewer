@@ -427,3 +427,5 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
   background: #fbebeb;
   color: #7f3030;
 }
+/* Google-provided attribution is isolated from the application's document. */
+.research-search-frame { width: 100%; height: 80px; border: 0; }

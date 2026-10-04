@@ -15,7 +15,7 @@
       <h1 id="hero-title">Strengthen the FCV framing of a CPF or CEN</h1>
       <p class="purpose">Get a concise, evidence-linked note with practical options to strengthen the draft.</p>
       <p class="advisory"><strong>{% if local_mai %}Local mAI development version.{% else %}Public version.{% endif %}</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. Use public or non-sensitive material only. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
-      {% if local_mai %}<p class="advisory">{% if config.RESEARCH_PROVIDER == 'anthropic' %}Public-web research uses Anthropic and incurs separate API charges. Review and assistant responses use your mAI DEV quota.{% else %}Institutional-source research only; broad web search is not included. Uses your mAI DEV quota.{% endif %} Assistant replies appear when complete.</p>{% endif %}
+      {% if local_mai %}<p class="advisory">{% if config.RESEARCH_PROVIDER == 'anthropic' %}Public-web research uses Anthropic and incurs separate API charges. Review and assistant responses use your mAI DEV quota.{% elif config.RESEARCH_PROVIDER == 'mai_google' %}Public research uses Google Search through mAI Factory with only the country and review date. Uploaded documents and review notes stay out of search queries. Assessment and assistant responses use Sonnet through mAI.{% else %}Institutional-source research only; broad web search is not included. Uses your mAI DEV quota.{% endif %} Assistant replies appear when complete.</p>{% endif %}
       <ol class="steps" aria-label="How the review works">
         <li>Add the draft</li>
         <li>Add context</li>
@@ -151,7 +151,8 @@
           <button id="result-tab-detailed" role="tab" aria-selected="false" aria-controls="detailed-panel" tabindex="-1" data-result-view="detailed" type="button">Detailed analysis</button>
         </div>
         <section id="summary-panel" role="tabpanel" aria-labelledby="result-tab-summary" tabindex="0"></section>
-        <section id="detailed-panel" role="tabpanel" aria-labelledby="result-tab-detailed" tabindex="0" hidden></section>
+          <section id="detailed-panel" role="tabpanel" aria-labelledby="result-tab-detailed" tabindex="0" hidden></section>
+          <section id="research-attribution" aria-label="Google Search suggestions" hidden></section>
       </section>
 
       <section id="assistant-card" class="assistant-card" hidden aria-labelledby="assistant-heading">

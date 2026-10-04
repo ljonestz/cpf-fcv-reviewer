@@ -1074,6 +1074,23 @@ function renderEvidenceStatus(result) {
   evidenceStatus.hidden = !label;
 }
 
+function renderSearchAttribution(result) {
+  const container = document.querySelector("#research-attribution");
+  if (!container) return;
+  container.replaceChildren();
+  const html = result.research_search_suggestions;
+  container.hidden = typeof html !== "string" || !html || html.length > 30000;
+  if (container.hidden) return;
+  const frame = document.createElement("iframe");
+  frame.title = "Google Search suggestions";
+  frame.className = "research-search-frame";
+  frame.referrerPolicy = "no-referrer";
+  // Provider attribution stays in an opaque frame, without scripts, storage or app access.
+  frame.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+  frame.srcdoc = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: https://www.gstatic.com https://www.google.com; base-uri \'none\'; form-action \'none\'"><base target="_blank">' + html;
+  container.append(frame);
+}
+
 function renderResult(result) {
   if (summaryPanel === detailedPanel) {
     results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysisView(result, true));
@@ -1082,6 +1099,7 @@ function renderResult(result) {
     detailedPanel.replaceChildren(renderDetailedAnalysisView(result, true));
   }
   const country = countryInput.value.trim();
+  renderSearchAttribution(result);
   const documentType = inferDocumentType(result.document_coverage.primary_document);
   const reviewStage = result.metadata?.review_stage;
   const stage = reviewStage ? " - " + reviewStage.replaceAll("_", " ") : "";
@@ -1644,6 +1662,7 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     appendAssessmentStanding,
     renderFiveMinuteReadout,
     renderDetailedAnalysis,
+    renderSearchAttribution,
     splitNarrativeIntoChunks,
     loadAssistantHistory,
     prefillAssistant,

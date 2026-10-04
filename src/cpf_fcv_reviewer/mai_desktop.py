@@ -9,7 +9,7 @@ from threading import Lock
 
 import httpx
 
-from .contracts import CurrentEvidenceTier
+from .contracts import CurrentEvidenceTier, ReviewDraft
 from .model_gateway import ModelOutputUnavailable
 from .prompts import load_prompt
 from .research_controller import ResearchController
@@ -24,6 +24,11 @@ RESEARCH_LIMITATION = (
 
 class MaiUnavailable(RuntimeError):
     """Sanitized transport/authentication failure without provider response text."""
+
+    def __init__(self, message: str, *, status_code: int | None = None):
+        super().__init__(message)
+        # Existing runtime logs can retain this safe status without response text.
+        self.status_code = status_code
 
 
 class MaiDesktopGateway:
@@ -61,7 +66,7 @@ class MaiDesktopGateway:
         """Sign in on the main thread before background assessment work."""
         self._token()
 
-    def _complete(self, *, system, messages, max_tokens, schema=None):
+    def _complete(self, *, system, messages, max_tokens, schema=None, timeout_seconds=None):
         payload = {
             "system": [{"text": system}],
             "messages": [
@@ -80,11 +85,12 @@ class MaiDesktopGateway:
             response = self._client.post(ENDPOINT, json=payload, headers={
                 "Authorization": "Bearer " + self._token(),
                 "x-source-type": "interactive", "x-team-name": self.team_name,
-            })
+            }, **({"timeout": timeout_seconds} if timeout_seconds is not None else {}))
         except httpx.HTTPError:
             raise MaiUnavailable("mAI request failed; no automatic retry was made.") from None
         if response.status_code != 200:
-            raise MaiUnavailable(f"mAI returned HTTP {response.status_code}.")
+            raise MaiUnavailable(f"mAI returned HTTP {response.status_code}.",
+                                 status_code=response.status_code)
         try:
             body = response.json()
             stop_reason = body.get("stopReason")
@@ -101,18 +107,58 @@ class MaiDesktopGateway:
     def generate(self, *, prompt_name, payload, output_type):
         from anthropic import transform_schema
 
+        schema = transform_schema(output_type.model_json_schema())
+        selections = payload.get("cpf_quote_index")
+        if output_type is ReviewDraft and selections:
+            from .source_grounding import NO_CPF_QUOTE
+
+            definitions = schema["$defs"]
+            definitions["CPFQuoteSelection"] = {
+                "type": "string", "enum": list(dict.fromkeys(item["quote_id"] for item in selections)),
+            }
+            definitions["RRADriverAssessment"]["properties"]["cpf_response"] = {"anyOf": [
+                {"$ref": "#/$defs/CPFQuoteSelection"}, {"const": NO_CPF_QUOTE, "type": "string"},
+            ]}
+            # Coordinates are already known. Generating a second locator object
+            # exceeds Bedrock's compiled-grammar budget for this full schema.
+            definitions["PriorityArea"]["properties"]["target_locator"] = {
+                "$ref": "#/$defs/CPFQuoteSelection",
+            }
+            del definitions["EvidenceLocator"]
         text = self._complete(
             system=load_prompt(prompt_name),
             messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
             max_tokens=20000 if prompt_name in {"review", "repair"} else 12000,
-            schema=transform_schema(output_type.model_json_schema()),
+            schema=schema,
         )
+        if output_type is ReviewDraft and selections:
+            try:
+                content = json.loads(text)
+            except ValueError:
+                return output_type.model_validate_json(text)
+            sources = payload.get("evidence_pack", {}).get("evidence", []) or payload.get(
+                "source_grounding_evidence", [])
+            locators = {item["evidence_id"]: item["locator"] for item in sources
+                        if item.get("document_role") in {"primary", "package"} and item.get("locator")}
+            choices = {item["quote_id"]: locators[item["evidence_id"]] for item in selections
+                       if item.get("evidence_id") in locators}
+            areas = content.get("priority_areas", []) if isinstance(content, dict) else []
+            for area in areas if isinstance(areas, list) else []:
+                selection = area.get("target_locator") if isinstance(area, dict) else None
+                if isinstance(selection, str) and selection in choices:
+                    area["target_locator"] = {**choices[selection], "excerpt": selection,
+                                              "is_paraphrase": False}
+            # Unknown selections still fail the contract. Own-citation and exact
+            # passage checks remain the review engine's responsibility.
+            return output_type.model_validate(content)
         return output_type.model_validate_json(text)
 
     def stream(self, *, review, evidence, history, message):
+        from .validators import assert_no_unsupported_policy_claims
+
         # ponytail: one complete chunk for local testing; add native streaming
         # only after the gateway's streaming protocol has been verified.
-        yield self._complete(
+        response = self._complete(
             system=load_prompt("follow_on"), max_tokens=4000,
             messages=[
                 {"role": "user", "content": json.dumps(
@@ -120,6 +166,9 @@ class MaiDesktopGateway:
                 *history, {"role": "user", "content": message},
             ],
         )
+        # mAI already returns a complete response: check before releasing any text.
+        assert_no_unsupported_policy_claims(response, set())
+        yield response
 
 
 class NoBroadWebSearch:

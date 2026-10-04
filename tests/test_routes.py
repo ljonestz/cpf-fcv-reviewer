@@ -620,6 +620,24 @@ def test_result_includes_validated_traceable_evidence_for_browser_expansion(
     assert payload["evidence_by_id"]["ev-1"]["locator"]["excerpt"]
 
 
+@pytest.mark.parametrize("suggestions", ["<div>Google search suggestions</div>", "x" * 30001],
+                         ids=["bounded", "oversized"])
+def test_result_serves_only_bounded_search_attribution(make_valid_result, suggestions):
+    result, evidence = make_valid_result
+    app = make_app()
+    identifier = app.extensions["session_store"].create({
+        "status": "complete", "result": result.model_dump(mode="json"),
+        "evidence_by_id": {key: value.model_dump(mode="json") for key, value in evidence.items()},
+        "research_search_suggestions": suggestions,
+    })
+    response = app.test_client().get(f"/api/reviews/{identifier}/result")
+    assert response.status_code == 200
+    if len(suggestions) <= 30000:
+        assert response.json["research_search_suggestions"] == suggestions
+    else:
+        assert "research_search_suggestions" not in response.json
+
+
 @pytest.mark.parametrize("path_suffix", ["result", "export.docx"])
 def test_legacy_result_without_strategy_readout_is_explicitly_invalidated(
     make_valid_result, path_suffix

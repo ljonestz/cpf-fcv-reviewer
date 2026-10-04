@@ -554,6 +554,9 @@ def review_result(assessment_id):
 
     response_payload = validated_result.model_dump(mode="json")
     response_payload["evidence_by_id"] = validated_evidence
+    suggestions = state.payload.get("research_search_suggestions")
+    if isinstance(suggestions, str) and 0 < len(suggestions) <= 30_000:
+        response_payload["research_search_suggestions"] = suggestions
     return jsonify(response_payload)
 
 
@@ -668,6 +671,7 @@ def add_correction(assessment_id):
     child_payload["parent_assessment_id"] = assessment_id
     child_payload["status"] = "created"
     child_payload.pop("result", None)
+    child_payload.pop("research_search_suggestions", None)
     child_payload.pop("evidence_by_id", None)
     child_payload.pop("assistant_history", None)
     child_payload.pop("assistant_active", None)
@@ -723,6 +727,8 @@ def run_assessment(app, assessment_id):
                 assessment_id,
                 result=result_context["result"].model_dump(mode="json"),
                 evidence_by_id=evidence_by_id,
+                **({"research_search_suggestions": result_context["research_search_suggestions"]}
+                   if result_context.get("research_search_suggestions") else {}),
                 status="complete",
             )
             for kind, data in terminal_events:
@@ -760,6 +766,7 @@ def run_assessment(app, assessment_id):
                 stale_keys = {
                     "result",
                     "evidence_by_id",
+                    "research_search_suggestions",
                     "validation_issues",
                     *_partial_research_keys(state.payload),
                 }

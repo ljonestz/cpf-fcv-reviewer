@@ -21,21 +21,22 @@ def grounding_issues(result, evidence):
 
 
 @pytest.mark.parametrize("corrected", [False, True])
+@pytest.mark.parametrize("latest_case", [False, True])
 def test_six_residual_grounding_issues_require_real_source_corrections(
-    make_valid_result, corrected,
+    make_valid_result, corrected, latest_case,
 ):
     result, _, evidence = reference_case(make_valid_result)
     rows = tuple(result.rra_driver_assessments[0].model_copy(update={
         "assessment_id": f"rra-{index}", "driver": f"Synthetic driver {index}",
         "cpf_response": "The program promises an invented commitment.",
-        "evidence_ids": ("ev-1", f"invented-{index}"),
-    }) for index in range(2))
+        "evidence_ids": ("ev-1",) if latest_case else ("ev-1", f"invented-{index}"),
+    }) for index in range(3 if latest_case else 2))
     areas = tuple(result.priority_areas[0].model_copy(update={
         "priority_area_id": f"pa-{index}",
         "target_locator": evidence["ev-1"].locator.model_copy(update={
             "excerpt": "A fabricated target excerpt.",
         }),
-    }) for index in range(2))
+    }) for index in range(3 if latest_case else 2))
     result = result.model_copy(update={
         "rra_driver_assessments": rows, "priority_areas": areas,
         "revision_summary": tuple(result.revision_summary[0].model_copy(update={
@@ -48,6 +49,8 @@ def test_six_residual_grounding_issues_require_real_source_corrections(
     issues = grounding_issues(result, evidence)
     expected = Counter(unsupported_cpf_response=2, unknown_assessment_evidence=2,
                        target_locator_mismatch=2)
+    if latest_case:
+        expected = Counter(unsupported_cpf_response=3, target_locator_mismatch=3)
     assert Counter(issue.code for issue in issues) == expected
     candidate = result
     if corrected:
@@ -57,7 +60,7 @@ def test_six_residual_grounding_issues_require_real_source_corrections(
             }) for row in rows),
             "priority_areas": tuple(area.model_copy(update={
                 "target_locator": evidence["ev-1"].locator.model_copy(update={
-                    "excerpt": evidence["ev-1"].text,
+                    "excerpt": "CPF_QUOTE:ev-1:1",
                 }),
             }) for area in areas),
         })

@@ -886,6 +886,11 @@ def _preserve_research_limitation(context: dict):
     return result.model_copy(update={"limitations": limitations})
 
 
+def _utc_review_date() -> date:
+    """Keep public research on the same date basis as UTC run metadata."""
+    return datetime.now(UTC).date()
+
+
 def build_runtime_services(
     config: dict,
     *,
@@ -893,7 +898,7 @@ def build_runtime_services(
     research_gateway=None,
     research_controller=None,
     follow_on_gateway=None,
-    review_date_provider=date.today,
+    review_date_provider=_utc_review_date,
 ) -> dict:
     path = Path(config.get("REGISTRY_BUNDLE_PATH", ""))
     expected_hash = str(config.get("REGISTRY_BUNDLE_SHA256", "")).strip().lower()
@@ -970,6 +975,12 @@ def build_runtime_services(
             )
             if institutional_research:
                 research_gateway = NoBroadWebSearch()
+            elif mai_desktop and config.get("RESEARCH_PROVIDER") == "mai_google":
+                from .mai_research import MaiGoogleResearchGateway
+
+                research_gateway = MaiGoogleResearchGateway(
+                    model_gateway, timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
+                )
             else:
                 research_gateway = AnthropicPublicResearchGateway(
                     config["ANTHROPIC_API_KEY"],
@@ -1543,6 +1554,10 @@ def build_runtime_services(
                     context["_emit"],
                     allow_document_led=_allow_document_led(context),
                 )
+                if mai_desktop and config.get("RESEARCH_PROVIDER") == "mai_google":
+                    suggestions = getattr(research_controller.gateway, "last_search_suggestions", "")
+                    if isinstance(suggestions, str) and len(suggestions) <= 30_000:
+                        context["research_search_suggestions"] = suggestions
                 if (
                     context["research_result"].tier
                     is CurrentEvidenceTier.DOCUMENT_LED

@@ -1,5 +1,40 @@
 # Project status
 
+## 2026-10-05 mAI-only stress testing completed; readiness held
+
+Three newly authorized full Guinea assessments are consumed: two failed, and the
+third completed without repair on `14f32d9` (1,875 CI tests passed). Research and
+assessment both use mAI, with no separate Anthropic API key. Four source quotations
+and four target excerpts matched cited PDF pages; five RRA drivers and four Strategy
+shifts were covered. Assistant, restoration and exports executed; nine Word pages
+were inspected. The browser caveat-check failure was a whitespace-only test mismatch.
+
+**Analytical and production acceptance remain held.** Research is still reduced;
+the accepted report misreads the private-capital target, confuses beneficiary units,
+and overstates some contextual evidence. The assistant crossed the advisory boundary.
+Provider-free follow-up fixes the UTC/local research-date mismatch and blocks the
+observed policy-determination class before mAI assistant text is released. Those
+changes at `5298070` passed 1,881 CI tests and Python name/import lint, but have no
+new live-model acceptance. Do not launch a fourth full assessment.
+
+See the [outcomes, Render comparison and remaining defects](validation/2026-10-04-mai-grounded-research.md).
+Draft PR 44 remains stacked on PR 43, unmerged and undeployed. Hosted mAI Application/ACN,
+Python/Posit compatibility, persistent hosting and cross-country gates remain open.
+
+
+## 2026-10-04 mAI-native Google research candidate
+
+The owner now prefers mAI-native research over the separate Anthropic API and
+authorized up to three new local full assessments. The candidate uses mAI Gemini
+Google discovery plus independently fetched original pages and mAI Sonnet passage
+selection. Documents and notes remain excluded from search. Quotation, country,
+date and source-quality checks remain enforced. No hosted access is implied.
+
+Preparation identified model transcription errors, conflicting publication dates
+and loss of publisher breadth within the existing source-bundle cap. Synthetic
+regressions precede repairs. Acceptance/comparison is in progress; production
+readiness is still held. See the [current validation record](validation/2026-10-04-mai-grounded-research.md).
+
 ## 2026-10-04 Local external-research privacy follow-up
 
 The owner approved separating local Anthropic credentials and excluding document

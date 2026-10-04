@@ -148,15 +148,21 @@ def build_config(
         "RESEARCH_PROVIDER", "institutional" if config["MODEL_PROVIDER"] == "mai_desktop"
         else "anthropic",
     ))
-    if config["RESEARCH_PROVIDER"] not in ("anthropic", "institutional"):
+    if config["RESEARCH_PROVIDER"] not in ("anthropic", "institutional", "mai_google"):
         raise ValueError("RESEARCH_PROVIDER is invalid.")
     if config["RESEARCH_PROVIDER"] == "institutional" and config["MODEL_PROVIDER"] != "mai_desktop":
         raise ValueError("Institutional RESEARCH_PROVIDER requires mAI Desktop mode.")
+    if config["RESEARCH_PROVIDER"] == "mai_google" and config["MODEL_PROVIDER"] != "mai_desktop":
+        raise ValueError("mAI Google research requires mAI Desktop mode.")
     # Resolve the research model before Desktop sets application-owned review metadata.
     config.setdefault("RESEARCH_MODEL_ID", environment("RESEARCH_MODEL_ID", config["ANTHROPIC_MODEL_ID"]))
     if not isinstance(config["RESEARCH_MODEL_ID"], str) or not config["RESEARCH_MODEL_ID"].strip():
         raise ValueError("RESEARCH_MODEL_ID must be a nonblank string.")
     config["RESEARCH_MODEL_ID"] = config["RESEARCH_MODEL_ID"].strip()
+    if config["RESEARCH_PROVIDER"] == "mai_google":
+        from .mai_research import MODEL
+
+        config["RESEARCH_MODEL_ID"] = MODEL
     if config["MODEL_PROVIDER"] == "mai_desktop":
         from .mai_desktop import MODEL_ID
 

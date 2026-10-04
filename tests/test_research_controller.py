@@ -77,6 +77,17 @@ def holistic_request() -> ResearchRequest:
     return ResearchRequest("Benin", date(2026, 8, 1), ResearchMode.HOLISTIC)
 
 
+def test_bundle_budget_preserves_available_publisher_diversity():
+    long_quote = "Political exclusion affects services in Benin. " * 18
+    claims = tuple(claim(f"a{i}", source_url="https://www.worldbank.org/a").model_copy(
+        update={"text": long_quote, "supporting_quote": long_quote}) for i in range(3))
+    other = claim("b1", publisher="United Nations", source_date=date(2026, 6, 1)).model_copy(
+        update={"text": long_quote, "supporting_quote": long_quote})
+    retained = controller(None)._qualifying_claims(claims + (other,), holistic_request())
+    assert {c.publisher for c in retained} == {"World Bank", "United Nations"}
+    assert sum(len(c.model_dump_json()) for c in retained) <= 6000
+
+
 def rra_request() -> ResearchRequest:
     return ResearchRequest(
         "Benin",
