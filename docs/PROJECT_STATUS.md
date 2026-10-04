@@ -1,5 +1,22 @@
 # Project status
 
+## 2026-10-04 Local mAI Desktop integration
+
+The opt-in development adapter uses Sonnet 4.6 through mAI Desktop DEV, with
+institutional research and explicit limitations approved by the owner. It retains
+structured output/evidence validation, has no direct-provider fallback and rejects
+non-local/cross-site access. The local assistant returns one complete answer chunk.
+
+Desktop sign-in and three bounded connection/schema probes succeeded as documented
+(212 total tokens; the incompatible schema request returned plain text and was
+replaced with the verified Converse shape). No full assessment or direct Anthropic
+call occurred. **252 focused checks** passed, followed by **61 Desktop/smoke checks**
+after adding the cross-site guard. Local persistent-worker health and static assets
+passed. See [the validation record](validation/2026-10-04-mai-desktop.md).
+
+Full provider-backed review acceptance and hosted Application access remain open.
+This branch does not change the deployed Render app or establish production readiness.
+
 ## 2026-10-04 Hosting URL-prefix preparation
 
 Branch `feat/posit-connect-compatibility`, code `e196b3d`, corrects asset/API URLs
