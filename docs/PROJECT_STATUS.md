@@ -1,5 +1,20 @@
 # Project status
 
+## 2026-10-04 Hosting URL-prefix preparation
+
+Branch `feat/posit-connect-compatibility`, code `e196b3d`, corrects asset/API URLs
+and namespaces saved browser review keys by mount. Empty-prefix root behavior is
+preserved. **138 focused tests** and **11 synthetic browser checks** passed below
+`/content/cpf-preview`; both exports and refresh/assistant history worked. Full
+Linux CI passed **1,773 tests** and Python name/import checks on `7e88c41`.
+See the [validation note](validation/2026-10-04-posit-mount-compatibility.md).
+
+Draft PR 40 is based on the existing repair branch. No deployment or provider
+switch occurred. Publishing access was verified, but server runtime compatibility,
+model application authentication, persistence and actual hosted acceptance remain
+open. There were no paid model calls. Earlier production/factual acceptance limits
+remain unchanged.
+
 ## 2026-10-03 Provider-free quality and presentation follow-up verified
 
 Code `9914483` passed **1,769 Linux tests** including Gunicorn and Python name/import

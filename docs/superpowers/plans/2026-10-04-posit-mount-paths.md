@@ -8,12 +8,12 @@ uses the server-provided mount prefix for locally constructed API URLs and scope
 saved review identifiers by mount. Empty prefix preserves existing root hosting.
 No forwarded-header trust or separate authentication layer is introduced.
 
-- [ ] Reproduce prefixed asset/API and browser restoration/download failures.
-- [ ] Update `templates/index.html`, `static/app.js` and `routes.py` with the
+- [x] Reproduce prefixed asset/API and browser restoration/download failures.
+- [x] Update `templates/index.html`, `static/app.js` and `routes.py` with the
   existing Flask URL generator and one browser path helper.
-- [ ] Run focused regressions, then a provider-free browser workflow mounted below
+- [x] Run focused regressions, then a provider-free browser workflow mounted below
   a prefix. Verify root behavior with the existing suite.
-- [ ] Commit/push on `feat/posit-connect-compatibility`, recording exact validation
+- [x] Commit/push on `feat/posit-connect-compatibility`, recording exact validation
   and remaining server-runtime, storage and model-access prerequisites.
 
 This is one prerequisite for the authorized hosting/integration work, not a live
