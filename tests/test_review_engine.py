@@ -875,6 +875,7 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         "repair_support_evidence_ids": {"current_context": [], "registry_language": []},
         "repair_support_evidence": [],
         "source_grounding_evidence": [],
+        "cpf_quote_index": [],
         "diagnostic_provenance": None,
         "diagnostic_mode": "rra_alignment",
         "review_stage": "concept_review",

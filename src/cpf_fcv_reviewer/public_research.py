@@ -1162,15 +1162,14 @@ def _source_supports_country(
     if not _text_mentions_country(source.title, selected_country):
         return False
     selected_markers = set(_country_markers(selected_country))
-    # Remove the selected country's complete names before checking other geography.
-    context = _normalize_text(f"{source.title} {text or ''}")
-    for marker in sorted(selected_markers, key=len, reverse=True):
-        context = re.sub(rf"\b{re.escape(marker)}\b", " ", context)
+    # Preserve compound names: deleting "Guinea" would hide "Guinea-Bissau".
+    # The ordinary country matcher already disambiguates longer country names.
+    context = f"{source.title} {text or ''}"
     for country in COUNTRY_ALIASES:
         markers = _country_markers(country)
         if selected_markers.intersection(markers):
             continue
-        if any(re.search(rf"\b{re.escape(marker)}\b", context) for marker in markers):
+        if _text_mentions_country(context, country):
             return False
     return True
 

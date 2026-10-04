@@ -22,7 +22,7 @@ from .public_research import (
     ResearchSource,
     _is_public_http_url,
     _publisher_for_source_url,
-    _source_mentions_country,
+    _source_supports_country,
 )
 from .research_controller import ResearchRequest
 
@@ -730,23 +730,26 @@ def _crisis_group_claim(
     source_url = _nonblank_string(item.findtext("link"))
     source_date = _crisis_group_date(item.findtext("pubDate"))
     summary = _bounded_report_text(item.findtext("description"))
-    text = summary or (f"{title}." if title is not None else None)
+    # A teaser can omit geography or substantive detail that is in the headline.
+    # Select one literal field, never combine them into a manufactured quotation.
+    use_title = summary is None or _FCV_TITLE_PATTERN.search(summary) is None
+    text = title if use_title else summary
     if (
         title is None
         or source_url is None
         or not _is_crisis_group_result_url(source_url)
         or source_date is None
         or text is None
-        or not _source_mentions_country(
+        or not _source_supports_country(
             ResearchSource(
                 title=title,
                 url=source_url,
-                excerpt=text,
+                excerpt=summary or text,
             ),
             expected_country,
         )
         or _FCV_TITLE_PATTERN.search(text) is None
-        or (summary is None and _FCV_ASSERTION_PATTERN.search(title) is None)
+        or (use_title and _FCV_ASSERTION_PATTERN.search(title) is None)
         or not start_date <= source_date <= end_date
     ):
         return None
