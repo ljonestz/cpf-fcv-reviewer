@@ -1,3 +1,11 @@
+// The server supplies its WSGI mount; root hosting keeps existing URLs and keys.
+const appRoot = document.body?.dataset?.appRoot || "";
+const assessmentStorageKey = `cpf_fcv_assessment_id${appRoot}`;
+const countryStorageKey = `cpf_fcv_country${appRoot}`;
+function appUrl(path) {
+  return `${appRoot}${path}`;
+}
+
 const form = document.querySelector("#review-form");
 const landingView = document.querySelector("#landing-view");
 const landingNotice = document.querySelector("#landing-notice");
@@ -49,8 +57,8 @@ const resetReviewButton = document.querySelector("#reset-review");
 const evidenceStatus = document.querySelector("#evidence-status") || document.createElement("aside");
 const evidenceStatusLabel = document.querySelector("#evidence-status-label") || document.createElement("strong");
 const evidenceStatusLimitation = document.querySelector("#evidence-status-limitation") || document.createElement("span");
-let assessmentId = sessionStorage.getItem("cpf_fcv_assessment_id") || "";
-const savedCountry = sessionStorage.getItem("cpf_fcv_country") || "";
+let assessmentId = sessionStorage.getItem(assessmentStorageKey) || "";
+const savedCountry = sessionStorage.getItem(countryStorageKey) || "";
 if (assessmentId && savedCountry && savedCountry !== assessmentId) {
   countryInput.value = savedCountry;
 }
@@ -412,7 +420,7 @@ async function detectCountry() {
   try {
     const body = new FormData();
     body.append("cpf", file);
-    const response = await fetch("/api/detect-country", {method: "POST", body});
+    const response = await fetch(appUrl("/api/detect-country"), {method: "POST", body});
     if (requestEpoch !== detectionEpoch) return;
     if (!response.ok) throw new Error("Country detection failed.");
     const detection = await response.json();
@@ -1127,7 +1135,7 @@ async function loadAssistantHistory() {
   assistantSend.disabled = true;
   assistantConversation.setAttribute("aria-busy", "true");
   try {
-    const response = await fetch(`/api/reviews/${requestedAssessmentId}/assistant`);
+    const response = await fetch(appUrl(`/api/reviews/${requestedAssessmentId}/assistant`));
     if (requestedAssessmentId !== assessmentId || historyEpoch !== assistantHistoryEpoch) return;
     if (!response.ok) {
       if (response.status === 410) setAssistantStatus("This review session has expired. Start a new review to continue.");
@@ -1210,7 +1218,7 @@ async function sendAssistantMessage(event) {
   let completed = false;
   let failed = false;
   try {
-    const response = await fetch(`/api/reviews/${requestAssessmentId}/assistant`, {
+    const response = await fetch(appUrl(`/api/reviews/${requestAssessmentId}/assistant`), {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({message}),
@@ -1305,16 +1313,16 @@ async function restoreSavedReview() {
   showProgress();
   progressMessage.textContent = "Restoring the saved review";
   try {
-    const resultUrl = `/api/reviews/${requestedAssessmentId}/result`;
+    const resultUrl = appUrl(`/api/reviews/${requestedAssessmentId}/result`);
     const response = await fetch(resultUrl);
     if (!isCurrentOperation(operation) || requestedAssessmentId !== assessmentId) return;
     if (response.status === 202) {
-      watchEvents(`/api/reviews/${requestedAssessmentId}/events`, resultUrl, operation);
+      watchEvents(appUrl(`/api/reviews/${requestedAssessmentId}/events`), resultUrl, operation);
       return;
     }
     if (response.status === 410) {
-      sessionStorage.removeItem("cpf_fcv_assessment_id");
-      sessionStorage.removeItem("cpf_fcv_country");
+      sessionStorage.removeItem(assessmentStorageKey);
+      sessionStorage.removeItem(countryStorageKey);
       assessmentId = "";
       showLanding("This saved review expired. Upload again.");
       return;
@@ -1408,7 +1416,7 @@ form.addEventListener("submit", async (event) => {
   showProgress();
   progressMessage.textContent = "Uploading and validating";
   try {
-    const response = await fetch("/api/reviews", {
+    const response = await fetch(appUrl("/api/reviews"), {
       method: "POST",
       body: new FormData(form),
     });
@@ -1420,8 +1428,8 @@ form.addEventListener("submit", async (event) => {
     const created = await response.json();
     if (!isCurrentOperation(operation)) return;
     assessmentId = created.assessment_id;
-    sessionStorage.setItem("cpf_fcv_country", countryInput.value.trim());
-    sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
+    sessionStorage.setItem(countryStorageKey, countryInput.value.trim());
+    sessionStorage.setItem(assessmentStorageKey, assessmentId);
     watchEvents(created.event_url, created.result_url, operation);
   } catch (_error) {
     if (!isCurrentOperation(operation)) return;
@@ -1435,7 +1443,7 @@ async function retryResearch() {
   retryResearchButton.disabled = true;
   researchRecoveryMessage.textContent = "Restarting current-country research using the uploaded package held in this temporary session.";
   try {
-    const response = await fetch(`/api/reviews/${assessmentId}/retry-research`, {
+    const response = await fetch(appUrl(`/api/reviews/${assessmentId}/retry-research`), {
       method: "POST",
     });
     if (!isCurrentOperation(operation)) return;
@@ -1466,7 +1474,7 @@ submitCorrection.addEventListener("click", async () => {
   const operation = ++operationEpoch;
   submitCorrection.disabled = true;
   try {
-    const response = await fetch(`/api/reviews/${assessmentId}/corrections`, {
+    const response = await fetch(appUrl(`/api/reviews/${assessmentId}/corrections`), {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({text: correction}),
@@ -1484,7 +1492,7 @@ submitCorrection.addEventListener("click", async () => {
     assistantSend.disabled = true;
     assistantConversation.setAttribute("aria-busy", "false");
     assessmentId = child.assessment_id;
-    sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
+    sessionStorage.setItem(assessmentStorageKey, assessmentId);
     showProgress();
     progressMessage.textContent = "User-provided correction saved; rerun requested.";
     watchEvents(child.event_url, child.result_url, operation);
@@ -1531,7 +1539,7 @@ async function downloadDocx(summary = false) {
   if (!assessmentId) return;
   clearDownloadError();
   try {
-    const response = await fetch(`/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}`);
+    const response = await fetch(appUrl(`/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}`));
     if (!response.ok || response.status === 202) {
       showDownloadError(downloadErrorMessage(response.status));
       return;
@@ -1563,8 +1571,8 @@ async function resetReview() {
   resetPending = true;
   activeEventSource?.close();
   activeEventSource = undefined;
-  sessionStorage.removeItem("cpf_fcv_assessment_id");
-  sessionStorage.removeItem("cpf_fcv_country");
+  sessionStorage.removeItem(assessmentStorageKey);
+  sessionStorage.removeItem(countryStorageKey);
   assessmentId = "";
   if (summaryPanel === detailedPanel) {
     results.replaceChildren();
@@ -1603,7 +1611,7 @@ async function resetReview() {
   let purgeConfirmed = !assessmentToPurge;
   try {
     if (assessmentToPurge) {
-      const response = await fetch(`/api/reviews/${assessmentToPurge}`, {method: "DELETE"});
+      const response = await fetch(appUrl(`/api/reviews/${assessmentToPurge}`), {method: "DELETE"});
       purgeConfirmed = response.ok;
     }
   } catch (_error) {

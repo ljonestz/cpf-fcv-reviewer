@@ -39,7 +39,7 @@ def test_correction_handler_switches_to_child_run_and_watches_it():
     javascript = JS.read_text(encoding="utf-8")
 
     assert "assessmentId = child.assessment_id" in javascript
-    assert 'sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId)' in javascript
+    assert 'sessionStorage.setItem(assessmentStorageKey, assessmentId)' in javascript
     assert "watchEvents(child.event_url, child.result_url, operation)" in javascript
 
 
