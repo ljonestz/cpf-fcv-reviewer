@@ -144,6 +144,19 @@ def build_config(
     config["ANTHROPIC_API_KEY"] = config["ANTHROPIC_API_KEY"].strip()
     if config["MODEL_PROVIDER"] not in {"anthropic", "mai_desktop"}:
         raise ValueError("MODEL_PROVIDER is invalid.")
+    config.setdefault("RESEARCH_PROVIDER", environment(
+        "RESEARCH_PROVIDER", "institutional" if config["MODEL_PROVIDER"] == "mai_desktop"
+        else "anthropic",
+    ))
+    if config["RESEARCH_PROVIDER"] not in ("anthropic", "institutional"):
+        raise ValueError("RESEARCH_PROVIDER is invalid.")
+    if config["RESEARCH_PROVIDER"] == "institutional" and config["MODEL_PROVIDER"] != "mai_desktop":
+        raise ValueError("Institutional RESEARCH_PROVIDER requires mAI Desktop mode.")
+    # Resolve the research model before Desktop sets application-owned review metadata.
+    config.setdefault("RESEARCH_MODEL_ID", environment("RESEARCH_MODEL_ID", config["ANTHROPIC_MODEL_ID"]))
+    if not isinstance(config["RESEARCH_MODEL_ID"], str) or not config["RESEARCH_MODEL_ID"].strip():
+        raise ValueError("RESEARCH_MODEL_ID must be a nonblank string.")
+    config["RESEARCH_MODEL_ID"] = config["RESEARCH_MODEL_ID"].strip()
     if config["MODEL_PROVIDER"] == "mai_desktop":
         from .mai_desktop import MODEL_ID
 
@@ -155,7 +168,8 @@ def build_config(
             raise ValueError("MAI_TEAM_NAME must be a nonblank ASCII header value.")
         config["MAI_TEAM_NAME"] = team.strip()
         config["ANTHROPIC_MODEL_ID"] = MODEL_ID
-    if (config["MODEL_PROVIDER"] == "anthropic" and not config["TESTING"]
+    if ((config["MODEL_PROVIDER"] == "anthropic" or config["RESEARCH_PROVIDER"] == "anthropic")
+            and not config["TESTING"]
             and not config["ANTHROPIC_API_KEY"] and not config["SMOKE_MODE"]):
         raise RuntimeError("ANTHROPIC_API_KEY is required outside tests.")
     return config
