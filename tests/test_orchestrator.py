@@ -3,6 +3,13 @@ import pytest
 from cpf_fcv_reviewer.orchestrator import ReviewOrchestrator
 
 
+def test_mai_transport_failure_is_not_reported_as_evidence_failure():
+    from cpf_fcv_reviewer.mai_desktop import MaiUnavailable
+    from cpf_fcv_reviewer.orchestrator import safe_failure_data
+    error = MaiUnavailable("Synthetic private error text", status_code=400)
+    assert safe_failure_data(error) == {"error": "model_output_unavailable"}
+
+
 class FakeStep:
     def __init__(self, name, value):
         self.name = name

@@ -151,3 +151,7 @@ The compact-target conversion and schema regression failed before implementation
 The same complete schema also passed a 32-token synthetic transport probe with all
 260 source choices from the frozen corpus. Its deliberate token-limit stop is not
 an accepted assessment; it establishes schema compatibility only.
+Full CI passed for `e97398e`. A final narrow follow-up maps mAI transport failures
+to the existing `model_output_unavailable` message rather than inaccurately blaming
+evidence grounding. Its regression failed before the change; 81 focused checks,
+including smoke, passed afterward. No new browser text or workflow was introduced.

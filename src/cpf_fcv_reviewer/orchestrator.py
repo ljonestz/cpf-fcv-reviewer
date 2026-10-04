@@ -11,6 +11,7 @@ from .extraction import (
     ReviewCoverageUnavailable,
 )
 from .model_gateway import ModelOutputUnavailable
+from .mai_desktop import MaiUnavailable
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
 from .review_engine import ReviewSchemaUnavailable
@@ -21,6 +22,7 @@ Step = Callable[[dict], dict]
 Repair = Callable[[dict, list], dict]
 
 SAFE_FAILURES = {
+    MaiUnavailable: "model_output_unavailable",
     TimeoutError: "model_timeout",
     DiagnosticCoverageUnavailable: "diagnostic_coverage_unavailable",
     ReviewCoverageUnavailable: "review_coverage_unavailable",
