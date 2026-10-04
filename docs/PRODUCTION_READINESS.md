@@ -1,5 +1,22 @@
 # Production readiness
 
+## 2026-10-05 mAI-only execution verified; quality and hosting gates remain held
+
+The third and final authorized local assessment completed on `14f32d9` without repair;
+its exact candidate passed 1,875 CI tests. Quotation/reference mechanics, persistence
+across refresh and both exports worked. The full comparison found material table,
+unit, contextual-attribution and assistant-boundary errors, with reduced research
+coverage. **The app is not production-ready, and Render-equivalent factual quality
+has not been established.** All three full-run permissions are consumed.
+
+UTC date consistency and pre-release mAI assistant policy checks were repaired with
+provider-free regressions after that run. Further live validation requires fresh
+authorization. Preserve the original outputs as failure evidence; do not present them
+as cleared country assessments. See the [current validation record](validation/2026-10-04-mai-grounded-research.md).
+No merge or deployment; the Application/ACN, Python/Posit, durable hosted storage and
+cross-country acceptance requirements remain unchanged.
+
+
 ## 2026-10-04 mAI-native research acceptance in progress
 
 An mAI Google Search route now avoids a separate Anthropic API key. Preparation

@@ -886,6 +886,11 @@ def _preserve_research_limitation(context: dict):
     return result.model_copy(update={"limitations": limitations})
 
 
+def _utc_review_date() -> date:
+    """Keep public research on the same date basis as UTC run metadata."""
+    return datetime.now(UTC).date()
+
+
 def build_runtime_services(
     config: dict,
     *,
@@ -893,7 +898,7 @@ def build_runtime_services(
     research_gateway=None,
     research_controller=None,
     follow_on_gateway=None,
-    review_date_provider=date.today,
+    review_date_provider=_utc_review_date,
 ) -> dict:
     path = Path(config.get("REGISTRY_BUNDLE_PATH", ""))
     expected_hash = str(config.get("REGISTRY_BUNDLE_SHA256", "")).strip().lower()

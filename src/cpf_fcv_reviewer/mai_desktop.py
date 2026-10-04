@@ -154,9 +154,11 @@ class MaiDesktopGateway:
         return output_type.model_validate_json(text)
 
     def stream(self, *, review, evidence, history, message):
+        from .validators import assert_no_unsupported_policy_claims
+
         # ponytail: one complete chunk for local testing; add native streaming
         # only after the gateway's streaming protocol has been verified.
-        yield self._complete(
+        response = self._complete(
             system=load_prompt("follow_on"), max_tokens=4000,
             messages=[
                 {"role": "user", "content": json.dumps(
@@ -164,6 +166,9 @@ class MaiDesktopGateway:
                 *history, {"role": "user", "content": message},
             ],
         )
+        # mAI already returns a complete response: check before releasing any text.
+        assert_no_unsupported_policy_claims(response, set())
+        yield response
 
 
 class NoBroadWebSearch:

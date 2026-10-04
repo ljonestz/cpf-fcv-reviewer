@@ -62,6 +62,17 @@ def _assessment_mode(payload):
     return getattr(mode, "value", mode)
 
 
+def test_default_research_date_uses_same_utc_basis_as_review_metadata(monkeypatch):
+    from datetime import UTC, datetime
+    instant = datetime(2026, 10, 4, 23, 30, tzinfo=UTC)
+    def now(zone):
+        assert zone is UTC
+        return instant
+    monkeypatch.setattr(runtime, "datetime", SimpleNamespace(now=now))
+    assert runtime._utc_review_date() == date(2026, 10, 4)
+    assert build_runtime_services.__kwdefaults__["review_date_provider"] is runtime._utc_review_date
+
+
 def test_mechanical_repair_retry_gate_accepts_duplicates_and_rejects_other_issues():
     assert runtime._can_retry_mechanical_repair(
         [

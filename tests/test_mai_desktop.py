@@ -142,6 +142,21 @@ def test_follow_on_returns_only_complete_response():
     assert "outputConfig" not in captured[0]
 
 
+@pytest.mark.parametrize("text", ["The CPF is approvable in its strategic orientation.",
+    "The project is approved.", "The CEN is endorsed.", "The framework is cleared."])
+def test_mai_assistant_withholds_policy_determinations_before_first_chunk(text):
+    stream = gateway(lambda request: httpx.Response(200, json=response(text))).stream(
+        review={}, evidence={}, history=(), message="Summarise for management")
+    with pytest.raises(ValueError, match="Unsupported policy"):
+        next(stream)
+
+
+def test_mai_assistant_preserves_advisory_disclaimer():
+    text = "This is advisory and does not provide approval or clearance. Consult the country team."
+    assert list(gateway(lambda r: httpx.Response(200, json=response(text))).stream(
+        review={}, evidence={}, history=(), message="Summarise")) == [text]
+
+
 def test_mai_development_needs_no_anthropic_key_and_records_actual_model():
     config = build_config({"APP_ENV": "development", "MODEL_PROVIDER": "mai_desktop",
                            "MAI_TEAM_NAME": "test-team"}, use_environment=False)

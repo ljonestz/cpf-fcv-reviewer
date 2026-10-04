@@ -29,6 +29,8 @@ from .source_grounding import (
 )
 
 DETERMINATION_PATTERNS = (
+    r"\b(?:cpf|cen|project|program|framework|proposal)\s+is\s+"
+    r"(?:approvable|approved|endorsed|cleared|compliant)\b",
     r"\beligible for\b",
     r"\beligibility for\b",
     r"\bis triggered\b",
