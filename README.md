@@ -1,5 +1,12 @@
 # CPF FCV Reviewer
 
+**Current continuation point (4 October 2026):** read the
+[full session handover](docs/handover/20261004_cpf-mai-full-handover.md).
+Local mAI Desktop connectivity works, but the first full Guinea assessment failed
+evidence validation after repair. No accepted output was released. The repair,
+Posit compatibility and mAI branches remain undeployed; production readiness is
+not achieved. See the [local acceptance record](docs/validation/2026-10-04-mai-local-assessment.md).
+
 A production repair candidate is available on `fix/production-readiness-20260930`: public
 access with four paid assessment admissions per UTC day, durable quotas, bounded workers
 and streams, full readable primary evidence and concise management views. It is not yet

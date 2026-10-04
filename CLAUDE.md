@@ -4,6 +4,16 @@
 
 Read `README.md` and `docs/PROJECT_STATUS.md`, then verify `git status`, the current branch, and the latest commit. Do not rely on an earlier chat as the source of truth.
 
+For continuation after 4 October 2026, first read
+`docs/handover/20261004_cpf-mai-full-handover.md`. It records the active worktree,
+stacked branches, approved decisions, current evidence and the remaining gates.
+The first local mAI full assessment failed grounding validation; the authorized
+single assessment is consumed. Continue provider-free diagnosis before requesting
+a new model-backed acceptance. No new live run is authorized by this handover.
+Read the current shared mAI/Posit guides at the paths in the handover before
+changing authentication or hosting. Historical deployment sections below are
+dated evidence, not a claim that the candidate has been deployed.
+
 ## Project goal
 
 Build an advisory, evidence-linked FCV review prototype for CPF and CEN packages. It supports expert judgment and practical options; it must not make policy, compliance, eligibility, endorsement, or clearance determinations.

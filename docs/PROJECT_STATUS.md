@@ -1,5 +1,28 @@
 # Project status
 
+Continuation reference: [full 4 October handover](handover/20261004_cpf-mai-full-handover.md).
+Prepared on `docs/mai-session-handover`, based on validation-record commit
+`c3f9b64`; application code remains `05772b7`. Read it before resuming repair,
+model testing or hosting work. Shared setup guides have been reconciled with the
+live mAI tests and the newer verified internal Posit account setup.
+
+## 2026-10-04 Local mAI full assessment withheld
+
+One authorized Guinea CPF/RRA assessment on application `05772b7` reached draft
+validation and bounded repair through mAI Desktop DEV. It failed with six residual
+grounding issues: unsupported CPF responses, unknown assessment evidence and
+target excerpt mismatches. No findings or exports were released; no assistant or
+second assessment was called. Institutional research supplied zero accepted
+sources, so the run used the document-led fallback. Connectivity works, but full
+local review acceptance and production readiness remain held.
+
+The exact browser runner first passed 11 synthetic checks, including assistant,
+refresh and downloads, with no browser errors; cleanup was slow but exited 0.
+The real runner exited 1 after about 367 seconds. Safe diagnostics and screenshots
+are saved locally. See [the acceptance record](validation/2026-10-04-mai-local-assessment.md).
+Next work is provider-free reproduction of grounding failures and retrieval
+coverage verification, before authorizing another model-backed assessment.
+
 ## 2026-10-04 Local mAI Desktop integration
 
 The opt-in development adapter uses Sonnet 4.6 through mAI Desktop DEV, with

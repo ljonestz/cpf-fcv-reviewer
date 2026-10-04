@@ -1,5 +1,30 @@
 # Production readiness
 
+## 2026-10-04 Local mAI acceptance and hosting gates
+
+**Production readiness remains unachieved.** Local Desktop authentication and
+Sonnet 4.6 generation work, but one Guinea CPF/RRA assessment failed after bounded
+repair with six residual quotation/reference/target-grounding issues. It returned
+no findings, exports or assistant response. Current institutional research yielded
+zero accepted sources and used the document-led fallback. No second run occurred.
+
+Code `05772b7` previously passed 1,796 Linux tests and Python name/import lint.
+The exact runner passed 11 synthetic browser checks before the real run. These
+checks do not establish factual acceptance. See the
+[local assessment record](validation/2026-10-04-mai-local-assessment.md) and
+[full handover](handover/20261004_cpf-mai-full-handover.md).
+
+The draft repair, Posit URL-prefix and local mAI branches remain unmerged and
+undeployed. There is no Posit CPF viewing URL. Both Connect publishing accounts
+are now verified according to the updated shared workstation guide, but Python
+3.11.9 server availability versus the app's >=3.13 requirement, mAI Application/ACN
+approval, durable storage/worker lifecycle, backups and hosted acceptance remain
+open. Desktop credentials must not be used for a hosted service.
+
+Next: provider-free grounding diagnosis and retrieval coverage investigation,
+then a newly authorized bounded assessment. Preserve admission/spending limits
+and the existing validator. Earlier dated sections below retain historical scope.
+
 ## 2026-10-03 Provider-free quality and presentation follow-up verified
 
 Code `9914483` passed **1,769 Linux tests** including Gunicorn and Python name/import
