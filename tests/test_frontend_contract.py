@@ -158,7 +158,7 @@ def test_correction_child_invalidates_parent_assistant_activity():
 def test_country_detection_preflight_and_submit_gating_are_wired():
     javascript = JS.read_text(encoding="utf-8")
 
-    assert 'fetch("/api/detect-country"' in javascript
+    assert 'fetch(appUrl("/api/detect-country")' in javascript
     assert 'document.querySelector("#country")' in javascript
     assert "requires_confirmation" in javascript
     assert "countryCorrection" in javascript
@@ -172,22 +172,22 @@ def test_browser_state_is_session_only_and_reset_clears_assessment_id():
     assert "sessionStorage" in javascript
     assert "localStorage" not in javascript
     assert "indexedDB" not in javascript
-    assert 'sessionStorage.removeItem("cpf_fcv_assessment_id")' in javascript
+    assert 'sessionStorage.removeItem(assessmentStorageKey)' in javascript
 
 
 def test_saved_review_restores_country_title_from_session_state():
     javascript = JS.read_text(encoding="utf-8")
 
-    assert 'sessionStorage.getItem("cpf_fcv_country")' in javascript
+    assert 'sessionStorage.getItem(countryStorageKey)' in javascript
     assert "savedCountry !== assessmentId" in javascript
     submit_handler = javascript.split(
         'form.addEventListener("submit", async (event) => {', 1
     )[1].split("\n});", 1)[0]
-    country_write = 'sessionStorage.setItem("cpf_fcv_country", countryInput.value.trim())'
-    assessment_write = 'sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId)'
+    country_write = 'sessionStorage.setItem(countryStorageKey, countryInput.value.trim())'
+    assessment_write = 'sessionStorage.setItem(assessmentStorageKey, assessmentId)'
     assert country_write in submit_handler
     assert submit_handler.index(country_write) < submit_handler.index(assessment_write)
-    assert 'sessionStorage.removeItem("cpf_fcv_country")' in javascript
+    assert 'sessionStorage.removeItem(countryStorageKey)' in javascript
 
 
 def test_start_new_review_and_result_reset_share_guarded_purge_behavior():
@@ -201,7 +201,7 @@ def test_start_new_review_and_result_reset_share_guarded_purge_behavior():
         "if (resetPending) return",
         "const resetEpoch = ++operationEpoch",
         "activeEventSource?.close()",
-        'sessionStorage.removeItem("cpf_fcv_assessment_id")',
+        'sessionStorage.removeItem(assessmentStorageKey)',
         "form.reset()",
         'method: "DELETE"',
         "The review was cleared from this browser",
@@ -209,7 +209,7 @@ def test_start_new_review_and_result_reset_share_guarded_purge_behavior():
         assert fragment in reset_handler
     assert 'resetReviewButton.addEventListener("click", resetReview)' in javascript
     assert 'returnToIntake.addEventListener("click", resetReview)' in javascript
-    assert javascript.count('sessionStorage.removeItem("cpf_fcv_assessment_id")') == 2
+    assert javascript.count('sessionStorage.removeItem(assessmentStorageKey)') == 2
 
 
 def test_result_rendering_uses_connected_note_sections_and_safe_text_content():
@@ -300,7 +300,7 @@ def test_research_failure_offers_retry_without_reupload():
     retry_handler = javascript.split("function retryResearch()", 1)[1].split(
         "\n}\n", 1
     )[0]
-    assert 'fetch(`/api/reviews/${assessmentId}/retry-research`' in retry_handler
+    assert 'fetch(appUrl(`/api/reviews/${assessmentId}/retry-research`)' in retry_handler
     assert 'method: "POST"' in retry_handler
     assert "watchEvents(retry.event_url, retry.result_url, operation)" in retry_handler
     assert retry_handler.index("showProgress();") > retry_handler.index(

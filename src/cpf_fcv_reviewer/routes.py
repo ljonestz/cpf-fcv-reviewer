@@ -10,7 +10,9 @@ from threading import RLock
 from time import monotonic, sleep
 from uuid import uuid4
 
-from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
+from flask import (
+    Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context, url_for,
+)
 
 from .admission import AdmissionDenied
 from .background import AssessmentQueueFull
@@ -362,12 +364,11 @@ def retry_research(assessment_id):
                 status=503,
             ) from None
 
-    base = f"/api/reviews/{assessment_id}"
     return (
         jsonify(
             assessment_id=assessment_id,
-            event_url=f"{base}/events",
-            result_url=f"{base}/result",
+            event_url=url_for(".review_events", assessment_id=assessment_id),
+            result_url=url_for(".review_result", assessment_id=assessment_id),
         ),
         202,
     )
@@ -446,13 +447,12 @@ def create_review():
             "status": "created",
         }
     assessment_id = _submit_payload(payload)
-    base = f"/api/reviews/{assessment_id}"
 
     return (
         jsonify(
             assessment_id=assessment_id,
-            event_url=f"{base}/events",
-            result_url=f"{base}/result",
+            event_url=url_for(".review_events", assessment_id=assessment_id),
+            result_url=url_for(".review_result", assessment_id=assessment_id),
         ),
         201,
     )
@@ -674,13 +674,12 @@ def add_correction(assessment_id):
     child_payload.pop("assistant_active_owner", None)
 
     child_id = _submit_payload(child_payload)
-    base = f"/api/reviews/{child_id}"
     return (
         jsonify(
             assessment_id=child_id,
             parent_assessment_id=assessment_id,
-            event_url=f"{base}/events",
-            result_url=f"{base}/result",
+            event_url=url_for(".review_events", assessment_id=child_id),
+            result_url=url_for(".review_result", assessment_id=child_id),
         ),
         201,
     )

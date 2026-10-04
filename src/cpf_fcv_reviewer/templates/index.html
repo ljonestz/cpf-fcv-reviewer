@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CPF FCV Reviewer</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
+<body data-app-root="{{ request.script_root }}">
   <header class="site-header">
     <section class="hero" aria-labelledby="hero-title">
       <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
@@ -200,6 +200,6 @@
     </ol>
     <p class="advisory"><strong>Use public or non-sensitive material only.</strong> This tool provides advisory feedback and does not replace formal review or clearance processes.</p>
   </dialog>
-  <script src="/static/app.js"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
