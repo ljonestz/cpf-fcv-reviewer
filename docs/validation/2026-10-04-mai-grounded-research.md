@@ -236,7 +236,9 @@ released; the observed approval-language class was added to that validator. Synt
 regressions failed before both changes. The follow-up batch passed 367 tests; two
 registry tests initially hit Windows temporary-folder permissions and both passed
 when rerun alone in a fresh repository-local temporary directory. Full CI for the
-follow-up is recorded on draft PR 44. These fixes have **not** had another live
+follow-up commit `529807080e01c75d486a0928d2bd33f891c26456` passed **1,881 tests**
+and Python name/import lint ([CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37243473492)).
+These fixes have **not** had another live
 assessment or assistant acceptance, and do not repair the saved narrative.
 
 Do not mask these analytical failures with country-specific substitutions, relax
@@ -253,4 +255,6 @@ and `output/20261005_mai_accepted_word/run03/`. Safe events, original results, W
 files, screenshots, read-only checks and hashes are preserved. The database records
 four daily assessments (one earlier historical mAI attempt plus the three in this
 cycle), and one assistant call. No quota reset, merge, deployment, separate Anthropic
-key configuration or stable FCV Project Screener modification occurred.
+key configuration or stable FCV Project Screener modification occurred. The two
+verified temporary local service processes were stopped after testing; SQLite,
+quotas and all original outputs were preserved.

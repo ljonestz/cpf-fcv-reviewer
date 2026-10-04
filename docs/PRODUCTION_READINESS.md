@@ -10,7 +10,8 @@ coverage. **The app is not production-ready, and Render-equivalent factual quali
 has not been established.** All three full-run permissions are consumed.
 
 UTC date consistency and pre-release mAI assistant policy checks were repaired with
-provider-free regressions after that run. Further live validation requires fresh
+provider-free regressions after that run. Follow-up code `5298070` passed 1,881 CI
+tests and Python name/import lint. Further live validation requires fresh
 authorization. Preserve the original outputs as failure evidence; do not present them
 as cleared country assessments. See the [current validation record](validation/2026-10-04-mai-grounded-research.md).
 No merge or deployment; the Application/ACN, Python/Posit, durable hosted storage and

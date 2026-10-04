@@ -14,7 +14,8 @@ the accepted report misreads the private-capital target, confuses beneficiary un
 and overstates some contextual evidence. The assistant crossed the advisory boundary.
 Provider-free follow-up fixes the UTC/local research-date mismatch and blocks the
 observed policy-determination class before mAI assistant text is released. Those
-changes have no new live-model acceptance. Do not launch a fourth full assessment.
+changes at `5298070` passed 1,881 CI tests and Python name/import lint, but have no
+new live-model acceptance. Do not launch a fourth full assessment.
 
 See the [outcomes, Render comparison and remaining defects](validation/2026-10-04-mai-grounded-research.md).
 Draft PR 44 remains stacked on PR 43, unmerged and undeployed. Hosted mAI Application/ACN,
