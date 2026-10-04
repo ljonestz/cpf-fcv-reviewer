@@ -925,6 +925,7 @@ def build_runtime_services(
             )
 
     mai_desktop = config.get("MODEL_PROVIDER") == "mai_desktop"
+    institutional_research = mai_desktop and config.get("RESEARCH_PROVIDER", "institutional") == "institutional"
     controller_type = ResearchController
     if mai_desktop:
         from .mai_desktop import (
@@ -941,7 +942,8 @@ def build_runtime_services(
                 model_gateway = mai_gateway
             if follow_on_gateway is None:
                 follow_on_gateway = mai_gateway
-        controller_type = InstitutionalResearchController
+        if institutional_research:
+            controller_type = InstitutionalResearchController
     if model_gateway is None:
         model_gateway = AnthropicModelGateway(
             config["ANTHROPIC_API_KEY"],
@@ -966,17 +968,17 @@ def build_runtime_services(
                 ),
                 reliefweb_app_name=config.get("RELIEFWEB_APP_NAME", ""),
             )
-            if mai_desktop:
+            if institutional_research:
                 research_gateway = NoBroadWebSearch()
             else:
                 research_gateway = AnthropicPublicResearchGateway(
                     config["ANTHROPIC_API_KEY"],
-                    config["ANTHROPIC_MODEL_ID"],
+                    config.get("RESEARCH_MODEL_ID", config["ANTHROPIC_MODEL_ID"]),
                     timeout_seconds=config["RESEARCH_ATTEMPT_TIMEOUT_SECONDS"],
                 )
         research_controller = controller_type(
             research_gateway,
-            max_attempts=1 if mai_desktop else config["RESEARCH_MAX_ATTEMPTS"],
+            max_attempts=1 if institutional_research else config["RESEARCH_MAX_ATTEMPTS"],
             minimum_claims=config["RESEARCH_MINIMUM_CLAIMS"],
             minimum_publishers=config["RESEARCH_MINIMUM_PUBLISHERS"],
             total_budget_seconds=config["RESEARCH_TOTAL_BUDGET_SECONDS"],
@@ -1528,6 +1530,14 @@ def build_runtime_services(
                         else ""
                     ),
                 )
+                if mai_desktop:
+                    # Allowlist public inputs before search, retries and recovery.
+                    # Keep uploaded evidence and review notes inside the mAI path.
+                    request = ResearchRequest(
+                        country=payload["country"],
+                        review_date=review_date,
+                        mode=ResearchMode.HOLISTIC,
+                    )
                 context["research_result"] = research_controller.run(
                     request,
                     context["_emit"],

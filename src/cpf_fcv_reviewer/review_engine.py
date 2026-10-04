@@ -832,7 +832,7 @@ class ReviewEngine:
         )
         source_grounding_repair = bool(issue_codes & {
             "target_locator_mismatch", "unsupported_numeric_recommendation",
-            "unknown_assessment_evidence", "unsupported_cpf_response",
+            "unknown_assessment_evidence", "unknown_evidence", "unsupported_cpf_response",
         })
         current_support = [
             {

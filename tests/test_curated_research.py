@@ -809,6 +809,51 @@ def rss_response(value: str) -> StubResponse:
     )
 
 
+@pytest.mark.parametrize("summary,expected", [
+    ("An expert examines the general's bid to remain in office.", True),
+    ("Political violence displaced families.", True),
+    ("Political violence displaced families in Guinea-Bissau.", False),
+    ("An expert examines the leadership in Somalia.", False),
+])
+def test_crisis_group_teaser_does_not_hide_grounded_country_headline(summary, expected):
+    title = "Guinea election delays threaten the political transition"
+    payload = f"""<rss><channel><item>
+      <title>{title}</title>
+      <link>https://www.crisisgroup.org/africa/guinea/synthetic-report</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description>{summary}</description>
+    </item></channel></rss>"""
+    gateway = CuratedResearchGateway(BoundedInstitutionalClient(
+        client=StubClient(lambda *_args: rss_response(payload)),
+    ))
+    claims = gateway.search(request("Guinea"))
+    assert bool(claims) is expected
+    if expected:
+        assert len(claims) == 1
+        assert claims[0].supporting_quote in (summary, title)
+        assert claims[0].text == claims[0].supporting_quote
+        from cpf_fcv_reviewer.mai_desktop import InstitutionalResearchController, NoBroadWebSearch
+
+        result = InstitutionalResearchController(
+            NoBroadWebSearch(), recovery_gateway=gateway, max_attempts=1,
+        ).run(request("Guinea"), lambda *_: None, allow_document_led=True)
+        assert result.claims == claims
+        assert result.tier.value == "reduced"
+
+
+def test_crisis_group_generic_title_and_teaser_still_rejected():
+    payload = """<rss><channel><item>
+      <title>Guinea elections</title>
+      <link>https://www.crisisgroup.org/africa/guinea/synthetic-report</link>
+      <pubDate>Friday, October 3, 2025 - 12:26</pubDate>
+      <description>Read our latest analysis.</description>
+    </item></channel></rss>"""
+    adapter = CrisisGroupAdapter(BoundedInstitutionalClient(
+        client=StubClient(lambda *_args: rss_response(payload)),
+    ))
+    assert adapter.search(request("Guinea")) == ()
+
+
 def test_crisis_group_country_feed_returns_recent_dated_fcv_claim():
     payload = """<?xml version="1.0" encoding="utf-8"?>
     <rss version="2.0"><channel><item>

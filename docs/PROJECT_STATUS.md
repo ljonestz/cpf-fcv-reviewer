@@ -1,5 +1,42 @@
 # Project status
 
+## 2026-10-04 Local external-research privacy follow-up
+
+The owner approved separating local Anthropic credentials and excluding document
+content from external research. In local mAI mode, research now receives only the
+selected country, application review date and fixed public-country research mode,
+including retries and institutional recovery. Full CPF/RRA evidence and review
+notes remain available to mAI. Direct-Anthropic public prototype behavior is unchanged.
+
+Starting from clean commit `50a8651`, six new cases failed before the boundary and
+then passed. All 14 hybrid tests pass; the broader batch passed 380 checks and two
+registry checks passed after their temporary-directory setup was corrected.
+The change remains on the existing draft PR 43 branch. No key was configured, model
+call made, service restarted, merge performed or deployment initiated. See the
+[privacy boundary and secure local setup](validation/2026-10-04-local-research-privacy.md).
+Live research breadth, Guinea grounding acceptance and production readiness remain open.
+
+## 2026-10-04 Provider-free diagnosis and optional broader research
+
+Repair code `723645a` reproduces the six grounding failure categories synthetically,
+restores source context for unknown priority references, and corrects Crisis Group
+headline selection plus compound-country rejection. The exact historical draft
+failure remains unestablished. The corrected institutional probe retains one dated
+observation and properly reports reduced coverage.
+
+At the owner's request, code `3514826` adds explicit Anthropic public-web research
+alongside mAI Sonnet 4.6 generation, reusing the Render pipeline. It requires a
+separate API key, keeps research/model settings separate, and discloses API costs.
+The running mAI service was not switched; no model-backed research call occurred.
+Default institutional research, local-only guards, quotas and validation remain.
+
+Local verification: 504 grounding/research checks, 301 hybrid/config/runtime/smoke
+checks, and 11 synthetic browser checks passed. See the
+[diagnosis, configuration and limitations](validation/2026-10-04-grounding-and-hybrid-research.md).
+Branch `fix/mai-grounding-diagnostics-20261004` is stacked on handover `0c757ba`;
+full Linux CI is tracked on its draft PR. No merge or deployment. Fresh model-backed
+acceptance, factual reliability, research breadth and hosting gates remain open.
+
 Continuation reference: [full 4 October handover](handover/20261004_cpf-mai-full-handover.md).
 Prepared on `docs/mai-session-handover`, based on validation-record commit
 `c3f9b64`; application code remains `05772b7`. Read it before resuming repair,

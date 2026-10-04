@@ -1,5 +1,17 @@
 # CPF FCV Reviewer
 
+**Local research privacy follow-up (4 October):** mAI-mode external research now
+receives country/date inputs and fixed public research instructions, excluding
+uploaded document content and review notes. See the
+[boundary and local credential setup](docs/validation/2026-10-04-local-research-privacy.md).
+This candidate has not been activated in the running app.
+
+**Latest provider-free follow-up (4 October):** code `3514826` offers explicit
+Anthropic public-web research alongside local mAI generation. Grounding diagnostics
+and institutional-source repairs are verified with synthetic tests; no fresh live
+assessment was run and production readiness remains held. See the
+[diagnosis and hybrid research setup](docs/validation/2026-10-04-grounding-and-hybrid-research.md).
+
 **Current continuation point (4 October 2026):** read the
 [full session handover](docs/handover/20261004_cpf-mai-full-handover.md).
 Local mAI Desktop connectivity works, but the first full Guinea assessment failed

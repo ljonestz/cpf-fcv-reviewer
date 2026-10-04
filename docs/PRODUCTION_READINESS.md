@@ -1,5 +1,17 @@
 # Production readiness
 
+## 2026-10-04 Provider-free follow-up and research option
+
+Grounding/research repairs and an explicit Anthropic-research/mAI-generation option
+are implemented in candidate `3514826`. Local checks and synthetic browser acceptance
+passed; no live research/model call, activation, merge or deployment occurred.
+The six-error synthetic control passes only when given actual source corrections;
+the rejected Guinea draft's precise cause and real-model reliability remain open.
+The fixed institutional feed provides one dated source, still reduced coverage.
+Broader research does not itself resolve the document-grounding failures.
+See the [follow-up record](validation/2026-10-04-grounding-and-hybrid-research.md).
+Production readiness and the hosting/factual acceptance gates below remain held.
+
 ## 2026-10-04 Local mAI acceptance and hosting gates
 
 **Production readiness remains unachieved.** Local Desktop authentication and
