@@ -57,6 +57,15 @@ lines changed. Existing title/registry confidence checks and manual entry remain
   unchanged E501/I001 findings also reproduced on origin/main; checking them with
   only those exclusions passes. `git diff --check` passes.
 
+Initial candidate Linux CI stopped during collection because the new synthetic
+PDF test used locally installed ReportLab, which is not a repository dependency.
+The test now reuses the existing pypdf-only `make_pdf` fixture helper. Application
+source is unchanged and no dependency was added; final focused checks and Linux
+CI are required after this fixture correction. The recorded local full-suite pass
+preceded that test-only correction.
+Final local focused checks after correction: **92 passed**, including the module
+that imports the route-test helpers; the final route-test Ruff check also passed.
+
 Local screenshots, helper scripts, synthetic uploads and temporary test files
 remain ignored under `output/playwright/`. No raw documents, model output,
 credentials, conversations or review identifiers are committed.

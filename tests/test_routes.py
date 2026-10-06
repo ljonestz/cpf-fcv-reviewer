@@ -2,7 +2,6 @@ from io import BytesIO
 
 import pytest
 from pypdf import PdfReader, PdfWriter
-from reportlab.pdfgen.canvas import Canvas
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.country_detection import (
@@ -29,6 +28,7 @@ from cpf_fcv_reviewer.research_controller import (
     ResearchTimeout,
 )
 from cpf_fcv_reviewer.routes import run_assessment
+from tests.test_extraction import make_pdf
 
 
 def create_review(client):
@@ -361,15 +361,12 @@ def test_detect_country_rejects_detector_oversized_upload():
 
 def test_detect_country_accepts_readable_pdf_above_old_two_mib_limit():
     assert COUNTRY_DETECTION_MAX_UPLOAD_BYTES == 10 * 1024 * 1024
-    cover = BytesIO()
-    canvas = Canvas(cover)
-    canvas.drawString(40, 750, "Country Partnership Framework for Somalia for FY27-FY32")
-    canvas.drawString(
-        40, 730, "Synthetic readable CPF cover content for country detection testing."
-    )
-    canvas.save()
+    cover = make_pdf([
+        "Country Partnership Framework for Somalia for FY27-FY32\n"
+        "Synthetic readable CPF cover content for country detection testing."
+    ])
     writer = PdfWriter()
-    writer.add_page(PdfReader(BytesIO(cover.getvalue())).pages[0])
+    writer.add_page(PdfReader(BytesIO(cover)).pages[0])
     # Increase upload bytes without increasing extracted text or page streams.
     writer.add_metadata({"/SyntheticPadding": "x" * (3 * 1024 * 1024)})
     upload = BytesIO()
