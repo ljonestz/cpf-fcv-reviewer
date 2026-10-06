@@ -3121,6 +3121,75 @@ def test_runtime_does_not_turn_uploaded_rra_into_current_context(monkeypatch):
     assert context["evidence_pack"].metadata.current_evidence_tier is CurrentEvidenceTier.DOCUMENT_LED
 
 
+@pytest.mark.parametrize("scenario", ("caveat", "row_repair", "uncorrected_claim"))
+def test_early_drafting_limited_mode_caveat_and_row_repair(scenario):
+    calls = []
+    events = []
+
+    class Gateway:
+        def generate(self, *, prompt_name, payload, output_type):
+            calls.append(prompt_name)
+            if prompt_name == "review":
+                draft = _valid_review_draft(
+                    output_type, payload,
+                    overall_read=(
+                        "RRA alignment has not been assessed."
+                        if scenario == "caveat" else "The draft needs a clearer delivery chain."
+                    ),
+                    alignment_readout="The review considers the available FCV evidence.",
+                    revision_summary=(), priority_areas=(), institutional_referral_ids=(),
+                    limitations=(), coverage_note="The synthetic CPF was reviewed.",
+                )
+                if scenario != "caveat":
+                    rows = list(draft.fcv_strategy_assessments)
+                    rows[0] = rows[0].model_copy(update={
+                        "assessment": "The CPF shows strong RRA alignment.",
+                    })
+                    draft = draft.model_copy(update={"fcv_strategy_assessments": tuple(rows)})
+                return draft
+            assert prompt_name == "repair"
+            draft = output_type.model_validate(payload["draft"])
+            if scenario == "row_repair":
+                rows = list(draft.fcv_strategy_assessments)
+                rows[0] = rows[0].model_copy(update={
+                    "assessment": "RRA alignment was not assessed.",
+                })
+                draft = draft.model_copy(update={"fcv_strategy_assessments": tuple(rows)})
+            return draft
+
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=Gateway(), research_controller=_InjectedResearchController(),
+        follow_on_gateway=object(),
+    )
+    context = {
+        "assessment_id": "synthetic-limited-review",
+        "payload": {
+            "country": "Niger", "review_stage": "early_drafting", "detail_level": "standard",
+            "cpf": {"name": "synthetic-cpf.txt", "bytes": b"Synthetic CPF delivery plan. " * 20},
+            "package_documents": [], "context_documents": [], "review_focus": "", "corrections": [],
+        },
+    }
+    run = services["review_orchestrator"].run
+
+    def emit(kind, data):
+        events.append((kind, data))
+
+    if scenario == "uncorrected_claim":
+        with pytest.raises(ValueError, match="only repair"):
+            run(context, emit)
+        assert ("repair_failed", {"issue_count": 1, "codes": ["limited_mode_overclaim"]}) in events
+        assert events[-1] == ("run_failed", {"error": "review_failed"})
+        assert calls == ["review", "repair"]
+    else:
+        completed = run(context, emit)
+        assert completed["result"].metadata.diagnostic_mode is DiagnosticMode.LIMITED_FRAMING
+        repair_count = int(scenario == "row_repair")
+        assert events[-1] == ("run_complete", {"repair_count": repair_count})
+        assert calls == (["review", "repair"] if repair_count else ["review"])
+        assert not any(kind in {"repair_failed", "run_failed"} for kind, _ in events)
+
+
 def test_runtime_preserves_research_limitation_once_through_repair(monkeypatch):
     authoritative_limitation = (
         "  Independent current-country\n research   was unavailable.  "

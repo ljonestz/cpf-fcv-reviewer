@@ -1,5 +1,17 @@
 # Project status
 
+## 2026-10-06 Candidate: limited-mode review hotfix
+
+The Niger early-drafting stop is reproduced in the released main code and the newer
+unmerged development stack. A focused hotfix on `fix/limited-mode-review-20261006`
+accepts explicit abstentions and preserves corrected row wording through bounded
+repair, while retaining evidence/identity protection and blocking genuine claims.
+No additional provider calls or retries. Local full suite reached 1,653 passed with
+one Windows Gunicorn skip; final focused scenarios passed 51 tests. Independent
+review refinements and the synthetic Edge result/export flow are checked. Linux CI,
+deployment and one real Niger validation remain pending. See the
+[validation record](validation/2026-10-06-limited-mode-review-fix.md).
+
 ## 2026-09-10 Deployed: grounded recommendations
 
 PR 36 is merged; **992c35a** is live. Render and TLS-verified health confirm the

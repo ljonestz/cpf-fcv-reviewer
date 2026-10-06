@@ -38,9 +38,25 @@ LIMITED_MODE_ALIGNMENT_PATTERN = re.compile(
 )
 LIMITED_MODE_ABSTENTION_PATTERN = re.compile(
     rf"(?:{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}\s+"
-    r"(?:(?:was|is)\s+not|cannot|could\s+not)\s+(?:be\s+)?"
-    r"(?:assessed|evaluated|rated)\b|(?:does|did)\s+not\s+"
-    rf"(?:assess|evaluate|rate)\s+{LIMITED_MODE_ALIGNMENT_PATTERN.pattern})",
+    r"(?:(?:(?:was|is)\s+not|cannot|could\s+not)\s+(?:be\s+)?"
+    r"(?:assessed|evaluated|rated)\b|(?:has|have)\s+not\s+been\s+"
+    r"(?:assessed|evaluated|rated)\b|(?:is|was)\s+not\s+assessable\b|"
+    r"(?:is|was)\s+outside\s+(?:the\s+)?scope\b)|"
+    r"(?:(?:does|did)\s+not|cannot|could\s+not)\s+"
+    rf"(?:assess|evaluate|rate)\s+{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}|"
+    rf"(?:has|have)\s+not\s+(?:assessed|evaluated|rated)\s+"
+    rf"{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}|"
+    rf"no\s+{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}\s+"
+    r"(?:assessment|evaluation|rating)\s+(?:is|was)\s+possible\b|"
+    rf"no\s+(?:assessment|evaluation|rating)\s+of\s+{LIMITED_MODE_ALIGNMENT_PATTERN.pattern}"
+    r"\s+(?:is|was)\s+possible\b)",
+    re.IGNORECASE,
+)
+LIMITED_MODE_ANAPHORIC_CLAIM_PATTERN = re.compile(
+    r"\b(?:it|this\s+alignment|that\s+alignment)\s+"
+    r"(?:is|was|appears|seems|remains)\s+"
+    r"(?:(?:very|largely|clearly|mostly)\s+)?"
+    r"(?:strong|weak|partial|full|clear|high|low|good|poor)\b(?=\s*(?:[,;:]|$))",
     re.IGNORECASE,
 )
 FINALIZATION_OVERREACH_TERMS = (
@@ -383,6 +399,20 @@ def _append_diagnostic_date_issue(issues: list[ValidationIssue], result: ReviewR
         ))
 
 
+def has_limited_mode_overclaim(text: str) -> bool:
+    """Ignore explicit abstentions, while retaining separate alignment claims."""
+    for abstention in LIMITED_MODE_ABSTENTION_PATTERN.finditer(text):
+        # Do not let an abstention hide a rating in the immediately next sentence.
+        # Newlines separate fields in the validator's combined narrative.
+        remainder = text[abstention.end():].split("\n", maxsplit=1)[0]
+        sentences = re.split(r"[.!?]", remainder, maxsplit=2)[:2]
+        if any(LIMITED_MODE_ANAPHORIC_CLAIM_PATTERN.search(part) for part in sentences):
+            return True
+    return bool(LIMITED_MODE_ALIGNMENT_PATTERN.search(
+        LIMITED_MODE_ABSTENTION_PATTERN.sub("", text)
+    ))
+
+
 def validate_review(
     result: ReviewResult,
     *,
@@ -408,8 +438,7 @@ def validate_review(
     }
 
     if result.metadata.diagnostic_mode == DiagnosticMode.LIMITED_FRAMING:
-        text_without_abstentions = LIMITED_MODE_ABSTENTION_PATTERN.sub("", text)
-        if LIMITED_MODE_ALIGNMENT_PATTERN.search(text_without_abstentions):
+        if has_limited_mode_overclaim(text):
             issues.append(
                 ValidationIssue(
                     "limited_mode_overclaim",
