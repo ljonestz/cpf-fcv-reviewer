@@ -1,5 +1,38 @@
 # Project status
 
+## 2026-10-06 Full Niger CPF plus RRA retest: completed
+
+One explicitly authorized provider-backed retest on live **99cba08** completed at
+**early drafting / in-depth**, using the Niger CPF and June 2022 RRA. Result metadata
+confirmed **RRA alignment**, all **81 RRA pages** extracted and thematic synthesis
+complete. One bounded repair resolved `unknown_assessment_evidence`; neither prior
+failure code appeared. This run did not directly trigger unknown-referral removal;
+the synthetic regressions provide that targeted evidence.
+
+Summary/detail views, assistant response and refresh restoration, mobile overflow
+checks and both Word downloads passed. Eight screenshots and two valid Word files
+remain local and ignored. Current-context evidence was **reduced**, with undated
+sources, so expert acceptance remains separate. Health independently confirms the
+deployed commit; a pre-existing hardcoded `0.1.0` result version label was documented
+as an observability follow-up. No additional assessment, application change or ITS
+message. See the [full retest record](validation/2026-10-06-niger-rra-full-retest.md).
+
+## 2026-10-06 Deployed: registry-controlled referral repair
+
+PR [48](https://github.com/ljonestz/cpf-fcv-reviewer/pull/48) is merged.
+Application **99cba08** is live on Render; TLS-verified health/homepage/JavaScript
+checks confirm the exact commit. Candidate Linux CI passed **1,684 tests** including
+real Gunicorn, and merged-release CI also passed. The shared correction preserves
+approved original referrals, removes unknown IDs during the named repair, and verifies
+the exact parsed registry bytes. The final local suite passed 1,683 tests with one
+Windows Gunicorn skip; independent re-review found no remaining focused issue.
+
+The earlier Niger CPF plus RRA trial remains a failed quality case, distinct from
+the successful limited-mode Niger review. No second paid CPF plus RRA trial has been
+submitted; explicit retest authorization is pending. Use of the RRA was authorized
+separately and is not being requested again. Public-pilot and expert-review limits
+remain. See the [release record](validation/2026-10-06-registry-referral-repair.md).
+
 ## 2026-10-06 Candidate: registry-controlled referral repair
 
 The owner approved a shared correction for the separate CPF plus RRA referral
