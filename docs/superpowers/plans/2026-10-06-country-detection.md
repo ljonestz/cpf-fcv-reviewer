@@ -26,10 +26,10 @@ backend admission limits synchronized. Preserve all extraction and confidence ga
   route checks against all six original CPF files. Keep outputs ignored.
 - [x] Review the diff independently, resolve material findings, lint changed Python
   and check whitespace. Commit/push the feature and create a focused PR using `gh`.
-- [ ] Require Linux CI before merging; allow normal Render auto-deploy and verify
+- [x] Require Linux CI before merging; allow normal Render auto-deploy and verify
   its exact commit, health and detector-only synthetic title/size checks. Test the
   browser intake and manual fallback without creating a real assessment.
-- [ ] Record sanitized validation and the actual release; push documentation with
+- [x] Record sanitized validation and the actual release; push documentation with
   `[skip render]`. Do not claim every country/title layout is automatically detected.
 
 The user already approved this design and execution. Review is read-only; source

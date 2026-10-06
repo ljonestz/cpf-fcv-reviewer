@@ -1,5 +1,21 @@
 # Project status
 
+## 2026-10-06 Deployed: country detection repair
+
+PR [50](https://github.com/ljonestz/cpf-fcv-reviewer/pull/50) is merged to `main`;
+**2ef0166** is live on Render, confirmed by the deployment and TLS-verified health.
+The fix adds the reproduced Ethiopia/Guinea title variants and raises the automatic
+detector's frontend/backend upload allowance from 2 to **10 MiB**. All six original
+local CPF files now detect correctly. Canonical synthetic CPF titles passed for
+all 196 registry country names; this does not establish every real PDF layout.
+
+Final candidate Linux CI passed **1,687 tests**, and merged-release CI passed.
+Live detector API and visible Edge checks passed for four synthetic inputs,
+including a PDF above the former limit; oversize rejection and manual entry also
+passed. No assessment or model call was made. Scanned, unusual or ambiguous titles
+and files beyond the limits can still require manual entry. See the completed
+[validation record](validation/2026-10-06-country-detection-repair.md).
+
 ## 2026-10-06 Candidate: country detection repair
 
 The approved preflight repair adds the reproduced Ethiopia/Guinea title aliases
