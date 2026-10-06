@@ -1,5 +1,16 @@
 # Production readiness
 
+## Limited-mode hotfix deployed - 2026-10-06
+
+Application **c525c9e** (PR 46) is live and health/static verified. Candidate and
+merged-release Linux CI each passed **1,670 tests**. One Niger CPF early-drafting
+review without an uploaded RRA completed in limited framing after one bounded
+repair; output, assistant restoration and both Word exports worked. Current-context
+evidence was reduced. Supervised expert-use and volatile-storage limits remain.
+The strict runner recorded a final 404 console message; read-only restoration
+passed with no JavaScript errors. See the
+[hotfix record](validation/2026-10-06-limited-mode-review-fix.md).
+
 ## Grounding release deployed - 2026-09-10
 
 Application **992c35a** (PR 36) is live with source-grounding and temporal-qualification
