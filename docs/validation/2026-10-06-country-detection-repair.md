@@ -77,3 +77,35 @@ detector-only synthetic/browser probes are subsequent acceptance steps. Scanned
 documents, unusual or ambiguous titles and files beyond the limits can still
 require manual country entry. Normal registry-supported CPF/CEN titles remain
 deterministic; the increased upload allowance benefits every country.
+
+## Deployment and live verification
+
+PR [50](https://github.com/ljonestz/cpf-fcv-reviewer/pull/50) merged the repair to
+`main` as **2ef01662c490810f4d346551a4555b6384222ece**. Final candidate Linux CI
+[37497710576](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37497710576)
+passed **1,687 tests**, including real Gunicorn, after the fixture correction.
+Merged-release CI
+[37498076350](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37498076350)
+also passed.
+
+Render's normal auto-deploy became live at **2026-10-06 16:45:29 UTC** on that exact
+commit. TLS-verified `/health` returned HTTP 200 and the complete release hash;
+the served JavaScript contains the matching 10 MiB limit. Detector-only live API
+probes returned HTTP 200 and correct countries without confirmation for Niger,
+Ethiopia, Guinea and a valid synthetic Somalia PDF above 3 MiB. A 10 MiB + 1 byte
+synthetic input was rejected with HTTP 400.
+
+The dedicated visible Edge session repeated those four synthetic detections on
+the deployed intake. Above 10 MiB, the browser skipped the detector request,
+displayed the new limit and accepted manual entry, enabling the review button.
+Result: `LIVE_EDGE_COUNTRY_QA_PASS`, four detector POSTs, zero assessment POSTs and
+zero page errors. Both live screenshots were inspected. The helper's initial
+Playwright request-context health probe encountered the local certificate chain;
+using browser-native fetch with normal certificate validation completed the check.
+No TLS validation was disabled and no application change was needed.
+
+Live helper scripts, synthetic uploads and screenshots remain ignored under
+`output/playwright/`. No real documents were sent to Render and no model/provider
+calls were made. The owned local smoke server was stopped; Edge remains open on a
+fresh live intake. This closes the pending detector release checks above; it does
+not add a full assessment quality run or guarantee unusual/scanned title layouts.
