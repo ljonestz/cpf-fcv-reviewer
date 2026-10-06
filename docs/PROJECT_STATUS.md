@@ -1,5 +1,22 @@
 # Project status
 
+## 2026-10-06 Full Niger CPF plus RRA retest: completed
+
+One explicitly authorized provider-backed retest on live **99cba08** completed at
+**early drafting / in-depth**, using the Niger CPF and June 2022 RRA. Result metadata
+confirmed **RRA alignment**, all **81 RRA pages** extracted and thematic synthesis
+complete. One bounded repair resolved `unknown_assessment_evidence`; neither prior
+failure code appeared. This run did not directly trigger unknown-referral removal;
+the synthetic regressions provide that targeted evidence.
+
+Summary/detail views, assistant response and refresh restoration, mobile overflow
+checks and both Word downloads passed. Eight screenshots and two valid Word files
+remain local and ignored. Current-context evidence was **reduced**, with undated
+sources, so expert acceptance remains separate. Health independently confirms the
+deployed commit; a pre-existing hardcoded `0.1.0` result version label was documented
+as an observability follow-up. No additional assessment, application change or ITS
+message. See the [full retest record](validation/2026-10-06-niger-rra-full-retest.md).
+
 ## 2026-10-06 Deployed: registry-controlled referral repair
 
 PR [48](https://github.com/ljonestz/cpf-fcv-reviewer/pull/48) is merged.

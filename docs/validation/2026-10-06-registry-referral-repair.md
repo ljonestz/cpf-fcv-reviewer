@@ -70,3 +70,13 @@ in-depth Niger CPF plus RRA trial under the post-failure validation rule; no new
 assessment has been submitted while that response is pending. Document-use approval
 persists. This deployment confirmation does not establish that the real full RRA
 assessment now completes or that its content is accepted.
+
+## Subsequent authorized full retest
+
+The owner subsequently authorized one more full early-drafting/in-depth Niger CPF
+plus RRA assessment. It completed on `99cba08`, with all 81 RRA pages extracted and
+RRA alignment retained. Browser results, assistant restoration, mobile layout and
+both real Word exports passed. One evidence-reference repair was needed; the earlier
+referral failure did not appear. Current-context evidence was reduced and expert
+content acceptance remains separate. See the
+[full retest record](2026-10-06-niger-rra-full-retest.md) for scope, checks and limits.
