@@ -1,5 +1,21 @@
 # Project status
 
+## 2026-10-06 Deployed: registry-controlled referral repair
+
+PR [48](https://github.com/ljonestz/cpf-fcv-reviewer/pull/48) is merged.
+Application **99cba08** is live on Render; TLS-verified health/homepage/JavaScript
+checks confirm the exact commit. Candidate Linux CI passed **1,684 tests** including
+real Gunicorn, and merged-release CI also passed. The shared correction preserves
+approved original referrals, removes unknown IDs during the named repair, and verifies
+the exact parsed registry bytes. The final local suite passed 1,683 tests with one
+Windows Gunicorn skip; independent re-review found no remaining focused issue.
+
+The earlier Niger CPF plus RRA trial remains a failed quality case, distinct from
+the successful limited-mode Niger review. No second paid CPF plus RRA trial has been
+submitted; explicit retest authorization is pending. Use of the RRA was authorized
+separately and is not being requested again. Public-pilot and expert-review limits
+remain. See the [release record](validation/2026-10-06-registry-referral-repair.md).
+
 ## 2026-10-06 Candidate: registry-controlled referral repair
 
 The owner approved a shared correction for the separate CPF plus RRA referral

@@ -53,3 +53,20 @@ provider-backed Niger CPF plus RRA run are separate acceptance steps. No success
 full Niger RRA assessment or real Word export is claimed by these synthetic checks.
 A further paid trial requires explicit authorization under the repository validation
 ladder. Public-pilot, expert-review and volatile-storage limitations remain.
+
+## Deployment confirmation
+
+PR [48](https://github.com/ljonestz/cpf-fcv-reviewer/pull/48) merged as
+`99cba0835421dd845c10725475c1a2eb23846436`. Candidate Linux CI
+[37453223650](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37453223650)
+passed 1,684 tests including real Gunicorn. Merged-release CI
+[37453467306](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37453467306)
+also completed successfully.
+
+Render deployment `dep-db2d9b7lk1mc738pspkg` is live, finished at 11:01:20 UTC.
+TLS-verified `/health` returned HTTP 200 and the exact release, and homepage/JavaScript
+checks returned HTTP 200. The owner was asked to authorize one more early-drafting/
+in-depth Niger CPF plus RRA trial under the post-failure validation rule; no new
+assessment has been submitted while that response is pending. Document-use approval
+persists. This deployment confirmation does not establish that the real full RRA
+assessment now completes or that its content is accepted.

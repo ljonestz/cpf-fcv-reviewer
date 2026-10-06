@@ -49,8 +49,8 @@ if "unknown_institutional_referral" in issue_codes and registry_entry_ids is not
 - [x] Run 38 smoke tests and existing synthetic browser checks for the candidate.
 - [x] Get independent focused review of the diff before merge.
 - [x] Update validation/status with exact checks, safe failure history and limits.
-- [ ] Commit/push the feature branch, create a substantive PR, and confirm Linux CI.
-- [ ] Follow existing deployment authorization; verify the exact live release before
+- [x] Commit/push the feature branch, create a substantive PR, and confirm Linux CI.
+- [x] Follow existing deployment authorization; verify the exact live release before
   requesting approval for another paid CPF plus RRA trial.
 
 Review found and reproduced a registry hash/read race. Pass the existing
