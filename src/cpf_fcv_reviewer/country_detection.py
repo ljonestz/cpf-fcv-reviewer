@@ -7,7 +7,7 @@ from typing import Literal
 
 from .extraction import ExtractedDocument
 
-COUNTRY_DETECTION_MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+COUNTRY_DETECTION_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 COUNTRY_DETECTION_MAX_PDF_PAGES = 16
 COUNTRY_DETECTION_MAX_SEGMENTS = 256
 COUNTRY_DETECTION_MAX_CHARACTERS = 100_000
@@ -86,7 +86,7 @@ COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "Eritrea": (),
     "Estonia": (),
     "Eswatini": ("Swaziland",),
-    "Ethiopia": (),
+    "Ethiopia": ("Federal Democratic Republic of Ethiopia",),
     "Fiji": (),
     "Finland": (),
     "France": (),
@@ -98,7 +98,7 @@ COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
     "Greece": (),
     "Grenada": (),
     "Guatemala": (),
-    "Guinea": (),
+    "Guinea": ("Republique of Guinea",),
     "Guinea-Bissau": (),
     "Guyana": (),
     "Haiti": (),

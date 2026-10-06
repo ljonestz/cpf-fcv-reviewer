@@ -134,6 +134,23 @@ def test_detects_country_from_cen_title():
     assert result.confidence == "high"
 
 
+@pytest.mark.parametrize(
+    ("cover_name", "country"),
+    [
+        ("THE FEDERAL DEMOCRATIC REPUBLIC OF ETHIOPIA", "Ethiopia"),
+        ("REPUBLIQUE OF GUINEA", "Guinea"),
+    ],
+)
+def test_detects_reproduced_cpf_cover_name_variants(cover_name, country):
+    result = detect_country(document(
+        f"COUNTRY PARTNERSHIP FRAMEWORK\nFOR\n{cover_name}\n"
+        "FOR THE PERIOD FY27-FY32\nSynthetic cover for country detection."
+    ))
+
+    assert result.country == country
+    assert result.confidence == "high"
+
+
 def test_normalizes_the_republic_prefix_case_insensitively():
     result = detect_country(
         document("Country Partnership Framework for The Republic of The Gambia for FY26")

@@ -6,7 +6,7 @@ from pathlib import Path
 JS = Path("src/cpf_fcv_reviewer/static/app.js")
 
 
-def test_large_primary_document_skips_detector_and_small_file_detection_is_unchanged():
+def test_detector_budget_accepts_larger_cpfs_and_keeps_manual_confirmation_above_limit():
     javascript = JS.read_text(encoding="utf-8")
     assert "COUNTRY_DETECTION_MAX_BYTES" in javascript
     assert "file.size > COUNTRY_DETECTION_MAX_BYTES" in javascript
@@ -101,11 +101,14 @@ def test_large_primary_document_skips_detector_and_small_file_detection_is_uncha
           ...(root?.children || []).flatMap((child) => findInputs(child)),
         ];
 
-        cpf.files = [{name: "large.pdf", size: 2 * 1024 * 1024 + 1}];
+        cpf.files = [{name: "large.pdf", size: 10 * 1024 * 1024 + 1}];
         await cpf.trigger("change");
         if (detectorCalls !== 0) throw Error("large CPF was uploaded to automatic detection");
         if (!detection.textContent.includes("Enter the country")) {
           throw Error("large CPF did not prompt for manual country confirmation");
+        }
+        if (!detection.textContent.includes("10 MiB")) {
+          throw Error("large CPF message did not explain the current detector limit");
         }
         if (!submit.disabled) throw Error("large CPF did not require manual confirmation");
         const manualCountry = findInputs(detection)[0];
@@ -117,9 +120,19 @@ def test_large_primary_document_skips_detector_and_small_file_detection_is_uncha
         await nodes["#review-form"].trigger("submit");
         if (finalUploads !== 1) throw Error("large CPF was not uploaded exactly once on final submission");
 
-        cpf.files = [{name: "small.pdf", size: 2 * 1024 * 1024}];
+        cpf.files = [{name: "ordinary-cpf.pdf", size: 3 * 1024 * 1024}];
         await cpf.trigger("change");
         if (detectorCalls !== 1 || country.value !== "Chad" || submit.disabled) {
+          throw Error("ordinary CPF above the old limit was not detected");
+        }
+        cpf.files = [{name: "at-limit.pdf", size: 10 * 1024 * 1024}];
+        await cpf.trigger("change");
+        if (detectorCalls !== 2 || country.value !== "Chad" || submit.disabled) {
+          throw Error("CPF at the new limit was not detected");
+        }
+        cpf.files = [{name: "small.pdf", size: 2 * 1024 * 1024}];
+        await cpf.trigger("change");
+        if (detectorCalls !== 3 || country.value !== "Chad" || submit.disabled) {
           throw Error("small-file country detection behavior changed");
         }
         })();

@@ -1,6 +1,8 @@
 from io import BytesIO
 
 import pytest
+from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen.canvas import Canvas
 
 from cpf_fcv_reviewer.app import create_app
 from cpf_fcv_reviewer.country_detection import (
@@ -355,6 +357,36 @@ def test_detect_country_rejects_detector_oversized_upload():
     assert response.get_json() == {
         "error": "A readable primary CPF/CEN is required."
     }
+
+
+def test_detect_country_accepts_readable_pdf_above_old_two_mib_limit():
+    assert COUNTRY_DETECTION_MAX_UPLOAD_BYTES == 10 * 1024 * 1024
+    cover = BytesIO()
+    canvas = Canvas(cover)
+    canvas.drawString(40, 750, "Country Partnership Framework for Somalia for FY27-FY32")
+    canvas.drawString(
+        40, 730, "Synthetic readable CPF cover content for country detection testing."
+    )
+    canvas.save()
+    writer = PdfWriter()
+    writer.add_page(PdfReader(BytesIO(cover.getvalue())).pages[0])
+    # Increase upload bytes without increasing extracted text or page streams.
+    writer.add_metadata({"/SyntheticPadding": "x" * (3 * 1024 * 1024)})
+    upload = BytesIO()
+    writer.write(upload)
+    assert 2 * 1024 * 1024 < len(upload.getvalue()) < 10 * 1024 * 1024
+    upload.seek(0)
+    app = make_app()
+
+    response = app.test_client().post(
+        "/api/detect-country",
+        data={"cpf": (upload, "synthetic-somalia-cpf.pdf")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"country": "Somalia", "requires_confirmation": False}
+    assert app.extensions["session_store"].count() == 0
 
 
 def test_detect_country_passes_detector_extraction_budgets(monkeypatch):

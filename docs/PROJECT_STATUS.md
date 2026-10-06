@@ -1,5 +1,18 @@
 # Project status
 
+## 2026-10-06 Candidate: country detection repair
+
+The approved preflight repair adds the reproduced Ethiopia/Guinea title aliases
+and raises matching frontend/backend upload limits to **10 MiB**, retaining every
+extraction limit and manual confirmation. All six original local CPF files detect
+correctly; standard CPF titles pass for all 196 canonical registry country names.
+Four regressions failed before correction; the focused suite passed 91 tests and
+the final full provider-free suite passed **1,686**, with one Windows Gunicorn skip.
+Local Edge checks covered the six files and manual entry above 10 MiB. Independent
+review found one test gap, now closed. No model calls or real assessment submissions.
+Linux CI, merge and live-release checks remain. See the
+[validation record](validation/2026-10-06-country-detection-repair.md).
+
 ## 2026-10-06 Candidate: registry-controlled referral repair
 
 The owner approved a shared correction for the separate CPF plus RRA referral
