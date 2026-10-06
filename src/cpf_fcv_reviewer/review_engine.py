@@ -751,6 +751,7 @@ class ReviewEngine:
         forbidden_phrases: tuple[str, ...] = (),
         evidence_ids: set[str] | None = None,
         evidence: Mapping[str, EvidenceItem] | None = None,
+        registry_entry_ids: set[str] | None = None,
     ) -> ReviewResult:
         stage = result.metadata.review_stage
         if stage not in STAGE_PROFILES:
@@ -901,6 +902,15 @@ class ReviewEngine:
             )
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
+        if "unknown_institutional_referral" in issue_codes and registry_entry_ids is not None:
+            # Correct references from the trusted registry, never from model-added IDs.
+            # Preserve approved original referrals even when the model drops them.
+            draft = draft.model_copy(update={
+                "institutional_referral_ids": tuple(
+                    entry_id for entry_id in result.institutional_referral_ids
+                    if entry_id in registry_entry_ids
+                ),
+            })
         coverage = result.document_coverage.model_copy(
             update={"coverage_note": draft.coverage_note}
         )

@@ -1,5 +1,31 @@
 # Project status
 
+## 2026-10-06 Candidate: registry-controlled referral repair
+
+The owner approved a shared correction for the separate CPF plus RRA referral
+failure. Repair now filters original structured referrals using runtime's approved
+registry, preserves valid originals and unrelated content, and rejects model-added
+IDs. The loader verifies the exact registry bytes it parses. No country conditions,
+new model calls, retries or deployment configuration. Final local suite: **1,683
+passed, one Windows Gunicorn skip**; 14 final referral/integrity regressions passed.
+Synthetic Edge preflight finished with result, assistant restoration, mobile and
+both Word downloads. Independent review found no remaining focused issue.
+Linux CI, exact deployment and an explicitly authorized paid retest remain separate.
+See the [candidate record](validation/2026-10-06-registry-referral-repair.md).
+
+## 2026-10-06 Niger CPF plus RRA: separate failure
+
+The explicitly requested early-drafting/in-depth CPF plus RRA trial on live
+**c525c9e** failed after repair with `unknown_institutional_referral`, followed by
+`review_failed`. This is a different failure from the fixed limited-mode issue.
+Local full RRA extraction and all 38 smoke tests passed; the synthetic browser
+preflight also passed. One assessment was submitted, with no successful result,
+assistant call or Word export. A local multipart-request QA assertion failed after
+submission; the original session was recovered without resubmission. A narrow
+registry-controlled referral-repair design is proposed, pending approval. No
+additional application change or deployment is recorded here. See the
+[validation record](validation/2026-10-06-niger-rra-release-test.md).
+
 ## 2026-10-06 Deployed: limited-mode review hotfix
 
 PR [46](https://github.com/ljonestz/cpf-fcv-reviewer/pull/46) is merged; application

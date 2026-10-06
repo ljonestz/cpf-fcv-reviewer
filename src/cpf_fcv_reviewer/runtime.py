@@ -892,6 +892,7 @@ def build_runtime_services(
         bundle = load_registry_bundle(
             path,
             allow_synthetic=config.get("ALLOW_SYNTHETIC_REGISTRY", False),
+            expected_hash=expected_hash,
         )
     except RegistryUnavailable as exc:
         raise RuntimeError(str(exc)) from exc
@@ -1556,6 +1557,7 @@ def build_runtime_services(
                 ),
                 evidence_ids=evidence_ids,
                 evidence=evidence_by_id,
+                registry_entry_ids=registry_entry_ids,
             )
             context["result"] = _preserve_research_limitation(context)
             return review_validation_issues(context)
