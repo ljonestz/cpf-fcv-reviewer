@@ -4,12 +4,15 @@
 
 Read `README.md` and `docs/PROJECT_STATUS.md`, then verify `git status`, the current branch, and the latest commit. Do not rely on an earlier chat as the source of truth.
 
-For continuation after 4 October 2026, first read
-`docs/handover/20261004_cpf-mai-full-handover.md`. It records the active worktree,
-stacked branches, approved decisions, current evidence and the remaining gates.
-The first local mAI full assessment failed grounding validation; the authorized
-single assessment is consumed. Continue provider-free diagnosis before requesting
-a new model-backed acceptance. No new live run is authorized by this handover.
+For continuation after 6 October 2026, first read
+`docs/handover/20261006_cpf-mai-production-readiness-handover.md`. It supersedes the
+4 October navigation record and records the active worktree, stacked branches,
+approved decisions, saved evidence and next repair sequence. All three subsequently
+authorized full mAI assessments are consumed. The third completed, but table/unit
+interpretation, contextual attribution and reduced country research keep factual
+and production acceptance held. Follow-up code `5298070` passed 1,881 CI tests;
+it has no further live acceptance. Continue provider-free diagnosis and repairs.
+No new live assessment, research probe or assistant call is authorized by this handover.
 Read the current shared mAI/Posit guides at the paths in the handover before
 changing authentication or hosting. Historical deployment sections below are
 dated evidence, not a claim that the candidate has been deployed.
@@ -83,6 +86,8 @@ header.
 - `tests/`: executable behavior and safety boundaries.
 - `docs/PROJECT_STATUS.md`: current state, completed work, and remaining considerations.
 - `docs/validation/`: dated historical validation evidence.
+- `docs/handover/20261006_cpf-mai-production-readiness-handover.md`: current continuation
+  point, evidence locations, consumed run allowance and ordered next steps.
 - `docs/superpowers/specs/` and `plans/`: historical designs and implementation plans.
 
 ## Current-context pipeline and readiness (2026-09-10)

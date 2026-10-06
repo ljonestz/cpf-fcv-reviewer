@@ -1,30 +1,30 @@
 # CPF FCV Reviewer
 
-**mAI-native research candidate (4 October):** `RESEARCH_PROVIDER=mai_google`
-uses Google Search through mAI Factory and Sonnet through mAI, without a separate
-Anthropic API key. Only public country/date queries leave the document workflow.
-The owner authorized three new local full assessments; acceptance is in progress.
-See the [design, setup and acceptance record](docs/validation/2026-10-04-mai-grounded-research.md).
-No merge or hosted deployment has occurred; Desktop credentials remain local DEV only.
+**Current continuation point (6 October 2026):** read the
+[production-readiness handover](docs/handover/20261006_cpf-mai-production-readiness-handover.md).
+The mAI-only integration works, but **production readiness and Render-equivalent
+factual accuracy are not established**. All three newly authorized full Guinea
+assessments were used: grounding failure, schema/transport failure, then completion
+without repair. The final output still contains material analytical errors and
+reduced country research. The temporary local service is stopped; evidence is saved.
 
-**Local research privacy follow-up (4 October):** mAI-mode external research now
-receives country/date inputs and fixed public research instructions, excluding
-uploaded document content and review notes. See the
-[boundary and local credential setup](docs/validation/2026-10-04-local-research-privacy.md).
-This candidate has not been activated in the running app.
+`MODEL_PROVIDER=mai_desktop` with `RESEARCH_PROVIDER=mai_google` uses Sonnet and
+Google Search through mAI Factory, without a separate Anthropic API key. Search
+receives country/date and fixed public topics, excluding uploaded documents and
+review notes. Original public pages are fetched without credentials. This uses
+public search through mAI and still incurs usage costs. Desktop access remains
+local DEV only. The earlier separate-Anthropic option remains available in code,
+but is not the owner's chosen research route.
 
-**Latest provider-free follow-up (4 October):** code `3514826` offers explicit
-Anthropic public-web research alongside local mAI generation. Grounding diagnostics
-and institutional-source repairs are verified with synthetic tests; no fresh live
-assessment was run and production readiness remains held. See the
-[diagnosis and hybrid research setup](docs/validation/2026-10-04-grounding-and-hybrid-research.md).
-
-**Current continuation point (4 October 2026):** read the
-[full session handover](docs/handover/20261004_cpf-mai-full-handover.md).
-Local mAI Desktop connectivity works, but the first full Guinea assessment failed
-evidence validation after repair. No accepted output was released. The repair,
-Posit compatibility and mAI branches remain undeployed; production readiness is
-not achieved. See the [local acceptance record](docs/validation/2026-10-04-mai-local-assessment.md).
+Follow-up application code `5298070` passed 1,881 CI tests and name/import lint;
+candidate documentation `feb7f4c` also passed CI. Date and assistant-boundary fixes
+have provider-free coverage only. No further live model call is authorized.
+Next: reproduce and repair table/value/unit association, improve research topic
+and event-date coverage, and check report/assistant consistency before requesting
+another bounded acceptance. See the [full results and comparison](docs/validation/2026-10-04-mai-grounded-research.md)
+and [research privacy boundary](docs/validation/2026-10-04-local-research-privacy.md).
+Candidate branches remain unmerged and undeployed; hosted Application/ACN and
+runtime/storage acceptance remain open.
 
 A production repair candidate is available on `fix/production-readiness-20260930`: public
 access with four paid assessment admissions per UTC day, durable quotas, bounded workers

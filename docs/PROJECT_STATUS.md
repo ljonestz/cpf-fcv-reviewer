@@ -1,5 +1,23 @@
 # Project status
 
+## 2026-10-06 continuation documentation reconciled
+
+Start with the [current handover](handover/20261006_cpf-mai-production-readiness-handover.md).
+README and CLAUDE.md now point to the completed three-run cycle rather than the
+first failed assessment. The 4 October handover is retained with a supersession
+notice. Application code remains `5298070`; saved candidate `feb7f4c` passed
+[CI](https://github.com/ljonestz/cpf-fcv-reviewer/actions/runs/37243875900).
+This continuation update changes Markdown only on `docs/session-handover-20261006`,
+based on draft PR 44. No model call, restart, merge or deployment occurred.
+
+Next work is provider-free: reproduce adjacent-table indicator/value/unit errors,
+improve public research topic/event-date coverage, and address analytical attribution
+and assistant amplification. These repairs are planned, not implemented by this
+documentation update. All three new full-run permissions are consumed; further
+live assessment, research probe or assistant calls require fresh authorization.
+The local service was stopped after testing; ignored original outputs and quotas
+remain preserved. Production acceptance is held.
+
 ## 2026-10-05 mAI-only stress testing completed; readiness held
 
 Three newly authorized full Guinea assessments are consumed: two failed, and the
