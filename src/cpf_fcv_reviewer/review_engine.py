@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 import re
+from collections import Counter
+from collections.abc import Mapping
 
 from pydantic import ValidationError
 
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
+    DiagnosticMode,
     DocumentCoverage,
     DocumentRole,
     EvidenceItem,
@@ -21,7 +23,7 @@ from .contracts import (
 from .extraction import PackageCoverageUnavailable
 from .model_gateway import ModelGateway
 from .review_profiles import DETAIL_PROFILES, STAGE_PROFILES
-from .validators import has_diagnostic_date_conflict
+from .validators import has_diagnostic_date_conflict, has_limited_mode_overclaim
 
 # "missing_current_context_support" is intentionally excluded: it is raised with
 # severity="advisory" and is therefore filtered out by the orchestrator before repair
@@ -526,7 +528,10 @@ _RRA_TEXT_FIELDS = (
 )
 
 
-def _clean_guardrail_fields(original, candidate, fields, forbidden_phrases, provenance=None):
+def _clean_guardrail_fields(
+    original, candidate, fields, forbidden_phrases, provenance=None,
+    *, repair_limited_mode: bool = False,
+):
     phrases = tuple(
         phrase.casefold() for phrase in forbidden_phrases if phrase.strip()
     )
@@ -539,6 +544,8 @@ def _clean_guardrail_fields(original, candidate, fields, forbidden_phrases, prov
              and not any(phrase in candidate_text.casefold() for phrase in phrases))
             or (has_diagnostic_date_conflict(original_text, provenance)
                 and not has_diagnostic_date_conflict(candidate_text, provenance))
+            or (repair_limited_mode and has_limited_mode_overclaim(original_text)
+                and not has_limited_mode_overclaim(candidate_text))
         ):
             updates[field] = candidate_text
     return original.model_copy(update=updates) if updates else original
@@ -549,8 +556,17 @@ def _preserve_cleaned_assessment_text(
     repaired: ReviewDraft,
     forbidden_phrases: tuple[str, ...],
     provenance=None,
+    *,
+    repair_limited_mode: bool = False,
 ) -> ReviewDraft:
-    repaired_rra = {row.assessment_id: row for row in repaired.rra_driver_assessments}
+    # Ambiguous identities cannot authorize a limited-mode wording replacement.
+    original_ids = Counter(row.assessment_id for row in normalized.rra_driver_assessments)
+    repaired_ids = Counter(row.assessment_id for row in repaired.rra_driver_assessments)
+    repaired_rra = {
+        row.assessment_id: row for row in repaired.rra_driver_assessments
+        if not repair_limited_mode or original_ids[row.assessment_id]
+        == repaired_ids[row.assessment_id] == 1
+    }
     rra_rows = tuple(
         _clean_guardrail_fields(
             row,
@@ -558,14 +574,23 @@ def _preserve_cleaned_assessment_text(
             _RRA_TEXT_FIELDS,
             forbidden_phrases,
             provenance,
+            repair_limited_mode=repair_limited_mode,
         )
         if row.assessment_id in repaired_rra
         else row
         for row in normalized.rra_driver_assessments
     )
+    original_keys = Counter(
+        (row.strategic_shift, row.assessment_id) for row in normalized.fcv_strategy_assessments
+    )
+    repaired_keys = Counter(
+        (row.strategic_shift, row.assessment_id) for row in repaired.fcv_strategy_assessments
+    )
     repaired_strategy = {
         (row.strategic_shift, row.assessment_id): row
         for row in repaired.fcv_strategy_assessments
+        if not repair_limited_mode or original_keys[(row.strategic_shift, row.assessment_id)]
+        == repaired_keys[(row.strategic_shift, row.assessment_id)] == 1
     }
     strategy_rows = tuple(
         _clean_guardrail_fields(
@@ -574,6 +599,7 @@ def _preserve_cleaned_assessment_text(
             ("assessment",),
             forbidden_phrases,
             provenance,
+            repair_limited_mode=repair_limited_mode,
         )
         if (row.strategic_shift, row.assessment_id) in repaired_strategy
         else row
@@ -850,13 +876,28 @@ class ReviewEngine:
             allow_new_rra_rows=allow_new_rra_rows,
             allow_missing_strategy_rows=allow_missing_strategy_rows,
         )
-        if issue_codes & {"prohibited_policy_language", "diagnostic_date_conflict"}:
+        repair_limited_mode = (
+            "limited_mode_overclaim" in issue_codes
+            and result.metadata.diagnostic_mode is DiagnosticMode.LIMITED_FRAMING
+        )
+        if repair_limited_mode and not allow_new_rra_rows:
+            original_rra_ids = {row.assessment_id for row in result.rra_driver_assessments}
+            draft = draft.model_copy(update={
+                "rra_driver_assessments": tuple(
+                    row for row in draft.rra_driver_assessments
+                    if row.assessment_id in original_rra_ids
+                ),
+            })
+        if issue_codes & {
+            "prohibited_policy_language", "diagnostic_date_conflict", "limited_mode_overclaim",
+        }:
             draft = _preserve_cleaned_assessment_text(
                 draft,
                 repaired_assessments,
                 forbidden_phrases,
                 result.metadata.diagnostic_provenance
                 if "diagnostic_date_conflict" in issue_codes else None,
+                repair_limited_mode=repair_limited_mode,
             )
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
