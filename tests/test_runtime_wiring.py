@@ -4381,3 +4381,75 @@ def test_runtime_records_unestablished_diagnostic_date(monkeypatch):
     assert provenance.publication_date is None
     assert provenance.date_basis == "unestablished"
     assert context["result"].metadata.diagnostic_provenance == provenance
+
+
+def test_runtime_referral_repair_uses_integrity_checked_registry(make_valid_result):
+    result, evidence = make_valid_result
+    rows = tuple(
+        row.model_copy(update={
+            "status": AssessmentStatus.NOT_ASSESSABLE,
+            "confidence": AssessmentConfidence.LOW,
+            "gap_locus": None,
+            "evidence_ids": (),
+        })
+        for row in result.fcv_strategy_assessments
+    )
+    result = result.model_copy(update={
+        "fcv_strategy_assessments": rows,
+        "institutional_referral_ids": ("SYN-REF-001", "synthetic-unknown-referral"),
+    })
+    calls = []
+
+    class Gateway:
+        def generate(self, *, prompt_name, payload, output_type):
+            calls.append(prompt_name)
+            candidate = dict(payload["draft"])
+            # The model keeps an unknown ID and drops the approved original.
+            candidate["institutional_referral_ids"] = ("synthetic-unknown-referral",)
+            return output_type.model_validate(candidate)
+
+    services = build_runtime_services(
+        production_config(ALLOW_SYNTHETIC_REGISTRY=True),
+        model_gateway=Gateway(), research_controller=_InjectedResearchController(),
+        follow_on_gateway=object(),
+    )
+    context = {
+        "result": result,
+        "evidence_pack": EvidencePack(
+            metadata=result.metadata, evidence=tuple(evidence.values()),
+            diagnostic_entries=(),
+        ),
+    }
+    repaired = services["review_orchestrator"].repair(
+        context, [{"code": "unknown_institutional_referral"}],
+    )
+    assert repaired["result"].institutional_referral_ids == ("SYN-REF-001",)
+    assert repaired["validation_issues"] == []
+    assert calls == ["repair"]
+    assert repaired["result"].model_dump(exclude={"metadata", "institutional_referral_ids"}) == (
+        result.model_dump(exclude={"metadata", "institutional_referral_ids"})
+    )
+
+
+def test_runtime_rejects_registry_changed_between_hash_and_parse(monkeypatch):
+    config = production_config(ALLOW_SYNTHETIC_REGISTRY=True)
+    original_read = Path.read_bytes
+    original_bytes = FIXTURE.read_bytes()
+    modified = json.loads(original_bytes)
+    modified["entries"][0]["entry_id"] = "synthetic-unverified-referral"
+    modified_bytes = json.dumps(modified).encode("utf-8")
+    reads = []
+
+    def changing_read(path):
+        if path == FIXTURE:
+            reads.append(True)
+            return original_bytes if len(reads) == 1 else modified_bytes
+        return original_read(path)
+
+    monkeypatch.setattr(Path, "read_bytes", changing_read)
+    with pytest.raises(RuntimeError, match="hash mismatch"):
+        build_runtime_services(
+            config, model_gateway=object(),
+            research_controller=_InjectedResearchController(), follow_on_gateway=object(),
+        )
+    assert len(reads) == 2

@@ -55,6 +55,7 @@ probe reproduces retained unknown IDs and loss of an approved original reference
 That probe does not reveal the real run's rejected values or establish its exact
 model response. The recommended follow-up is registry-controlled removal of unknown
 structured referrals while preserving approved original IDs and all unrelated content.
-Implementation/design approval is pending; no application change or new deployment
-was made in this validation session. A new paid trial is not automatically authorized
-by this record.
+At completion of the failed trial, implementation/design approval was pending and
+no application change or deployment had been made. The owner subsequently approved
+the narrow correction; see the [separate fix record](2026-10-06-registry-referral-repair.md).
+A new paid trial is not automatically authorized by this record.

@@ -1,5 +1,18 @@
 # Project status
 
+## 2026-10-06 Candidate: registry-controlled referral repair
+
+The owner approved a shared correction for the separate CPF plus RRA referral
+failure. Repair now filters original structured referrals using runtime's approved
+registry, preserves valid originals and unrelated content, and rejects model-added
+IDs. The loader verifies the exact registry bytes it parses. No country conditions,
+new model calls, retries or deployment configuration. Final local suite: **1,683
+passed, one Windows Gunicorn skip**; 14 final referral/integrity regressions passed.
+Synthetic Edge preflight finished with result, assistant restoration, mobile and
+both Word downloads. Independent review found no remaining focused issue.
+Linux CI, exact deployment and an explicitly authorized paid retest remain separate.
+See the [candidate record](validation/2026-10-06-registry-referral-repair.md).
+
 ## 2026-10-06 Niger CPF plus RRA: separate failure
 
 The explicitly requested early-drafting/in-depth CPF plus RRA trial on live
