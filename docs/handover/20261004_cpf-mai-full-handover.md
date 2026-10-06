@@ -1,5 +1,11 @@
 # CPF reviewer and mAI Factory session handover
 
+**Superseded for continuation on 6 October 2026:** start with
+[the current production-readiness handover](20261006_cpf-mai-production-readiness-handover.md).
+The record below preserves the state before the subsequent three-run mAI-only
+cycle. Its branch, research and running-service descriptions are historical;
+do not use its startup or run allowance as current authorization.
+
 Prepared 4 October 2026 at the owner's request to continue in a fresh LLM session.
 This is the navigation and decision record. Dated validation records remain the
 authority for individual test results. No model call or deployment is authorized

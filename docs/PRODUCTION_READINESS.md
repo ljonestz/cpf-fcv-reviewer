@@ -1,5 +1,22 @@
 # Production readiness
 
+## 2026-10-06 resume at the factual-accuracy and research gates
+
+The [current handover](handover/20261006_cpf-mai-production-readiness-handover.md)
+records the exact continuation point. Application code `5298070` and candidate
+documentation `feb7f4c` passed CI; this is not factual acceptance. No further live
+model call is authorized under the exhausted three-run allowance.
+
+Before requesting another run, reproduce and repair indicator/baseline/target/unit
+association with synthetic tables; test research breadth and publication/event-date
+separation using saved public originals; and check source attribution, recommendation
+targets and assistant consistency. Use a source-verified checklist for subsequent
+Guinea acceptance. Historical Render output has known defects and is a comparison
+point, not the correctness standard. These next repairs have not been implemented.
+
+No application behavior, hosting configuration or deployment changed during the
+6 October documentation update. Preserve evidence checks, reservations and quotas.
+
 ## 2026-10-05 mAI-only execution verified; quality and hosting gates remain held
 
 The third and final authorized local assessment completed on `14f32d9` without repair;

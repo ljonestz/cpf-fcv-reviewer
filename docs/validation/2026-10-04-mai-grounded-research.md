@@ -1,5 +1,10 @@
 # mAI country research and three-run acceptance
 
+For the next session, start with the [6 October handover](../handover/20261006_cpf-mai-production-readiness-handover.md).
+It records the final branch/CI state, evidence locations and ordered provider-free
+repairs. Historical test results below are preserved; this record does not
+authorize another model call.
+
 ## Authorization and scope
 
 The owner chose to avoid the separate Anthropic API and authorized up to three
