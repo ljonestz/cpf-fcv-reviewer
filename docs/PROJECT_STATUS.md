@@ -1,16 +1,26 @@
 # Project status
 
-## 2026-10-06 Candidate: limited-mode review hotfix
+## 2026-10-06 Deployed: limited-mode review hotfix
 
-The Niger early-drafting stop is reproduced in the released main code and the newer
-unmerged development stack. A focused hotfix on `fix/limited-mode-review-20261006`
-accepts explicit abstentions and preserves corrected row wording through bounded
-repair, while retaining evidence/identity protection and blocking genuine claims.
-No additional provider calls or retries. Local full suite reached 1,653 passed with
-one Windows Gunicorn skip; final focused scenarios passed 51 tests. Independent
-review refinements and the synthetic Edge result/export flow are checked. Linux CI,
-deployment and one real Niger validation remain pending. See the
-[validation record](validation/2026-10-06-limited-mode-review-fix.md).
+PR [46](https://github.com/ljonestz/cpf-fcv-reviewer/pull/46) is merged; application
+**c525c9e** is live on Render and TLS-verified health/static checks confirm it.
+Candidate and merged-release Linux CI each passed **1,670 tests**, including real
+Gunicorn. Independent review found no remaining focused correctness/safety issue.
+
+One provider-backed Niger CPF assessment at **early drafting**, without an uploaded
+RRA, completed in **limited framing** after one bounded repair. Its sole repair code
+was `raw_evidence_id_in_narrative`; no limited-mode failure remained. Result/detail,
+assistant restoration, mobile layout and both Word downloads were exercised. A
+read-only refresh check passed with no JavaScript errors or new model calls. The
+strict quality runner's only reported console error was a 404; the missing favicon
+is confirmed separately. No second quality assessment was submitted.
+
+Explicit abstentions are accepted; corrected assessment wording survives repair
+while identity, evidence and unaffected row fields stay protected. Genuine claims
+remain blocking. Current-context evidence in the live trial was reduced; supervised
+expert-use and volatile-storage limitations remain. Start a new review for ITS
+retesting. Newer draft production/mAI branches require this main fix when integrated.
+See the [validation record](validation/2026-10-06-limited-mode-review-fix.md).
 
 ## 2026-09-10 Deployed: grounded recommendations
 
