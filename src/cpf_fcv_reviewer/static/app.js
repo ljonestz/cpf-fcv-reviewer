@@ -127,7 +127,7 @@ const evidenceStatusLabels = {
   reduced: "Current evidence partially established",
   document_led: "Review based primarily on submitted documents",
 };
-const COUNTRY_DETECTION_MAX_BYTES = 2 * 1024 * 1024;
+const COUNTRY_DETECTION_MAX_BYTES = 10 * 1024 * 1024;
 
 const assessmentStatusLabels = {
   aligned: "Aligned",
@@ -435,7 +435,7 @@ async function detectCountry() {
   }
 
   if (file.size > COUNTRY_DETECTION_MAX_BYTES) {
-    countryDetection.textContent = "This primary document exceeds the 2 MiB automatic detector budget. Enter the country manually to continue.";
+    countryDetection.textContent = "This primary document exceeds the 10 MiB automatic detector budget. Enter the country manually to continue.";
     countryRequiresConfirmation = true;
     showCountryCorrection("");
     detectionPending = false;
