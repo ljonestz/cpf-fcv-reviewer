@@ -31,6 +31,18 @@ class PackageCoverageUnavailable(ExtractionLimitExceeded):
     """Raised when supplied package documents cannot be reviewed in full."""
 
 
+class PackageDocumentCountExceeded(PackageCoverageUnavailable):
+    """Raised when more package documents are supplied than can be read."""
+
+
+class PackageDocumentTooLarge(PackageCoverageUnavailable):
+    """Raised when one package document exceeds the per-document extraction bounds."""
+
+
+class PackageDocumentUnreadable(PackageCoverageUnavailable):
+    """Raised when a package document has no readable text or an invalid container."""
+
+
 @dataclass(frozen=True)
 class ExtractedSegment:
     text: str

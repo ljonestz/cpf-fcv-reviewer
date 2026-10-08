@@ -79,7 +79,9 @@ _SAFE_MODEL_VALIDATION_TYPES = {
     ),
     "Document evidence requires page, heading, or element.": "document_coordinate_required",
 }
-REVIEW_MAX_ESTIMATED_INPUT_TOKENS = 160_000
+# Conservative estimate (characters / 3) against the review model's 1M-token context,
+# leaving room for the system prompt and up to 64,000 output tokens.
+REVIEW_MAX_ESTIMATED_INPUT_TOKENS = 800_000
 
 
 def _estimated_input_tokens(payload: dict) -> int:

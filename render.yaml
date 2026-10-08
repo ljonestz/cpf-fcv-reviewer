@@ -24,6 +24,8 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL_ID
         value: claude-sonnet-4-5
+      - key: ANTHROPIC_REVIEW_MODEL_ID
+        value: claude-opus-5-5
       - key: PERSISTENCE_PATH
         value: /var/data/reviews.sqlite3
       - key: SESSION_TTL_SECONDS

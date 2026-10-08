@@ -1,5 +1,22 @@
 # Project status
 
+## 2026-10-08 Candidate: large-package coverage
+
+A full Guinea package (CPF, BOSIB, PLR, RRA) stopped on the live site with
+`package_coverage_unavailable`: the two package documents together held about 452,000
+characters against a 300,000-character combined budget. The candidate on
+`feat/large-package-coverage` moves document-reading calls to `claude-opus-5-5`
+(`ANTHROPIC_REVIEW_MODEL_ID`, 1M context, high effort, streaming), supplies the primary
+CPF in full (previously 12 sampled segments), allows up to 40 package documents, and
+replaces the combined budget with full-document digests for the largest documents when
+a role exceeds its direct budget. Non-RRA context analytics are now extracted in full.
+The intake shows counts and size and blocks uploads above 40 package documents or
+80 MB; a `package_plan` event reports summarising; failures use specific package codes.
+Research and the follow-on assistant still use `ANTHROPIC_MODEL_ID`. Design:
+[spec](superpowers/specs/2026-10-08-large-package-coverage-design.md). Provider-free
+suite: **1,712 passed**, one Windows Gunicorn skip. Not yet merged or deployed; one
+authorized paid local Guinea run remains.
+
 ## 2026-10-06 Candidate: country detection repair
 
 The approved preflight repair adds the reproduced Ethiopia/Guinea title aliases

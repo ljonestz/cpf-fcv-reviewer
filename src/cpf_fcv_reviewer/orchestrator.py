@@ -7,6 +7,9 @@ from .extraction import (
     DocumentTooLarge,
     DocumentUnreadable,
     PackageCoverageUnavailable,
+    PackageDocumentCountExceeded,
+    PackageDocumentTooLarge,
+    PackageDocumentUnreadable,
 )
 from .registry import RegistryUnavailable
 from .research_controller import ResearchFailure
@@ -16,9 +19,13 @@ Emitter = Callable[[str, dict], None]
 Step = Callable[[dict], dict]
 Repair = Callable[[dict, list], dict]
 
+# Checked in order with isinstance, so subclasses precede their base classes.
 SAFE_FAILURES = {
     TimeoutError: "model_timeout",
     DiagnosticCoverageUnavailable: "diagnostic_coverage_unavailable",
+    PackageDocumentCountExceeded: "package_document_count_exceeded",
+    PackageDocumentTooLarge: "package_document_too_large",
+    PackageDocumentUnreadable: "package_document_unreadable",
     PackageCoverageUnavailable: "package_coverage_unavailable",
     RegistryUnavailable: "registry_unavailable",
     DocumentUnreadable: "document_unreadable",

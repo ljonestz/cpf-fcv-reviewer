@@ -5,7 +5,7 @@ from pathlib import Path
 
 PROMPT_ROOT = Path(__file__).parents[2] / "prompts"
 PROMPT_NAMES = frozenset(
-    {"diagnostic_map", "review", "repair", "follow_on", "fcv_readout"}
+    {"diagnostic_map", "document_digest", "review", "repair", "follow_on", "fcv_readout"}
 )
 
 

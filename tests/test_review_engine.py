@@ -476,7 +476,7 @@ def test_review_rejects_over_budget_complete_payload_before_gateway():
     gateway = FakeGateway(draft_for(meta))
 
     with pytest.raises(PackageCoverageUnavailable, match="request budget"):
-        ReviewEngine(gateway).review(evidence_pack_with_package_text("x" * 500_000))
+        ReviewEngine(gateway).review(evidence_pack_with_package_text("x" * 3_000_000))
 
     assert gateway.calls == []
 
@@ -1742,14 +1742,28 @@ def test_repair_rejects_invalid_issue_entries_before_gateway_call(issues, expect
     assert gateway.calls == []
 
 
+class FakeStream:
+    def __init__(self, response):
+        self.response = response
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def get_final_message(self):
+        return self.response
+
+
 class FakeMessages:
     def __init__(self, response):
         self.response = response
         self.calls = []
 
-    def parse(self, **kwargs):
+    def stream(self, **kwargs):
         self.calls.append(kwargs)
-        return self.response
+        return FakeStream(self.response)
 
 
 class FakeAnthropicClient:
@@ -1774,10 +1788,26 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     assert actual == expected
     call = client.messages.calls[0]
     assert call["model"] == "test-model"
-    assert call["max_tokens"] == 12000
-    assert call["system"].startswith("Version: 3.0.4")
+    assert call["max_tokens"] == 64_000
+    assert call["output_config"] == {"effort": "high"}
+    assert call["system"].startswith("Version: 3.1.0")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
+
+
+def test_anthropic_gateway_rejects_declined_response(monkeypatch):
+    client = FakeAnthropicClient(
+        SimpleNamespace(stop_reason="refusal", parsed_output=None)
+    )
+    monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+    gateway = AnthropicModelGateway("test-key", "test-model")
+
+    with pytest.raises(ValueError, match="declined"):
+        gateway.generate(
+            prompt_name="review",
+            payload={"input": "bounded"},
+            output_type=ReviewDraft,
+        )
 
 
 def test_anthropic_gateway_rejects_missing_parsed_output(monkeypatch):

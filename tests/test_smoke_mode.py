@@ -443,7 +443,7 @@ def test_smoke_app_configuration_ignores_poisoned_environment(monkeypatch):
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_MODEL_ID": "deterministic-smoke",
         "ALLOW_SYNTHETIC_REGISTRY": True,
-        "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
+        "MAX_CONTENT_LENGTH": 80 * 1024 * 1024,
         "RESEARCH_MAX_ATTEMPTS": 1,
         "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": 5.0,
         "RESEARCH_TOTAL_BUDGET_SECONDS": 15.0,

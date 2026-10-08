@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template
 
 from .background import InProcessAssessmentQueue, PersistentAssessmentWorker
-from .config import build_config
+from .config import MAX_UPLOAD_BYTES, build_config
 from .persistent_store import SQLiteSessionStore
 from .routes import bp as review_blueprint
 from .runtime import build_runtime_services
@@ -115,7 +115,8 @@ def create_smoke_app(*, start_background_runs: bool = True) -> Flask:
         "ALLOW_SYNTHETIC_REGISTRY": True,
         "ANTHROPIC_API_KEY": "",
         "ANTHROPIC_MODEL_ID": "deterministic-smoke",
-        "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
+        "ANTHROPIC_REVIEW_MODEL_ID": "deterministic-smoke",
+        "MAX_CONTENT_LENGTH": MAX_UPLOAD_BYTES,
         "RESEARCH_MAX_ATTEMPTS": 1,
         "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": 5.0,
         "RESEARCH_TOTAL_BUDGET_SECONDS": 15.0,

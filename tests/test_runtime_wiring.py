@@ -41,6 +41,7 @@ from cpf_fcv_reviewer.extraction import (
     ExtractedSegment,
     ExtractionLimitExceeded,
     PackageCoverageUnavailable,
+    PackageDocumentCountExceeded,
 )
 from cpf_fcv_reviewer.public_research import CurrentContextClaim
 from cpf_fcv_reviewer.registry import load_registry_bundle
@@ -278,39 +279,27 @@ def test_runtime_full_package_reextract_replaces_sampling_warnings(monkeypatch):
     assert context["extraction_warnings"] == ("context warning", full_warning)
 
 
-def test_runtime_rejects_more_than_ten_package_documents(monkeypatch):
+def test_runtime_rejects_more_than_forty_package_documents(monkeypatch):
     uploads = tuple(
         {"name": f"annex-{index}.txt", "bytes": b"package text"}
-        for index in range(11)
+        for index in range(41)
     )
 
-    with pytest.raises(PackageCoverageUnavailable, match="document-count"):
+    with pytest.raises(PackageDocumentCountExceeded, match="document-count"):
         runtime._extract_optional_uploads(uploads, strict_package=True)
 
 
-def test_runtime_package_segment_bound_fails_closed():
-    document = ExtractedDocument(
-        "annex.txt",
-        tuple(
-            ExtractedSegment("x", None, None, f"paragraph {index}")
-            for index in range(401)
-        ),
-        (),
+def test_runtime_accepts_forty_package_documents():
+    uploads = tuple(
+        {"name": f"annex-{index}.txt", "bytes": b"package text"}
+        for index in range(40)
     )
 
-    with pytest.raises(PackageCoverageUnavailable, match="segment"):
-        runtime._validate_full_package_documents((document,))
-
-
-def test_runtime_package_character_bound_fails_closed():
-    document = ExtractedDocument(
-        "annex.txt",
-        (ExtractedSegment("x" * 300_001, None, None, "paragraph 1"),),
-        (),
+    documents, retained, _warnings = runtime._extract_optional_uploads(
+        uploads, strict_package=True
     )
 
-    with pytest.raises(PackageCoverageUnavailable, match="character"):
-        runtime._validate_full_package_documents((document,))
+    assert len(documents) == len(retained) == 40
 
 
 @pytest.mark.parametrize(
@@ -2496,7 +2485,7 @@ def test_runtime_package_evidence_keeps_late_pdf_material_and_all_segments(monke
     assert "LATE_PACKAGE_MATERIAL" in late_item.text
 
 
-def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monkeypatch):
+def test_runtime_supplies_primary_package_and_context_documents_in_full(monkeypatch):
     captured = {}
 
     class FakeGateway:
@@ -2576,19 +2565,24 @@ def test_runtime_role_budgets_reserve_context_and_balance_package_documents(monk
         role: [item for item in captured["pack"].evidence if item.document_role == role]
         for role in DocumentRole
     }
-    assert len(by_role[DocumentRole.PRIMARY]) == 12
+    assert len(by_role[DocumentRole.PRIMARY]) == 20
     assert len(by_role[DocumentRole.PACKAGE]) == 30
-    assert len(by_role[DocumentRole.CONTEXT]) == 16
-    assert sum(len(items) for items in by_role.values()) == 58
+    assert len(by_role[DocumentRole.CONTEXT]) == 20
+    assert sum(len(items) for items in by_role.values()) == 70
     assert len(
         [item for item in captured["pack"].evidence if item.evidence_type == "current_context"]
     ) == 2
     assert len({item.locator.document_title for item in by_role[DocumentRole.PACKAGE]}) == 3
     assert len({item.locator.document_title for item in by_role[DocumentRole.CONTEXT]}) == 2
     assert by_role[DocumentRole.PACKAGE][0].evidence_id == "package-doc-001-segment-001"
+    assert by_role[DocumentRole.CONTEXT][0].evidence_id == "context-doc-001-segment-001"
+    assert [item.evidence_id for item in by_role[DocumentRole.PRIMARY]][:2] == [
+        "primary-001",
+        "primary-002",
+    ]
 
 
-def test_runtime_evidence_truncation_keeps_complete_words(monkeypatch):
+def test_runtime_primary_evidence_is_complete_and_excerpt_keeps_complete_words(monkeypatch):
     services = _runtime_services(monkeypatch)
     build_evidence = dict(services["review_orchestrator"].steps)["build_evidence"]
     segment_text = (
@@ -2632,11 +2626,9 @@ def test_runtime_evidence_truncation_keeps_complete_words(monkeypatch):
         if item.evidence_type == "document_fact"
     )
 
-    assert len(evidence.text) <= 1600
+    assert evidence.text == segment_text
     assert len(evidence.locator.excerpt) <= 600
-    assert evidence.text.endswith("y")
     assert evidence.locator.excerpt.endswith("x")
-    assert segment_text[len(evidence.text)].isspace()
     assert segment_text[len(evidence.locator.excerpt)].isspace()
 
 

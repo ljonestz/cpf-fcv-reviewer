@@ -31,6 +31,14 @@ from .contracts import (
 )
 from .diagnostic_map import validate_diagnostic_references
 from .diagnostic_sources import identify_uploaded_diagnostic
+from .document_digest import (
+    CONTEXT_DIRECT_MAX_CHARACTERS,
+    PACKAGE_DIRECT_MAX_CHARACTERS,
+    DigestJob,
+    digest_documents,
+    plan_digests,
+    segment_evidence,
+)
 from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .extraction import (
     PDF_SAMPLING_WARNING_SUFFIX,
@@ -38,7 +46,9 @@ from .extraction import (
     DocumentTooLarge,
     DocumentUnreadable,
     ExtractionLimitExceeded,
-    PackageCoverageUnavailable,
+    PackageDocumentCountExceeded,
+    PackageDocumentTooLarge,
+    PackageDocumentUnreadable,
     extract_document,
     require_readable_primary,
 )
@@ -109,10 +119,10 @@ PRIMARY_MAX_SEGMENTS = 10_000
 PRIMARY_MAX_CHARACTERS = 600_000
 PRIMARY_MAX_UNCOMPRESSED_BYTES = 50_000_000
 PRIMARY_MAX_ARCHIVE_MEMBERS = 512
-PACKAGE_MAX_DOCUMENTS = 10
-PACKAGE_MAX_SEGMENTS_TOTAL = 400
-PACKAGE_MAX_CHARACTERS_TOTAL = 300_000
-DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS = 160_000
+# Every package document is read in full by the model; combined size no longer stops
+# a run because oversized packages are digested (see document_digest).
+PACKAGE_MAX_DOCUMENTS = 40
+DIAGNOSTIC_MAP_MAX_ESTIMATED_INPUT_TOKENS = 800_000
 _DIAGNOSTIC_MAP_SCHEMA_FIELDS = frozenset(
     {
         "entries",
@@ -300,6 +310,8 @@ def _incomplete_document_roles(context: dict) -> frozenset[DocumentRole]:
             for warning in getattr(document, "warnings", ())
         ):
             incomplete_roles.add(role)
+    # A digest is a summary: silence in it is not evidence of absence.
+    incomplete_roles.update(context.get("digested_document_roles", ()))
     return frozenset(incomplete_roles)
 
 
@@ -566,7 +578,7 @@ def _extract_optional_uploads(
     strict_package: bool = False,
 ) -> tuple[tuple, tuple, tuple[str, ...]]:
     if strict_package and len(items) > PACKAGE_MAX_DOCUMENTS:
-        raise PackageCoverageUnavailable("Package document-count budget exceeded.")
+        raise PackageDocumentCountExceeded("Package document-count budget exceeded.")
     documents = []
     retained_uploads = []
     warnings = []
@@ -578,7 +590,7 @@ def _extract_optional_uploads(
             data, suffix
         ):
             if strict_package:
-                raise PackageCoverageUnavailable("A package document is unreadable.")
+                raise PackageDocumentUnreadable("A package document is unreadable.")
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         try:
@@ -602,7 +614,7 @@ def _extract_optional_uploads(
                 )
         except ExtractionLimitExceeded as exc:
             if strict_package:
-                raise PackageCoverageUnavailable(
+                raise PackageDocumentTooLarge(
                     "A package document could not be extracted in full."
                 ) from exc
             if _filename_suggests_diagnostic(name):
@@ -613,33 +625,20 @@ def _extract_optional_uploads(
             continue
         except EXPECTED_OPTIONAL_EXTRACTION_ERRORS as exc:
             if strict_package:
-                raise PackageCoverageUnavailable(
+                raise PackageDocumentUnreadable(
                     "A package document could not be extracted in full."
                 ) from exc
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         if not _has_usable_uploaded_document(document):
             if strict_package:
-                raise PackageCoverageUnavailable("A package document is unreadable.")
+                raise PackageDocumentUnreadable("A package document is unreadable.")
             warnings.append(OPTIONAL_UPLOAD_EXCLUDED_WARNING)
             continue
         documents.append(document)
         retained_uploads.append((index, item))
         warnings.extend(document.warnings)
     return tuple(documents), tuple(retained_uploads), tuple(warnings)
-
-
-def _validate_full_package_documents(documents: tuple) -> None:
-    segment_count = sum(len(document.segments) for document in documents)
-    character_count = sum(
-        len(segment.text)
-        for document in documents
-        for segment in document.segments
-    )
-    if segment_count > PACKAGE_MAX_SEGMENTS_TOTAL:
-        raise PackageCoverageUnavailable("Package segment budget exceeded.")
-    if character_count > PACKAGE_MAX_CHARACTERS_TOTAL:
-        raise PackageCoverageUnavailable("Package character budget exceeded.")
 
 
 def _reextract_full_package_documents(context: dict) -> None:
@@ -654,21 +653,17 @@ def _reextract_full_package_documents(context: dict) -> None:
         if position == diagnostic_position:
             continue
         try:
-            document = extract_document(
-                upload["bytes"],
-                upload["name"],
-                max_pdf_pages=DIAGNOSTIC_MAX_PAGES,
-                sample_pdf_across_document=False,
-                max_segments=DIAGNOSTIC_MAX_PAGES,
-                max_characters=DIAGNOSTIC_MAX_CHARACTERS,
-                max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
-            )
+            document = _extract_full_optional_document(upload)
+        except ExtractionLimitExceeded as exc:
+            raise PackageDocumentTooLarge(
+                "A package document could not be extracted in full."
+            ) from exc
         except EXPECTED_OPTIONAL_EXTRACTION_ERRORS as exc:
-            raise PackageCoverageUnavailable(
+            raise PackageDocumentUnreadable(
                 "A package document could not be extracted in full."
             ) from exc
         if not _has_usable_uploaded_document(document):
-            raise PackageCoverageUnavailable("A package document is unreadable.")
+            raise PackageDocumentUnreadable("A package document is unreadable.")
         context["extraction_warnings"] = (
             _remove_warning_multiset(
                 tuple(context.get("extraction_warnings", ())),
@@ -677,13 +672,52 @@ def _reextract_full_package_documents(context: dict) -> None:
             + document.warnings
         )
         documents[position] = document
-    full_package = tuple(
-        document
-        for position, document in enumerate(documents)
-        if position != diagnostic_position
-    )
-    _validate_full_package_documents(full_package)
     context["package_documents"] = tuple(documents)
+
+
+def _extract_full_optional_document(upload: dict):
+    return extract_document(
+        upload["bytes"],
+        upload["name"],
+        max_pdf_pages=DIAGNOSTIC_MAX_PAGES,
+        sample_pdf_across_document=False,
+        max_segments=DIAGNOSTIC_MAX_PAGES,
+        max_characters=DIAGNOSTIC_MAX_CHARACTERS,
+        max_uncompressed_bytes=DIAGNOSTIC_MAX_UNCOMPRESSED_BYTES,
+    )
+
+
+def _reextract_full_context_documents(context: dict) -> None:
+    """Replace sampled context documents with full extractions where possible.
+
+    A context document that cannot be extracted in full keeps its sampled version and
+    sampling warning, so its role stays marked incomplete for absence claims.
+    """
+    documents = list(context.get("context_documents", ()))
+    uploads = tuple(context.get("context_document_uploads", ()))
+    diagnostic_position = (
+        context.get("diagnostic_document_position")
+        if context.get("diagnostic_document_role") is DocumentRole.CONTEXT
+        else None
+    )
+    for position, (_upload_index, upload) in enumerate(uploads):
+        if position == diagnostic_position or position >= len(documents):
+            continue
+        try:
+            document = _extract_full_optional_document(upload)
+        except EXPECTED_OPTIONAL_EXTRACTION_ERRORS:
+            continue
+        if not _has_usable_uploaded_document(document):
+            continue
+        context["extraction_warnings"] = (
+            _remove_warning_multiset(
+                tuple(context.get("extraction_warnings", ())),
+                documents[position].warnings,
+            )
+            + document.warnings
+        )
+        documents[position] = document
+    context["context_documents"] = tuple(documents)
 
 
 def _resolve_uploaded_diagnostic_source(
@@ -908,10 +942,13 @@ def build_runtime_services(
                 f"registry entries: {missing}."
             )
 
+    review_model_id = (
+        config.get("ANTHROPIC_REVIEW_MODEL_ID") or config["ANTHROPIC_MODEL_ID"]
+    )
     if model_gateway is None:
         model_gateway = AnthropicModelGateway(
             config["ANTHROPIC_API_KEY"],
-            config["ANTHROPIC_MODEL_ID"],
+            review_model_id,
         )
     if follow_on_gateway is None:
         follow_on_gateway = AnthropicFollowOnGateway(
@@ -977,6 +1014,68 @@ def build_runtime_services(
         )
         return context
 
+    def _supporting_document_evidence(context, package_documents, context_documents):
+        """Package and context evidence: full text, or a digest for oversized roles."""
+        package_digests = plan_digests(package_documents, PACKAGE_DIRECT_MAX_CHARACTERS)
+        context_digests = plan_digests(context_documents, CONTEXT_DIRECT_MAX_CHARACTERS)
+        emit = context.get("_emit")
+        if emit is not None and (package_documents or context_documents):
+            emit(
+                "package_plan",
+                {
+                    "package_documents": len(package_documents),
+                    "package_summarised": len(package_digests),
+                    "context_documents": len(context_documents),
+                    "context_summarised": len(context_digests),
+                },
+            )
+        jobs = [
+            DigestJob(document, DocumentRole.PACKAGE, "package", position + 1)
+            for position, document in enumerate(package_documents)
+            if position in package_digests
+        ] + [
+            DigestJob(document, DocumentRole.CONTEXT, "context", position + 1)
+            for position, document in enumerate(context_documents)
+            if position in context_digests
+        ]
+        outcomes = digest_documents(
+            model_gateway,
+            jobs,
+            on_complete=(
+                (lambda done, total: emit(
+                    "document_digest_progress", {"completed": done, "total": total}
+                ))
+                if emit is not None
+                else None
+            ),
+        )
+        outcome_by_key = {
+            (job.prefix, job.document_index): outcome
+            for job, outcome in zip(jobs, outcomes, strict=True)
+        }
+        if outcomes:
+            context["digested_document_roles"] = frozenset(job.role for job in jobs)
+            context["extraction_warnings"] = (
+                *context.get("extraction_warnings", ()),
+                *(outcome.warning for outcome in outcomes),
+            )
+        evidence = []
+        for prefix, role, documents in (
+            ("package", DocumentRole.PACKAGE, package_documents),
+            ("context", DocumentRole.CONTEXT, context_documents),
+        ):
+            for position, document in enumerate(documents):
+                outcome = outcome_by_key.get((prefix, position + 1))
+                if outcome is not None:
+                    evidence.extend(outcome.evidence)
+                else:
+                    evidence.extend(
+                        segment_evidence(
+                            document, role=role, prefix=prefix, document_index=position + 1
+                        )
+                    )
+        return evidence
+
     def build_uploaded_evidence(context):
         payload = context.get("payload")
         primary_document = context.get("primary_document")
@@ -1007,77 +1106,27 @@ def build_runtime_services(
                     for index, document in enumerate(context_documents)
                     if index != diagnostic_position
                 )
-        selected_segments = _select_role_segments(
-            DocumentRole.PRIMARY, (primary_document,), 12
-        )
-        context_segments = _select_role_segments(
-            DocumentRole.CONTEXT, context_documents, 16
-        )
-        role_counts = {DocumentRole.PRIMARY: 0, DocumentRole.CONTEXT: 0}
-        evidence = []
-        for document, segment, document_role in selected_segments:
-            role_counts[document_role] += 1
-            evidence.append(
-                EvidenceItem(
-                    evidence_id=(
-                        f"{document_role.value}-"
-                        f"{role_counts[document_role]:03d}"
-                    ),
-                    evidence_type="document_fact",
-                    text=_truncate_at_word_boundary(segment.text, 1600),
-                    locator=EvidenceLocator(
-                        document_title=document.name,
-                        page=segment.page,
-                        heading=segment.heading,
-                        element=segment.element,
-                        excerpt=_truncate_at_word_boundary(segment.text, 600),
-                    ),
-                    confidence="high",
-                    document_role=document_role,
-                )
+        # The primary CPF/CEN is the principal lens: every segment, in full and in order.
+        evidence = [
+            EvidenceItem(
+                evidence_id=f"primary-{segment_index:03d}",
+                evidence_type="document_fact",
+                text=segment.text,
+                locator=EvidenceLocator(
+                    document_title=primary_document.name,
+                    page=segment.page,
+                    heading=segment.heading,
+                    element=segment.element,
+                    excerpt=_truncate_at_word_boundary(segment.text, 600),
+                ),
+                confidence="high",
+                document_role=DocumentRole.PRIMARY,
             )
-        for document_index, document in enumerate(package_documents, start=1):
-            for segment_index, segment in enumerate(document.segments, start=1):
-                evidence.append(
-                    EvidenceItem(
-                        evidence_id=(
-                            f"package-doc-{document_index:03d}-"
-                            f"segment-{segment_index:03d}"
-                        ),
-                        evidence_type="document_fact",
-                        text=segment.text,
-                        locator=EvidenceLocator(
-                            document_title=document.name,
-                            page=segment.page,
-                            heading=segment.heading,
-                            element=segment.element,
-                            excerpt=_truncate_at_word_boundary(segment.text, 600),
-                        ),
-                        confidence="high",
-                        document_role=DocumentRole.PACKAGE,
-                    )
-                )
-        for document, segment, document_role in context_segments:
-            role_counts[document_role] += 1
-            evidence.append(
-                EvidenceItem(
-                    evidence_id=(
-                        f"{document_role.value}-"
-                        f"{role_counts[document_role]:03d}"
-                    ),
-                    evidence_type="document_fact",
-                    text=_truncate_at_word_boundary(segment.text, 1600),
-                    locator=EvidenceLocator(
-                        document_title=document.name,
-                        page=segment.page,
-                        heading=segment.heading,
-                        element=segment.element,
-                        excerpt=_truncate_at_word_boundary(segment.text, 600),
-                    ),
-                    confidence="high",
-                    document_role=document_role,
-                )
-            )
+            for segment_index, segment in enumerate(primary_document.segments, start=1)
+        ]
+        evidence.extend(
+            _supporting_document_evidence(context, package_documents, context_documents)
+        )
 
         correction_payloads = tuple(payload.get("corrections", ()))
         corrections = tuple(
@@ -1173,6 +1222,7 @@ def build_runtime_services(
         )
         prompt_bytes = {
             "diagnostic_map": load_prompt("diagnostic_map").encode("utf-8"),
+            "document_digest": load_prompt("document_digest").encode("utf-8"),
             "public_research": load_research_prompt().encode("utf-8"),
             "review": load_prompt("review").encode("utf-8"),
             "repair": load_prompt("repair").encode("utf-8"),
@@ -1195,7 +1245,7 @@ def build_runtime_services(
             ),
             guidance=review_focus,
             prompt_bytes=prompt_bytes,
-            model_id=config["ANTHROPIC_MODEL_ID"],
+            model_id=review_model_id,
             source_scan_at=datetime.now(UTC),
             output_language="en",
             evidence=tuple(evidence),
@@ -1443,6 +1493,7 @@ def build_runtime_services(
                         + full_diagnostic.warnings
                     )
                 _reextract_full_package_documents(context)
+                _reextract_full_context_documents(context)
                 review_date = review_date_provider()
                 dated_diagnostic = (
                     uploaded_diagnostic
