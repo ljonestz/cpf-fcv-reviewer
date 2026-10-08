@@ -418,3 +418,111 @@ def test_frontend_mirrors_server_upload_limits_before_submission():
 def test_frontend_reports_package_plan_and_digest_progress():
     assert 'source.addEventListener("package_plan"' in APP_JS
     assert 'source.addEventListener("document_digest_progress"' in APP_JS
+
+
+# --- RRA identification with a full package ---------------------------------------------------
+
+
+def _text_document(name: str, text: str) -> ExtractedDocument:
+    return ExtractedDocument(name, (ExtractedSegment(text, 1, None, "page 1"),), ())
+
+
+def test_rra_in_context_slot_wins_over_package_document_that_cites_it():
+    plr = _text_document(
+        "PLR.pdf", "Guinea PLR. The Risk and Resilience Assessment informed the program."
+    )
+    rra = _text_document("Guinea RRA.pdf", "Guinea Risk and Resilience Assessment, June 2023.")
+    context = {
+        "package_documents": (_text_document("BOSIB.pdf", "Board summary."), plr),
+        "context_documents": (rra,),
+    }
+
+    identified = runtime._identify_uploaded_diagnostic(context, country="Guinea")
+
+    assert identified is not None
+    assert identified.name == "Guinea RRA.pdf"
+    assert identified.source_index == 2
+    resolved = runtime._resolve_uploaded_diagnostic_source(
+        {**context, "context_document_uploads": ((1, {"name": "Guinea RRA.pdf"}),)},
+        identified.source_index,
+    )
+    assert resolved[0] is DocumentRole.CONTEXT
+
+
+def test_rra_uploaded_in_package_slot_is_still_identified():
+    rra = _text_document("Guinea RRA.pdf", "Guinea Risk and Resilience Assessment, June 2023.")
+    context = {"package_documents": (rra,), "context_documents": ()}
+
+    identified = runtime._identify_uploaded_diagnostic(context, country="Guinea")
+
+    assert identified is not None and identified.source_index == 0
+
+
+# --- schema-in-prompt fallback for oversized grammars -------------------------------------------
+
+
+class _GrammarTooLarge(Exception):
+    status_code = 400
+
+    def __str__(self):
+        return "Error code: 400 - The compiled grammar is too large, which would cause issues."
+
+
+class _Stream:
+    def __init__(self, response):
+        self.response = response
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def get_final_message(self):
+        return self.response
+
+
+class _FallbackMessages:
+    def __init__(self, reply_text):
+        self.reply_text = reply_text
+        self.calls = []
+
+    def stream(self, **kwargs):
+        self.calls.append(kwargs)
+        if "output_format" in kwargs:
+            raise _GrammarTooLarge()
+        block = type("Block", (), {"type": "text", "text": self.reply_text})()
+        return _Stream(type("Message", (), {"stop_reason": "end_turn", "content": [block]})())
+
+
+def _fallback_gateway(monkeypatch, reply_text):
+    from cpf_fcv_reviewer import model_gateway
+
+    messages = _FallbackMessages(reply_text)
+    client = type("Client", (), {"messages": messages})()
+    monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+    return model_gateway.AnthropicModelGateway("key", "model"), messages
+
+
+def test_gateway_falls_back_to_schema_in_prompt_when_grammar_is_too_large(monkeypatch):
+    expected = digest(DocumentDigestPoint(point="Point."))
+    gateway, messages = _fallback_gateway(
+        monkeypatch, "```json\n" + expected.model_dump_json() + "\n```"
+    )
+
+    first = gateway.generate(prompt_name="document_digest", payload={}, output_type=DocumentDigest)
+    second = gateway.generate(prompt_name="document_digest", payload={}, output_type=DocumentDigest)
+
+    assert first == second == expected
+    assert "output_format" in messages.calls[0]
+    assert all("output_format" not in call for call in messages.calls[1:])
+    assert '"significance"' in messages.calls[1]["system"]
+    # The fallback is remembered: the second request skips the rejected constrained call.
+    assert len(messages.calls) == 3
+
+
+def test_gateway_fallback_reply_that_breaks_schema_raises_validation_error(monkeypatch):
+    gateway, _messages = _fallback_gateway(monkeypatch, '{"significance": "unknown"}')
+
+    with pytest.raises(ValidationError):
+        gateway.generate(prompt_name="document_digest", payload={}, output_type=DocumentDigest)

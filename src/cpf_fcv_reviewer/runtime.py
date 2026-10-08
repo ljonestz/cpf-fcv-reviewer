@@ -720,6 +720,25 @@ def _reextract_full_context_documents(context: dict) -> None:
     context["context_documents"] = tuple(documents)
 
 
+def _identify_uploaded_diagnostic(context: dict, *, country: str):
+    """Prefer a single diagnostic among the RRA and supporting-analytics uploads.
+
+    Package documents such as a Performance and Learning Review often cite the RRA, so
+    a combined search can find two candidates and silently drop RRA alignment. The
+    combined search remains the fallback when the context slot has no single match.
+    """
+    package_documents = tuple(context.get("package_documents", ()))
+    context_documents = tuple(context.get("context_documents", ()))
+    in_context = identify_uploaded_diagnostic(context_documents, country=country)
+    if in_context is not None:
+        return replace(
+            in_context, source_index=in_context.source_index + len(package_documents)
+        )
+    return identify_uploaded_diagnostic(
+        package_documents + context_documents, country=country
+    )
+
+
 def _resolve_uploaded_diagnostic_source(
     context: dict,
     source_index: int,
@@ -1428,12 +1447,8 @@ def build_runtime_services(
                 context["result"] = _preserve_research_limitation(context)
             if name == "research":
                 payload = context.get("payload", {})
-                diagnostic_documents = (
-                    tuple(context.get("package_documents", ()))
-                    + tuple(context.get("context_documents", ()))
-                )
-                uploaded_diagnostic = identify_uploaded_diagnostic(
-                    diagnostic_documents,
+                uploaded_diagnostic = _identify_uploaded_diagnostic(
+                    context,
                     country=payload.get("country", ""),
                 )
                 context["uploaded_diagnostic"] = uploaded_diagnostic
