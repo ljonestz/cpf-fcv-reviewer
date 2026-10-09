@@ -50,3 +50,17 @@ quality run requires explicit authorization.
   attest a date; day precision and unattested dates remain conflicts.
 
 Provider-free suite after the fix: 1,719 passed, one Windows Gunicorn skip.
+
+## Attempt 3 (2026-10-09, authorized): interrupted during review
+
+- Build: `cb5e092`, same inputs and runner.
+- Safe event history: research `reduced` immediately after its first attempt;
+  `package_plan` 2 package documents in full, RRA identified; map completed; review
+  failed after 220 seconds with `APIStatusError` reporting HTTP status 200, which is an
+  error event received mid-stream after the request was accepted (a provider-side
+  interruption such as `overloaded_error`). The SDK does not retry these.
+- Fix: the gateway retries transient failures, including mid-stream errors, up to two
+  times with 15- and 45-second backoff, and logs the safe API error type. Invalid
+  requests (HTTP 400) are not retried.
+
+Provider-free suite after the fix: 1,722 passed, one Windows Gunicorn skip.

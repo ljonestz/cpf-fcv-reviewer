@@ -596,3 +596,72 @@ def test_digest_paraphrase_cannot_attest_a_diagnostic_date():
     texts = list(_verbatim_document_texts({"a": digest_item, "b": page_item}))
 
     assert texts == ["the 2017 RRA"]
+
+
+# --- transient stream interruptions --------------------------------------------------------------
+
+
+class _MidStreamOverloaded(Exception):
+    status_code = 200
+    body = {"type": "error", "error": {"type": "overloaded_error"}}
+
+
+class _FlakyMessages:
+    def __init__(self, failures, response):
+        self.failures = list(failures)
+        self.response = response
+        self.calls = 0
+
+    def stream(self, **kwargs):
+        self.calls += 1
+        if self.failures:
+            raise self.failures.pop(0)
+        return _Stream(self.response)
+
+
+def _flaky_gateway(monkeypatch, failures):
+    from cpf_fcv_reviewer import model_gateway
+
+    expected = digest(DocumentDigestPoint(point="Point."))
+    messages = _FlakyMessages(
+        failures, type("Message", (), {"stop_reason": "end_turn", "parsed_output": expected})()
+    )
+    client = type("Client", (), {"messages": messages})()
+    monkeypatch.setattr(model_gateway.anthropic, "Anthropic", lambda api_key: client)
+    sleeps = []
+    monkeypatch.setattr(model_gateway, "sleep", sleeps.append)
+    return model_gateway.AnthropicModelGateway("key", "model"), messages, sleeps, expected
+
+
+def test_gateway_retries_mid_stream_interruption(monkeypatch):
+    gateway, messages, sleeps, expected = _flaky_gateway(
+        monkeypatch, [_MidStreamOverloaded(), _MidStreamOverloaded()]
+    )
+
+    result = gateway.generate(prompt_name="document_digest", payload={}, output_type=DocumentDigest)
+
+    assert result == expected
+    assert messages.calls == 3
+    assert sleeps == [15.0, 45.0]
+
+
+def test_gateway_gives_up_after_bounded_retries(monkeypatch):
+    gateway, messages, _sleeps, _expected = _flaky_gateway(
+        monkeypatch, [_MidStreamOverloaded()] * 3
+    )
+
+    with pytest.raises(_MidStreamOverloaded):
+        gateway.generate(prompt_name="document_digest", payload={}, output_type=DocumentDigest)
+    assert messages.calls == 3
+
+
+def test_gateway_does_not_retry_invalid_requests(monkeypatch):
+    class _Invalid(Exception):
+        status_code = 400
+
+    gateway, messages, sleeps, _expected = _flaky_gateway(monkeypatch, [_Invalid()])
+
+    with pytest.raises(_Invalid):
+        gateway.generate(prompt_name="document_digest", payload={}, output_type=DocumentDigest)
+    assert messages.calls == 1
+    assert sleeps == []
