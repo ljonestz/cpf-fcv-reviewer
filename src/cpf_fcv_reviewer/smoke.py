@@ -12,6 +12,8 @@ from .contracts import (
     DiagnosticEntry,
     DiagnosticMap,
     DiagnosticMode,
+    DocumentDigest,
+    DocumentDigestPoint,
     EvidenceLocator,
     FCVStrategicShift,
     FCVStrategyAssessment,
@@ -159,6 +161,27 @@ class SmokeModelGateway:
     """Build deterministic review drafts from evidence IDs supplied by the app."""
 
     def generate(self, *, prompt_name: str, payload: dict, output_type: type[Any]):
+        if output_type is DocumentDigest:
+            if prompt_name != "document_digest":
+                raise ValueError("Smoke digests require the document_digest prompt.")
+            evidence_ids = tuple(
+                item["evidence_id"]
+                for item in payload.get("evidence", ())
+                if isinstance(item, dict) and isinstance(item.get("evidence_id"), str)
+            )
+            if not evidence_ids:
+                raise ValueError("Smoke digests require supplied segment IDs.")
+            return DocumentDigest(
+                document_type=f"{SMOKE_MARKER} synthetic package document",
+                significance="core",
+                summary=f"{SMOKE_MARKER} Synthetic digest of a document read in full.",
+                key_points=(
+                    DocumentDigestPoint(
+                        point=f"{SMOKE_MARKER} Synthetic key point.",
+                        source_evidence_ids=evidence_ids[:2],
+                    ),
+                ),
+            )
         if output_type is DiagnosticMap:
             if prompt_name != "diagnostic_map":
                 raise ValueError("Smoke diagnostic mapping requires the diagnostic_map prompt.")

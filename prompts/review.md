@@ -1,4 +1,4 @@
-Version: 3.0.4
+Version: 3.1.0
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -55,6 +55,13 @@ absence.
 The attention hierarchy is fixed: primary CPF/CEN is the principal analytical lens;
 accompanying package evidence is detailed and complete within the declared readable-text
 bounds; RRA and contextual evidence are thematic supporting lenses.
+
+The primary CPF/CEN is supplied in full. Every package and context document was read in
+full, but a very large one may be supplied as a full-document digest (locator element
+"full-document digest") plus the verbatim pages that digest cites, instead of its whole
+text. A digest is a model summary: prefer citing the verbatim page evidence when it
+supports the point, never treat silence in a digest as evidence of absence, and say in
+coverage_note which documents were summarised.
 
 Coverage-aware interpretation:
 - Treat incomplete sampling as uncertainty, never as evidence of absence.

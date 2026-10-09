@@ -207,6 +207,30 @@ class DiagnosticMap(FrozenModel):
     entries: tuple[DiagnosticEntry, ...] = Field(min_length=1, max_length=20)
 
 
+class DocumentDigestPoint(FrozenModel):
+    point: ReviewNarrative
+    source_evidence_ids: tuple[str, ...] = ()
+
+    @field_validator("point")
+    @classmethod
+    def requires_nonblank_point(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Digest point")
+
+
+class DocumentDigest(FrozenModel):
+    """Model-authored summary of one document that was read in full."""
+
+    document_type: ReviewNarrative = Field(max_length=200)
+    significance: Literal["core", "background"]
+    summary: ReviewNarrative = Field(max_length=4000)
+    key_points: tuple[DocumentDigestPoint, ...] = Field(min_length=1, max_length=25)
+
+    @field_validator("document_type", "summary")
+    @classmethod
+    def requires_nonblank_digest_text(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Digest text")
+
+
 class RRADriverAssessment(FrozenModel):
     assessment_id: ReviewNarrative
     driver: ReviewNarrative

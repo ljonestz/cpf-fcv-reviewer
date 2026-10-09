@@ -5,6 +5,10 @@ from math import isfinite
 from numbers import Real
 from unicodedata import category
 
+DEFAULT_REVIEW_MODEL_ID = "claude-opus-5-5"
+# The Render starter instance has 512 MB of memory; raise this only with the plan.
+MAX_UPLOAD_BYTES = 80 * 1024 * 1024
+
 
 def _environment_bool(name: str, *, use_environment: bool = True) -> bool:
     if not use_environment:
@@ -44,10 +48,15 @@ def build_config(
         ),
         "ANTHROPIC_API_KEY": environment("ANTHROPIC_API_KEY", ""),
         "ANTHROPIC_MODEL_ID": environment("ANTHROPIC_MODEL_ID", "claude-sonnet-4-5"),
+        # Document-reading calls (review, repair, diagnostic map, readout, digests) need
+        # a 1M-token context; research and the follow-on assistant keep the model above.
+        "ANTHROPIC_REVIEW_MODEL_ID": environment(
+            "ANTHROPIC_REVIEW_MODEL_ID", DEFAULT_REVIEW_MODEL_ID
+        ),
         "REGISTRY_BUNDLE_PATH": environment("REGISTRY_BUNDLE_PATH", ""),
         "REGISTRY_BUNDLE_SHA256": environment("REGISTRY_BUNDLE_SHA256", ""),
         "ALLOW_SYNTHETIC_REGISTRY": False,
-        "MAX_CONTENT_LENGTH": 40 * 1024 * 1024,
+        "MAX_CONTENT_LENGTH": MAX_UPLOAD_BYTES,
         "RESEARCH_MAX_ATTEMPTS": int(environment("RESEARCH_MAX_ATTEMPTS", "1")),
         "RESEARCH_ATTEMPT_TIMEOUT_SECONDS": float(
             environment("RESEARCH_ATTEMPT_TIMEOUT_SECONDS", "180")

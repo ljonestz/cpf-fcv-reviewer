@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
@@ -360,7 +361,44 @@ _DIAGNOSTIC_DATE_PATTERNS = (
 )
 
 
-def has_diagnostic_date_conflict(text: str, provenance: DiagnosticProvenance | None) -> bool:
+def _authored_diagnostic_date(match: re.Match) -> tuple[int, int | None, bool]:
+    authored = match.group("date").casefold()
+    year = int(re.search(r"(?:19|20)\d{2}", authored).group())
+    month = next((i for i, name in enumerate(_DATE_MONTHS, 1) if name in authored), None)
+    iso_month = re.search(r"\d{4}-(\d{2})", authored)
+    if iso_month:
+        month = int(iso_month.group(1))
+    # Our extractor establishes a month, not an exact calendar day.
+    has_day = bool(
+        re.search(
+            r"\b\d{1,2}\s+[a-z]|[a-z]\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}",
+            authored,
+        )
+    )
+    return year, month, has_day
+
+
+def attested_diagnostic_dates(texts: Iterable[str]) -> frozenset[tuple[int, int | None]]:
+    """Diagnostic dates stated verbatim in supplied documents, such as an earlier RRA.
+
+    A CPF or PLR may cite a previous RRA ("the 2017 RRA") alongside the uploaded one.
+    Those dates are attested by the source text and are not conflicts.
+    """
+    dates: set[tuple[int, int | None]] = set()
+    for text in texts:
+        normalized = " ".join(text.split())
+        for pattern in _DIAGNOSTIC_DATE_PATTERNS:
+            for match in pattern.finditer(normalized):
+                year, month, _has_day = _authored_diagnostic_date(match)
+                dates.add((year, month))
+    return frozenset(dates)
+
+
+def has_diagnostic_date_conflict(
+    text: str,
+    provenance: DiagnosticProvenance | None,
+    attested: frozenset[tuple[int, int | None]] = frozenset(),
+) -> bool:
     if provenance is None:  # Existing stored reviews predate provenance capture.
         return False
     expected = provenance.publication_date
@@ -368,29 +406,39 @@ def has_diagnostic_date_conflict(text: str, provenance: DiagnosticProvenance | N
     for pattern in _DIAGNOSTIC_DATE_PATTERNS:
         matches = (match for line in lines for match in pattern.finditer(line))
         for match in matches:
-            authored = match.group("date").casefold()
-            year_match = re.search(r"(?:19|20)\d{2}", authored)
-            year = int(year_match.group())
-            month = next((i for i, name in enumerate(_DATE_MONTHS, 1) if name in authored), None)
-            iso_month = re.search(r"\d{4}-(\d{2})", authored)
-            if iso_month:
-                month = int(iso_month.group(1))
-            # Our extractor establishes a month, not an exact calendar day.
-            has_day = bool(
-                re.search(
-                    r"\b\d{1,2}\s+[a-z]|[a-z]\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2}",
-                    authored,
-                )
-            )
-            if expected is None or year != expected.year or (
-                month is not None and month != expected.month
-            ) or has_day:
+            year, month, has_day = _authored_diagnostic_date(match)
+            if has_day:
                 return True
+            if expected is not None and year == expected.year and (
+                month is None or month == expected.month
+            ):
+                continue
+            if any(
+                attested_year == year
+                and (attested_month is None or month is None or attested_month == month)
+                for attested_year, attested_month in attested
+            ):
+                continue
+            return True
     return False
 
 
-def _append_diagnostic_date_issue(issues: list[ValidationIssue], result: ReviewResult) -> None:
-    if has_diagnostic_date_conflict(result_text(result), result.metadata.diagnostic_provenance):
+def _verbatim_document_texts(evidence: Mapping[str, EvidenceItem] | None) -> Iterable[str]:
+    for item in (evidence or {}).values():
+        if item.evidence_type == "document_fact" and not (
+            item.locator is not None and item.locator.is_paraphrase
+        ):
+            yield item.text
+
+
+def _append_diagnostic_date_issue(
+    issues: list[ValidationIssue],
+    result: ReviewResult,
+    attested: frozenset[tuple[int, int | None]] = frozenset(),
+) -> None:
+    if has_diagnostic_date_conflict(
+        result_text(result), result.metadata.diagnostic_provenance, attested
+    ):
         issues.append(ValidationIssue(
             "diagnostic_date_conflict",
             "Use only the application-owned diagnostic publication month; "
@@ -424,7 +472,9 @@ def validate_review(
 ) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
     text = result_text(result)
-    _append_diagnostic_date_issue(issues, result)
+    _append_diagnostic_date_issue(
+        issues, result, attested_diagnostic_dates(_verbatim_document_texts(evidence))
+    )
     _append_raw_evidence_id_issue(issues, text, evidence_ids)
     if registry_entry_ids is not None:
         _append_unknown_institutional_referral_issue(

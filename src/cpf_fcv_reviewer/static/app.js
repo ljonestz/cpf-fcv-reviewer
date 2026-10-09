@@ -38,6 +38,9 @@ const researchRecoveryHeading = document.querySelector("#research-recovery-headi
 const researchRecoveryMessage = document.querySelector("#research-recovery-message") || document.createElement("p");
 const retryResearchButton = document.querySelector("#retry-research") || document.createElement("button");
 const primaryFileInput = document.querySelector("#cpf");
+const packageFileInput = document.querySelector("#package-documents");
+const contextFileInput = document.querySelector("#context-documents");
+const uploadSummary = document.querySelector("#upload-summary");
 const countryInput = document.querySelector("#country");
 const countryDetection = document.querySelector("#country-detection");
 const submitButton = document.querySelector("#submit-review");
@@ -103,6 +106,8 @@ const progressLabels = {
   research_reduced: "Current country evidence partially established",
   research_document_led: "Working from the submitted evidence",
   research_curated_recovery: "Cross-checking available institutional evidence",
+  package_plan: "Reading every supporting document in full",
+  document_digest_progress: "Summarising the largest supporting documents",
 };
 
 const sseStageMap = {
@@ -116,6 +121,8 @@ const sseStageMap = {
   research_document_led: "research",
   research_curated_recovery: "research",
   build_evidence: "note",
+  package_plan: "note",
+  document_digest_progress: "note",
   map: "note",
   review: "note",
   validate: "note",
@@ -128,6 +135,10 @@ const evidenceStatusLabels = {
   document_led: "Review based primarily on submitted documents",
 };
 const COUNTRY_DETECTION_MAX_BYTES = 10 * 1024 * 1024;
+// Mirror the server limits so an oversized package is caught before upload.
+const PACKAGE_MAX_DOCUMENTS = 40;
+const UPLOAD_MAX_BYTES = 80 * 1024 * 1024;
+let uploadLimitExceeded = false;
 
 const assessmentStatusLabels = {
   aligned: "Aligned",
@@ -276,6 +287,9 @@ const failureLabels = {
   document_too_large: "The primary document is too large to review in full. Upload a shorter version, or split the annexes into package documents.",
   diagnostic_coverage_unavailable: "The uploaded diagnostic could not be assessed in full. Upload a shorter or text-searchable version, or start a new review without it.",
   package_coverage_unavailable: "The accompanying package could not be reviewed in full. Upload fewer, shorter, or text-searchable package documents.",
+  package_document_count_exceeded: "More than 40 package documents were uploaded. Combine or remove some, or move background material to RRA and supporting analytics.",
+  package_document_too_large: "A package document is longer than 250 pages or 600,000 characters. Split it, or upload only the relevant sections.",
+  package_document_unreadable: "A package document has no readable text. Upload a text-searchable PDF, Word document, or text file.",
   review_schema_invalid: "The review could not be completed.",
   review_failed: "The review could not be completed.",
 };
@@ -376,7 +390,44 @@ function updateSubmitState() {
   submitButton.disabled = detectionPending
     || countryRequiresConfirmation
     || !countryInput.value.trim()
-    || !hasPrimaryFile;
+    || !hasPrimaryFile
+    || uploadLimitExceeded;
+}
+
+function selectedFiles(input) {
+  return Array.from(input?.files || []);
+}
+
+function formatMegabytes(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function updateUploadSummary() {
+  const packageFiles = selectedFiles(packageFileInput);
+  const allFiles = [
+    ...selectedFiles(primaryFileInput),
+    ...packageFiles,
+    ...selectedFiles(contextFileInput),
+  ];
+  const totalBytes = allFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+  const problems = [];
+  if (packageFiles.length > PACKAGE_MAX_DOCUMENTS) {
+    problems.push(`Remove ${packageFiles.length - PACKAGE_MAX_DOCUMENTS} package documents: the limit is ${PACKAGE_MAX_DOCUMENTS}.`);
+  }
+  if (totalBytes > UPLOAD_MAX_BYTES) {
+    problems.push(`Reduce the upload by ${formatMegabytes(totalBytes - UPLOAD_MAX_BYTES)}: the limit is ${formatMegabytes(UPLOAD_MAX_BYTES)} in total.`);
+  }
+  uploadLimitExceeded = problems.length > 0;
+  if (uploadSummary) {
+    if (!allFiles.length) {
+      uploadSummary.textContent = "";
+    } else if (uploadLimitExceeded) {
+      uploadSummary.textContent = problems.join(" ");
+    } else {
+      uploadSummary.textContent = `${allFiles.length} ${allFiles.length === 1 ? "document" : "documents"}, ${formatMegabytes(totalBytes)}. Every document is read in full; if the package is very large, the largest supporting documents are summarised rather than supplied word for word, and the note says which.`;
+    }
+  }
+  updateSubmitState();
 }
 
 function clearCountryCorrection() {
@@ -477,6 +528,9 @@ async function detectCountry() {
 }
 
 primaryFileInput.addEventListener("change", detectCountry);
+for (const input of [primaryFileInput, packageFileInput, contextFileInput]) {
+  input?.addEventListener("change", updateUploadSummary);
+}
 
 if (typeof processDialog.showModal === "function") processDialog.hidden = false;
 
@@ -1301,6 +1355,21 @@ function watchEvents(eventUrl, resultUrl, operation = operationEpoch) {
       updateProgress(eventName);
     });
   }
+  source.addEventListener("package_plan", (event) => {
+    if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
+    const plan = JSON.parse(event.data);
+    updateProgress("package_plan");
+    const summarised = (plan.package_summarised || 0) + (plan.context_summarised || 0);
+    if (summarised > 0) {
+      progressMessage.textContent = `Reading every supporting document in full and summarising the ${summarised} largest`;
+    }
+  });
+  source.addEventListener("document_digest_progress", (event) => {
+    if (!isCurrentOperation(operation) || !isActiveSource(source)) return;
+    const data = JSON.parse(event.data);
+    updateProgress("document_digest_progress");
+    progressMessage.textContent = `Summarised ${data.completed} of ${data.total} large supporting documents`;
+  });
   for (const eventName of ["research_reduced", "research_document_led", "research_curated_recovery"]) {
     source.addEventListener(eventName, () => {
       if (!isCurrentOperation(operation) || !isActiveSource(source)) return;

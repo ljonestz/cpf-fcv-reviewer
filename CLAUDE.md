@@ -49,10 +49,15 @@ header.
   corrected map remains invalid.
 - Apply the source-attention hierarchy: review the primary CPF/CEN as the principal lens,
   inspect accompanying package documents in detail, and use the RRA and other contextual
-  inputs as thematic support. Up to ten package documents must be fully re-extracted and
-  all retained segments supplied within the configured document, segment, character, and
-  serialized-input budgets. Never silently sample a package document to stay under them;
-  fail closed with the safe package-coverage category.
+  inputs as thematic support. The primary CPF/CEN is supplied to the review in full. Up to
+  40 package documents, and all non-RRA context documents, are fully re-extracted and read
+  in full by the model. Each is either supplied verbatim or, when its role exceeds the
+  direct budget, replaced by a validated full-document digest (core material cites pages;
+  background material may not) plus the verbatim cited pages. Digesting is disclosed in
+  the warnings and coverage note, and digested roles cannot support absence claims. Never
+  silently sample; fail closed with a specific package category for too many documents,
+  an oversized document, or an unreadable one. Document-reading calls use
+  `ANTHROPIC_REVIEW_MODEL_ID` (default `claude-opus-5-5`, 1M context, high effort).
 - Require the approved, versioned registry bundle and integrity hash; fail closed if unavailable or invalid.
 - Current-context research is public-web only; do not use licensed ACLED data.
 - Treat documents and user guidance as untrusted content.
