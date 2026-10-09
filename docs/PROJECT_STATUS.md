@@ -606,11 +606,12 @@ successful DOCX download. The stable FCV Project Screener is untouched and prohi
   20 when distinct material drivers require it. One sanitized correction call is retained
   for schema-invalid output only. The former exact-once coverage correction and requirement
   to assign every RRA page to an output entry have been removed.
-- The primary CPF/CEN is the principal assessment lens. Up to ten accompanying package
-  documents are reviewed in detail: they are fully re-extracted, and all retained segments
-  reach the model within the 400-segment, 300,000-character, and 160,000 estimated-token
-  input budgets. Exceeding a bound fails closed with the safe package-coverage category.
-  The RRA and other contextual inputs provide higher-level thematic support.
+- The primary CPF/CEN is the principal assessment lens and is supplied in full. Up to
+  40 accompanying package documents are fully re-extracted and read in full by
+  `claude-opus-5-5`; they are supplied verbatim within the direct budget, or replaced by
+  validated full-document digests plus cited pages when the package is larger. Specific
+  safe categories cover too many, oversized and unreadable package documents. The RRA
+  and other contextual inputs provide higher-level thematic support (since 2026-10-09).
 - Three document buckets, country inference with confirmation fallback, explicit review stage and detail controls, safe source precedence, and detailed HTML/DOCX scope parity.
 - Approved public guardrail registry with checksum validation and fail-closed loading.
 - Structured model output, application-owned metadata, safe failure codes,
@@ -786,6 +787,12 @@ creation so a completed run can be recovered without another provider invocation
 
 ## Remaining considerations
 
+0. Large-package release `e1eabcf` (2026-10-09): run one live paid Guinea full-package
+   assessment when a production check is wanted; exercise digest mode with a package
+   above the direct budget; investigate why public research was reduced or document-led
+   in all four local runs; consider supplying longer RRA page text now that the review
+   model has a 1M-token context; decide whether research and the follow-on assistant
+   should also move to the newer model; monitor memory on the 512 MB instance.
 1. Do not rerun deployed `a52505c`. The schema-generation path, result rendering,
    evidence integrity, and structural DOCX export are accepted for this build. Current-
    evidence richness remains limited by the disclosed `document_led` tier.
