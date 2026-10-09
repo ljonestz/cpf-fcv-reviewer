@@ -1,5 +1,9 @@
 # Project status
 
+## 2026-10-09 Deployed: large-package coverage
+
+PR #52 merged as `e1eabcf` and live on Render (deploy `dep-db4f2t6q1p3s73a15o4g`). No-cost checks passed: `/health` reports release `e1eabcf`; the intake upload summary and the 40-document and package failure labels are served. No live paid assessment was run after deployment; the fourth local Guinea run is the quality evidence.
+
 ## 2026-10-08 Candidate: large-package coverage
 
 A full Guinea package (CPF, BOSIB, PLR, RRA) stopped on the live site with
@@ -14,7 +18,7 @@ The intake shows counts and size and blocks uploads above 40 package documents o
 80 MB; a `package_plan` event reports summarising; failures use specific package codes.
 Research and the follow-on assistant still use `ANTHROPIC_MODEL_ID`. Design:
 [spec](superpowers/specs/2026-10-08-large-package-coverage-design.md). Provider-free
-suite: **1,722 passed**, one Windows Gunicorn skip. Four authorized local Guinea runs: the first three exposed and fixed an oversized output grammar on Opus 5.5, an ambiguous RRA detection when the PLR cites the RRA, a date guardrail false positive on the earlier 2017 RRA, and unretried mid-stream provider errors; the fourth completed with RRA alignment, 4 priority areas and 7 RRA driver assessments. See the [validation record](validation/2026-10-08-large-package-local-run.md). Not yet merged or deployed.
+suite: **1,722 passed**, one Windows Gunicorn skip. Four authorized local Guinea runs: the first three exposed and fixed an oversized output grammar on Opus 5.5, an ambiguous RRA detection when the PLR cites the RRA, a date guardrail false positive on the earlier 2017 RRA, and unretried mid-stream provider errors; the fourth completed with RRA alignment, 4 priority areas and 7 RRA driver assessments. See the [validation record](validation/2026-10-08-large-package-local-run.md).
 
 ## 2026-10-06 Candidate: country detection repair
 
