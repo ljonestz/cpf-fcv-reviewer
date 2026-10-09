@@ -526,3 +526,73 @@ def test_gateway_fallback_reply_that_breaks_schema_raises_validation_error(monke
 
     with pytest.raises(ValidationError):
         gateway.generate(prompt_name="document_digest", payload={}, output_type=DocumentDigest)
+
+
+# --- earlier diagnostics cited by the supplied documents -----------------------------------------
+
+
+def _june_2023_provenance():
+    from datetime import date
+
+    from cpf_fcv_reviewer.contracts import DiagnosticProvenance, EvidenceLocator
+
+    return DiagnosticProvenance(
+        document_title="Guinea RRA.pdf",
+        publication_date=date(2023, 6, 1),
+        date_basis="cover",
+        locator=EvidenceLocator(document_title="Guinea RRA.pdf", page=1, excerpt="June 2023"),
+    )
+
+
+def test_earlier_rra_cited_by_source_documents_is_not_a_date_conflict():
+    from cpf_fcv_reviewer.validators import attested_diagnostic_dates, has_diagnostic_date_conflict
+
+    attested = attested_diagnostic_dates(
+        ["The CPF drew on the Risk\xa0and\xa0Resilience\xa0Assessment\xa0(May\xa02017)."]
+    )
+    review = "The June 2023 RRA updates the 2017 RRA, which shaped the earlier CPF."
+
+    assert attested == frozenset({(2017, 5)})
+    assert not has_diagnostic_date_conflict(review, _june_2023_provenance(), attested)
+    assert has_diagnostic_date_conflict(review, _june_2023_provenance())
+
+
+def test_unattested_or_day_precise_diagnostic_dates_still_conflict():
+    from cpf_fcv_reviewer.validators import has_diagnostic_date_conflict
+
+    attested = frozenset({(2017, 5)})
+
+    assert has_diagnostic_date_conflict("The 2019 RRA notes...", _june_2023_provenance(), attested)
+    assert has_diagnostic_date_conflict(
+        "The RRA dated 12 May 2017 notes...", _june_2023_provenance(), attested
+    )
+    assert has_diagnostic_date_conflict(
+        "The RRA (September 2022) notes...", _june_2023_provenance(), attested
+    )
+
+
+def test_digest_paraphrase_cannot_attest_a_diagnostic_date():
+    from cpf_fcv_reviewer.contracts import EvidenceItem, EvidenceLocator
+    from cpf_fcv_reviewer.validators import _verbatim_document_texts
+
+    digest_item = EvidenceItem(
+        evidence_id="package-doc-001-digest",
+        evidence_type="document_fact",
+        text="Digest: the 2019 RRA ...",
+        locator=EvidenceLocator(
+            document_title="PLR.pdf", element="full-document digest", excerpt="x",
+            is_paraphrase=True,
+        ),
+        confidence="medium",
+    )
+    page_item = digest_item.model_copy(
+        update={
+            "evidence_id": "package-doc-001-segment-001",
+            "text": "the 2017 RRA",
+            "locator": EvidenceLocator(document_title="PLR.pdf", page=3, excerpt="x"),
+        }
+    )
+
+    texts = list(_verbatim_document_texts({"a": digest_item, "b": page_item}))
+
+    assert texts == ["the 2017 RRA"]

@@ -28,3 +28,25 @@
 
 Provider-free suite after the fixes: 1,716 passed, one Windows Gunicorn skip. A second
 quality run requires explicit authorization.
+
+## Attempt 2 (2026-10-09, authorized): failed at validation
+
+- Build: `3baeb0a`, same inputs and runner.
+- Safe event history: research ran curated recovery (7 accepted) but ended
+  `document_led` for insufficient coverage, and the knowledge-based readout was
+  generated (6 themes); `package_plan` reported 2 package documents in full and the
+  RRA identified as the diagnostic (no context documents left to summarise); map,
+  review (schema-in-prompt fallback) and validate completed; `advisory_notice` 3 x
+  `missing_current_context_support`; `repair_start` with `diagnostic_date_conflict`
+  and `unknown_institutional_referral`; `repair_failed` with
+  `diagnostic_date_conflict`; `run_failed` `review_failed` after 540 seconds.
+- Provider-free diagnosis: the uploaded RRA's provenance is June 2023 (cover). The
+  supplied documents legitimately cite the earlier May 2017 RRA (CPF 3, PLR 6, and
+  the 2023 RRA itself 17 dated mentions). With the full CPF and PLR now supplied, the
+  review cited "the 2017 RRA", which the validator treated as a conflict with the
+  June 2023 provenance; repair could not resolve it without mislabelling the 2017 RRA.
+- Fix: dated diagnostic mentions are allowed when the same year (and month, where
+  given) is stated verbatim in supplied document evidence. Digest paraphrases cannot
+  attest a date; day precision and unattested dates remain conflicts.
+
+Provider-free suite after the fix: 1,719 passed, one Windows Gunicorn skip.
