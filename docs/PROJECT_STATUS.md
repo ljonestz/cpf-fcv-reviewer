@@ -14,8 +14,7 @@ The intake shows counts and size and blocks uploads above 40 package documents o
 80 MB; a `package_plan` event reports summarising; failures use specific package codes.
 Research and the follow-on assistant still use `ANTHROPIC_MODEL_ID`. Design:
 [spec](superpowers/specs/2026-10-08-large-package-coverage-design.md). Provider-free
-suite: **1,712 passed**, one Windows Gunicorn skip. Not yet merged or deployed; one
-authorized paid local Guinea run remains.
+suite: **1,722 passed**, one Windows Gunicorn skip. Four authorized local Guinea runs: the first three exposed and fixed an oversized output grammar on Opus 5.5, an ambiguous RRA detection when the PLR cites the RRA, a date guardrail false positive on the earlier 2017 RRA, and unretried mid-stream provider errors; the fourth completed with RRA alignment, 4 priority areas and 7 RRA driver assessments. See the [validation record](validation/2026-10-08-large-package-local-run.md). Not yet merged or deployed.
 
 ## 2026-10-06 Candidate: country detection repair
 

@@ -64,3 +64,24 @@ Provider-free suite after the fix: 1,719 passed, one Windows Gunicorn skip.
   requests (HTTP 400) are not retried.
 
 Provider-free suite after the fix: 1,722 passed, one Windows Gunicorn skip.
+
+## Attempt 4 (2026-10-09, authorized): complete
+
+- Build: `63ef58c`, same inputs and runner; 521 seconds; `run_complete`.
+- Safe event history: research `reduced` (two partially verified items, one
+  publisher); `package_plan` 2 package documents in full, RRA identified; map, review
+  and validate completed; `advisory_notice` 2 x `missing_current_context_support`;
+  `repair_start` with `unknown_institutional_referral`, resolved by the single repair.
+- Result metadata: model `claude-opus-5-5`, `rra_alignment`, current evidence
+  `reduced`, repair count 1; 4 priority areas and 7 RRA driver assessments. Evidence
+  supplied: 105 primary segments (full CPF), 168 package pages (BOSIB and PLR in full,
+  no digests needed), RRA page excerpts with the diagnostic map, 2 current-context items.
+  Priority-area citations: primary 18, package 11, diagnostic 11, current 2, registry 3.
+- The model-authored coverage note describes the CPF as read in full and both package
+  documents as supplied in full, not as digests. The Word export (101 paragraphs)
+  distinguishes the May 2017 RRA cited by the CPF from the uploaded June 2023 RRA.
+- Not exercised in this run: digest mode (the package fit the direct budget), which is
+  covered by provider-free tests only.
+- Follow-ups: public research was reduced or document-led in all four attempts (code
+  unchanged on this branch); RRA pages still reach the review as 600-character
+  excerpts, which the 1M context would now allow to be lengthened.
