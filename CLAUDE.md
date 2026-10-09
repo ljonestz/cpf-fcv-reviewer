@@ -78,11 +78,19 @@ header.
 - `docs/validation/`: dated historical validation evidence.
 - `docs/superpowers/specs/` and `plans/`: historical designs and implementation plans.
 
-## Current-context pipeline and readiness (2026-09-10)
+## Current-context pipeline and readiness (2026-10-09)
 
-Application release `992c35a` (PR 36) is deployed; Render and `/health` confirm it.
-Main CI passed 1,619 tests including Gunicorn. Grounding improvements are live; no
-paid assessment was run on this release. See `docs/validation/2026-09-10-grounding-deployment.md`.
+Application release `e1eabcf` (PR 52) is deployed; Render and `/health` confirm it.
+It adds large-package coverage: `ANTHROPIC_REVIEW_MODEL_ID` (default `claude-opus-5-5`)
+for document-reading calls, the full primary CPF, up to 40 package documents with
+validated digests, a schema-in-prompt fallback when constrained decoding rejects the
+`ReviewDraft` grammar, RRA upload-slot preference, attested earlier diagnostic dates,
+and transient stream retries. 1,722 provider-free tests passed; Linux CI passed. A
+full local Guinea package run completed; no live paid run on this release. See
+`docs/validation/2026-10-08-large-package-local-run.md`.
+
+Prior release `992c35a` (PR 36) added grounding improvements; see
+`docs/validation/2026-09-10-grounding-deployment.md`.
 
 Prior release `3904935` acceptance:
 The candidate passed 1,610 provider-free tests including real Gunicorn, and merged-release
@@ -110,7 +118,11 @@ current results. No further paid run is authorized merely by updating documentat
 
 **Test assets (local only, not in repo):** real Guinea CPF/RRA source docs at
 `C:\Users\wb559324\OneDrive - WBG\Claude_Outputs\cpf_screener\GuineaCPFRRA\guineacpf.pdf` and
-`guinearra.pdf` (do not open the dated sub-folders' sensitive handoff files); synthetic Benin fixture
+`guinearra.pdf` (do not open the dated sub-folders' sensitive handoff files). The full public Guinea
+package (CPF, BOSIB project appraisal document, PLR, RRA) is at
+`C:\Users\wb559324\OneDrive - WBG\fcv-project-screener\FCV_Screener_test_cases\Guinea - Water`; local
+paid runs use `scripts/20260907_run_quality_local.py`, `decision_review`, the RRA in
+`context_documents`, and must persist assessment IDs outside the repository. Synthetic Benin fixture
 `tests/fixtures/synthetic_en.txt`. Trigger a real run via `POST /api/reviews` (multipart `cpf`,
 `country`, `review_stage`, `context_documents`) then stream `GET /api/reviews/<id>/events`. On the WBG
 machine, local httpx to onrender.com / api.anthropic.com must merge the WBG root CA (`SSL_CERT_FILE`)

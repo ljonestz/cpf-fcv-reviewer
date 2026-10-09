@@ -1,5 +1,20 @@
 # Production readiness
 
+## Large-package coverage deployed - 2026-10-09
+
+Application **e1eabcf** (PR 52) is live and health/static verified. Document-reading
+calls use `claude-opus-5-5`; the primary CPF is supplied in full; up to 40 package
+documents are read in full, with validated digests when a package exceeds the direct
+budget. The provider-free suite passed **1,722 tests** and Linux CI passed. A full local
+Guinea package run completed with RRA alignment, four priority areas and seven RRA
+driver assessments after three earlier attempts exposed and fixed an oversized output
+grammar, RRA ambiguity, a date guardrail false positive and unretried stream errors.
+No paid live assessment has been run on this release. Digest mode is covered by
+provider-free tests only. Public research was reduced or document-led in all four runs.
+Per-run model cost is higher than on Sonnet 4.5. The 512 MB instance bounds uploads to
+80 MB. Supervised expert-use and volatile-storage limits remain. See the
+[large-package record](validation/2026-10-08-large-package-local-run.md).
+
 ## Limited-mode hotfix deployed - 2026-10-06
 
 Application **c525c9e** (PR 46) is live and health/static verified. Candidate and

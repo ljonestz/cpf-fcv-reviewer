@@ -1,7 +1,11 @@
 # CPF FCV Reviewer
 
-Application release **992c35a** (PR 36) is deployed and health-verified on 10 September.
-Main CI passed 1,619 tests. Grounding improvements are live; no new paid assessment.
+Application release **e1eabcf** (PR 52) is deployed and health-verified on 9 October 2026.
+It reads large CPF packages in full with Claude Opus 5.5 (1M-token context) and summarises
+oversized supporting documents with validated digests. The provider-free suite passed
+1,722 tests and Linux CI passed; a full local Guinea package run (CPF, PLR, project
+appraisal document, RRA) completed. See the
+[large-package record](docs/validation/2026-10-08-large-package-local-run.md).
 The open pilot uses one paid 0.5 CPU / 512 MB instance and 16 request threads.
 Storage remains volatile. See the [deployment record](docs/validation/2026-09-10-grounding-deployment.md).
 `render.yaml` remains a candidate durable configuration, not a dump of live dashboard settings.
@@ -43,17 +47,26 @@ The review starts with three document buckets: the draft CPF/CEN, accompanying p
 
 Every review performs bounded current-country public-web research. An uploaded public RRA changes the research window but never suppresses that current research. Retryable research failures can be retried using the retained review package; retry never exposes partial output.
 
-Up to ten accompanying package documents are fully re-extracted and every retained
-segment is supplied to the review within explicit limits of 400 segments, 300,000
-characters, and a 160,000 estimated-input-token ceiling. If that detailed package review
-cannot be completed, the assessment fails closed instead of silently sampling. A
+The draft CPF/CEN is supplied to the review in full. Up to 40 accompanying package
+documents are fully re-extracted and read in full by the model. When they fit the direct
+budget (about 900,000 characters) every segment is supplied verbatim; otherwise the largest
+documents are replaced by a validated full-document digest plus the verbatim pages it
+cites. Core package material must cite pages; background material may not. Digesting is
+disclosed in the warnings and coverage note, and a digest cannot support a claim that
+something is absent. The intake shows document counts and total size and blocks uploads
+above 40 package documents or 80 MB; a package document over 250 pages or 600,000
+characters, or with no readable text, stops the review with a specific message. A
 recognized uploaded RRA or equivalent diagnostic is also extracted in full within the
 configured safety bounds and is never silently reduced to sampled pages. Its diagnostic
 map synthesizes drivers, resilience sources, and key risks using known, nonempty,
 representative citations; it does not require the model to assign every RRA page to an
 output theme. One sanitized retry remains available only for a schema-invalid map.
-Other contextual material may be summarized at a higher level, with incomplete coverage
-disclosed rather than treated as proof that content is absent.
+Other contextual analytics are extracted in full and summarised as background digests
+when they exceed their direct budget, with incomplete coverage disclosed rather than
+treated as proof that content is absent. When a package document such as a PLR also cites
+the RRA, the document uploaded under RRA and supporting analytics is treated as the
+diagnostic, and earlier diagnostics dated verbatim in the documents (such as a 2017 RRA)
+may be cited.
 
 Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and a bounded basis/limitations disclosure on the website. Word exports instead carry a short language-model caution at the top. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
 
@@ -74,7 +87,8 @@ If a policy-boundary, registry, non-sensitive-input, or unexpected-output concer
 Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a virtual environment. Configure these environment variables without committing their values:
 
 - `ANTHROPIC_API_KEY` (required outside tests)
-- `ANTHROPIC_MODEL_ID` (optional model override)
+- `ANTHROPIC_MODEL_ID` (optional; public research and the follow-on assistant)
+- `ANTHROPIC_REVIEW_MODEL_ID` (optional; document-reading calls, default `claude-opus-5-5`)
 - `REGISTRY_BUNDLE_PATH` and `REGISTRY_BUNDLE_SHA256` (approved bundle and integrity check)
 - `APP_RELEASE` (deployment label)
 - `PERSISTENCE_PATH` (required in production; use the mounted disk path)
