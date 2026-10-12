@@ -1,5 +1,27 @@
 # Project status
 
+## 2026-10-13 Rollout candidate: coordinator review comments
+
+[PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55) now has the final light
+workflow: **Draft review comments**, Copy only, automatic edit retention and a single
+prose query box with three small example prompts. There are no query dropdowns,
+assistant branding, optional feedback or separate correction box. The four findings,
+RRA/Strategy connection, central stage calibration and separate corporate processes
+remain. The specification was reconciled with these superseding choices.
+
+Analytical code `9e84d06` passed **1,796 local tests** (one Windows Gunicorn skip)
+and **1,797 Linux CI tests**. One paid public Guinea assessment completed after
+a bounded referral repair. One prose query condensed the comments from 1,358 to
+648 words and preserved evidence caveats; refresh and Word downloads worked. The
+second authorized paid assessment was not used. Final favicon/header fixes passed
+**80 focused tests** and GET-only restoration with no errors or new model calls.
+
+The candidate is not merged or deployed. Internal hosting/reference integration
+remains separate; public volatile-storage and reduced-research limits remain. Real-run
+Word pagination was not visually verified because local Word conversion could not
+start, although the exports passed structure/text checks. See the
+[quality record](validation/2026-10-13-coordinator-quality-acceptance.md).
+
 ## 2026-10-12 Follow-up: simplified draft review comments
 
 The owner removed optional feedback and the separate correction box from the design.

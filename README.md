@@ -23,7 +23,10 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
   and previous comments are optional. PC14 and Envelope observations stay
   high-level. See the [design](20261012_cpf-coordinator-redesign-spec.md) and
   [validation record](docs/validation/2026-10-12-coordinator-review-redesign.md).
-  This candidate has not been deployed or tested with a paid model run.
+  One public Guinea quality run completed, including prose comments refinement,
+  refresh and exports. The second authorized paid run was unused. It is ready for
+  supervised rollout review and has not been deployed. See the
+  [quality record](docs/validation/2026-10-13-coordinator-quality-acceptance.md).
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Historical application release: `27ef3aa` (PR30), 2026-09-08. Render and `/health`

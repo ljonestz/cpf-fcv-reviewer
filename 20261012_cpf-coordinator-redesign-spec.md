@@ -32,7 +32,7 @@ Coordinators preparing departmental comments. Expert country knowledge and final
 responsibility remain with the coordinator and the established review process.
 
 The three products are an authoritative detailed note, a five-minute summary and
-an unsigned peer-review email draft. They use one set of findings. The email is
+an unsigned draft of review comments. They use one set of findings. The comments are
 the final drafting product and is generated automatically after analysis without
 a required coordinator checkpoint.
 
@@ -43,7 +43,7 @@ Timing is not a design constraint.
 The public prototype accepts public or approved non-sensitive inputs. The target
 internal ITS installation can supply separately approved references and style
 examples. Internal policy text, confidential examples, uploads, corrections,
-feedback and final comments must remain outside this public repository.
+and final comments must remain outside this public repository.
 Internal hosting alone does not establish approval to load a particular source.
 
 ## User journey
@@ -53,10 +53,10 @@ Internal hosting alone does not establish approval to load a particular source.
    the CLR, previous CPF, results framework, Envelope notes, previous comments and
    decision records. Optional coordinator guidance and CMU review questions are
    separate fields.
-3. Generate the detailed note, summary and draft email in one user action.
-4. Read the default five-minute summary, open the detailed note or email, and
-   optionally edit wording or supply a substantive correction.
-5. Copy or download outputs and optionally provide feedback.
+3. Generate the detailed note, summary and draft review comments in one action.
+4. Read the default summary, open the detailed note or comments, and optionally
+   edit wording or use the prose query box to tailor, discuss or correct findings.
+5. Copy the comments or download the detailed note and five-minute summary.
 
 Country identification retains the existing automatic detection and manual
 correction. Country-context framing is a proposed interpretation with a short
@@ -211,7 +211,7 @@ A concise overall assessment and the same priority order as the email. Material
 caveats remain visible. It does not use compliance verdicts or official category
 claims to simplify uncertain analysis.
 
-### Peer-review email
+### Draft review comments
 
 Use the style and editorial emphasis of the approved departmental examples,
 including Shubham's tone as a base. No signature or named sign-off is generated.
@@ -233,28 +233,28 @@ Approved confidential style examples are runtime inputs for the internal
 installation, never public fixtures. They influence tone and structure, not facts
 or conclusions about another country.
 
-## Editing, corrections and feedback
+## Editing and prose queries
 
-Store email wording edits as an overlay on the generated email. These edits do not
-silently alter findings or evidence. Refresh and email download preserve them.
+Store comments wording as an overlay on the generated draft. Edits are retained
+when the field loses focus; refresh preserves them. They do not silently alter
+findings or evidence. The comments toolbar has one Copy control.
 
-Substantive corrections use the existing linked child-review/rerun mechanism and
-regenerate affected findings, summary and email consistently. Prior wording edits
-remain available; a new generated draft must not silently overwrite user work.
-Clearly mark edits based on an earlier analysis. If a natural-language request is
-ambiguous between a wording edit and a substantive correction, ask one question.
+One **What would you like to do next?** query box accepts prose requests. There are
+no task dropdowns or assistant branding. Three small example links prefill the
+editable request without submitting. Guidance mentions tone, focus, length,
+explanations and substantive corrections. The same bounded model response signals
+whether it is answering, tailoring comments or handling an explicit assessment
+update; no extra classification call is needed. Ambiguous requests ask one question.
 
-Optional feedback consists of an accuracy/usefulness rating, correction text and
-a final-comments upload. No feedback is required for generation, editing or
-download. Feedback and final comments are evaluation material, not analytical
-inputs, instructions or automatic additions to the style corpus.
+Substantive corrections use the existing child-review/rerun mechanism and regenerate
+affected findings, summary and comments consistently. Prior wording remains available
+and is marked as belonging to the earlier assessment. The query box can reconcile it
+with revised findings. Failed or unsupported rewrites preserve the prior draft.
 
-Reuse the session store, lifetime and deletion controls. The public prototype's
-24-hour lifecycle is not extended. Longer-term internal evaluation storage needs
-an explicitly governed internal destination; this design does not silently create
-a public archive. Explain the configured lifetime wherever feedback is collected.
-The feedback upload follows existing type, size, extraction and safe-failure
-controls, and supports authorised non-sensitive inputs in the public test track.
+Reuse the session store, lifetime and deletion controls. There is no optional
+feedback, final-comments upload, rating form or new archive. The website and Word
+notes share the CPF-specific **LLMs are not magic** caveat, with country judgment,
+stage feasibility and expert/OPCS verification.
 
 ## Implementation constraints
 
@@ -284,8 +284,10 @@ findings for an old result. Do not introduce permanent compatibility machinery.
 - Every priority has a destination and real supporting evidence.
 - Summary and email use the same priorities and preserve qualifications.
 - Emails have no named signature; optional tiers and CMU questions work.
-- Wording edits survive refresh/download and are not lost during corrections.
-- Feedback is optional and follows expiry/deletion; final uploads never enter review.
+- Wording edits survive refresh and are not lost during corrections.
+- One prose query box works without dropdowns; examples only prefill.
+- No feedback collection or separate correction box is present.
+- Failed rewrites retain the current comments and the request.
 - Invalid references, over-budget inputs and unreadable required content retain
   safe failures; covered-document absence safeguards remain enforced.
 - Synthetic tests and browser smoke are distinguished from analytical quality.

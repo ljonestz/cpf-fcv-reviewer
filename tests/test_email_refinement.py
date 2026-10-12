@@ -28,6 +28,13 @@ def test_feedback_collection_is_removed(completed_coordinator_review):
     assert "feedback" not in client.get(f"/api/reviews/{assessment_id}/result").json
 
 
+def test_page_links_a_readable_favicon_without_a_missing_resource():
+    client = create_smoke_app(start_background_runs=False).test_client()
+    assert 'href="/static/favicon.svg"' in client.get("/").text
+    icon = client.get("/static/favicon.svg")
+    assert icon.status_code == 200 and icon.mimetype == "image/svg+xml"
+
+
 def test_tailoring_uses_current_email_and_keeps_findings(completed_coordinator_review):
     app, client, assessment_id = completed_coordinator_review
     before = app.extensions["session_store"].get(assessment_id).payload["result"]

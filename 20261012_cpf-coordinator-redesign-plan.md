@@ -407,7 +407,7 @@ one pipeline; no confidential source examples were committed.
 
 The latest revision removes feedback collection and the separate correction box,
 reduces the comments toolbar to Copy, and renames the output Draft review comments.
-The shared assistant supports current-draft tailoring, discussion and explicit
+The shared prose query supports current-draft tailoring, discussion and explicit
 assessment updates. Suggestions cover tone, focus, condensing and elaboration.
 The Project Screener caveat is adapted without changing that product. Earlier task
 checkpoints above describe the first implementation; the revision record documents

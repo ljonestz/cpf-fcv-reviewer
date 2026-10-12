@@ -1,5 +1,24 @@
 # Production readiness
 
+## Coordinator candidate ready for supervised rollout review — 2026-10-13
+
+PR #55 implements the four qualitative findings, stage-calibrated recommendations,
+separate prior-comment follow-through and unsigned **Draft review comments**. One
+prose query box handles questions, tailoring and explicit assessment updates, with
+no task dropdowns or feedback form. One approved public Guinea quality assessment
+completed with a bounded referral repair; its comments were condensed and restored.
+The second authorized paid run was unused. The missing favicon and cramped header
+were fixed and checked against the retained result without further model calls.
+
+Local suite: **1,796 passed, one Windows skip**; analytical-candidate Linux CI:
+**1,797 passed**, including Gunicorn; final presentation regressions: **80 passed**.
+The code is a reviewable rollout candidate, not an observed live release. Existing
+public/approved-input and supervised-expert-use limits remain. The pilot still uses
+volatile sessions; operational hosting should use the existing durable configuration.
+Native Word pagination of the real-run exports was not verified because Word could
+not start a conversion instance; document structure/text checks passed. See the
+[quality acceptance record](validation/2026-10-13-coordinator-quality-acceptance.md).
+
 ## Large-package coverage deployed - 2026-10-09
 
 Application **e1eabcf** (PR 52) is live and health/static verified. Document-reading
