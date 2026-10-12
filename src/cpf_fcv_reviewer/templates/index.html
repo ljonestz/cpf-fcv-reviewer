@@ -11,7 +11,7 @@
     <section class="hero" aria-labelledby="hero-title">
       <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
       <h1 id="hero-title">Strengthen the FCV framing of a CPF or CEN</h1>
-      <p class="purpose">Prepare an evidence-linked note, five-minute summary and draft peer-review email.</p>
+      <p class="purpose">Prepare an evidence-linked note, five-minute summary and draft review comments.</p>
       <p class="advisory"><strong>Public version.</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. Use public or non-sensitive material only. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
       <ol class="steps" aria-label="How the review works">
         <li>Add the draft</li>
@@ -159,97 +159,49 @@
             <button id="reset-review" class="button-secondary" type="button">Start a new review</button>
           </nav>
         </header>
+        <aside class="llm-caveat" role="note" aria-label="Important caveat about this output">
+          <p><strong>{{ advisory_note.split('. ', 1)[0] }}.</strong> {{ advisory_note.split('. ', 1)[1] }}</p>
+          <p>{{ recommendation_note }}</p>
+        </aside>
         <div class="result-tabs" role="tablist" aria-label="Review result views">
           <button id="result-tab-summary" role="tab" aria-selected="true" aria-controls="summary-panel" tabindex="0" data-result-view="summary" type="button">Five-minute readout</button>
           <button id="result-tab-detailed" role="tab" aria-selected="false" aria-controls="detailed-panel" tabindex="-1" data-result-view="detailed" type="button">Detailed analysis</button>
-          <button id="result-tab-email" role="tab" aria-selected="false" aria-controls="email-panel" tabindex="-1" data-result-view="email" type="button">Draft email</button>
+          <button id="result-tab-email" role="tab" aria-selected="false" aria-controls="email-panel" tabindex="-1" data-result-view="email" type="button">Draft review comments</button>
         </div>
         <section id="summary-panel" role="tabpanel" aria-labelledby="result-tab-summary" tabindex="0"></section>
         <section id="detailed-panel" role="tabpanel" aria-labelledby="result-tab-detailed" tabindex="0" hidden></section>
         <section id="email-panel" role="tabpanel" aria-labelledby="result-tab-email" tabindex="0" hidden>
-          <h2>Draft peer-review email</h2>
-          <p class="helper">Review the findings and adapt this unsigned draft using your country knowledge. You remain responsible for the final comments.</p>
+          <h2>Draft review comments</h2>
+          <p class="helper">Tailor this unsigned draft using the query box below, or edit the comments directly.</p>
           <p id="email-warning" class="helper" role="status" hidden></p>
-          <label for="peer-email-editor">Email wording</label>
+          <label for="peer-email-editor">Review comments</label>
           <textarea id="peer-email-editor" maxlength="12000" rows="18"></textarea>
-          <p class="helper">Save wording to keep edits across refreshes and in downloads. Substantive corrections belong in the correction panel below.</p>
+          <p class="helper">Edits are retained when you leave this field.</p>
           <div class="email-controls">
-            <button id="save-email-wording" type="button">Save wording</button>
-            <button id="copy-peer-email" type="button" class="button-secondary">Copy email</button>
-            <button id="use-generated-email" type="button" class="button-secondary" hidden>Use updated draft</button>
-            <button id="download-email" type="button" class="button-secondary">Download email draft</button>
+            <button id="copy-peer-email" type="button" class="button-secondary">Copy comments</button>
           </div>
           <p id="email-status" class="helper" role="status" aria-live="polite"></p>
         </section>
-        <details id="pilot-feedback" class="correction-details">
-          <summary>Optional pilot feedback</summary>
-          <form id="feedback-form" class="correction-content">
-            <p class="helper">Feedback supports evaluation. It is optional and is not used as review evidence.</p>
-            <p id="feedback-retention" class="helper"></p>
-            <label for="feedback-accuracy">Accuracy (optional)</label>
-            <select id="feedback-accuracy" name="accuracy">
-              <option value="">Choose a rating</option>
-              <option value="accurate">Accurate</option>
-              <option value="partly_accurate">Partly accurate</option>
-              <option value="inaccurate">Inaccurate</option>
-            </select>
-            <label for="feedback-usefulness">Usefulness (optional)</label>
-            <select id="feedback-usefulness" name="usefulness">
-              <option value="">Choose a rating</option>
-              <option value="useful">Useful</option>
-              <option value="partly_useful">Partly useful</option>
-              <option value="not_useful">Not useful</option>
-            </select>
-            <label for="feedback-comment">Correction or feedback (optional)</label>
-            <textarea id="feedback-comment" name="comment" maxlength="2000"></textarea>
-            <label for="final-comments">Final comments sent (optional, public or non-sensitive only)</label>
-            <input id="final-comments" name="final_comments" type="file" accept=".pdf,.docx,.txt,.md">
-            <p id="feedback-file-note" class="helper"></p>
-            <button id="submit-feedback" type="submit">Save optional feedback</button>
-            <p id="feedback-status" class="helper" role="status" aria-live="polite"></p>
-          </form>
-        </details>
       </section>
 
       <section id="assistant-card" class="assistant-card" hidden aria-labelledby="assistant-heading">
-        <p class="eyebrow">FOLLOW-ON REVIEW ASSISTANT</p>
         <h2 id="assistant-heading">What would you like to do next?</h2>
-        <p class="helper">Use the completed review as a starting point for a practical follow-on request. Suggestions prefill the message and do not send it.</p>
-        <div id="assistant-suggestions" class="assistant-suggestions" aria-label="Suggested follow-on requests">
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Draft a peer-review email based on the review.">Draft a peer-review email</button>
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Expand a priority measure from the review.">Expand a priority measure</button>
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Clarify the assessment and its practical implications.">Clarify the assessment</button>
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Summarise the review for management.">Summarise for management</button>
-        </div>
+        <p class="helper">Write a question or request in your own words. Adjust the comments' tone, focus or length, explain an issue, or provide a correction. Asking to update the assessment reruns the note and summary; wording changes revise only the comments.</p>
         <div id="assistant-conversation" role="log" aria-live="polite" class="assistant-conversation" aria-relevant="additions text"></div>
         <form id="assistant-form" class="assistant-form">
-          <label for="assistant-input">Follow-on request</label>
-          <textarea id="assistant-input" maxlength="10000" placeholder="Ask a follow-on question or edit a suggestion."></textarea>
+          <label for="assistant-input">Your request</label>
+          <textarea id="assistant-input" maxlength="10000" placeholder="For example: make the comments more diplomatic and focus on implementation."></textarea>
           <button id="assistant-send" type="submit">Send</button>
         </form>
+        <p class="query-examples helper">Try an example:
+          <button type="button" class="query-example" data-assistant-prompt="Condense the review comments to the few most consequential points.">Condense the comments</button>
+          <button type="button" class="query-example" data-assistant-prompt="Make the review comments more diplomatic while keeping the main concerns clear.">Adjust the tone</button>
+          <button type="button" class="query-example" data-assistant-prompt="Explain how the RRA informed the program choices, using the available evidence.">Explain an issue</button>
+        </p>
         <p id="assistant-status" class="assistant-status" role="status" aria-live="polite" hidden></p>
       </section>
 
-      <details id="corrections" hidden class="correction-details">
-        <summary>Correct source information and rerun</summary>
-        <div class="correction-content">
-          <h2>Add context or correct the review</h2>
-          <p>Corrections remain labelled as user-provided unless independently supported by evidence.</p>
-          <label for="correction-text">Correction or additional context</label>
-          <textarea id="correction-text"></textarea>
-          <label for="correction-framing">Change context framing (optional)</label>
-          <select id="correction-framing">
-            <option value="">Keep current framing</option>
-            <option value="in_crisis">In crisis</option>
-            <option value="in_transition">In transition</option>
-            <option value="conflict_affected">Conflict-affected</option>
-            <option value="at_risk">At risk / prevention</option>
-            <option value="undetermined">Mixed or undetermined</option>
-          </select>
-          <p class="helper">A framing change reruns the assessment and updates all three outputs.</p>
-          <button id="submit-correction" type="button">Add correction and rerun</button>
-        </div>
-      </details>
+
 
     </section>
   </main>

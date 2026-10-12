@@ -19,8 +19,8 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 - Development candidate: [PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55)
   adds the agreed coordinator review structure, four qualitative findings,
   stage-calibrated recommendations, separate earlier-comment follow-through and an
-  unsigned email draft. Intake stays light; questions, framing overrides, previous
-  comments and pilot feedback are optional. PC14 and Envelope observations stay
+  unsigned draft of review comments. Intake stays light; questions, framing overrides
+  and previous comments are optional. PC14 and Envelope observations stay
   high-level. See the [design](20261012_cpf-coordinator-redesign-spec.md) and
   [validation record](docs/validation/2026-10-12-coordinator-review-redesign.md).
   This candidate has not been deployed or tested with a paid model run.
@@ -78,17 +78,19 @@ may be cited.
 
 Starting an assessment opens a dedicated holding view with a compact elapsed timer,
 estimate, connected three-stage ticker and rotating guidance. Results open with a
-**Five-minute readout**, **Detailed analysis** and **Draft email**. New reviews show
+**Five-minute readout**, **Detailed analysis** and **Draft review comments**. New reviews show
 four short qualitative findings, compact RRA/Strategy connections and the destination
 for each recommendation. Clearly labelled earlier comments are checked only after
-the independent review. The email uses those validated findings, optional CMU questions
-and approved external style references; it has no named signature. Save wording to
-retain it across refreshes and in downloads. Correction reruns preserve edits and
-mark older wording for comparison with the updated findings. Feedback and final sent
-comments are optional evaluation material, excluded from analysis and deleted with
-the review. The existing configured session lifetime, evidence links, Word caution
-and streamed follow-on assistant remain in use. Legacy results keep their original
-presentation.
+the independent review. **Draft review comments** use those validated findings,
+optional CMU questions and approved external style references, with no named signature.
+The comments have one Copy action and retain edits when the field loses focus.
+The **What would you like to do next?** query box accepts prose requests to tailor
+comments, explain an issue or explicitly update the assessment. Three example
+prompts prefill the editable box; there are no task dropdowns. Wording changes
+preserve findings. Assessment updates rerun the note and summary and retain older
+wording for reconciliation. There is no pilot-feedback form or separate correction
+box. Queries and edits share the review's existing session lifetime. Legacy results
+keep their original presentation.
 
 ## Safety boundary
 
@@ -121,10 +123,11 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Download the five-minute readout, full detailed note or email draft before the review
-expires or is reset. New summaries retain every selected priority and its recommended
-action. Email downloads use saved wording and warn when it belongs to an earlier
-assessment. All three exports retain the Word caution and established layout.
+Download the five-minute readout or full detailed note, and copy draft review comments,
+before the review expires or is reset. New summaries retain every selected priority
+and its recommended action. Both notes carry the same opening caveat as the website:
+LLMs are not magic, outputs can be wrong, and comments must fit the country and review
+stage. WBG policy/procedure references should be verified with OPCS and human experts.
 The basis/limitations disclosure stays on the website.
 
 ## Validation and API-cost control

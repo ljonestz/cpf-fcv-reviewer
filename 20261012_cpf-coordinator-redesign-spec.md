@@ -1,5 +1,25 @@
 # CPF coordinator review redesign specification
 
+## Follow-up revision: simplified draft review comments
+
+The owner's follow-up instructions supersede the earlier feedback and email-toolbar
+choices in this document. Remove optional pilot feedback and the separate correction
+box. Label the output **Draft review comments**. Provide one Copy control and retain
+wording edits automatically. Use one prose query box for tailoring, discussion and
+explicit assessment updates, with no task dropdowns or assistant branding. Three
+small example prompts prefill the box without sending. The existing single model
+response signals its action; ambiguous requests are answered or clarified, never
+silently treated as a correction. Suggestions cover tone, focus, condensation and
+elaboration. Tailoring updates the comments from the current draft and reviewed
+evidence without changing the findings. Assessment updates use the existing child
+review and refresh its derived outputs, while preserving older wording for comparison.
+
+Adapt the Project Screener's "LLMs are not magic" caveat for CPF/CEN context and review
+stage. The Screener itself is read-only background. No additional model-routing or
+classification call is required, and no provider or hosting change is part of this
+revision. See the [revision record](docs/validation/2026-10-12-review-comments-simplification.md).
+
+
 Date: 12 October 2026
 Status: agreed design consolidated from the working discussion
 Repository baseline: a210b29 (origin/main); documented application release e1eabcf.

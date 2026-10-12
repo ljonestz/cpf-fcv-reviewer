@@ -1,5 +1,23 @@
 # Project status
 
+## 2026-10-12 Follow-up: simplified draft review comments
+
+The owner removed optional feedback and the separate correction box from the design.
+The output is now **Draft review comments**, with one Copy control and automatic
+wording retention. One prose query box is the shared entry point for comments tailoring, questions
+and explicit assessment updates. There are no follow-on dropdowns or assistant
+branding; three small example prompts only prefill the input. Tone, focus,
+condensation and elaboration suggestions prefill an editable request. Tailoring uses
+the latest draft, preserves the underlying findings, and retains completed responses;
+failed revisions leave the previous draft intact. Full assessment updates remain
+explicit and refresh the note and summary through the existing child-review pipeline.
+
+The website and Word notes share a CPF-specific adaptation of the Project Screener's
+"LLMs are not magic" caveat, including review-stage feasibility and OPCS/human checks.
+The Project Screener was read only. No deployment or paid model run was performed.
+See the [revision validation record](validation/2026-10-12-review-comments-simplification.md).
+
+
 ## 2026-10-12 Candidate: coordinator review redesign
 
 The agreed [specification](../20261012_cpf-coordinator-redesign-spec.md) and

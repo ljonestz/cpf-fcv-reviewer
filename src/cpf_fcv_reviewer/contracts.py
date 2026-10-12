@@ -481,12 +481,6 @@ class PeerEmailDraft(FrozenModel):
         return _requires_nonblank_text(value, "Email opening")
 
 
-class ReviewFeedback(FrozenModel):
-    accuracy: Literal["accurate", "partly_accurate", "inaccurate"] | None = None
-    usefulness: Literal["useful", "partly_useful", "not_useful"] | None = None
-    comment: str = Field(default="", max_length=2000)
-
-
 class DocumentCoverage(FrozenModel):
     primary_document: str
     package_documents: tuple[str, ...] = ()

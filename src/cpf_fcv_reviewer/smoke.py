@@ -65,6 +65,22 @@ class SmokeFollowOnGateway:
     """Stream a clearly labelled provider-free response for local UI QA."""
 
     def stream(self, *, review, evidence, history, message):
+        if review.get("follow_on_task") == "query":
+            if "update the assessment" in message.lower():
+                yield "ACTION: correct_review\n"
+                yield f"{SMOKE_MARKER} Updating the assessment using your request."
+                return
+            if message.lower().startswith(("explain", "why", "what")):
+                yield "ACTION: answer\n"
+            else:
+                yield "ACTION: tailor_email\n"
+                yield review.get("current_email", "Dear colleagues,")
+                yield f"\n\n{SMOKE_MARKER} Comments tailored to the request."
+                return
+        if review.get("follow_on_task") == "tailor_email":
+            yield review.get("current_email", "Dear colleagues,")
+            yield f"\n\n{SMOKE_MARKER} Comments tailored to the request."
+            return
         del review, evidence, history, message
         yield f"{SMOKE_MARKER} Draft follow-on response. "
         yield "Use the completed review and cited evidence when refining this text."

@@ -786,6 +786,7 @@ def validate_current_context_support(
     assertion_texts: tuple[str, ...],
     evidence_ids: tuple[str, ...],
     evidence: Mapping[str, EvidenceItem],
+    evidence_pool: bool = False,
 ) -> tuple[ValidationIssue, ...]:
     current_items = [
         evidence[evidence_id]
@@ -858,7 +859,7 @@ def validate_current_context_support(
         covered_topics.update(supported_topics)
     if (
         not current_items
-        or unsupported
+        or (unsupported and not evidence_pool)
         or not priority_topics.issubset(covered_topics)
     ):
         return (

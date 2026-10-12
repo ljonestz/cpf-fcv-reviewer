@@ -26,18 +26,16 @@ const emailPanel = document.querySelector("#email-panel") || document.createElem
 const emailEditor = document.querySelector("#peer-email-editor") || document.createElement("textarea");
 const emailStatus = document.querySelector("#email-status") || document.createElement("p");
 const emailWarning = document.querySelector("#email-warning") || document.createElement("p");
-const feedbackForm = document.querySelector("#feedback-form");
 let currentReviewResult = null;
 let displayedEmailText = "";
+let emailSavePromise = Promise.resolve(true);
 const resultTabs = Array.from(document.querySelectorAll?.('[role="tab"][data-result-view]') || []);
-const corrections = document.querySelector("#corrections");
 const assistantCard = document.querySelector("#assistant-card") || document.createElement("section");
 const assistantConversation = document.querySelector("#assistant-conversation") || document.createElement("div");
 const assistantForm = document.querySelector("#assistant-form") || document.createElement("form");
 const assistantInput = document.querySelector("#assistant-input") || document.createElement("textarea");
 const assistantSend = document.querySelector("#assistant-send") || document.createElement("button");
 const assistantStatus = document.querySelector("#assistant-status") || document.createElement("p");
-const assistantSuggestions = Array.from(document.querySelectorAll?.("[data-assistant-suggestion]") || []);
 const actions = document.querySelector("#actions");
 const returnToIntake = document.querySelector("#return-to-intake");
 const researchRecovery = document.querySelector("#research-recovery") || document.createElement("section");
@@ -55,7 +53,6 @@ const submitButton = document.querySelector("#submit-review");
 const processDialog = document.querySelector("#process-dialog");
 const openProcessDialog = document.querySelector("#open-process-dialog");
 const closeProcessDialog = document.querySelector("#close-process-dialog");
-const submitCorrection = document.querySelector("#submit-correction");
 const resetReviewButton = document.querySelector("#reset-review");
 const evidenceStatus = document.querySelector("#evidence-status") || document.createElement("aside");
 const evidenceStatusLabel = document.querySelector("#evidence-status-label") || document.createElement("strong");
@@ -333,7 +330,6 @@ function showProgress() {
   progressTitle.focus({preventScroll: true});
   results.hidden = true;
   assistantCard.hidden = true;
-  corrections.hidden = true;
   actions.hidden = true;
   returnToIntake.hidden = true;
   researchRecovery.hidden = true;
@@ -352,12 +348,10 @@ function showResults() {
   progress.hidden = true;
   results.hidden = false;
   assistantCard.hidden = false;
-  corrections.hidden = false;
   actions.hidden = false;
   returnToIntake.hidden = true;
   researchRecovery.hidden = true;
   retryResearchButton.hidden = true;
-  submitCorrection.disabled = false;
   assistantSend.disabled = assistantStreaming;
 }
 
@@ -1139,7 +1133,6 @@ function renderResult(result) {
       "context-framing"));
   }
   renderEmailState(result);
-  renderFeedbackState(result);
   setResultView("summary");
   showResults();
   resultTitle.focus({preventScroll: true});
@@ -1150,7 +1143,7 @@ function renderAssistantMessage(role, content) {
   const message = document.createElement("article");
   message.className = `assistant-message assistant-message-${role}`;
   message.setAttribute("data-assistant-role", role);
-  message.textContent = `${role === "user" ? "You" : "Assistant"}: ${content}`;
+  message.textContent = `${role === "user" ? "Request" : "Response"}: ${content}`;
   assistantConversation.append(message);
   return message;
 }
@@ -1162,7 +1155,7 @@ function setAssistantStatus(message) {
 
 function prefillAssistant(event) {
   const suggestion = event.currentTarget || event.target;
-  const prompt = suggestion?.dataset?.assistantPrompt
+  const prompt = suggestion?.value || suggestion?.dataset?.assistantPrompt
     || suggestion?.getAttribute?.("data-assistant-prompt")
     || "";
   assistantInput.value = prompt;
@@ -1204,7 +1197,7 @@ async function loadAssistantHistory() {
     setAssistantStatus("");
   } catch (_error) {
     if (requestedAssessmentId === assessmentId && historyEpoch === assistantHistoryEpoch) {
-      setAssistantStatus("The follow-on assistant is unavailable right now. Try again in a moment.");
+      setAssistantStatus("Previous responses are unavailable right now. Try again in a moment.");
     }
   } finally {
     if (
@@ -1259,6 +1252,9 @@ async function sendAssistantMessage(event) {
     || assistantStreaming || assistantSend.disabled
   ) return;
 
+  const requestEmailText = emailEditor.value;
+  emailEditor.readOnly = true;
+
   const requestEpoch = ++assistantRequestEpoch;
   assistantHistoryEpoch += 1;
   assistantStreaming = true;
@@ -1270,11 +1266,20 @@ async function sendAssistantMessage(event) {
   let responseText = "";
   let completed = false;
   let failed = false;
+  let responseAction = "answer";
   try {
+    await emailSavePromise;
+    if (emailEditor.value.trim() && emailEditor.value !== displayedEmailText && !(await retainEmailWording())) {
+      failed = true;
+      assistantMessage.remove();
+      setAssistantStatus("Your edited comments could not be retained. Try again before sending this request.");
+      return;
+    }
+    if (requestAssessmentId !== assessmentId || requestEpoch !== assistantRequestEpoch) return;
     const response = await fetch(`/api/reviews/${requestAssessmentId}/assistant`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({message}),
+      body: JSON.stringify({message, mode: "query", email_text: requestEmailText}),
     });
     if (!response.ok) throw new Error("Assistant request failed.");
     await consumeAssistantStream(response, (eventName, data) => {
@@ -1283,13 +1288,15 @@ async function sendAssistantMessage(event) {
         || requestEpoch !== assistantRequestEpoch
         || failed
       ) return;
-      if (eventName === "chunk" && typeof data?.text === "string") {
+      if (eventName === "action" && typeof data?.action === "string") {
+        responseAction = data.action;
+      } else if (eventName === "chunk" && typeof data?.text === "string") {
         responseText += data.text;
-        assistantMessage.textContent = `Assistant: ${responseText}`;
+        assistantMessage.textContent = `Response: ${responseText}`;
       } else if (eventName === "error" || eventName === "parse_error") {
         failed = true;
         assistantMessage.remove();
-        setAssistantStatus("The assistant could not complete that response. Please try again.");
+        setAssistantStatus("The request could not be completed. Please try again.");
       } else if (eventName === "done") {
         completed = true;
       }
@@ -1297,6 +1304,25 @@ async function sendAssistantMessage(event) {
     if (!completed || !responseText) throw new Error("Assistant response incomplete.");
     if (requestAssessmentId === assessmentId && requestEpoch === assistantRequestEpoch) {
       assistantInput.value = "";
+      if (responseAction === "tailor_email") {
+        emailEditor.value = responseText;
+        displayedEmailText = responseText;
+        currentReviewResult.email_text = responseText;
+        currentReviewResult.email_edited = true;
+        currentReviewResult.email_stale = false;
+        emailWarning.hidden = true;
+        emailStatus.textContent = "Draft review comments updated and retained for this session.";
+        setResultView("email");
+      } else if (responseAction === "correct_review") {
+        if (message.length > 2000) {
+          assistantInput.value = message;
+          setAssistantStatus("Keep an assessment correction within 2,000 characters.");
+        } else {
+          assistantInput.value = message;
+          emailEditor.readOnly = false;
+          await updateAssessment(message);
+        }
+      }
     }
   } catch (_error) {
     if (
@@ -1305,20 +1331,21 @@ async function sendAssistantMessage(event) {
       && requestEpoch === assistantRequestEpoch
     ) {
       assistantMessage.remove();
-      setAssistantStatus("The assistant could not complete that response. Please try again.");
+      setAssistantStatus("The request could not be completed. Please try again.");
     }
   } finally {
     if (requestAssessmentId === assessmentId && requestEpoch === assistantRequestEpoch) {
       assistantStreaming = false;
+      emailEditor.readOnly = false;
       assistantSend.disabled = false;
       assistantConversation.setAttribute("aria-busy", "false");
     }
   }
 }
 
-for (const suggestion of assistantSuggestions) {
-  suggestion.addEventListener("click", prefillAssistant);
-}
+document.querySelectorAll?.("[data-assistant-prompt]")?.forEach((button) => {
+  button.addEventListener("click", prefillAssistant);
+});
 assistantForm.addEventListener("submit", sendAssistantMessage);
 
 function isActiveSource(source) {
@@ -1531,26 +1558,20 @@ async function retryResearch() {
 
 retryResearchButton.addEventListener("click", retryResearch);
 
-submitCorrection.addEventListener("click", async () => {
-  const selectedFraming = document.querySelector("#correction-framing")?.value || "";
-  const correction = document.querySelector("#correction-text").value.trim()
-    || (selectedFraming ? "Use the coordinator-selected analytical framing." : "");
-  if (!correction || !assessmentId || resetPending || submitCorrection.disabled) return;
+async function updateAssessment(correction) {
+  const requestedId = assessmentId;
   const operation = ++operationEpoch;
-  submitCorrection.disabled = true;
+  assistantSend.disabled = true;
   try {
-    if (emailEditor.value !== displayedEmailText && !(await saveEmailWording())) return;
-    if (!isCurrentOperation(operation)) return;
-    const response = await fetch(`/api/reviews/${assessmentId}/corrections`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({text: correction, ...(selectedFraming ? {framing_override: selectedFraming} : {})}),
+    await emailSavePromise;
+    if (emailEditor.value !== displayedEmailText && !(await retainEmailWording())) return;
+    if (!isCurrentOperation(operation) || requestedId !== assessmentId) return;
+    const response = await fetch(`/api/reviews/${requestedId}/corrections`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text: correction}),
     });
     if (!isCurrentOperation(operation)) return;
-    if (!response.ok) {
-      showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
-      return;
-    }
+    if (!response.ok) throw new Error("Assessment update unavailable.");
     const child = await response.json();
     if (!isCurrentOperation(operation)) return;
     assistantRequestEpoch += 1;
@@ -1558,18 +1579,20 @@ submitCorrection.addEventListener("click", async () => {
     assistantStreaming = false;
     assistantSend.disabled = true;
     assistantConversation.setAttribute("aria-busy", "false");
+    assistantInput.value = "";
     assessmentId = child.assessment_id;
     sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
     showProgress();
-    progressMessage.textContent = "User-provided correction saved; rerun requested.";
+    progressMessage.textContent = "Context or correction saved; updating the assessment.";
     watchEvents(child.event_url, child.result_url, operation);
   } catch (_error) {
-    if (!isCurrentOperation(operation)) return;
-    showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
+    if (isCurrentOperation(operation)) {
+      setAssistantStatus("The assessment could not be updated. Your request remains available.");
+    }
   } finally {
-    if (!corrections.hidden) submitCorrection.disabled = false;
+    if (requestedId === assessmentId) assistantSend.disabled = false;
   }
-});
+}
 
 function clearDownloadError() {
   if (!downloadError) return;
@@ -1648,8 +1671,8 @@ async function resetReview() {
   currentReviewResult = null;
   displayedEmailText = "";
   emailEditor.value = "";
+  emailEditor.readOnly = false;
   emailStatus.textContent = "";
-  feedbackForm?.reset?.();
   if (summaryPanel === detailedPanel) {
     results.replaceChildren();
   } else {
@@ -1679,10 +1702,7 @@ async function resetReview() {
   detectionPending = false;
   countryRequiresConfirmation = false;
   updateSubmitState();
-  document.querySelector("#correction-text").value = "";
-  corrections.hidden = true;
   actions.hidden = true;
-  submitCorrection.disabled = true;
   showLanding();
   let purgeConfirmed = !assessmentToPurge;
   try {
@@ -1724,6 +1744,7 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     loadAssistantHistory,
     prefillAssistant,
     sendAssistantMessage,
+    updateAssessment,
     renderAssistantMessage,
     restoreSavedReview,
   };
@@ -1774,15 +1795,14 @@ function renderPriorComments(result) {
 function renderEmailState(result) {
   displayedEmailText = result.email_text || "";
   emailEditor.value = displayedEmailText;
-  emailStatus.textContent = result.email_edited ? "Saved coordinator wording." : "";
+  emailEditor.readOnly = false;
+  emailStatus.textContent = result.email_edited ? "Retained draft review comments." : "";
   emailWarning.textContent = result.email_stale
-    ? "These edits belong to an earlier assessment. Compare them with the updated findings, or use the updated draft."
+    ? "These comments belong to an earlier assessment. Use the query box to update them against the new findings before copying."
     : result.email_error
-      ? "The email draft could not be generated. The validated note is available; you can write your own email here."
+      ? "The draft review comments could not be generated. The validated note is available; you can draft comments here or use the query box."
       : "";
   emailWarning.hidden = !emailWarning.textContent;
-  const updated = document.querySelector("#use-generated-email");
-  if (updated) updated.hidden = !(result.email_stale && result.peer_email);
 }
 
 async function saveEmailWording() {
@@ -1790,8 +1810,6 @@ async function saveEmailWording() {
   if (!requestedId || !currentReviewResult || !emailEditor.value.trim()) return false;
   const submittedText = emailEditor.value;
   const submittedRunId = currentReviewResult.metadata.run_id;
-  const button = document.querySelector("#save-email-wording");
-  if (button) button.disabled = true;
   try {
     const response = await fetch(`/api/reviews/${requestedId}/email`, {
       method: "PUT", headers: {"Content-Type": "application/json"},
@@ -1800,21 +1818,24 @@ async function saveEmailWording() {
     if (requestedId !== assessmentId) return false;
     if (!response.ok) throw new Error("Email wording was not saved.");
     displayedEmailText = submittedText;
+    currentReviewResult.email_text = submittedText;
     currentReviewResult.email_edited = true;
     currentReviewResult.email_stale = false;
     emailWarning.hidden = true;
     emailStatus.textContent = emailEditor.value === submittedText
-      ? "Wording saved for this assessment." : "Earlier wording saved; save your latest edits too.";
+      ? "Draft review comments retained for this session." : "Your earlier wording is retained; leave the field to retain the latest edits too.";
     return true;
   } catch (_error) {
     if (requestedId === assessmentId) emailStatus.textContent = "Wording was not saved. Your text remains in the editor.";
     return false;
-  } finally {
-    if (button) button.disabled = false;
   }
 }
 
-document.querySelector("#save-email-wording")?.addEventListener("click", saveEmailWording);
+function retainEmailWording() {
+  emailSavePromise = emailSavePromise.then(saveEmailWording);
+  return emailSavePromise;
+}
+emailEditor.addEventListener("change", retainEmailWording);
 document.querySelector("#copy-peer-email")?.addEventListener("click", async () => {
   if (!emailEditor.value.trim()) return;
   try {
@@ -1824,94 +1845,16 @@ document.querySelector("#copy-peer-email")?.addEventListener("click", async () =
       emailEditor.select();
       if (!document.execCommand("copy")) throw new Error("Copy unavailable.");
     }
-    emailStatus.textContent = "Email copied.";
+    emailStatus.textContent = "Review comments copied.";
   } catch (_error) {
     emailEditor.focus();
     emailEditor.select?.();
-    emailStatus.textContent = "Select and copy the email text manually.";
+    emailStatus.textContent = "Select and copy the review comments manually.";
   }
-});
-document.querySelector("#download-email")?.addEventListener("click", () => {
-  if (emailEditor.value !== displayedEmailText) {
-    emailStatus.textContent = "Save your wording before downloading so the file contains your edits.";
-    return;
-  }
-  void downloadDocx("email");
-});
-document.querySelector("#use-generated-email")?.addEventListener("click", async () => {
-  const requestedId = assessmentId;
-  const response = await fetch(`/api/reviews/${requestedId}/result`);
-  if (requestedId !== assessmentId) return;
-  if (!response.ok) return;
-  const result = await response.json();
-  if (requestedId !== assessmentId) return;
-  if (!result.peer_email) return;
-  // The original saved edits remain on the parent review.
-  const sections = ["Dear colleagues,", result.peer_email.opening];
-  let tier = null;
-  for (const comment of result.peer_email.comments) {
-    if (comment.tier && comment.tier !== tier) {
-      sections.push(comment.tier === "tier_1"
-        ? "Tier 1: Issues for the review meeting" : "Tier 2: Additional guidance for the team");
-      tier = comment.tier;
-    }
-    sections.push(comment.heading, comment.text);
-  }
-  sections.push("We hope these comments are useful and look forward to the discussion.");
-  emailEditor.value = sections.join("\n\n");
-  await saveEmailWording();
 });
 window.addEventListener?.("beforeunload", (event) => {
   if (emailEditor.value !== displayedEmailText) {
     event.preventDefault();
     event.returnValue = "";
-  }
-});
-
-function renderFeedbackState(result) {
-  if (!feedbackForm) return;
-  const feedback = result.feedback || {};
-  for (const [id, value] of [
-    ["#feedback-accuracy", feedback.accuracy], ["#feedback-usefulness", feedback.usefulness],
-    ["#feedback-comment", feedback.comment],
-  ]) {
-    const input = document.querySelector(id);
-    if (input) input.value = value || "";
-  }
-  const retention = document.querySelector("#feedback-retention");
-  if (retention) retention.textContent = `Feedback follows this review's ${Math.round((result.feedback_ttl_seconds || 86400) / 3600)}-hour inactivity limit; it is deleted with the review.`;
-  const note = document.querySelector("#feedback-file-note");
-  if (note) note.textContent = feedback.final_comments
-    ? `Saved final-comments file: ${feedback.final_comments.name}`
-    : "Up to 10 MiB. Final comments are evaluation material and are not added to the review or style corpus.";
-  const status = document.querySelector("#feedback-status");
-  if (status) status.textContent = "";
-}
-feedbackForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const requestedId = assessmentId;
-  if (!requestedId) return;
-  const button = document.querySelector("#submit-feedback");
-  const status = document.querySelector("#feedback-status");
-  const file = document.querySelector("#final-comments")?.files?.[0];
-  if (file && file.size > 10 * 1024 * 1024) {
-    status.textContent = "Keep the final-comments upload within 10 MiB.";
-    return;
-  }
-  if (button) button.disabled = true;
-  try {
-    const response = await fetch(`/api/reviews/${requestedId}/feedback`, {
-      method: "POST", body: new FormData(feedbackForm),
-    });
-    if (requestedId !== assessmentId) return;
-    if (!response.ok) {
-      const message = await response.json();
-      throw new Error(message.error || "Feedback was not saved.");
-    }
-    status.textContent = "Optional feedback saved.";
-  } catch (error) {
-    if (requestedId === assessmentId) status.textContent = error.message || "Feedback was not saved.";
-  } finally {
-    if (button) button.disabled = false;
   }
 });

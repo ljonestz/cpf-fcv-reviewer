@@ -105,7 +105,7 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
           setAttribute(name, value) { this.attributes[name] = String(value); },
           replaceChildren(...v) { this.children = v; }, reset() {}, focus() { this.focused = true; }, click() { return Promise.all((this.handlers.click || []).map(fn => fn())); },
           trigger(type) { return Promise.all((this.handlers[type] || []).map(fn => fn({preventDefault(){}}))); } }; }
-        for (const id of ["#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress", "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country", "#country-detection", "#primary-upload", "#detail-level", "#submit-review", "#submit-correction", "#correction-text", "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog", "#close-process-dialog"]) nodes[id] = node();
+        for (const id of ["#review-form", "#landing-view", "#landing-notice", "#review-workspace", "#progress", "#results", "#corrections", "#actions", "#return-to-intake", "#cpf", "#country", "#country-detection", "#primary-upload", "#detail-level", "#submit-review", "#assistant-form", "#assistant-mode", "#assistant-input", "#assistant-send", "#export-docx", "#reset-review", "#process-dialog", "#open-process-dialog", "#close-process-dialog"]) nodes[id] = node();
         nodes["#cpf"].files = [{}]; nodes["#country"].value = "Chad";
         const findElementById = (root, id) => {
           if (!root || typeof root !== "object") return null;
@@ -223,16 +223,17 @@ def test_event_lifecycle_handles_result_retry_stale_stream_errors_and_double_cli
         hooks.watchEvents("old", "old-result"); const old = FakeSource.all[2]; hooks.watchEvents("new", "new-result"); const newer = FakeSource.all[3]; await old.emit("run_failed", JSON.stringify({error:"review_failed"}));
         if (hooks.getActiveSource() !== newer) throw Error("stale stream mutated active stream");
         newer.error(); newer.error(); if (nodes["#return-to-intake"].hidden) throw Error("transport failure was not recoverable");
-        hooks.setAssessmentId("parent"); nodes["#correction-text"].value = "context"; let resolvePost; calls = 0;
+        hooks.setAssessmentId("parent"); nodes["#assistant-input"].value = "context"; nodes["#assistant-send"].disabled = false; let resolvePost; calls = 0;
         global.fetch = () => { calls++; if (calls === 1) return new Promise(resolve => { resolvePost = resolve; }); return Promise.resolve({ok:true}); };
-        const first = nodes["#submit-correction"].click(); const second = nodes["#submit-correction"].click();
-        if (calls !== 1 || !nodes["#submit-correction"].disabled) throw Error("correction was not locked");
+        const first = hooks.updateAssessment("context"); const second = nodes["#assistant-form"].trigger("submit");
+        await Promise.resolve();
+        if (calls !== 1 || !nodes["#assistant-send"].disabled) throw Error("correction was not locked");
         const reset = nodes["#reset-review"].click(); resolvePost({ok:true, json:async()=>({assessment_id:"late", event_url:"late", result_url:"late"})});
         await Promise.all([first, second, reset]);
         if (stored || FakeSource.all.length !== 4) throw Error("late correction resurrected review state");
-        hooks.setAssessmentId("old"); nodes["#correction-text"].value = "blocked"; let resolveDelete; calls = 0;
+        hooks.setAssessmentId("old"); nodes["#assistant-input"].value = "blocked"; let resolveDelete; calls = 0;
         global.fetch = () => { calls++; if (calls === 1) return new Promise(resolve => { resolveDelete = resolve; }); return Promise.resolve({ok:true, json:async()=>({assessment_id:"new", event_url:"new", result_url:"new-result"})}); };
-        const pendingReset = nodes["#reset-review"].click(); await nodes["#submit-correction"].click();
+        const pendingReset = nodes["#reset-review"].click(); await nodes["#assistant-form"].trigger("submit");
         if (calls !== 1 || FakeSource.all.length !== 4 || stored) throw Error("correction ran during pending reset");
         nodes["#country"].value = "Chad"; nodes["#cpf"].files = [{}]; nodes["#submit-review"].disabled = false;
         await nodes["#review-form"].trigger("submit"); const current = FakeSource.all[4];

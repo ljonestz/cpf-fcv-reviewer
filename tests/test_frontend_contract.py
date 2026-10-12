@@ -25,7 +25,6 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
         'id="process-dialog"',
         'id="progress"',
         'id="results"',
-        'id="correction-text"',
         'id="assistant-card"',
         'id="assistant-conversation"',
         'id="assistant-input"',
@@ -41,7 +40,7 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
         "official classification",
     ):
         assert prohibited_determination in html
-    assert '<label for="correction-text">' in html
+    assert '<label for="assistant-input">' in html
     assert "public version" in html.lower()
     assert "internal ITS version" in html
     assert '<label for="country">' not in html
@@ -57,17 +56,16 @@ def test_follow_on_assistant_uses_approved_shell_and_suggestion_labels():
 
     assert "What would you like to do next?" in html
     for label in (
-        "Draft a peer-review email",
-        "Expand a priority measure",
-        "Clarify the assessment",
-        "Summarise for management",
+        "Condense the comments",
+        "Adjust the tone",
+        "Explain an issue",
     ):
         assert label in html
     assert 'id="assistant-conversation" role="log" aria-live="polite"' in html
     assert '<label for="assistant-input">' in html
     assert '>Send<' in html
-    assert "Correct source information and rerun" in html
-    assert '<details id="corrections"' in html
+    assert 'id="assistant-mode"' not in html
+    assert 'id="corrections"' not in html
 
     for fragment in (
         "function loadAssistantHistory()",
@@ -134,15 +132,15 @@ def test_guided_landing_has_three_upload_zones_and_process_dialog():
 def test_correction_prompt_uses_note_first_review_language():
     html = HTML.read_text(encoding="utf-8")
 
-    assert "Add context or correct the review" in html
+    assert "Asking to update the assessment reruns the note and summary" in html
     assert "Add context or correct a finding" not in html
 
 
 def test_correction_child_invalidates_parent_assistant_activity():
     javascript = JS.read_text(encoding="utf-8")
     handler = javascript.split(
-        'submitCorrection.addEventListener("click", async () => {', 1
-    )[1].split("\n});", 1)[0]
+        "async function updateAssessment(correction)", 1
+    )[1].split("\n}\n", 1)[0]
 
     child_handoff = handler.split("assessmentId = child.assessment_id;", 1)[0]
     for fragment in (

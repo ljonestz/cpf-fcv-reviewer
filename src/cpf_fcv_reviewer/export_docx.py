@@ -31,9 +31,17 @@ DARK_BLUE = RGBColor(0x15, 0x39, 0x56)
 MUTED = RGBColor(0x66, 0x70, 0x85)
 BLACK = RGBColor(0, 0, 0)
 ADVISORY_NOTE = (
-    "Note: This review was generated using a language model. Treat its findings and exact "
-    "dates with caution, and always use it in consultation with a country or FCV expert. "
-    "It is an advisory input, not an institutional clearance or policy determination."
+    "Be aware: LLMs are not magic, and neither is the CPF FCV Reviewer. "
+    "This language model gives advice based on supplied documents, guidance and the evidence "
+    "it has retrieved, and it can be wrong. Treat all findings, dates and suggestions as advisory. "
+    "References to WBG policies, instruments or procedures should be verified with OPCS. "
+    "Consult a country or FCV expert and relevant OPCS human experts."
+)
+RECOMMENDATION_NOTE = (
+    "Recommendations may go beyond what is feasible at the selected review stage or miss country "
+    "realities the tool cannot see. Use your judgment to select the few comments that matter and "
+    "adapt them to the scope for change. You are responsible for the final review comments; "
+    "there is no obligation to use every recommendation."
 )
 
 PAGE_WIDTH_DXA = 9360
@@ -677,7 +685,7 @@ def _apply_report_layout(document: Document, *, summary: bool, created_at: datet
             run.font.bold = True
             run.font.color.rgb = DARK_BLUE
             line.paragraph_format.space_after = Pt(12)
-        elif paragraph.text == ADVISORY_NOTE:
+        elif paragraph.text in (ADVISORY_NOTE, RECOMMENDATION_NOTE):
             paragraph.paragraph_format.space_after = Pt(14)
             for run in paragraph.runs:
                 run.font.size = Pt(9)
@@ -747,6 +755,7 @@ def build_docx(
 
     document.add_heading("Five-minute readout" if summary else "CPF FCV Review", level=0)
     document.add_paragraph(ADVISORY_NOTE)
+    document.add_paragraph(RECOMMENDATION_NOTE)
 
     document.add_heading("Overall assessment", level=1)
     _add_readable_paragraph(document, result.overall_read)
@@ -842,8 +851,9 @@ def build_email_docx(text: str, *, created_at: datetime, stale: bool = False) ->
     """Export the displayed coordinator wording as editable native paragraphs."""
     document = Document()
     _configure_document(document, created_at=created_at)
-    document.add_heading("Draft peer-review email", level=0)
+    document.add_heading("Draft review comments", level=0)
     document.add_paragraph(ADVISORY_NOTE)
+    document.add_paragraph(RECOMMENDATION_NOTE)
     if stale:
         document.add_paragraph(
             "These wording edits were made for an earlier assessment. "
@@ -855,7 +865,7 @@ def build_email_docx(text: str, *, created_at: datetime, stale: bool = False) ->
     for paragraph in document.paragraphs:
         for run in paragraph.runs:
             if "FULL ASSESSMENT" in run.text:
-                run.text = run.text.replace("FULL ASSESSMENT", "PEER-REVIEW EMAIL", 1)
+                run.text = run.text.replace("FULL ASSESSMENT", "DRAFT REVIEW COMMENTS", 1)
     output = BytesIO()
     document.save(output)
     return output.getvalue()

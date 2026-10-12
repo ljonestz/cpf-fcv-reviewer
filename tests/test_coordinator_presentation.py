@@ -40,9 +40,9 @@ def test_correction_preserves_unsaved_wording_or_stops(make_valid_result, save_o
       const hooks = window.__cpfFcvReviewerTestHooks;
       hooks.setAssessmentId("parent");
       await hooks.restoreSavedReview();
+      await hooks.loadAssistantHistory();
       nodes["#peer-email-editor"].value = "Unsaved coordinator wording";
-      nodes["#correction-text"].value = "Qualify the finding";
-      await nodes["#submit-correction"].trigger("click");
+      await hooks.updateAssessment("Qualify the finding");
       if (!writes[0]?.[0].endsWith("/email")) throw Error("Wording not saved first");
       if (JSON.parse(writes[0][1].body).text !== "Unsaved coordinator wording")
         throw Error("Wrong wording saved");
@@ -101,7 +101,7 @@ def test_intake_and_email_controls_are_optional_and_accessible():
     for element in [
         'id="review-questions"', 'id="previous-comments"', 'id="framing-override"',
         'id="result-tab-email"', 'id="email-panel"', 'id="peer-email-editor"',
-        'id="save-email-wording"', 'id="copy-peer-email"', 'id="feedback-form"',
+        'id="copy-peer-email"', 'id="assistant-input"', 'data-assistant-prompt=',
     ]:
         assert element in html
     assert 'aria-controls="email-panel"' in html
@@ -109,7 +109,6 @@ def test_intake_and_email_controls_are_optional_and_accessible():
     assert 'value="" disabled selected>Select review stage' in html
     for line in html.splitlines():
         if any(f'id="{name}"' in line for name in (
-            "review-questions", "previous-comments", "feedback-accuracy",
-            "feedback-usefulness", "final-comments",
+            "review-questions", "previous-comments",
         )):
             assert "required" not in line

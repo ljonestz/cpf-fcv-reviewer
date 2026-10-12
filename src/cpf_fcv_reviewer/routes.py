@@ -5,7 +5,6 @@ import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
-from pathlib import Path
 from threading import RLock
 from time import monotonic, sleep
 from uuid import uuid4
@@ -17,7 +16,6 @@ from .contracts import (
     DetailLevel,
     EvidenceItem,
     PeerEmailDraft,
-    ReviewFeedback,
     ReviewResult,
 )
 from .country_detection import (
@@ -29,7 +27,7 @@ from .country_detection import (
     COUNTRY_DETECTION_MAX_UPLOAD_BYTES,
     detect_country,
 )
-from .email_draft import render_peer_email
+from .email_draft import render_peer_email, validate_email_refinement
 from .export_docx import (
     EvidenceCompletenessError,
     build_docx,
@@ -59,7 +57,7 @@ LEGACY_REVIEW_RESULT_ERROR = (
 EVENT_STREAM_KEEPALIVE_SECONDS = 5
 ASSISTANT_MESSAGE_MAX_LENGTH = 10_000
 ASSISTANT_HISTORY_MAX_MESSAGES = 20
-ASSISTANT_RETRY_MESSAGE = "The assistant could not complete that response. Please try again."
+ASSISTANT_RETRY_MESSAGE = "The request could not be completed. Please try again."
 ASSISTANT_PROCESS_OWNER = uuid4().hex
 _ASSISTANT_REQUEST_LOCK = RLock()
 
@@ -108,9 +106,17 @@ def _assistant_context(payload: dict):
             *result.priority_areas,
             *result.rra_driver_assessments,
             *result.fcv_strategy_assessments,
+            *result.core_findings,
         )
         for evidence_id in assessment.evidence_ids
     }
+    if result.proposed_context_framing is not None:
+        referenced_ids.update(result.proposed_context_framing.evidence_ids)
+    report = payload.get("prior_comment_report")
+    if report is not None:
+        report = PriorCommentReport.model_validate(report)
+        for check in report.checks:
+            referenced_ids.update((*check.prior_evidence_ids, *check.current_evidence_ids))
     if not referenced_ids <= set(evidence):
         raise ValueError("Traceable evidence is incomplete.")
 
@@ -131,8 +137,11 @@ def _assistant_context(payload: dict):
         evidence_id: evidence[evidence_id].model_dump(mode="json")
         for evidence_id in sorted(referenced_ids)
     }
+    review = result.model_dump(mode="json")
+    if report is not None:
+        review["prior_comment_report"] = report.model_dump(mode="json")
     return (
-        result.model_dump(mode="json"),
+        review,
         relevant_evidence,
         tuple(history),
     )
@@ -162,10 +171,26 @@ def assistant_response(assessment_id):
     if len(message) > ASSISTANT_MESSAGE_MAX_LENGTH:
         return jsonify(error="Assistant message is too long."), 400
 
+    mode = body.get("mode", "discuss")
+    if mode not in ("discuss", "tailor_email", "query"):
+        return jsonify(error="Unsupported follow-on request."), 400
+    email_text = body.get("email_text")
+    if email_text is not None and (not isinstance(email_text, str) or len(email_text) > 12_000):
+        return jsonify(error="Review comments must be text within 12,000 characters."), 400
+
     with _ASSISTANT_REQUEST_LOCK:
         try:
             state = store().get(assessment_id)
             review, evidence, history = _assistant_context(state.payload)
+            if mode in ("tailor_email", "query"):
+                review["current_email"] = (
+                    email_text if email_text is not None
+                    else _email_state(
+                        state.payload, ReviewResult.model_validate(state.payload["result"]),
+                    )["email_text"]
+                )
+                review["follow_on_task"] = mode
+
         except SessionExpired:
             return jsonify(error="Assessment expired."), 410
         except ValueError:
@@ -188,6 +213,9 @@ def assistant_response(assessment_id):
 
     def generate():
         chunks = []
+        action = "tailor_email" if mode == "tailor_email" else "answer"
+        pending_header = mode == "query"
+        header = ""
         try:
             for chunk in gateway.stream(
                 review=review,
@@ -197,18 +225,46 @@ def assistant_response(assessment_id):
             ):
                 if not isinstance(chunk, str) or not chunk:
                     continue
+                if pending_header:
+                    header += chunk
+                    if "\n" not in header:
+                        if len(header) > 128:
+                            raise ValueError("Invalid query action.")
+                        continue
+                    first_line, chunk = header.split("\n", 1)
+                    actions = {f"ACTION: {value}": value for value in (
+                        "answer", "tailor_email", "correct_review",
+                    )}
+                    action = actions.get(first_line.strip())
+                    if action is None:
+                        raise ValueError("Invalid query action.")
+                    pending_header = False
+                    yield f"event: action\ndata: {json.dumps({'action': action})}\n\n"
+                    if not chunk:
+                        continue
                 chunks.append(chunk)
                 yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
             response_text = "".join(chunks)
-            if not response_text:
+            if pending_header or not response_text.strip():
                 raise RuntimeError("Assistant returned an empty response.")
+            if action == "tailor_email":
+                result = ReviewResult.model_validate(state.payload["result"])
+                validate_email_refinement(
+                    result, response_text,
+                    evidence={key: EvidenceItem.model_validate(item)
+                              for key, item in evidence.items()},
+                )
+                store().update(assessment_id, email_overlay={
+                    "text": response_text, "base_run_id": result.metadata.run_id,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                })
             updated_history = [
                 *history,
                 {"role": "user", "content": message},
                 {"role": "assistant", "content": response_text},
             ][-ASSISTANT_HISTORY_MAX_MESSAGES:]
             store().update(assessment_id, assistant_history=updated_history)
-            yield "event: done\ndata: {}\n\n"
+            yield f"event: done\ndata: {json.dumps({'action': action})}\n\n"
         except SessionExpired:
             expired_payload = {
                 "error": "This review expired before the response was saved.",
@@ -460,14 +516,6 @@ def review_result(assessment_id):
     response_payload.update(email)
     response_payload["prior_comment_report"] = report
     response_payload["prior_comment_error"] = state.payload.get("prior_comment_error")
-    feedback = dict(state.payload.get("feedback") or {})
-    final_comments = feedback.pop("final_comments", None)
-    if final_comments:
-        feedback["final_comments"] = {
-            "name": final_comments["name"], "size": len(final_comments["bytes"]),
-        }
-    response_payload["feedback"] = feedback
-    response_payload["feedback_ttl_seconds"] = current_app.config["SESSION_TTL_SECONDS"]
     return jsonify(response_payload)
 
 
@@ -531,7 +579,7 @@ def export_review(assessment_id):
         mimetype=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         as_attachment=True,
         download_name=(
-            "CPF-FCV-Peer-Review-Email.docx" if view == "email" else
+            "CPF-FCV-Draft-Review-Comments.docx" if view == "email" else
             "CPF-FCV-Five-Minute-Readout.docx" if view == "summary" else "CPF-FCV-Review.docx"
         ),
     )
@@ -582,52 +630,6 @@ def save_email_wording(assessment_id):
         "updated_at": datetime.now(UTC).isoformat(),
     })
     return jsonify(saved=True)
-
-
-@bp.post("/api/reviews/<assessment_id>/feedback")
-def save_review_feedback(assessment_id):
-    try:
-        state = store().get(assessment_id)
-    except SessionExpired:
-        return jsonify(error="Assessment expired."), 410
-    if state.payload.get("status") != "complete":
-        return jsonify(error="Complete the review before providing feedback."), 409
-    body = request.get_json(silent=True) if request.is_json else dict(request.form)
-    if not isinstance(body, dict):
-        return jsonify(error="Feedback request is invalid."), 400
-    body = {key: (None if value == "" and key != "comment" else value)
-            for key, value in body.items()}
-    try:
-        feedback = ReviewFeedback.model_validate(body)
-    except ValueError:
-        return jsonify(error="Feedback fields are invalid."), 400
-    uploads = request.files.getlist("final_comments")
-    if len(uploads) > 1:
-        return jsonify(error="Upload one final-comments document."), 400
-    values = dict(state.payload.get("feedback") or {})
-    values.update(feedback.model_dump(exclude_unset=True))
-    if uploads and uploads[0].filename:
-        from .runtime import (
-            EXPECTED_OPTIONAL_EXTRACTION_ERRORS,
-            SUPPORTED_UPLOAD_SUFFIXES,
-            _extract_full_optional_document,
-        )
-        filename = Path(uploads[0].filename).name[:200]
-        data = uploads[0].read(10 * 1024 * 1024 + 1)
-        if len(data) > 10 * 1024 * 1024 or Path(filename).suffix.lower() not in (
-            SUPPORTED_UPLOAD_SUFFIXES
-        ):
-            return jsonify(error="Final comments must be a supported document within 10 MiB."), 400
-        upload = {"name": filename, "bytes": data}
-        try:
-            document = _extract_full_optional_document(upload)
-            require_readable_primary(document)
-        except (ValueError, *EXPECTED_OPTIONAL_EXTRACTION_ERRORS):
-            return jsonify(error="Final comments could not be read safely."), 400
-        values["final_comments"] = upload
-    values["updated_at"] = datetime.now(UTC).isoformat()
-    store().update(assessment_id, feedback=values)
-    return jsonify(saved=True, has_final_comments=bool(values.get("final_comments")))
 
 
 @bp.post("/api/reviews/<assessment_id>/corrections")

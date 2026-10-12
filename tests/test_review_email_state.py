@@ -93,5 +93,5 @@ def test_email_export_identifies_email_in_subtitle(completed_coordinator_review)
     _, client, assessment_id = completed_coordinator_review
     download = client.get(f"/api/reviews/{assessment_id}/export.docx?view=email")
     text = "\n".join(p.text for p in Document(BytesIO(download.data)).paragraphs)
-    assert "PEER-REVIEW EMAIL" in text
+    assert "DRAFT REVIEW COMMENTS" in text
     assert "FULL ASSESSMENT" not in text

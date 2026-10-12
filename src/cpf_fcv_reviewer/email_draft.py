@@ -25,6 +25,11 @@ _SIGNATURE = re.compile(
 _NUMBERS = re.compile(r"\b\d+(?:[.,]\d+)*\b")
 
 
+def _prose_units(text: str) -> tuple[str, ...]:
+    # A salutation or introductory sentence must not hide prescriptive advice.
+    return (text, *re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", text))
+
+
 def render_peer_email(draft: PeerEmailDraft) -> str:
     parts = ["Dear colleagues,", draft.opening]
     previous_tier = None
@@ -38,6 +43,33 @@ def render_peer_email(draft: PeerEmailDraft) -> str:
         parts.extend((comment.heading, comment.text))
     parts.append(_CLOSING)
     return "\n\n".join(parts)
+
+
+def validate_email_refinement(
+    result: ReviewResult, text: str, *, evidence: Mapping[str, EvidenceItem],
+) -> None:
+    if not text.strip() or len(text) > 12_000:
+        raise ValueError("Review comments exceed their text budget.")
+    assert_no_unsupported_policy_claims(text, set())
+    if any(re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", text) for key in evidence):
+        raise ValueError("Review comments contain raw evidence identifiers.")
+    if _SIGNATURE.search(text):
+        raise ValueError("Review comments must be unsigned.")
+    if any(issue.severity != "advisory" for unit in _prose_units(text)
+           for issue in validate_stage_behavior(result.metadata.review_stage, unit)):
+        raise ValueError("Review comments exceed the review stage.")
+    supported = result_text(result) + " ".join(
+        item.supporting_quote or item.text for item in evidence.values()
+    )
+    factual_text = re.sub(r"(?m)^\s*\d+[.)]\s+", "", text)
+    if set(_NUMBERS.findall(factual_text)) - set(_NUMBERS.findall(supported)):
+        raise ValueError("Review comments added an unsupported number.")
+    for unit in _prose_units(text)[1:]:
+        if has_current_context_assertion(unit) and validate_current_context_support(
+            label="review_comments", heading="", assertion_texts=(unit,),
+            evidence_ids=tuple(evidence), evidence=evidence, evidence_pool=True,
+        ):
+            raise ValueError("Review comments added an unsupported current claim.")
 
 
 def generate_peer_email(
@@ -112,9 +144,8 @@ def generate_peer_email(
         if re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", model_text):
             raise ValueError("Email prose contains raw evidence identifiers.")
     areas = {area.priority_area_id: area for area in result.priority_areas}
-    if any(issue.severity != "advisory" for issue in validate_stage_behavior(
-        result.metadata.review_stage, draft.opening,
-    )):
+    if any(issue.severity != "advisory" for unit in _prose_units(draft.opening)
+           for issue in validate_stage_behavior(result.metadata.review_stage, unit)):
         raise ValueError("Email opening exceeds the review stage.")
     claims = [(draft.opening, tuple(evidence_ids))]
     for comment in draft.comments:
@@ -122,18 +153,22 @@ def generate_peer_email(
             item for key in comment.priority_area_ids for item in areas[key].evidence_ids
         ))))
         for key in comment.priority_area_ids:
-            issues = validate_stage_behavior(
-                result.metadata.review_stage, comment.text, areas[key].recommendation_scale,
-                priority_area_id=key,
+            issues = tuple(
+                issue for unit in _prose_units(comment.text)
+                for issue in validate_stage_behavior(
+                    result.metadata.review_stage, unit, areas[key].recommendation_scale,
+                    priority_area_id=key,
+                )
             )
             if any(issue.severity != "advisory" for issue in issues):
                 raise ValueError("Email advice exceeds the review stage.")
     for text, linked_evidence in claims:
-        if text in result_text(result) or not has_current_context_assertion(text):
-            continue
-        if validate_current_context_support(
-            label="email", heading="", assertion_texts=(text,),
-            evidence_ids=linked_evidence, evidence=evidence or {},
-        ):
-            raise ValueError("Email added a claim without current-context support.")
+        for unit in _prose_units(text)[1:]:
+            if unit in result_text(result) or not has_current_context_assertion(unit):
+                continue
+            if validate_current_context_support(
+                label="email", heading="", assertion_texts=(unit,),
+                evidence_ids=linked_evidence, evidence=evidence or {}, evidence_pool=True,
+            ):
+                raise ValueError("Email added a claim without current-context support.")
     return draft
