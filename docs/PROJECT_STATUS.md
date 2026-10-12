@@ -1,5 +1,18 @@
 # Project status
 
+## 2026-10-12 Coordinator review redesign planning
+
+The agreed [specification](../20261012_cpf-coordinator-redesign-spec.md) and
+[implementation plan](../20261012_cpf-coordinator-redesign-plan.md) are saved on
+`feat/coordinator-review-redesign`, based on refreshed `origin/main` at `a210b29`.
+The design adds four concise qualitative findings, stage-calibrated priorities,
+independent prior-comment follow-through, unsigned email drafting and optional
+feedback. PC14 and Envelope observations remain advisory and limited.
+The baseline provider-free smoke suite passed **38 tests**; a non-failing pytest
+cache-write warning occurred. Planning document checks passed. Application code,
+hosting and provider configuration are unchanged; implementation and analytical
+quality validation remain next. No model API calls or deployment were performed.
+
 ## 2026-10-09 Deployed: large-package coverage
 
 PR #52 merged as `e1eabcf` and live on Render (deploy `dep-db4f2t6q1p3s73a15o4g`). No-cost checks passed: `/health` reports release `e1eabcf`; the intake upload summary and the 40-document and package failure labels are served. No live paid assessment was run after deployment; the fourth local Guinea run is the quality evidence.
