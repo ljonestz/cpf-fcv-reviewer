@@ -22,6 +22,13 @@ const resultTitle = document.querySelector("#result-title") || document.createEl
 const resultContext = document.querySelector("#result-context") || document.createElement("p");
 const summaryPanel = document.querySelector("#summary-panel") || results;
 const detailedPanel = document.querySelector("#detailed-panel") || results;
+const emailPanel = document.querySelector("#email-panel") || document.createElement("section");
+const emailEditor = document.querySelector("#peer-email-editor") || document.createElement("textarea");
+const emailStatus = document.querySelector("#email-status") || document.createElement("p");
+const emailWarning = document.querySelector("#email-warning") || document.createElement("p");
+const feedbackForm = document.querySelector("#feedback-form");
+let currentReviewResult = null;
+let displayedEmailText = "";
 const resultTabs = Array.from(document.querySelectorAll?.('[role="tab"][data-result-view]') || []);
 const corrections = document.querySelector("#corrections");
 const assistantCard = document.querySelector("#assistant-card") || document.createElement("section");
@@ -40,6 +47,7 @@ const retryResearchButton = document.querySelector("#retry-research") || documen
 const primaryFileInput = document.querySelector("#cpf");
 const packageFileInput = document.querySelector("#package-documents");
 const contextFileInput = document.querySelector("#context-documents");
+const previousCommentsInput = document.querySelector("#previous-comments");
 const uploadSummary = document.querySelector("#upload-summary");
 const countryInput = document.querySelector("#country");
 const countryDetection = document.querySelector("#country-detection");
@@ -408,9 +416,13 @@ function updateUploadSummary() {
     ...selectedFiles(primaryFileInput),
     ...packageFiles,
     ...selectedFiles(contextFileInput),
+    ...selectedFiles(previousCommentsInput),
   ];
   const totalBytes = allFiles.reduce((sum, file) => sum + (file.size || 0), 0);
   const problems = [];
+  if (selectedFiles(previousCommentsInput).length > 10) {
+    problems.push("Upload at most ten previous-comment documents.");
+  }
   if (packageFiles.length > PACKAGE_MAX_DOCUMENTS) {
     problems.push(`Remove ${packageFiles.length - PACKAGE_MAX_DOCUMENTS} package documents: the limit is ${PACKAGE_MAX_DOCUMENTS}.`);
   }
@@ -528,7 +540,7 @@ async function detectCountry() {
 }
 
 primaryFileInput.addEventListener("change", detectCountry);
-for (const input of [primaryFileInput, packageFileInput, contextFileInput]) {
+for (const input of [primaryFileInput, packageFileInput, contextFileInput, previousCommentsInput]) {
   input?.addEventListener("change", updateUploadSummary);
 }
 
@@ -844,7 +856,7 @@ function renderRevisionSummary(result, anchorIds) {
   summary.className = "priority-summary-grid";
   const summaryItems = result.revision_summary
     .filter((item) => result.priority_areas.some((area) => area.priority_area_id === item.priority_area_id))
-    .slice(0, 3);
+    .slice(0, result.core_findings?.length ? undefined : 3);
   if (!summaryItems.length) {
     summary.append(text("p", "No revision summary was returned for this review.", "empty-state"));
     return summary;
@@ -903,6 +915,18 @@ function renderPriorityAreas(result, anchorIds) {
     if (area.comment_reference) {
       section.append(
         labelledParagraph("Comment addressed", area.comment_reference, "comment-reference"),
+      );
+    }
+    if (result.core_findings?.length) {
+      const destinations = {
+        cpf_text: "CPF text or annex",
+        results_framework: "Results framework",
+        meeting_record: "Meeting minutes or decision note",
+        annual_business_planning: "Annual business planning or implementation",
+      };
+      section.append(
+        labelledParagraph("Where to act", destinations[area.destination] || "CPF text or annex", "target-location"),
+        renderEvidenceGroup(result, area.evidence_ids),
       );
     }
     fragment.append(section);
@@ -997,6 +1021,19 @@ function renderDetailedAnalysis(result) {
 function renderDetailedAnalysisView(result, includeDisclosurePanels = true) {
   const anchorIds = priorityAreaAnchorIds(result);
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  if (result.core_findings?.length) {
+    fragment.append(
+      text("h2", "Overall assessment"),
+      renderNarrative(result.overall_read, "overall-read"),
+      renderReadoutPanel("RRA and current-context connection", result.alignment_readout, "readout-panel-rra"),
+      renderReadoutPanel("FCV Strategy connection", result.strategy_readout, "readout-panel-strategy"),
+      renderCoreFindings(result),
+      renderPriorityAreas(result, anchorIds),
+      renderPriorComments(result),
+    );
+    if (includeDisclosurePanels) fragment.append(renderBasisAndLimitations(result));
+    return fragment;
+  }
   fragment.append(
     text("h2", "Overall assessment"),
     renderNarrative(result.overall_read, "overall-read"),
@@ -1026,7 +1063,7 @@ function inferDocumentType(primaryDocumentName) {
 }
 
 function setResultView(view) {
-  const panels = {summary: summaryPanel, detailed: detailedPanel};
+  const panels = {summary: summaryPanel, detailed: detailedPanel, email: emailPanel};
   for (const tab of resultTabs) {
     const isSelected = tab.dataset.resultView === view;
     const panel = panels[tab.dataset.resultView];
@@ -1077,6 +1114,7 @@ function renderEvidenceStatus(result) {
 }
 
 function renderResult(result) {
+  currentReviewResult = result;
   if (summaryPanel === detailedPanel) {
     results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysisView(result, true));
   } else {
@@ -1089,6 +1127,19 @@ function renderResult(result) {
   const stage = reviewStage ? " - " + reviewStage.replaceAll("_", " ") : "";
   resultTitle.textContent = [country, documentType, "FCV review"].filter(Boolean).join(" ");
   resultContext.textContent = `${result.document_coverage.primary_document}${stage}`;
+  const framing = result.proposed_context_framing;
+  if (framing) {
+    const labels = {
+      in_crisis: "In crisis", in_transition: "In transition",
+      conflict_affected: "Conflict-affected", at_risk: "At risk / prevention",
+      undetermined: "Mixed or undetermined",
+    };
+    resultContext.append(text("span",
+      ` ${framing.origin === "coordinator_override" ? "Coordinator framing" : "Proposed framing"}: ${labels[framing.category] || "Undetermined"}. ${framing.rationale}`,
+      "context-framing"));
+  }
+  renderEmailState(result);
+  renderFeedbackState(result);
   setResultView("summary");
   showResults();
   resultTitle.focus({preventScroll: true});
@@ -1481,15 +1532,19 @@ async function retryResearch() {
 retryResearchButton.addEventListener("click", retryResearch);
 
 submitCorrection.addEventListener("click", async () => {
-  const correction = document.querySelector("#correction-text").value.trim();
+  const selectedFraming = document.querySelector("#correction-framing")?.value || "";
+  const correction = document.querySelector("#correction-text").value.trim()
+    || (selectedFraming ? "Use the coordinator-selected analytical framing." : "");
   if (!correction || !assessmentId || resetPending || submitCorrection.disabled) return;
   const operation = ++operationEpoch;
   submitCorrection.disabled = true;
   try {
+    if (emailEditor.value !== displayedEmailText && !(await saveEmailWording())) return;
+    if (!isCurrentOperation(operation)) return;
     const response = await fetch(`/api/reviews/${assessmentId}/corrections`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({text: correction}),
+      body: JSON.stringify({text: correction, ...(selectedFraming ? {framing_override: selectedFraming} : {})}),
     });
     if (!isCurrentOperation(operation)) return;
     if (!response.ok) {
@@ -1551,7 +1606,10 @@ async function downloadDocx(summary = false) {
   if (!assessmentId) return;
   clearDownloadError();
   try {
-    const response = await fetch(`/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}`);
+    const email = summary === "email";
+    const response = await fetch(email
+      ? `/api/reviews/${assessmentId}/export.docx?view=email`
+      : `/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}`);
     if (!response.ok || response.status === 202) {
       showDownloadError(downloadErrorMessage(response.status));
       return;
@@ -1560,7 +1618,8 @@ async function downloadDocx(summary = false) {
     const objectUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement("a");
     downloadLink.href = objectUrl;
-    downloadLink.download = summary ? "CPF-FCV-Five-Minute-Readout.docx" : "CPF-FCV-Review.docx";
+    downloadLink.download = email ? "CPF-FCV-Peer-Review-Email.docx"
+      : summary ? "CPF-FCV-Five-Minute-Readout.docx" : "CPF-FCV-Review.docx";
     document.body.append(downloadLink);
     try {
       downloadLink.click();
@@ -1586,6 +1645,11 @@ async function resetReview() {
   sessionStorage.removeItem("cpf_fcv_assessment_id");
   sessionStorage.removeItem("cpf_fcv_country");
   assessmentId = "";
+  currentReviewResult = null;
+  displayedEmailText = "";
+  emailEditor.value = "";
+  emailStatus.textContent = "";
+  feedbackForm?.reset?.();
   if (summaryPanel === detailedPanel) {
     results.replaceChildren();
   } else {
@@ -1664,3 +1728,190 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     restoreSavedReview,
   };
 }
+
+
+function renderCoreFindings(result) {
+  const section = document.createElement("section");
+  section.className = "core-findings";
+  section.append(text("h2", "Four analytical findings"));
+  const labels = {
+    drivers_priorities: "Drivers and priorities",
+    actions_commitment: "Critical actions and commitment",
+    program_implications: "Program implications",
+    if_then_calibration: "If/Then calibration",
+  };
+  for (const finding of result.core_findings || []) {
+    const item = document.createElement("section");
+    item.className = "core-finding";
+    item.append(text("h3", labels[finding.question] || finding.question),
+      renderNarrative(finding.assessment));
+    if (finding.basis === "limited") item.append(text("p", "Evidence limits this finding.", "helper"));
+    item.append(renderEvidenceGroup(result, finding.evidence_ids));
+    section.append(item);
+  }
+  return section;
+}
+
+function renderPriorComments(result) {
+  const section = document.createElement("section");
+  const report = result.prior_comment_report;
+  if (report?.checks?.length || result.prior_comment_error) {
+    section.append(text("h2", "Earlier comments: follow-through"));
+    if (result.prior_comment_error) {
+      section.append(text("p", "Some earlier comments could not be checked. The independent findings remain available.", "helper"));
+    }
+    for (const check of report?.checks || []) {
+      section.append(text("h3", check.comment_label),
+        renderNarrative(check.assessment),
+        labelledParagraph("Follow-through", assessmentValueLabel(check.status), "helper"),
+        renderEvidenceGroup(result, [...check.prior_evidence_ids, ...check.current_evidence_ids]));
+    }
+    if (report?.coverage_note) section.append(renderNarrative(report.coverage_note, "helper"));
+  }
+  return section;
+}
+
+function renderEmailState(result) {
+  displayedEmailText = result.email_text || "";
+  emailEditor.value = displayedEmailText;
+  emailStatus.textContent = result.email_edited ? "Saved coordinator wording." : "";
+  emailWarning.textContent = result.email_stale
+    ? "These edits belong to an earlier assessment. Compare them with the updated findings, or use the updated draft."
+    : result.email_error
+      ? "The email draft could not be generated. The validated note is available; you can write your own email here."
+      : "";
+  emailWarning.hidden = !emailWarning.textContent;
+  const updated = document.querySelector("#use-generated-email");
+  if (updated) updated.hidden = !(result.email_stale && result.peer_email);
+}
+
+async function saveEmailWording() {
+  const requestedId = assessmentId;
+  if (!requestedId || !currentReviewResult || !emailEditor.value.trim()) return false;
+  const submittedText = emailEditor.value;
+  const submittedRunId = currentReviewResult.metadata.run_id;
+  const button = document.querySelector("#save-email-wording");
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch(`/api/reviews/${requestedId}/email`, {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text: submittedText, base_run_id: submittedRunId}),
+    });
+    if (requestedId !== assessmentId) return false;
+    if (!response.ok) throw new Error("Email wording was not saved.");
+    displayedEmailText = submittedText;
+    currentReviewResult.email_edited = true;
+    currentReviewResult.email_stale = false;
+    emailWarning.hidden = true;
+    emailStatus.textContent = emailEditor.value === submittedText
+      ? "Wording saved for this assessment." : "Earlier wording saved; save your latest edits too.";
+    return true;
+  } catch (_error) {
+    if (requestedId === assessmentId) emailStatus.textContent = "Wording was not saved. Your text remains in the editor.";
+    return false;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+document.querySelector("#save-email-wording")?.addEventListener("click", saveEmailWording);
+document.querySelector("#copy-peer-email")?.addEventListener("click", async () => {
+  if (!emailEditor.value.trim()) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(emailEditor.value);
+    else {
+      emailEditor.focus();
+      emailEditor.select();
+      if (!document.execCommand("copy")) throw new Error("Copy unavailable.");
+    }
+    emailStatus.textContent = "Email copied.";
+  } catch (_error) {
+    emailEditor.focus();
+    emailEditor.select?.();
+    emailStatus.textContent = "Select and copy the email text manually.";
+  }
+});
+document.querySelector("#download-email")?.addEventListener("click", () => {
+  if (emailEditor.value !== displayedEmailText) {
+    emailStatus.textContent = "Save your wording before downloading so the file contains your edits.";
+    return;
+  }
+  void downloadDocx("email");
+});
+document.querySelector("#use-generated-email")?.addEventListener("click", async () => {
+  const requestedId = assessmentId;
+  const response = await fetch(`/api/reviews/${requestedId}/result`);
+  if (requestedId !== assessmentId) return;
+  if (!response.ok) return;
+  const result = await response.json();
+  if (requestedId !== assessmentId) return;
+  if (!result.peer_email) return;
+  // The original saved edits remain on the parent review.
+  const sections = ["Dear colleagues,", result.peer_email.opening];
+  let tier = null;
+  for (const comment of result.peer_email.comments) {
+    if (comment.tier && comment.tier !== tier) {
+      sections.push(comment.tier === "tier_1"
+        ? "Tier 1: Issues for the review meeting" : "Tier 2: Additional guidance for the team");
+      tier = comment.tier;
+    }
+    sections.push(comment.heading, comment.text);
+  }
+  sections.push("We hope these comments are useful and look forward to the discussion.");
+  emailEditor.value = sections.join("\n\n");
+  await saveEmailWording();
+});
+window.addEventListener?.("beforeunload", (event) => {
+  if (emailEditor.value !== displayedEmailText) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
+
+function renderFeedbackState(result) {
+  if (!feedbackForm) return;
+  const feedback = result.feedback || {};
+  for (const [id, value] of [
+    ["#feedback-accuracy", feedback.accuracy], ["#feedback-usefulness", feedback.usefulness],
+    ["#feedback-comment", feedback.comment],
+  ]) {
+    const input = document.querySelector(id);
+    if (input) input.value = value || "";
+  }
+  const retention = document.querySelector("#feedback-retention");
+  if (retention) retention.textContent = `Feedback follows this review's ${Math.round((result.feedback_ttl_seconds || 86400) / 3600)}-hour inactivity limit; it is deleted with the review.`;
+  const note = document.querySelector("#feedback-file-note");
+  if (note) note.textContent = feedback.final_comments
+    ? `Saved final-comments file: ${feedback.final_comments.name}`
+    : "Up to 10 MiB. Final comments are evaluation material and are not added to the review or style corpus.";
+  const status = document.querySelector("#feedback-status");
+  if (status) status.textContent = "";
+}
+feedbackForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const requestedId = assessmentId;
+  if (!requestedId) return;
+  const button = document.querySelector("#submit-feedback");
+  const status = document.querySelector("#feedback-status");
+  const file = document.querySelector("#final-comments")?.files?.[0];
+  if (file && file.size > 10 * 1024 * 1024) {
+    status.textContent = "Keep the final-comments upload within 10 MiB.";
+    return;
+  }
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch(`/api/reviews/${requestedId}/feedback`, {
+      method: "POST", body: new FormData(feedbackForm),
+    });
+    if (requestedId !== assessmentId) return;
+    if (!response.ok) {
+      const message = await response.json();
+      throw new Error(message.error || "Feedback was not saved.");
+    }
+    status.textContent = "Optional feedback saved.";
+  } catch (error) {
+    if (requestedId === assessmentId) status.textContent = error.message || "Feedback was not saved.";
+  } finally {
+    if (button) button.disabled = false;
+  }
+});

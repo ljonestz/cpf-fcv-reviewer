@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 
-from .contracts import PeerEmailDraft, ReviewResult
+from .contracts import EvidenceItem, PeerEmailDraft, ReviewResult
 from .review_profiles import STAGE_PROFILES
 from .validators import (
     assert_no_unsupported_policy_claims,
+    has_current_context_assertion,
     result_text,
+    validate_current_context_support,
     validate_stage_behavior,
 )
 
@@ -45,6 +48,7 @@ def generate_peer_email(
     follow_through: dict | None = None,
     style_entries=(),
     prohibited_terms=frozenset(),
+    evidence: Mapping[str, EvidenceItem] | None = None,
 ) -> PeerEmailDraft:
     stage_profile = STAGE_PROFILES[result.metadata.review_stage]
     # Synthesis gets reviewed findings, not raw CPF packages or previous emails.
@@ -108,7 +112,15 @@ def generate_peer_email(
         if re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", model_text):
             raise ValueError("Email prose contains raw evidence identifiers.")
     areas = {area.priority_area_id: area for area in result.priority_areas}
+    if any(issue.severity != "advisory" for issue in validate_stage_behavior(
+        result.metadata.review_stage, draft.opening,
+    )):
+        raise ValueError("Email opening exceeds the review stage.")
+    claims = [(draft.opening, tuple(evidence_ids))]
     for comment in draft.comments:
+        claims.append((comment.text, tuple(dict.fromkeys(
+            item for key in comment.priority_area_ids for item in areas[key].evidence_ids
+        ))))
         for key in comment.priority_area_ids:
             issues = validate_stage_behavior(
                 result.metadata.review_stage, comment.text, areas[key].recommendation_scale,
@@ -116,4 +128,12 @@ def generate_peer_email(
             )
             if any(issue.severity != "advisory" for issue in issues):
                 raise ValueError("Email advice exceeds the review stage.")
+    for text, linked_evidence in claims:
+        if text in result_text(result) or not has_current_context_assertion(text):
+            continue
+        if validate_current_context_support(
+            label="email", heading="", assertion_texts=(text,),
+            evidence_ids=linked_evidence, evidence=evidence or {},
+        ):
+            raise ValueError("Email added a claim without current-context support.")
     return draft

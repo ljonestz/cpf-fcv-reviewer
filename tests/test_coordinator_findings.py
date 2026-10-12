@@ -104,3 +104,49 @@ def test_export_rejects_unknown_core_evidence(make_valid_result):
     result = result.model_copy(update={"core_findings": (finding(evidence_ids=("missing",)),)})
     with pytest.raises(EvidenceCompletenessError):
         validate_evidence_completeness(result, evidence)
+
+
+def test_core_finding_checks_present_day_claim_support(make_valid_result):
+    result, evidence = make_valid_result
+    result = result.model_copy(update={"core_findings": (finding(
+        assessment="Conflict has intensified across Benin and displacement is rising.",
+    ),)})
+    issues = validate_review(
+        result, evidence_ids=set(evidence), evidence=evidence, prohibited_terms=set(),
+    )
+    assert "missing_current_context_support" in {issue.code for issue in issues}
+
+
+def test_repair_cannot_invent_coordinator_framing_or_change_destination(make_valid_result):
+    from cpf_fcv_reviewer.contracts import (
+        ContextFraming,
+        RecommendationDestination,
+        ReviewDraft,
+    )
+    from cpf_fcv_reviewer.review_engine import ReviewEngine
+
+    result, evidence = make_valid_result
+    result = result.model_copy(update={"priority_areas": (
+        result.priority_areas[0].model_copy(update={
+            "destination": RecommendationDestination.MEETING_RECORD,
+        }),
+    )})
+    payload = result.model_dump(exclude={"metadata", "document_coverage"})
+    payload["coverage_note"] = result.document_coverage.coverage_note
+    payload["priority_areas"][0]["destination"] = "cpf_text"
+    payload["proposed_context_framing"] = ContextFraming(
+        category="at_risk", rationale="A proposed framing.", confidence="low",
+        origin="coordinator_override",
+    )
+    candidate = ReviewDraft.model_validate(payload)
+
+    class Gateway:
+        def generate(self, **kwargs):
+            return candidate
+
+    repaired = ReviewEngine(Gateway()).repair(
+        result, [{"code": "unknown_evidence", "message": "Repair evidence only."}],
+        evidence_ids=set(evidence),
+    )
+    assert repaired.proposed_context_framing is None
+    assert repaired.priority_areas[0].destination == "meeting_record"

@@ -657,6 +657,8 @@ def _preserve_priority_coverage(original, draft, issue_codes, available_evidence
             "target_locator": area.target_locator,
             "gap_locus": area.gap_locus,
             "sensitivity": area.sensitivity,
+            "destination": area.destination,
+            "issue_kind": area.issue_kind,
         }
         if "stage_overreach" not in issue_codes:
             updates["recommendation_scale"] = area.recommendation_scale
@@ -762,7 +764,9 @@ class ReviewEngine:
         if framing_override:
             framing = ContextFraming(
                 category=framing_override,
-                rationale="Coordinator-selected analytical framing; interpret with country evidence.",
+                rationale=(
+                    "Coordinator-selected analytical framing; interpret with country evidence."
+                ),
                 confidence=AssessmentConfidence.LOW,
                 evidence_ids=framing.evidence_ids if framing is not None else (),
                 origin="coordinator_override",
@@ -969,7 +973,7 @@ class ReviewEngine:
                 )
             elif candidate is not None and "unknown_assessment_evidence" in issue_codes:
                 framing = candidate.model_copy(update={"origin": framing.origin})
-            draft = draft.model_copy(update={"proposed_context_framing": framing})
+        draft = draft.model_copy(update={"proposed_context_framing": framing})
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
         if "unknown_institutional_referral" in issue_codes and registry_entry_ids is not None:

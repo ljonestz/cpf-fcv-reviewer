@@ -479,7 +479,12 @@ def test_smoke_routes_complete_with_schema_for_every_review_stage(review_stage):
     assert response.status_code == 200
     payload = response.get_json()
     evidence_by_id = payload.pop("evidence_by_id")
-    result = ReviewResult.model_validate(payload)
+    result = ReviewResult.model_validate({
+        key: value for key, value in payload.items() if key in ReviewResult.model_fields
+    })
+    assert result.metadata.schema_version == "2.0.0"
+    assert len(result.core_findings) == 4
+    assert payload["peer_email"]["comments"]
     assert evidence_by_id
     assert result.metadata.review_stage == review_stage
     assert result.metadata.model_id == "deterministic-smoke"
@@ -522,7 +527,10 @@ def test_smoke_app_completes_full_pipeline_with_synthetic_rra_mapping():
     assert result_response.status_code == 200
     payload = result_response.get_json()
     evidence_by_id = payload.pop("evidence_by_id")
-    result = ReviewResult.model_validate(payload)
+    result = ReviewResult.model_validate({
+        key: value for key, value in payload.items() if key in ReviewResult.model_fields
+    })
+    assert len(result.core_findings) == 4
     assert result.metadata.diagnostic_mode.value == "rra_alignment"
     assert SMOKE_MARKER in result.overall_read
     assert any(

@@ -133,16 +133,25 @@ def test_runtime_separates_prior_text_before_digest_and_review(monkeypatch):
                     + b"Annex 2: Results\nCurrent indicator evidence."
                 ), "Supporting package.txt"),
             ],
+            "context_documents": (BytesIO(
+                b"Benin Risk and Resilience Assessment. Publication date: January 2024.\n"
+                b"Structural drivers include exclusion and weak service delivery.\n"
+                b"Previous FCV comments\nSENTINEL_PRIOR_RRA\n"
+                b"Annex 2: Current diagnostic\nCurrent sources of resilience."
+            ), "Benin RRA.txt"),
         })
         assert response.status_code == 201
         assessment_id = response.json["assessment_id"]
         run_assessment(app, assessment_id)
         state = app.extensions["session_store"].get(assessment_id)
         assert state.payload["status"] == "complete"
-        fresh = [text for name, text in calls if name in {"review", "document_digest"}]
+        fresh = [text for name, text in calls if name in {
+            "review", "document_digest", "diagnostic_map",
+        }]
         assert fresh
         assert all("SENTINEL_" not in text for text in fresh)
         follow = [text for name, text in calls if name == "prior_comments"]
         assert len(follow) == 1
         assert "SENTINEL_PRIOR" in follow[0] and "SENTINEL_MIXED" in follow[0]
+        assert "SENTINEL_PRIOR_RRA" in follow[0]
         assert state.payload["prior_comment_report"]["checks"][0]["status"] == "partly_addressed"

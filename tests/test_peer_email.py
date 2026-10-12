@@ -35,6 +35,9 @@ def test_renderer_is_unsigned():
 
 @pytest.mark.parametrize("text", [
     "The CPF complies with PC14.",
+    "The CPF meets PC14.",
+    "PC14: Partly meets.",
+    "The country is on the FCS list.",
     "The response is appropriate.\nShubham",
     "Allocate 987654 additional grants.",
 ])
@@ -87,6 +90,35 @@ def test_generator_preserves_stage_and_separate_questions(make_valid_result):
     assert gateway.payload["review_questions"] == "Is the results chain clear?"
     assert "evidence_pack" not in gateway.payload
     assert generated == draft()
+
+
+def test_email_opening_obeys_finalization_stage(make_valid_result):
+    result, _ = make_valid_result
+    result = result.model_copy(update={"metadata": result.metadata.model_copy(update={
+        "review_stage": "finalization",
+    })})
+
+    class Gateway:
+        def generate(self, **kwargs):
+            return draft().model_copy(update={
+                "opening": "Replace all objectives and rebuild the entire delivery model.",
+            })
+
+    with pytest.raises(ValueError, match="stage"):
+        module().generate_peer_email(result, Gateway())
+
+
+def test_email_rejects_new_unsupported_present_day_claim(make_valid_result):
+    result, evidence = make_valid_result
+
+    class Gateway:
+        def generate(self, **kwargs):
+            return draft().model_copy(update={
+                "opening": "Conflict has intensified across Benin and displacement is rising.",
+            })
+
+    with pytest.raises(ValueError, match="current-context"):
+        module().generate_peer_email(result, Gateway(), evidence=evidence)
 
 
 @pytest.mark.parametrize("fail_email", [False, True])

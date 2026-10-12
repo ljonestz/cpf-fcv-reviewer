@@ -39,8 +39,8 @@ from .document_digest import (
     plan_digests,
     segment_evidence,
 )
-from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .email_draft import generate_peer_email
+from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .extraction import (
     PDF_SAMPLING_WARNING_SUFFIX,
     DiagnosticCoverageUnavailable,
@@ -61,8 +61,8 @@ from .fcv_readout import (
 from .follow_on import AnthropicFollowOnGateway
 from .model_gateway import AnthropicModelGateway
 from .orchestrator import ReviewOrchestrator
-from .prompts import load_prompt
 from .prior_comments import check_prior_comments, partition_document
+from .prompts import load_prompt
 from .public_research import AnthropicPublicResearchGateway, load_research_prompt
 from .registry import RegistryUnavailable, load_registry_bundle
 from .research_controller import (
@@ -1042,6 +1042,8 @@ def build_runtime_services(
                 if current is not None:
                     if position == diagnostic_position:
                         context["diagnostic_document_position"] = len(kept_documents)
+                        if full:
+                            context["full_diagnostic_document"] = current
                     kept_documents.append(current)
                     kept_uploads.append(upload_pair)
             context[f"{prefix}_documents"] = tuple(kept_documents)
@@ -1316,7 +1318,15 @@ def build_runtime_services(
             current_evidence_limitation=_normalize_limitation(
                 context["research_result"].limitation
             ),
-            guidance=review_focus,
+            guidance=(
+                json.dumps({
+                    "review_focus": review_focus,
+                    "review_questions": payload.get("review_questions", ""),
+                    "framing_override": payload.get("framing_override", ""),
+                }, sort_keys=True)
+                if payload.get("review_questions") or payload.get("framing_override")
+                else review_focus
+            ),
             prompt_bytes=prompt_bytes,
             model_id=review_model_id,
             source_scan_at=datetime.now(UTC),
@@ -1338,6 +1348,8 @@ def build_runtime_services(
                 "schema_version": "2.0.0",
                 "rubric_version": "2.0.0",
                 "prompt_bundle_version": "2.0.0",
+                "app_release": config.get("APP_RELEASE", "dev"),
+                "registry_versions": {"bundle": bundle.version},
             })})
         context["evidence_pack"] = pack.model_copy(update={
             "metadata": pack.metadata.model_copy(update={
@@ -1680,6 +1692,7 @@ def build_runtime_services(
                     context["prior_comment_error"] = "followup_unavailable"
                     context["_emit"]("prior_comment_unavailable", {"error": "followup_unavailable"})
             if name == "render" and context["result"].metadata.schema_version.startswith("2."):
+                context["peer_email"] = None
                 context["_emit"]("email_draft_start", {})
                 try:
                     email = generate_peer_email(
@@ -1691,12 +1704,17 @@ def build_runtime_services(
                             if entry.entry_id.startswith("STYLE-CPF-")
                         ),
                         prohibited_terms=prohibited_terms,
+                        evidence={
+                            item.evidence_id: item for item in context["evidence_pack"].evidence
+                        },
                     )
                     context["peer_email"] = email.model_dump(mode="json")
                     context["_emit"]("email_draft_ready", {})
                 except Exception:
                     context["email_error"] = "email_draft_unavailable"
-                    context["_emit"]("email_draft_unavailable", {"error": "email_draft_unavailable"})
+                    context["_emit"](
+                        "email_draft_unavailable", {"error": "email_draft_unavailable"},
+                    )
             return context
 
         return step

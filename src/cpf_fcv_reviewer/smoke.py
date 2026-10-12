@@ -21,18 +21,18 @@ from .contracts import (
     FCVStrategicShift,
     FCVStrategyAssessment,
     GapLocus,
-    PriorityArea,
     PeerEmailComment,
     PeerEmailDraft,
+    PriorityArea,
     RecommendationScale,
-    RRADriverAssessment,
     ReviewDraft,
     RevisionSummaryItem,
+    RRADriverAssessment,
     SensitivityCategory,
 )
+from .prior_comments import PriorCommentCheck, PriorCommentReport
 from .research_controller import ResearchMode, ResearchRequest
 from .runtime import build_runtime_services
-from .prior_comments import PriorCommentCheck, PriorCommentReport
 
 SMOKE_REVIEW_DATE = date(2026, 8, 14)
 SMOKE_MARKER = "[SYNTHETIC SMOKE]"
@@ -240,7 +240,9 @@ class SmokeModelGateway:
                     prior_evidence_ids=(prior_id,),
                     current_evidence_ids=current_ids,
                 ),),
-                coverage_note=f"{SMOKE_MARKER} Earlier comments checked after the independent review.",
+                coverage_note=(
+                    f"{SMOKE_MARKER} Earlier comments checked after the independent review."
+                ),
             )
         if output_type is not ReviewDraft:
             raise ValueError("Smoke model only supports ReviewDraft output.")

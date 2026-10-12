@@ -5,13 +5,21 @@ import unicodedata
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 from threading import RLock
 from time import monotonic, sleep
 from uuid import uuid4
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
-from .contracts import DetailLevel, EvidenceItem, ReviewResult
+from .contracts import (
+    ContextFraming,
+    DetailLevel,
+    EvidenceItem,
+    PeerEmailDraft,
+    ReviewFeedback,
+    ReviewResult,
+)
 from .country_detection import (
     COUNTRY_DETECTION_MAX_ARCHIVE_MEMBERS,
     COUNTRY_DETECTION_MAX_CHARACTERS,
@@ -21,13 +29,16 @@ from .country_detection import (
     COUNTRY_DETECTION_MAX_UPLOAD_BYTES,
     detect_country,
 )
+from .email_draft import render_peer_email
 from .export_docx import (
     EvidenceCompletenessError,
     build_docx,
+    build_email_docx,
     validate_evidence_completeness,
 )
 from .extraction import extract_document, require_readable_primary
 from .orchestrator import safe_failure_code, safe_failure_data
+from .prior_comments import PriorCommentReport
 from .session_store import SessionExpired
 from .validators import validate_reproducibility_metadata
 
@@ -287,6 +298,20 @@ def create_review():
     if cpf is None:
         return jsonify(error="A primary CPF/CEN is required."), 400
     country = request.form.get("country", "").strip()
+    framing_override = request.form.get("framing_override", "").strip()
+    if framing_override:
+        try:
+            ContextFraming(
+                category=framing_override, rationale="Coordinator-selected framing.",
+                confidence="low", origin="coordinator_override",
+            )
+        except ValueError:
+            return jsonify(error="Unsupported context framing."), 400
+    if len(request.files.getlist("previous_comments")) > 10:
+        return jsonify(error="Upload at most ten previous-comment documents."), 400
+    review_questions = request.form.get("review_questions", "").strip()
+    if len(review_questions) > 4000:
+        return jsonify(error="Review questions are too long."), 400
     if not country:
         return jsonify(error="Country is required."), 400
     if len(country) > 100 or any(
@@ -316,6 +341,10 @@ def create_review():
         "package_documents": uploaded_files("package_documents"),
         "context_documents": uploaded_files("context_documents"),
         "review_focus": request.form.get("review_focus", "").strip()[:4000],
+        "review_questions": review_questions,
+        "framing_override": framing_override,
+        "previous_comments": uploaded_files("previous_comments"),
+        "coordinator_review_version": 2,
         "corrections": [],
         "status": "created",
     }
@@ -400,6 +429,10 @@ def review_result(assessment_id):
             evidence_id: EvidenceItem.model_validate(item).model_dump(mode="json")
             for evidence_id, item in evidence_payload.items()
         }
+        validate_evidence_completeness(
+            validated_result,
+            {key: EvidenceItem.model_validate(item) for key, item in validated_evidence.items()},
+        )
     except ValueError:
         return jsonify(error="Traceable evidence is invalid."), 409
     if any(
@@ -417,13 +450,31 @@ def review_result(assessment_id):
 
     response_payload = validated_result.model_dump(mode="json")
     response_payload["evidence_by_id"] = validated_evidence
+    try:
+        email = _email_state(state.payload, validated_result)
+        report = state.payload.get("prior_comment_report")
+        if report is not None:
+            report = PriorCommentReport.model_validate(report).model_dump(mode="json")
+    except ValueError:
+        return jsonify(error="Review drafting state is invalid."), 409
+    response_payload.update(email)
+    response_payload["prior_comment_report"] = report
+    response_payload["prior_comment_error"] = state.payload.get("prior_comment_error")
+    feedback = dict(state.payload.get("feedback") or {})
+    final_comments = feedback.pop("final_comments", None)
+    if final_comments:
+        feedback["final_comments"] = {
+            "name": final_comments["name"], "size": len(final_comments["bytes"]),
+        }
+    response_payload["feedback"] = feedback
+    response_payload["feedback_ttl_seconds"] = current_app.config["SESSION_TTL_SECONDS"]
     return jsonify(response_payload)
 
 
 @bp.get("/api/reviews/<assessment_id>/export.docx")
 def export_review(assessment_id):
     view = request.args.get("view", "detailed")
-    if view not in {"detailed", "summary"}:
+    if view not in {"detailed", "summary", "email"}:
         return jsonify(error="Unknown export view."), 400
     try:
         state = store().get(assessment_id)
@@ -454,12 +505,22 @@ def export_review(assessment_id):
     except ValueError:
         return jsonify(error="Traceable evidence is invalid."), 409
     try:
-        data = build_docx(
-            result,
-            evidence=evidence,
-            hydrated_referrals=(),
-            summary=view == "summary",
-        )
+        if view == "email":
+            email = _email_state(state.payload, result)
+            if not email["email_text"]:
+                return jsonify(error="An email draft is not available."), 409
+            data = build_email_docx(
+                email["email_text"], created_at=result.metadata.created_at,
+                stale=email["email_stale"],
+            )
+        else:
+            data = build_docx(
+                result, evidence=evidence, hydrated_referrals=(), summary=view == "summary",
+                prior_comment_report=(
+                    PriorCommentReport.model_validate(state.payload["prior_comment_report"])
+                    if state.payload.get("prior_comment_report") is not None else None
+                ),
+            )
     except EvidenceCompletenessError:
         return jsonify(error="Traceable evidence is invalid."), 409
     except Exception:
@@ -470,9 +531,103 @@ def export_review(assessment_id):
         mimetype=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         as_attachment=True,
         download_name=(
+            "CPF-FCV-Peer-Review-Email.docx" if view == "email" else
             "CPF-FCV-Five-Minute-Readout.docx" if view == "summary" else "CPF-FCV-Review.docx"
         ),
     )
+
+
+def _email_state(payload, result):
+    raw_draft = payload.get("peer_email")
+    draft = PeerEmailDraft.model_validate(raw_draft) if raw_draft is not None else None
+    overlay = payload.get("email_overlay")
+    text = render_peer_email(draft) if draft is not None else ""
+    stale = False
+    if overlay is not None:
+        if not isinstance(overlay, dict) or not isinstance(overlay.get("text"), str):
+            raise ValueError("Invalid email overlay.")
+        if len(overlay["text"]) > 12_000:
+            raise ValueError("Email overlay exceeds its budget.")
+        text = overlay["text"]
+        stale = overlay.get("base_run_id") != result.metadata.run_id
+    return {
+        "peer_email": draft.model_dump(mode="json") if draft is not None else None,
+        "email_text": text, "email_edited": overlay is not None,
+        "email_stale": stale, "email_error": payload.get("email_error"),
+    }
+
+
+@bp.put("/api/reviews/<assessment_id>/email")
+def save_email_wording(assessment_id):
+    try:
+        state = store().get(assessment_id)
+    except SessionExpired:
+        return jsonify(error="Assessment expired."), 410
+    if state.payload.get("status") != "complete":
+        return jsonify(error="Complete the review before editing the email."), 409
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {"text", "base_run_id"}:
+        return jsonify(error="Email wording request is invalid."), 400
+    text = body["text"]
+    if not isinstance(text, str) or not text.strip() or len(text) > 12_000:
+        return jsonify(error="Provide email wording within the allowed length."), 400
+    try:
+        result = ReviewResult.model_validate(state.payload.get("result"))
+    except ValueError:
+        return jsonify(error="Review result is invalid."), 409
+    if body["base_run_id"] != result.metadata.run_id:
+        return jsonify(error="The email belongs to a different assessment."), 409
+    store().update(assessment_id, email_overlay={
+        "text": text, "base_run_id": result.metadata.run_id,
+        "updated_at": datetime.now(UTC).isoformat(),
+    })
+    return jsonify(saved=True)
+
+
+@bp.post("/api/reviews/<assessment_id>/feedback")
+def save_review_feedback(assessment_id):
+    try:
+        state = store().get(assessment_id)
+    except SessionExpired:
+        return jsonify(error="Assessment expired."), 410
+    if state.payload.get("status") != "complete":
+        return jsonify(error="Complete the review before providing feedback."), 409
+    body = request.get_json(silent=True) if request.is_json else dict(request.form)
+    if not isinstance(body, dict):
+        return jsonify(error="Feedback request is invalid."), 400
+    body = {key: (None if value == "" and key != "comment" else value)
+            for key, value in body.items()}
+    try:
+        feedback = ReviewFeedback.model_validate(body)
+    except ValueError:
+        return jsonify(error="Feedback fields are invalid."), 400
+    uploads = request.files.getlist("final_comments")
+    if len(uploads) > 1:
+        return jsonify(error="Upload one final-comments document."), 400
+    values = dict(state.payload.get("feedback") or {})
+    values.update(feedback.model_dump(exclude_unset=True))
+    if uploads and uploads[0].filename:
+        from .runtime import (
+            EXPECTED_OPTIONAL_EXTRACTION_ERRORS,
+            SUPPORTED_UPLOAD_SUFFIXES,
+            _extract_full_optional_document,
+        )
+        filename = Path(uploads[0].filename).name[:200]
+        data = uploads[0].read(10 * 1024 * 1024 + 1)
+        if len(data) > 10 * 1024 * 1024 or Path(filename).suffix.lower() not in (
+            SUPPORTED_UPLOAD_SUFFIXES
+        ):
+            return jsonify(error="Final comments must be a supported document within 10 MiB."), 400
+        upload = {"name": filename, "bytes": data}
+        try:
+            document = _extract_full_optional_document(upload)
+            require_readable_primary(document)
+        except (ValueError, *EXPECTED_OPTIONAL_EXTRACTION_ERRORS):
+            return jsonify(error="Final comments could not be read safely."), 400
+        values["final_comments"] = upload
+    values["updated_at"] = datetime.now(UTC).isoformat()
+    store().update(assessment_id, feedback=values)
+    return jsonify(saved=True, has_final_comments=bool(values.get("final_comments")))
 
 
 @bp.post("/api/reviews/<assessment_id>/corrections")
@@ -487,6 +642,17 @@ def add_correction(assessment_id):
         return jsonify(error="Correction request is invalid."), 400
     if "affected_finding_id" in body:
         return jsonify(error="Legacy correction fields are not supported."), 400
+    framing_override = body.get("framing_override", "")
+    if not isinstance(framing_override, str):
+        return jsonify(error="Unsupported context framing."), 400
+    if framing_override:
+        try:
+            ContextFraming(
+                category=framing_override, rationale="Coordinator-selected framing.",
+                confidence="low", origin="coordinator_override",
+            )
+        except ValueError:
+            return jsonify(error="Unsupported context framing."), 400
 
     text = body.get("text", "")
     if not isinstance(text, str) or not text.strip():
@@ -530,6 +696,13 @@ def add_correction(assessment_id):
     )
     child_payload["parent_assessment_id"] = assessment_id
     child_payload["status"] = "created"
+    child_payload["coordinator_review_version"] = 2
+    if framing_override:
+        child_payload["framing_override"] = framing_override
+    for key in (
+        "feedback", "peer_email", "email_error", "prior_comment_report", "prior_comment_error",
+    ):
+        child_payload.pop(key, None)
     child_payload.pop("result", None)
     child_payload.pop("evidence_by_id", None)
     child_payload.pop("assistant_history", None)
@@ -589,10 +762,12 @@ def run_assessment(app, assessment_id):
                 result=result_context["result"].model_dump(mode="json"),
                 evidence_by_id=evidence_by_id,
                 status="complete",
-                prior_comment_report=result_context.get("prior_comment_report"),
-                prior_comment_error=result_context.get("prior_comment_error"),
-                peer_email=result_context.get("peer_email"),
-                email_error=result_context.get("email_error"),
+                **{
+                    key: result_context[key]
+                    for key in (
+                        "prior_comment_report", "prior_comment_error", "peer_email", "email_error"
+                    ) if key in result_context
+                },
             )
             for kind, data in terminal_events:
                 if kind == "run_complete":

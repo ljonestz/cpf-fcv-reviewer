@@ -11,7 +11,7 @@
     <section class="hero" aria-labelledby="hero-title">
       <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
       <h1 id="hero-title">Strengthen the FCV framing of a CPF or CEN</h1>
-      <p class="purpose">Get a concise, evidence-linked note with practical options to strengthen the draft.</p>
+      <p class="purpose">Prepare an evidence-linked note, five-minute summary and draft peer-review email.</p>
       <p class="advisory"><strong>Public version.</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. Use public or non-sensitive material only. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
       <ol class="steps" aria-label="How the review works">
         <li>Add the draft</li>
@@ -62,6 +62,7 @@
         <div class="field-grid field-grid-single">
           <label for="review-stage">Review stage <span aria-hidden="true">*</span>
             <select id="review-stage" name="review_stage" required>
+              <option value="" disabled selected>Select review stage</option>
               <option value="early_drafting">Early drafting / PCN</option>
               <option value="concept_review">Concept review</option>
               <option value="decision_review">Decision review</option>
@@ -76,6 +77,21 @@
           <summary>Additional guidance</summary>
           <label for="review-focus">What should the review pay particular attention to?</label>
           <textarea id="review-focus" name="review_focus" maxlength="4000" placeholder="Optional: identify a theme, section, or concern for the reviewer."></textarea>
+          <label for="review-questions">CMU review questions (optional)</label>
+          <textarea id="review-questions" name="review_questions" maxlength="4000" placeholder="Paste questions from the review invitation."></textarea>
+          <label for="previous-comments">Earlier FCV comments or decision notes (optional)</label>
+          <input id="previous-comments" name="previous_comments" type="file" accept=".pdf,.docx,.txt,.md" multiple>
+          <p class="helper">Checked after the independent review. Clearly labelled comments in the package are also recognised.</p>
+          <label for="framing-override">Country-context framing (optional)</label>
+          <select id="framing-override" name="framing_override">
+            <option value="">Use the tool's proposed framing</option>
+            <option value="in_crisis">In crisis</option>
+            <option value="in_transition">In transition</option>
+            <option value="conflict_affected">Conflict-affected</option>
+            <option value="at_risk">At risk / prevention</option>
+            <option value="undetermined">Mixed or undetermined</option>
+          </select>
+          <p class="helper">An analytical framing, separate from official list or Envelope status.</p>
         </details>
 
         <button id="submit-review" type="submit" disabled>Generate CPF review note</button>
@@ -146,9 +162,53 @@
         <div class="result-tabs" role="tablist" aria-label="Review result views">
           <button id="result-tab-summary" role="tab" aria-selected="true" aria-controls="summary-panel" tabindex="0" data-result-view="summary" type="button">Five-minute readout</button>
           <button id="result-tab-detailed" role="tab" aria-selected="false" aria-controls="detailed-panel" tabindex="-1" data-result-view="detailed" type="button">Detailed analysis</button>
+          <button id="result-tab-email" role="tab" aria-selected="false" aria-controls="email-panel" tabindex="-1" data-result-view="email" type="button">Draft email</button>
         </div>
         <section id="summary-panel" role="tabpanel" aria-labelledby="result-tab-summary" tabindex="0"></section>
         <section id="detailed-panel" role="tabpanel" aria-labelledby="result-tab-detailed" tabindex="0" hidden></section>
+        <section id="email-panel" role="tabpanel" aria-labelledby="result-tab-email" tabindex="0" hidden>
+          <h2>Draft peer-review email</h2>
+          <p class="helper">Review the findings and adapt this unsigned draft using your country knowledge. You remain responsible for the final comments.</p>
+          <p id="email-warning" class="helper" role="status" hidden></p>
+          <label for="peer-email-editor">Email wording</label>
+          <textarea id="peer-email-editor" maxlength="12000" rows="18"></textarea>
+          <p class="helper">Save wording to keep edits across refreshes and in downloads. Substantive corrections belong in the correction panel below.</p>
+          <div class="email-controls">
+            <button id="save-email-wording" type="button">Save wording</button>
+            <button id="copy-peer-email" type="button" class="button-secondary">Copy email</button>
+            <button id="use-generated-email" type="button" class="button-secondary" hidden>Use updated draft</button>
+            <button id="download-email" type="button" class="button-secondary">Download email draft</button>
+          </div>
+          <p id="email-status" class="helper" role="status" aria-live="polite"></p>
+        </section>
+        <details id="pilot-feedback" class="correction-details">
+          <summary>Optional pilot feedback</summary>
+          <form id="feedback-form" class="correction-content">
+            <p class="helper">Feedback supports evaluation. It is optional and is not used as review evidence.</p>
+            <p id="feedback-retention" class="helper"></p>
+            <label for="feedback-accuracy">Accuracy (optional)</label>
+            <select id="feedback-accuracy" name="accuracy">
+              <option value="">Choose a rating</option>
+              <option value="accurate">Accurate</option>
+              <option value="partly_accurate">Partly accurate</option>
+              <option value="inaccurate">Inaccurate</option>
+            </select>
+            <label for="feedback-usefulness">Usefulness (optional)</label>
+            <select id="feedback-usefulness" name="usefulness">
+              <option value="">Choose a rating</option>
+              <option value="useful">Useful</option>
+              <option value="partly_useful">Partly useful</option>
+              <option value="not_useful">Not useful</option>
+            </select>
+            <label for="feedback-comment">Correction or feedback (optional)</label>
+            <textarea id="feedback-comment" name="comment" maxlength="2000"></textarea>
+            <label for="final-comments">Final comments sent (optional, public or non-sensitive only)</label>
+            <input id="final-comments" name="final_comments" type="file" accept=".pdf,.docx,.txt,.md">
+            <p id="feedback-file-note" class="helper"></p>
+            <button id="submit-feedback" type="submit">Save optional feedback</button>
+            <p id="feedback-status" class="helper" role="status" aria-live="polite"></p>
+          </form>
+        </details>
       </section>
 
       <section id="assistant-card" class="assistant-card" hidden aria-labelledby="assistant-heading">
@@ -177,6 +237,16 @@
           <p>Corrections remain labelled as user-provided unless independently supported by evidence.</p>
           <label for="correction-text">Correction or additional context</label>
           <textarea id="correction-text"></textarea>
+          <label for="correction-framing">Change context framing (optional)</label>
+          <select id="correction-framing">
+            <option value="">Keep current framing</option>
+            <option value="in_crisis">In crisis</option>
+            <option value="in_transition">In transition</option>
+            <option value="conflict_affected">Conflict-affected</option>
+            <option value="at_risk">At risk / prevention</option>
+            <option value="undetermined">Mixed or undetermined</option>
+          </select>
+          <p class="helper">A framing change reruns the assessment and updates all three outputs.</p>
           <button id="submit-correction" type="button">Add correction and rerun</button>
         </div>
       </details>

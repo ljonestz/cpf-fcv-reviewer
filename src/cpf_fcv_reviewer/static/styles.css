@@ -424,3 +424,12 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
   background: #fbebeb;
   color: #7f3030;
 }
+
+/* Coordinator views use the existing native controls and reading width. */
+#peer-email-editor { width: 100%; min-height: 24rem; font: inherit; line-height: 1.55; resize: vertical; }
+.email-controls { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+.core-finding { padding: .75rem 0; border-bottom: 1px solid #d9e2e8; }
+.context-framing { display: block; margin-top: .4rem; }
+#feedback-form select, #framing-override, #correction-framing { max-width: 100%; }
+#email-warning:not([hidden]) { padding: .75rem; background: #fff4db; border-radius: .3rem; }
+@media (max-width: 640px) { .email-controls button { width: 100%; } #peer-email-editor { min-height: 20rem; } }

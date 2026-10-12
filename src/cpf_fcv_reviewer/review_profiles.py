@@ -2,7 +2,22 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from .contracts import DetailLevel, RecommendationScale
+from .contracts import CoreQuestion, DetailLevel, RecommendationDestination, RecommendationScale
+
+CORE_QUESTION_LABELS = {
+    CoreQuestion.DRIVERS_PRIORITIES: "Drivers and priorities",
+    CoreQuestion.ACTIONS_COMMITMENT: "Critical actions and commitment",
+    CoreQuestion.PROGRAM_IMPLICATIONS: "Program implications",
+    CoreQuestion.IF_THEN_CALIBRATION: "If/Then calibration",
+}
+DESTINATION_LABELS = {
+    RecommendationDestination.CPF_TEXT: "CPF text or annex",
+    RecommendationDestination.RESULTS_FRAMEWORK: "Results framework",
+    RecommendationDestination.MEETING_RECORD: "Meeting minutes or decision note",
+    RecommendationDestination.ANNUAL_BUSINESS_PLANNING: (
+        "Annual business planning or implementation"
+    ),
+}
 
 
 @dataclass(frozen=True)

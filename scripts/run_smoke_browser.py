@@ -41,7 +41,7 @@ def main(
         page.locator("#assistant-send:not([disabled])").wait_for(timeout=10_000)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(channel="msedge", headless=True)
         context = browser.new_context(
             viewport={"width": 1440, "height": 1000}, accept_downloads=True
         )
@@ -105,6 +105,13 @@ def main(
             "!document.querySelector('#submit-review').disabled"
         )
         page.locator("#review-stage").select_option("decision_review")
+        if not cpf:
+            page.locator("#additional-guidance summary").click()
+            page.locator("#review-questions").fill("How could delivery be clarified at this stage?")
+            page.locator("#previous-comments").set_input_files({
+                "name": "Previous-FCV-comments.txt", "mimeType": "text/plain",
+                "buffer": b"[SYNTHETIC SMOKE] Earlier comment: clarify delivery arrangements.\n" * 10,
+            })
         with page.expect_response(
             lambda response: response.request.method == "POST"
             and response.url.rstrip("/").endswith("/api/reviews"),
@@ -126,6 +133,34 @@ def main(
         page.locator("#result-tab-detailed").click()
         assert page.locator("#detailed-panel:not([hidden])").is_visible()
         capture(page, 4, "smoke-detailed-desktop")
+        if not cpf:
+            assert page.get_by_role("heading", name="Four analytical findings").is_visible()
+            assert page.get_by_role("heading", name="Earlier comments: follow-through").is_visible()
+        page.locator("#result-tab-email").click()
+        editor = page.locator("#peer-email-editor")
+        assert editor.input_value().startswith("Dear colleagues,")
+        if not cpf:
+            edited_email = editor.input_value() + "\n\n[SYNTHETIC SMOKE] Coordinator wording edit."
+            editor.fill(edited_email)
+            page.locator("#save-email-wording").click()
+            page.wait_for_function(
+                "document.querySelector('#email-status').textContent === "
+                "'Wording saved for this assessment.'"
+            )
+            page.locator("#pilot-feedback summary").click()
+            page.locator("#feedback-accuracy").select_option("accurate")
+            page.locator("#feedback-usefulness").select_option("useful")
+            page.locator("#feedback-comment").fill("Synthetic evaluation feedback only.")
+            page.locator("#final-comments").set_input_files({
+                "name": "Final-comments.txt", "mimeType": "text/plain",
+                "buffer": b"[SYNTHETIC SMOKE] Final comments for evaluation only.\n" * 10,
+            })
+            page.locator("#submit-feedback").click()
+            page.wait_for_function(
+                "document.querySelector('#feedback-status').textContent === "
+                "'Optional feedback saved.'"
+            )
+        capture(page, 10, "smoke-email-desktop")
 
         page.get_by_role("button", name="Summarise for management").click()
         page.locator("#assistant-send").click()
@@ -143,6 +178,12 @@ def main(
         title = page.locator("#result-title").inner_text().strip()
         assert re.fullmatch(rf"{re.escape(country)} (?:CPF|CEN|CPF / CEN) FCV review", title), title
         capture(page, 6, "smoke-assistant-restored-desktop")
+        if not cpf:
+            page.locator("#result-tab-email").click()
+            assert editor.input_value() == edited_email
+            assert page.locator("#feedback-accuracy").input_value() == "accurate"
+            page.locator("#pilot-feedback summary").click()
+            assert "Final-comments.txt" in page.locator("#feedback-file-note").inner_text()
 
         page.locator("#corrections summary").click()
         capture(page, 7, "smoke-secondary-correction-desktop")
@@ -164,6 +205,39 @@ def main(
             assert archive.testzip() is None
             assert "word/document.xml" in archive.namelist()
 
+        page.locator("#result-tab-email").click()
+        with page.expect_download(timeout=30_000) as download_info:
+            page.locator("#download-email").click()
+        email_docx = output / f"08-{mode}-peer-review-email.docx"
+        download_info.value.save_as(email_docx)
+        with ZipFile(email_docx) as archive:
+            assert archive.testzip() is None
+            if not cpf:
+                assert b"Coordinator wording edit." in archive.read("word/document.xml")
+
+        if not cpf:
+            edited_email += "\n\n[SYNTHETIC SMOKE] Unsaved wording before correction."
+            editor.fill(edited_email)
+            page.locator("#correction-framing").select_option("in_transition")
+            page.locator("#submit-correction").click()
+            page.locator("#progress:not([hidden])").wait_for(timeout=5_000)
+            wait_for_results(page)
+            page.locator("#result-tab-email").click()
+            assert editor.input_value() == edited_email
+            assert "earlier assessment" in page.locator("#email-warning").inner_text()
+            page.wait_for_function(
+                "document.querySelector('#result-context').textContent.includes("
+                "'Coordinator framing: In transition')"
+            )
+            capture(page, 11, "smoke-stale-email-desktop")
+            page.locator("#use-generated-email").click()
+            page.wait_for_function(
+                "document.querySelector('#email-status').textContent === "
+                "'Wording saved for this assessment.'"
+            )
+            assert "Coordinator wording edit." not in editor.input_value()
+            assert not page.locator("#email-warning").is_visible()
+
         page.set_viewport_size({"width": 390, "height": 844})
         page.locator("#corrections summary").click()
         page.locator("#result-tab-summary").click()
@@ -175,7 +249,7 @@ def main(
         context.close()
         browser.close()
 
-    print(f"BROWSER_QA_PASS mode={mode} screenshots=8 assistant_messages_restored=2 docx=2")
+    print(f"BROWSER_QA_PASS mode={mode} assistant_messages_restored=2 docx=3")
 
 
 if __name__ == "__main__":
