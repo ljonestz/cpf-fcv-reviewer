@@ -377,7 +377,10 @@ class ContextFraming(FrozenModel):
 
     @model_validator(mode="after")
     def requires_proposal_evidence(self) -> ContextFraming:
-        if self.category != "undetermined" and not self.evidence_ids:
+        if (
+            self.category != "undetermined" and self.origin == "model_proposed"
+            and not self.evidence_ids
+        ):
             raise ValueError("A proposed context framing requires evidence.")
         return self
 
@@ -449,6 +452,33 @@ class PriorityArea(FrozenModel):
         if value is None:
             return None
         return _requires_nonblank_text(value, "Comment reference")
+
+
+class PeerEmailComment(FrozenModel):
+    heading: ReviewNarrative = Field(max_length=200)
+    text: ReviewNarrative = Field(max_length=3000)
+    priority_area_ids: tuple[ReviewNarrative, ...] = Field(min_length=1)
+    tier: Literal["tier_1", "tier_2"] | None = None
+
+    @field_validator("heading", "text")
+    @classmethod
+    def nonblank_text(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Email comment")
+
+    @field_validator("priority_area_ids")
+    @classmethod
+    def nonblank_priority_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _requires_nonblank_items(value, "Email priority references")
+
+
+class PeerEmailDraft(FrozenModel):
+    opening: ReviewNarrative = Field(max_length=1800)
+    comments: tuple[PeerEmailComment, ...] = Field(max_length=10)
+
+    @field_validator("opening")
+    @classmethod
+    def nonblank_opening(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Email opening")
 
 
 class DocumentCoverage(FrozenModel):

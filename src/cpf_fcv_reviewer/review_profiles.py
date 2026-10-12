@@ -37,7 +37,10 @@ STAGE_PROFILES: Mapping[str, StageProfile] = MappingProxyType(
         140,
     ),
     "roc_oc": StageProfile(
-        "Focus on discrete management decisions and implementability refinements.",
+        "Focus on discrete management decisions, earlier-comment follow-through and "
+        "feasible adjustments before finalisation. Route sensitive implementation "
+        "responsibilities to the meeting record or annual business planning where appropriate. "
+        "Do not routinely reopen program architecture.",
         (RecommendationScale.TARGETED_EDIT,),
         100,
     ),

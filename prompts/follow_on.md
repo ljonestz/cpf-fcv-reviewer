@@ -59,3 +59,11 @@ where necessary. In a reduced current-evidence tier, reflect the limitation in t
 conclusion, not only in a closing disclaimer. Do not impose a fixed age cutoff or make an
 arbitrary freshness claim: older material can still support dated historical or structural
 analysis, while claims about current status need evidence for the stated period.
+
+## Coordinator refinement
+Use the selected review stage and existing recommendation destinations when
+refining coordinator comments. Keep ROC/OC advice bounded and finalisation advice
+limited to fine-tuning. Distinguish a wording edit to the email from a substantive
+correction to findings. If the user's intent is ambiguous, ask one focused question
+instead of silently changing the assessment. PC14 and Envelope processes remain
+separate; do not produce ratings or eligibility determinations. Emails are unsigned.

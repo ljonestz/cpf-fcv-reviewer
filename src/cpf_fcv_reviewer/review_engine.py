@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
+    ContextFraming,
     DiagnosticMode,
     DocumentCoverage,
     DocumentRole,
@@ -694,6 +695,8 @@ class ReviewEngine:
         *,
         review_focus: str = "",
         current_context_readout: dict | None = None,
+        review_questions: str = "",
+        framing_override: str = "",
     ) -> ReviewResult:
         stage = evidence_pack.metadata.review_stage
         if stage not in STAGE_PROFILES:
@@ -715,6 +718,10 @@ class ReviewEngine:
             payload["diagnostic_provenance"] = provenance.model_dump(mode="json")
         if current_context_readout is not None:
             payload["current_context_readout"] = current_context_readout
+        if review_questions:
+            payload["review_questions"] = review_questions[:4000]
+        if framing_override:
+            payload["framing_override"] = framing_override
         if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
             raise PackageCoverageUnavailable(
                 "Complete review request exceeds the safe request budget."
@@ -749,6 +756,24 @@ class ReviewEngine:
             coverage_note=draft.coverage_note,
         )
         content = draft.model_dump(exclude={"coverage_note"})
+        framing = draft.proposed_context_framing
+        if framing is not None:
+            framing = framing.model_copy(update={"origin": "model_proposed"})
+        if framing_override:
+            framing = ContextFraming(
+                category=framing_override,
+                rationale="Coordinator-selected analytical framing; interpret with country evidence.",
+                confidence=AssessmentConfidence.LOW,
+                evidence_ids=framing.evidence_ids if framing is not None else (),
+                origin="coordinator_override",
+            )
+        elif framing is None and evidence_pack.metadata.schema_version.startswith("2."):
+            framing = ContextFraming(
+                category="undetermined",
+                rationale="Available evidence did not establish a proposed context framing.",
+                confidence=AssessmentConfidence.LOW,
+            )
+        content["proposed_context_framing"] = framing
         return ReviewResult(
             metadata=evidence_pack.metadata,
             document_coverage=coverage,
@@ -912,8 +937,6 @@ class ReviewEngine:
                 if "diagnostic_date_conflict" in issue_codes else None,
                 repair_limited_mode=repair_limited_mode,
             )
-        if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
-            draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
         if "incomplete_core_findings" not in issue_codes:
             candidates = {row.question: row for row in draft.core_findings}
             valid_priority_ids = {area.priority_area_id for area in draft.priority_areas}

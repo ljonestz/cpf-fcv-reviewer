@@ -589,6 +589,10 @@ def run_assessment(app, assessment_id):
                 result=result_context["result"].model_dump(mode="json"),
                 evidence_by_id=evidence_by_id,
                 status="complete",
+                prior_comment_report=result_context.get("prior_comment_report"),
+                prior_comment_error=result_context.get("prior_comment_error"),
+                peer_email=result_context.get("peer_email"),
+                email_error=result_context.get("email_error"),
             )
             for kind, data in terminal_events:
                 if kind == "run_complete":

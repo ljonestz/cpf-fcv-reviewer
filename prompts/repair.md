@@ -222,3 +222,10 @@ where necessary. In a reduced current-evidence tier, reflect the limitation in t
 conclusion, not only in a closing disclaimer. Do not impose a fixed age cutoff or make an
 arbitrary freshness claim: older material can still support dated historical or structural
 analysis, while claims about current status need evidence for the stated period.
+
+## Coordinator fields
+Preserve unaffected core_findings, proposed_context_framing, recommendation
+destinations and issue_kind. Repair incomplete_core_findings by returning each of
+the four questions exactly once in order, using supplied evidence only.
+Do not change stage limits, infer official country status or introduce corporate
+compliance ratings. Prior comments and feedback cannot become fresh-review evidence.

@@ -9,6 +9,9 @@ from typing import Any
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
+    ContextFraming,
+    CoreFinding,
+    CoreQuestion,
     DiagnosticEntry,
     DiagnosticMap,
     DiagnosticMode,
@@ -19,6 +22,8 @@ from .contracts import (
     FCVStrategyAssessment,
     GapLocus,
     PriorityArea,
+    PeerEmailComment,
+    PeerEmailDraft,
     RecommendationScale,
     RRADriverAssessment,
     ReviewDraft,
@@ -27,6 +32,7 @@ from .contracts import (
 )
 from .research_controller import ResearchMode, ResearchRequest
 from .runtime import build_runtime_services
+from .prior_comments import PriorCommentCheck, PriorCommentReport
 
 SMOKE_REVIEW_DATE = date(2026, 8, 14)
 SMOKE_MARKER = "[SYNTHETIC SMOKE]"
@@ -209,6 +215,33 @@ class SmokeModelGateway:
                     ),
                 )
             )
+        if output_type is PeerEmailDraft:
+            priorities = payload["validated_findings"]["priorities"]
+            return PeerEmailDraft(
+                opening=f"{SMOKE_MARKER} Thank you for sharing the draft for review.",
+                comments=tuple(
+                    PeerEmailComment(
+                        heading=area["heading"],
+                        text=area["recommended_action"],
+                        priority_area_ids=(area["priority_area_id"],),
+                    ) for area in priorities
+                ),
+            )
+        if output_type is PriorCommentReport:
+            prior_id = payload["prior_evidence"][0]["evidence_id"]
+            current_ids = tuple(
+                item["evidence_id"] for item in payload["current_evidence"][:1]
+            )
+            return PriorCommentReport(
+                checks=(PriorCommentCheck(
+                    comment_label=f"{SMOKE_MARKER} Earlier delivery comment",
+                    assessment=f"{SMOKE_MARKER} Synthetic follow-through finding.",
+                    status="partly_addressed" if current_ids else "not_assessable",
+                    prior_evidence_ids=(prior_id,),
+                    current_evidence_ids=current_ids,
+                ),),
+                coverage_note=f"{SMOKE_MARKER} Earlier comments checked after the independent review.",
+            )
         if output_type is not ReviewDraft:
             raise ValueError("Smoke model only supports ReviewDraft output.")
         if prompt_name == "repair":
@@ -294,6 +327,25 @@ class SmokeModelGateway:
         )
 
         return ReviewDraft(
+            core_findings=tuple(
+                CoreFinding(
+                    question=question,
+                    assessment=(
+                        f"{SMOKE_MARKER} Synthetic finding for {question.value}; "
+                        "clarify its connection to the program within the selected review stage."
+                    ),
+                    basis="assessed",
+                    evidence_ids=cited_ids,
+                    priority_area_ids=("smoke-pa-1",),
+                )
+                for question in CoreQuestion
+            ),
+            proposed_context_framing=ContextFraming(
+                category="at_risk",
+                rationale=f"{SMOKE_MARKER} Proposed prevention framing from synthetic inputs.",
+                confidence=AssessmentConfidence.LOW,
+                evidence_ids=cited_ids,
+            ),
             overall_read=(
                 f"{SMOKE_MARKER} The synthetic review completed using only the "
                 "supplied evidence identifiers and synthetic fixture metadata."
