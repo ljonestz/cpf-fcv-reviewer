@@ -374,6 +374,18 @@ def validate_evidence_completeness(
         for evidence_id in assessment.evidence_ids
         if evidence_id not in evidence
     )
+    missing_assessments.extend(
+        ("Core", finding.question.value, evidence_id)
+        for finding in result.core_findings
+        for evidence_id in finding.evidence_ids
+        if evidence_id not in evidence
+    )
+    if result.proposed_context_framing is not None:
+        missing_assessments.extend(
+            ("Framing", "context", evidence_id)
+            for evidence_id in result.proposed_context_framing.evidence_ids
+            if evidence_id not in evidence
+        )
     if missing_assessments:
         details = "; ".join(
             f"{kind} {assessment_id}: {evidence_id}"

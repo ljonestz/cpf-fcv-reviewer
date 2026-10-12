@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Literal, Mapping
+from typing import Literal
 
-from .country_detection import COUNTRY_ALIASES
 from .contracts import (
     AssessmentStatus,
+    CoreQuestion,
     DiagnosticMode,
     DiagnosticProvenance,
     DocumentRole,
@@ -18,6 +18,7 @@ from .contracts import (
     ReviewResult,
     RunMetadata,
 )
+from .country_detection import COUNTRY_ALIASES
 from .review_profiles import STAGE_PROFILES
 
 DETERMINATION_PATTERNS = (
@@ -230,6 +231,7 @@ ValidationIssueCode = Literal[
     "unknown_assessment_evidence",
     "missing_rra_driver_assessment",
     "incomplete_strategy_assessment",
+    "incomplete_core_findings",
     "stage_overreach",
     "stage_length_overreach",
     "withheld_drafting",
@@ -294,6 +296,9 @@ def result_text(result: ReviewResult) -> str:
             )
         )
     parts.extend(assessment.assessment for assessment in result.fcv_strategy_assessments)
+    parts.extend(finding.assessment for finding in result.core_findings)
+    if result.proposed_context_framing is not None:
+        parts.append(result.proposed_context_framing.rationale)
     for priority_area in result.priority_areas:
         parts.extend(
             (
@@ -472,6 +477,27 @@ def validate_review(
 ) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
     text = result_text(result)
+    if result.metadata.schema_version.startswith("2.") and tuple(
+        finding.question for finding in result.core_findings
+    ) != tuple(CoreQuestion):
+        issues.append(ValidationIssue(
+            "incomplete_core_findings", "Include each of the four core questions once, in order."
+        ))
+    priority_ids = {area.priority_area_id for area in result.priority_areas}
+    for finding in result.core_findings:
+        _append_unknown_evidence_issue(
+            issues, finding.question.value, finding.evidence_ids, evidence_ids,
+            issue_code="unknown_assessment_evidence",
+        )
+        if set(finding.priority_area_ids) - priority_ids:
+            issues.append(ValidationIssue(
+                "unknown_priority_area", "A core finding links an unknown priority."
+            ))
+    if result.proposed_context_framing is not None:
+        _append_unknown_evidence_issue(
+            issues, "context_framing", result.proposed_context_framing.evidence_ids,
+            evidence_ids, issue_code="unknown_assessment_evidence",
+        )
     _append_diagnostic_date_issue(
         issues, result, attested_diagnostic_dates(_verbatim_document_texts(evidence))
     )

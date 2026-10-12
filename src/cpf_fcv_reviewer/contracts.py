@@ -323,6 +323,72 @@ class FCVStrategyAssessment(FrozenModel):
         return self
 
 
+class CoreQuestion(StrEnum):
+    DRIVERS_PRIORITIES = "drivers_priorities"
+    ACTIONS_COMMITMENT = "actions_commitment"
+    PROGRAM_IMPLICATIONS = "program_implications"
+    IF_THEN_CALIBRATION = "if_then_calibration"
+
+
+class CoreFinding(FrozenModel):
+    question: CoreQuestion
+    assessment: ReviewNarrative = Field(max_length=1800)
+    basis: Literal["assessed", "limited"]
+    evidence_ids: tuple[ReviewNarrative, ...] = ()
+    priority_area_ids: tuple[ReviewNarrative, ...] = ()
+
+    @field_validator("assessment")
+    @classmethod
+    def nonblank_assessment(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Core finding")
+
+    @field_validator("evidence_ids", "priority_area_ids")
+    @classmethod
+    def nonblank_references(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _requires_nonblank_items(value, "Core finding references")
+
+    @model_validator(mode="after")
+    def requires_assessment_evidence(self) -> CoreFinding:
+        if self.basis == "assessed" and not self.evidence_ids:
+            raise ValueError("An assessed core finding requires evidence.")
+        return self
+
+
+class ContextFraming(FrozenModel):
+    """A proposed analytical framing, never an official country classification."""
+
+    category: Literal[
+        "in_crisis", "in_transition", "conflict_affected", "at_risk", "undetermined"
+    ]
+    rationale: ReviewNarrative = Field(max_length=800)
+    confidence: AssessmentConfidence
+    evidence_ids: tuple[ReviewNarrative, ...] = ()
+    origin: Literal["model_proposed", "coordinator_override"] = "model_proposed"
+
+    @field_validator("rationale")
+    @classmethod
+    def nonblank_rationale(cls, value: str) -> str:
+        return _requires_nonblank_text(value, "Framing rationale")
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def nonblank_evidence(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return _requires_nonblank_items(value, "Framing evidence")
+
+    @model_validator(mode="after")
+    def requires_proposal_evidence(self) -> ContextFraming:
+        if self.category != "undetermined" and not self.evidence_ids:
+            raise ValueError("A proposed context framing requires evidence.")
+        return self
+
+
+class RecommendationDestination(StrEnum):
+    CPF_TEXT = "cpf_text"
+    RESULTS_FRAMEWORK = "results_framework"
+    MEETING_RECORD = "meeting_record"
+    ANNUAL_BUSINESS_PLANNING = "annual_business_planning"
+
+
 class RecommendationScale(StrEnum):
     PREPARATION_PRIORITY = "preparation_priority"
     SUBSTANTIVE_REVISION = "substantive_revision"
@@ -358,6 +424,8 @@ class PriorityArea(FrozenModel):
     sensitivity: SensitivityCategory
     gap_locus: GapLocus
     comment_reference: str | None = None
+    destination: RecommendationDestination = RecommendationDestination.CPF_TEXT
+    issue_kind: Literal["explanation", "program_design"] = "explanation"
 
     @field_validator(
         "priority_area_id",
@@ -495,6 +563,8 @@ class ReviewResult(FrozenModel):
     institutional_referral_ids: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     document_coverage: DocumentCoverage
+    core_findings: tuple[CoreFinding, ...] = ()
+    proposed_context_framing: ContextFraming | None = None
 
     @field_validator("overall_read")
     @classmethod
@@ -520,6 +590,8 @@ class ReviewDraft(FrozenModel):
     institutional_referral_ids: tuple[str, ...]
     limitations: tuple[str, ...]
     coverage_note: ReviewNarrative
+    core_findings: tuple[CoreFinding, ...] = ()
+    proposed_context_framing: ContextFraming | None = None
 
     @field_validator("overall_read", "coverage_note")
     @classmethod

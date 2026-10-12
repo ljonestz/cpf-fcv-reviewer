@@ -40,6 +40,7 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
         "unknown_assessment_evidence",
         "missing_rra_driver_assessment",
         "incomplete_strategy_assessment",
+        "incomplete_core_findings",
         "missing_registry_support",
         "stage_overreach",
         "stage_length_overreach",
@@ -203,6 +204,15 @@ def _scrub_raw_evidence_ids_from_narrative(
             "overall_read": scrub(draft.overall_read),
             "alignment_readout": scrub(draft.alignment_readout),
             "strategy_readout": scrub(draft.strategy_readout),
+            "core_findings": tuple(
+                item.model_copy(update={"assessment": scrub(item.assessment)})
+                for item in draft.core_findings
+            ),
+            "proposed_context_framing": (
+                draft.proposed_context_framing.model_copy(update={
+                    "rationale": scrub(draft.proposed_context_framing.rationale)
+                }) if draft.proposed_context_framing is not None else None
+            ),
             "revision_summary": tuple(
                 item.model_copy(update={"title": scrub(item.title)})
                 for item in draft.revision_summary
@@ -902,6 +912,41 @@ class ReviewEngine:
                 if "diagnostic_date_conflict" in issue_codes else None,
                 repair_limited_mode=repair_limited_mode,
             )
+        if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
+            draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
+        if "incomplete_core_findings" not in issue_codes:
+            candidates = {row.question: row for row in draft.core_findings}
+            valid_priority_ids = {area.priority_area_id for area in draft.priority_areas}
+            rows = []
+            for row in result.core_findings:
+                candidate = candidates.get(row.question)
+                if candidate is not None and (
+                    ("unknown_assessment_evidence" in issue_codes
+                     and not set(row.evidence_ids) <= available_evidence_ids)
+                    or ("unknown_priority_area" in issue_codes
+                        and not set(row.priority_area_ids) <= valid_priority_ids)
+                ):
+                    rows.append(candidate)
+                elif candidate is not None:
+                    rows.append(_clean_guardrail_fields(
+                        row, candidate, ("assessment",), forbidden_phrases,
+                        result.metadata.diagnostic_provenance
+                        if "diagnostic_date_conflict" in issue_codes else None,
+                        repair_limited_mode=repair_limited_mode,
+                    ))
+                else:
+                    rows.append(row)
+            draft = draft.model_copy(update={"core_findings": tuple(rows)})
+        framing = result.proposed_context_framing
+        if framing is not None:
+            candidate = draft.proposed_context_framing
+            if candidate is not None and set(framing.evidence_ids) <= available_evidence_ids:
+                framing = _clean_guardrail_fields(
+                    framing, candidate, ("rationale",), forbidden_phrases,
+                )
+            elif candidate is not None and "unknown_assessment_evidence" in issue_codes:
+                framing = candidate.model_copy(update={"origin": framing.origin})
+            draft = draft.model_copy(update={"proposed_context_framing": framing})
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
         if "unknown_institutional_referral" in issue_codes and registry_entry_ids is not None:
