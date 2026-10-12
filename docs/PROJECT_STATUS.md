@@ -1,6 +1,6 @@
 # Project status
 
-## 2026-10-12 Coordinator review redesign planning
+## 2026-10-12 Candidate: coordinator review redesign
 
 The agreed [specification](../20261012_cpf-coordinator-redesign-spec.md) and
 [implementation plan](../20261012_cpf-coordinator-redesign-plan.md) are saved on
@@ -8,10 +8,27 @@ The agreed [specification](../20261012_cpf-coordinator-redesign-spec.md) and
 The design adds four concise qualitative findings, stage-calibrated priorities,
 independent prior-comment follow-through, unsigned email drafting and optional
 feedback. PC14 and Envelope observations remain advisory and limited.
-The baseline provider-free smoke suite passed **38 tests**; a non-failing pytest
-cache-write warning occurred. Planning document checks passed. Application code,
-hosting and provider configuration are unchanged; implementation and analytical
-quality validation remain next. No model API calls or deployment were performed.
+Implementation is committed on the feature branch and tracked in
+[draft PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55). New reviews use
+schema/rubric version 2 and the four concise findings, compact RRA/Strategy links,
+stage-specific recommendation destinations and proposed/overridden contextual framing.
+The generated email is unsigned and can be saved, copied or downloaded. Correction
+reruns preserve wording and mark stale edits. Optional feedback shares the existing
+review lifetime and stays out of analytical evidence.
+
+The full provider-free suite passed **1,777 tests**, with one Windows Gunicorn skip.
+The final layout-only change passed **35 export/presentation tests**. Synthetic Edge
+QA passed email save/refresh, unsaved-edit preservation, correction/stale handling,
+optional feedback, mobile layout and all three Word downloads. Native Word rendering
+and inspection covered all four pages of the final synthetic exports, including
+actual earlier-comment follow-through. Independent review issues were reproduced and
+fixed. No new Ruff issues were introduced; six existing findings remain in touched
+Python files. See the [validation record](validation/2026-10-12-coordinator-review-redesign.md).
+
+The candidate is not merged or deployed. No paid model calls, internal hosting or
+provider changes were made. Real-country drafting quality and approved internal
+style/reference integration still require acceptance. The live October 9 release
+and the separate Project Screener remain unchanged.
 
 ## 2026-10-09 Deployed: large-package coverage
 

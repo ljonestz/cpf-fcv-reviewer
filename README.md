@@ -16,6 +16,14 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 ## Current prototype
 
+- Development candidate: [PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55)
+  adds the agreed coordinator review structure, four qualitative findings,
+  stage-calibrated recommendations, separate earlier-comment follow-through and an
+  unsigned email draft. Intake stays light; questions, framing overrides, previous
+  comments and pilot feedback are optional. PC14 and Envelope observations stay
+  high-level. See the [design](20261012_cpf-coordinator-redesign-spec.md) and
+  [validation record](docs/validation/2026-10-12-coordinator-review-redesign.md).
+  This candidate has not been deployed or tested with a paid model run.
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Historical application release: `27ef3aa` (PR30), 2026-09-08. Render and `/health`
@@ -68,7 +76,19 @@ the RRA, the document uploaded under RRA and supporting analytics is treated as 
 diagnostic, and earlier diagnostics dated verbatim in the documents (such as a 2017 RRA)
 may be cited.
 
-Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and a bounded basis/limitations disclosure on the website. Word exports instead carry a short language-model caution at the top. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
+Starting an assessment opens a dedicated holding view with a compact elapsed timer,
+estimate, connected three-stage ticker and rotating guidance. Results open with a
+**Five-minute readout**, **Detailed analysis** and **Draft email**. New reviews show
+four short qualitative findings, compact RRA/Strategy connections and the destination
+for each recommendation. Clearly labelled earlier comments are checked only after
+the independent review. The email uses those validated findings, optional CMU questions
+and approved external style references; it has no named signature. Save wording to
+retain it across refreshes and in downloads. Correction reruns preserve edits and
+mark older wording for comparison with the updated findings. Feedback and final sent
+comments are optional evaluation material, excluded from analysis and deleted with
+the review. The existing configured session lifetime, evidence links, Word caution
+and streamed follow-on assistant remain in use. Legacy results keep their original
+presentation.
 
 ## Safety boundary
 
@@ -101,7 +121,11 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Download five-minute readout** or **Download full detailed note** before the retained review expires or is reset. The five-minute readout combines up to two assessment sentences and one FCV-relevance sentence per priority, and retains the full recommended action. Both Word downloads carry a short caution about findings and exact dates, with advice to consult a country or FCV expert. The basis/limitations section stays on the website. Word uses standard one-inch margins, left-aligned Calibri text, navy headings, a full-width navy running-header banner that reaches the top page edge, with white text and a teal rule, and subtle shaded action paragraphs; the detailed note retains all assessment sections.
+Download the five-minute readout, full detailed note or email draft before the review
+expires or is reset. New summaries retain every selected priority and its recommended
+action. Email downloads use saved wording and warn when it belongs to an earlier
+assessment. All three exports retain the Word caution and established layout.
+The basis/limitations disclosure stays on the website.
 
 ## Validation and API-cost control
 

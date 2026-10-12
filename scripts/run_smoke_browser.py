@@ -110,7 +110,9 @@ def main(
             page.locator("#review-questions").fill("How could delivery be clarified at this stage?")
             page.locator("#previous-comments").set_input_files({
                 "name": "Previous-FCV-comments.txt", "mimeType": "text/plain",
-                "buffer": b"[SYNTHETIC SMOKE] Earlier comment: clarify delivery arrangements.\n" * 10,
+                "buffer": (
+                    b"[SYNTHETIC SMOKE] Earlier comment: clarify delivery arrangements.\n" * 10
+                ),
             })
         with page.expect_response(
             lambda response: response.request.method == "POST"
