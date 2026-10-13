@@ -1,5 +1,17 @@
 # Production readiness
 
+## Latest judgment - 2026-10-13
+
+The fresh b75719c Guinea output is suitable for a supervised coordinator pilot:
+all four findings are readable, missing-annex recommendations are conditional, and
+default comments completed at 653 words. No further structural redesign is needed.
+This supersedes the editorial rejection below, but is not full production sign-off.
+Native Word pagination remains unchecked; the earlier intermittent comments failure
+is not explained by this successful run; current-country evidence is limited.
+Nothing is deployed. See the [fresh output review](validation/2026-10-13-final-output-review.md)
+for evidence and release gates. Historical run allowances below are superseded by
+the documented subsequent authorizations and cost accounting.
+
 ## Output acceptance is pending - 2026-10-13
 
 The owner rejected the earlier rollout candidate after reviewing the real Guinea

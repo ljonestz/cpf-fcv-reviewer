@@ -1,5 +1,17 @@
 # Project status
 
+## 2026-10-13 Fresh output accepted for supervised pilot review
+
+One newly authorized assessment on b75719c completed its note and default comments.
+The four findings are developed and readable, annex-dependent actions are locally
+qualified, and the unsigned comments are 653 words without tailoring. Screenshots,
+refresh, mobile layout and Word structure passed inspection. The output is usable
+as a coordinator first draft; no more structural redesign is recommended. Full
+production sign-off still requires Word pagination acceptance and a decision on
+the earlier unexplained intermittent comments failure. Current evidence remains
+limited. No merge/deployment or application change in this check. See the
+[fresh output review](validation/2026-10-13-final-output-review.md).
+
 ## 2026-10-13 Section explanations
 
 Added the approved short explanations beneath all four review-question headings
