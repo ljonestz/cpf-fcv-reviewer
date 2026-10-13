@@ -421,7 +421,7 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
     [
         ("diagnostic_map", "1.2.0"),
         ("document_digest", "1.0.0"),
-        ("review", "4.1.0"),
+        ("review", "4.1.1"),
         ("repair", "3.1.0"),
     ],
 )

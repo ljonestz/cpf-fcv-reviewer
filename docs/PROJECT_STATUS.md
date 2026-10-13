@@ -1,5 +1,16 @@
 # Project status
 
+## 2026-10-13 Generated output acceptance remains blocked
+
+Two local assessments on cfe48fa produced clearer four-question notes. One produced
+829-word default comments; the other failed its comments step while retaining the
+validated note. Annex caveats were not consistently attached to recommendations.
+The extra submission exceeded the remaining one-run allowance; the owner was told,
+and all further paid calls stopped. Prompt follow-up and safe failure diagnostics
+passed 75 focused tests but have not had another generated-output check. Word
+pagination remains unverified. PR 55 stays draft; nothing is deployed. See the
+[acceptance record](validation/2026-10-13-generated-output-acceptance.md).
+
 ## 2026-10-13 Output quality revision in validation
 
 The owner rejected the earlier Guinea output as insufficiently readable and

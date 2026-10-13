@@ -154,6 +154,21 @@ def test_single_run_drafts_email_and_keeps_note_on_draft_failure(monkeypatch, fa
     if fail_email:
         assert payload["peer_email"] is None
         assert payload["email_error"] == "email_draft_unavailable"
+        events = app.extensions["session_store"].read_events(assessment_id)
+        failure = next(event["data"] for _, event in events
+                       if event["type"] == "email_draft_unavailable")
+        assert failure == {"error": "email_draft_unavailable", "reason": "draft_failed"}
     else:
         assert payload["peer_email"]["comments"]
         assert "signature" not in payload["peer_email"]
+
+
+@pytest.mark.parametrize("error,expected", [
+    (ValueError("Email priorities must preserve the validated review order."), "priority_order"),
+    (ValueError("Email synthesis added an unsupported number."), "unsupported_number"),
+    (ValueError("Email added a claim without current-context support."), "current_context"),
+    (TimeoutError("private request body and token"), "timeout"),
+    (RuntimeError("private model output and token"), "draft_failed"),
+])
+def test_draft_failure_reason_is_allowlisted(error, expected):
+    assert module().email_failure_reason(error) == expected

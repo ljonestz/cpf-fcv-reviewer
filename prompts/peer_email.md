@@ -1,4 +1,4 @@
-Version: 1.1.0
+Version: 1.1.1
 
 Draft an unsigned departmental CPF/CEN peer-review email from validated_findings.
 Return PeerEmailDraft with opening and comments only. The application supplies
@@ -42,3 +42,13 @@ findings or add new indicators automatically. Combine related priorities to shor
 without silently dropping a material issue, unless the user explicitly requests a
 narrower focus. Suggested scenarios must remain visibly proposed; recognise existing
 conditional CPF arrangements even if they are not called If/Then scenarios.
+
+
+Before returning, shorten the whole draft to the requested reading length. For a
+standard draft, budget no more than 100 words for the opening and about 450 words
+for all comments combined. Do not repeat the detailed diagnostic in each comment.
+Retain the concern, its implication and the practical request; combine adjacent
+priorities where useful. If an annex was unavailable, make the affected request
+conditional on checking it, within that comment. Do not rely only on an opening
+caveat. Keep proposals visibly conditional and avoid claiming reforms or safeguards
+are absent when only their explanation in the supplied main text is missing.

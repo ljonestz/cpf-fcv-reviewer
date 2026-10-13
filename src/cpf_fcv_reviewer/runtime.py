@@ -39,7 +39,7 @@ from .document_digest import (
     plan_digests,
     segment_evidence,
 )
-from .email_draft import generate_peer_email
+from .email_draft import email_failure_reason, generate_peer_email
 from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .extraction import (
     PDF_SAMPLING_WARNING_SUFFIX,
@@ -1710,10 +1710,13 @@ def build_runtime_services(
                     )
                     context["peer_email"] = email.model_dump(mode="json")
                     context["_emit"]("email_draft_ready", {})
-                except Exception:
+                except Exception as exc:
                     context["email_error"] = "email_draft_unavailable"
                     context["_emit"](
-                        "email_draft_unavailable", {"error": "email_draft_unavailable"},
+                        "email_draft_unavailable", {
+                            "error": "email_draft_unavailable",
+                            "reason": email_failure_reason(exc),
+                        },
                     )
             return context
 

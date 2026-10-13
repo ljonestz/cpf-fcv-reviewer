@@ -16,6 +16,11 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 ## Current prototype
 
+Latest acceptance: generated notes are clearer, but comments reliability, concise
+drafting and local annex qualifications remain unresolved. PR 55 stays draft. See
+the [13 October acceptance record](docs/validation/2026-10-13-generated-output-acceptance.md)
+for results, paid-run accounting and limitations.
+
 - Development candidate: [PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55)
   adds the agreed coordinator review structure, four qualitative findings,
   stage-calibrated recommendations, separate earlier-comment follow-through and an

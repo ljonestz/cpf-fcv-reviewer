@@ -25,6 +25,23 @@ _SIGNATURE = re.compile(
 _NUMBERS = re.compile(r"\b\d+(?:[.,]\d+)*\b")
 
 
+def email_failure_reason(error: Exception) -> str:
+    """Expose only fixed diagnostic codes, never provider or rejected-output text."""
+    if isinstance(error, TimeoutError):
+        return "timeout"
+    return {
+        "Email priorities must preserve the validated review order.": "priority_order",
+        "Use tiers only for a meaningful meeting/guidance distinction.": "tier_structure",
+        "Email tiers must preserve priority order.": "tier_order",
+        "Generated emails must be unsigned.": "signature",
+        "Email synthesis added an unsupported number.": "unsupported_number",
+        "Email prose contains raw evidence identifiers.": "raw_evidence_id",
+        "Email opening exceeds the review stage.": "review_stage",
+        "Email advice exceeds the review stage.": "review_stage",
+        "Email added a claim without current-context support.": "current_context",
+    }.get(str(error), "draft_failed")
+
+
 def _prose_units(text: str) -> tuple[str, ...]:
     # A salutation or introductory sentence must not hide prescriptive advice.
     return (text, *re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", text))

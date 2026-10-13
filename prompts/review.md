@@ -1,4 +1,4 @@
-Version: 4.1.0
+Version: 4.1.1
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -449,3 +449,16 @@ variable inside a poverty index if separate geographic or delivery choices could
 address the issue. Preserve this distinction in summaries and comments. In crisis
 contexts assess realistic delivery and authorities' actual influence rather than
 imposing a reform-first approach. Positive openings need the same evidence as risks.
+
+
+## Missing annexes and readable scenarios
+When an annex or results framework is not supplied, each affected assessment,
+summary and recommended_action must carry the qualification beside the claim.
+Start the action by asking the team to check the unavailable material; propose an
+addition only if the provision is missing there too. A general limitations section
+does not qualify an otherwise unconditional instruction to add an indicator.
+Put each Suggested scenario in its own paragraph. Keep proposed_context_framing's
+rationale to one or two short sentences; detailed country analysis belongs in the
+findings. Avoid repeating undated, unverified reporting across sections: state the
+current-evidence limit once and use conditional reasoning, not uncertain events,
+as the basis for scenarios.
