@@ -1794,7 +1794,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 64_000
     assert call["output_config"] == {"effort": "high"}
-    assert call["system"].startswith("Version: 4.1.0")
+    assert call["system"].startswith("Version: 4.1.1")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 
