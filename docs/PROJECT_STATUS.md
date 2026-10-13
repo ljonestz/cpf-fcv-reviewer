@@ -1,5 +1,15 @@
 # Project status
 
+## 2026-10-13 Colleague feedback Word copies
+
+The owner accepted the generated narrative/layout and requested small changes for
+colleague feedback. Two dated Word copies now use descriptive section references,
+move traceability into an end annex and append the same unsigned review comments.
+All 19 rendered pages were inspected; structure/reference checks passed. The files
+are local, ignored copies in the main repository folder. Application exports and
+prompts are unchanged; there was no new model call or deployment. See the
+[Word-copy record](validation/2026-10-13-colleague-word-copies.md).
+
 ## 2026-10-13 Comments fallback verified
 
 The owner approved a labelled fallback when optional comments synthesis fails.
