@@ -1,5 +1,20 @@
 # Project status
 
+## 2026-10-13 Section explanations
+
+Added the approved short explanations beneath all four review-question headings
+in both browser views and both Word note exports. The If/Then heading now reads
+"Adapting to changing conditions"; internal question IDs and generated findings
+are unchanged. Explanations are fixed presentation text, not another model call.
+
+Verification: 51 focused presentation/export tests passed, targeted Ruff and diff
+checks passed. A read-only Edge check of the retained Guinea assessment confirmed
+four explanations in both views; summary/detail screenshots were inspected. Saved
+previews are `output/playwright/20261013-explanations-summary.png` and
+`output/playwright/20261013-explanations-detailed.png` (ignored). No paid calls or
+deployment. Existing comments reliability/content acceptance and Word pagination
+limits below remain open; native rendering was not retried without a changed setup.
+
 ## 2026-10-13 Generated output acceptance remains blocked
 
 Two local assessments on cfe48fa produced clearer four-question notes. One produced

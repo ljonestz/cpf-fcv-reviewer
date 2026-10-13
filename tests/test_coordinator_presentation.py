@@ -12,7 +12,7 @@ from cpf_fcv_reviewer.export_docx import build_docx
 
 LABELS = (
     "Drivers and priorities", "Critical actions and commitment",
-    "Program implications", "If/Then calibration",
+    "Program implications", "Adapting to changing conditions",
 )
 
 
@@ -60,8 +60,10 @@ def test_full_export_has_four_concise_findings(completed_coordinator_review):
     _, client, assessment_id = completed_coordinator_review
     response = client.get(f"/api/reviews/{assessment_id}/export.docx")
     paragraphs = [p.text for p in Document(BytesIO(response.data)).paragraphs]
-    for label in LABELS:
+    from cpf_fcv_reviewer.review_profiles import CORE_QUESTION_EXPLANATIONS
+    for label, explanation in zip(LABELS, CORE_QUESTION_EXPLANATIONS.values(), strict=True):
         assert paragraphs.count(label) == 1
+        assert paragraphs[paragraphs.index(label) + 1] == explanation
     assert "RRA driver-to-response assessment" not in paragraphs
     assert any("Where to act" in value for value in paragraphs)
 

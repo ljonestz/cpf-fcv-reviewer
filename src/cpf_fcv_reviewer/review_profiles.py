@@ -8,7 +8,26 @@ CORE_QUESTION_LABELS = {
     CoreQuestion.DRIVERS_PRIORITIES: "Drivers and priorities",
     CoreQuestion.ACTIONS_COMMITMENT: "Critical actions and commitment",
     CoreQuestion.PROGRAM_IMPLICATIONS: "Program implications",
-    CoreQuestion.IF_THEN_CALIBRATION: "If/Then calibration",
+    CoreQuestion.IF_THEN_CALIBRATION: "Adapting to changing conditions",
+}
+CORE_QUESTION_EXPLANATIONS = {
+    CoreQuestion.DRIVERS_PRIORITIES: (
+        'Does the CPF show how the main FCV drivers and sources of resilience shaped '
+        'its priorities?'
+    ),
+    CoreQuestion.ACTIONS_COMMITMENT: (
+        "Which actions matter most, and what evidence supports the authorities' "
+        'commitment and capacity to deliver them?'
+    ),
+    CoreQuestion.PROGRAM_IMPLICATIONS: (
+        "What does this mean for the program's priorities, sequencing, geographic focus "
+        'and delivery arrangements?'
+    ),
+    CoreQuestion.IF_THEN_CALIBRATION: (
+        'This section assesses whether the CPF explains how engagement would change if '
+        'FCV conditions improve or deteriorate, and suggests relevant scenarios where '
+        'that link is missing.'
+    ),
 }
 DESTINATION_LABELS = {
     RecommendationDestination.CPF_TEXT: "CPF text or annex",

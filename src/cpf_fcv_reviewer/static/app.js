@@ -1770,12 +1770,19 @@ function renderCoreFindings(result, summary = false) {
     drivers_priorities: "Drivers and priorities",
     actions_commitment: "Critical actions and commitment",
     program_implications: "Program implications",
-    if_then_calibration: "If/Then calibration",
+    if_then_calibration: "Adapting to changing conditions",
   };
+  const explanations = {
+    "drivers_priorities": "Does the CPF show how the main FCV drivers and sources of resilience shaped its priorities?",
+    "actions_commitment": "Which actions matter most, and what evidence supports the authorities' commitment and capacity to deliver them?",
+    "program_implications": "What does this mean for the program's priorities, sequencing, geographic focus and delivery arrangements?",
+    "if_then_calibration": "This section assesses whether the CPF explains how engagement would change if FCV conditions improve or deteriorate, and suggests relevant scenarios where that link is missing."
+};
   for (const finding of result.core_findings || []) {
     const item = document.createElement("section");
     item.className = "core-finding";
     item.append(text("h3", labels[finding.question] || finding.question),
+      text("p", explanations[finding.question] || "", "core-question-guide"),
       renderNarrative(summary ? (finding.summary || finding.assessment) : finding.assessment));
     if (!summary) item.append(renderEvidenceGroup(result, finding.evidence_ids));
     section.append(item);

@@ -438,3 +438,5 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 
 .assistant-conversation:empty { display: none; }
 .core-finding .narrative-chunk { max-width: 78ch; }
+
+.core-question-guide { max-width: 78ch; color: #526575; font-style: italic; }

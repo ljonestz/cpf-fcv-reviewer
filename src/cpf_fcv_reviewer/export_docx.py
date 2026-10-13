@@ -24,7 +24,11 @@ from .contracts import (
     ReviewResult,
 )
 from .prior_comments import PriorCommentReport
-from .review_profiles import CORE_QUESTION_LABELS, DESTINATION_LABELS
+from .review_profiles import (
+    CORE_QUESTION_EXPLANATIONS,
+    CORE_QUESTION_LABELS,
+    DESTINATION_LABELS,
+)
 
 BLUE = RGBColor(0x15, 0x39, 0x56)
 DARK_BLUE = RGBColor(0x15, 0x39, 0x56)
@@ -778,6 +782,9 @@ def build_docx(
         document.add_heading("Assessment against the four review questions", level=1)
         for finding in result.core_findings:
             document.add_heading(CORE_QUESTION_LABELS[finding.question], level=2)
+            guide = document.add_paragraph(CORE_QUESTION_EXPLANATIONS[finding.question])
+            guide.runs[0].italic = True
+            guide.paragraph_format.keep_with_next = True
             paragraphs = _add_readable_paragraph(
                 document,
                 (finding.summary or finding.assessment) if summary else finding.assessment,
