@@ -302,6 +302,7 @@ def result_text(result: ReviewResult) -> str:
         )
     parts.extend(assessment.assessment for assessment in result.fcv_strategy_assessments)
     parts.extend(finding.assessment for finding in result.core_findings)
+    parts.extend(finding.summary for finding in result.core_findings)
     if result.proposed_context_framing is not None:
         parts.append(result.proposed_context_framing.rationale)
     for priority_area in result.priority_areas:
@@ -490,15 +491,26 @@ def validate_review(
         ))
     priority_ids = {area.priority_area_id for area in result.priority_areas}
     for finding in result.core_findings:
+        if result.metadata.schema_version == "2.1.0" and not finding.summary.strip():
+            issues.append(ValidationIssue(
+                "incomplete_core_findings",
+                "Each core finding requires a concise evidence-grounded summary.",
+            ))
         _append_unknown_evidence_issue(
             issues, finding.question.value, finding.evidence_ids, evidence_ids,
             issue_code="unknown_assessment_evidence",
         )
         issues.extend(validate_current_context_support(
             label=finding.question.value, heading=finding.question.value,
-            assertion_texts=(finding.assessment,), evidence_ids=finding.evidence_ids,
+            assertion_texts=(finding.assessment, finding.summary),
+            evidence_ids=finding.evidence_ids,
             evidence=evidence or {},
         ))
+        for prose in (finding.assessment, finding.summary):
+            for unit in re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", prose):
+                issues.extend(issue for issue in validate_stage_behavior(
+                    result.metadata.review_stage, unit,
+                ) if issue.severity != "advisory")
         if set(finding.priority_area_ids) - priority_ids:
             issues.append(ValidationIssue(
                 "unknown_priority_area", "A core finding links an unknown priority."

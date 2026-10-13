@@ -185,7 +185,7 @@ def test_docx_uses_question_led_overall_read_and_restrained_appendix(make_valid_
     assert "Reproducibility information" not in headings
 
 
-def test_docx_splits_long_readout_and_bolds_each_active_lead_sentence(make_valid_result):
+def test_docx_preserves_authored_paragraph_without_arbitrary_bold(make_valid_result):
     result, evidence = make_valid_result
     long_read = (
         "The first sentence states the main finding. "
@@ -210,15 +210,9 @@ def test_docx_splits_long_readout_and_bolds_each_active_lead_sentence(make_valid
     )
     readout_paragraphs = paragraphs[overall_index + 1 : rra_question_index]
 
-    assert [paragraph.text for paragraph in readout_paragraphs] == [
-        "The first sentence states the main finding. The second sentence explains the evidence. "
-        "The third sentence identifies the consequence. The fourth sentence describes the implication.",
-        "The fifth sentence gives the practical conclusion.",
-    ]
-    assert readout_paragraphs[0].runs[0].text == "The first sentence states the main finding."
-    assert readout_paragraphs[0].runs[0].bold is True
-    assert readout_paragraphs[0].runs[1].bold is not True
-    assert readout_paragraphs[1].runs[0].bold is True
+    assert [paragraph.text for paragraph in readout_paragraphs] == [long_read]
+    assert not any(run.bold for run in readout_paragraphs[0].runs)
+
 
 
 def test_docx_exports_structured_assessments_with_human_labels_and_evidence(

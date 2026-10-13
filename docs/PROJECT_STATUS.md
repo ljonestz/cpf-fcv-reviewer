@@ -1,5 +1,17 @@
 # Project status
 
+## 2026-10-13 Output quality revision in validation
+
+The owner rejected the earlier Guinea output as insufficiently readable and
+analytically developed. Earlier rollout-readiness language below is superseded.
+The four questions now carry the detailed assessment and have separate concise
+summary fields. Conditional adaptation is assessed wherever it appears in the CPF;
+when materially missing, the prompt asks for grounded proposed scenarios and
+corresponding adjustments. Browser/Word paragraphs preserve authored arguments,
+recommendations use full-width sections, and the query has no example links or
+duplicated comments above its input. Generated-content acceptance remains pending.
+No additional paid assessment or deployment has been performed.
+
 ## 2026-10-13 Rollout candidate: coordinator review comments
 
 [PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55) now has the final light

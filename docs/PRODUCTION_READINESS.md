@@ -1,5 +1,15 @@
 # Production readiness
 
+## Output acceptance is pending - 2026-10-13
+
+The owner rejected the earlier rollout candidate after reviewing the real Guinea
+outputs. Passing functional tests did not establish editorial or analytical quality.
+The revision develops the four main questions, shortens and broadens the summary,
+improves paragraph rendering and simplifies comments/query presentation. It must
+still pass a fresh generated-output review before rollout. The earlier readiness
+assessment below is historical and superseded. The remaining authorized paid
+assessment has not been used for this revision.
+
 ## Coordinator candidate ready for supervised rollout review — 2026-10-13
 
 PR #55 implements the four qualitative findings, stage-calibrated recommendations,

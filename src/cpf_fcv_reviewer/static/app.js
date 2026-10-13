@@ -561,7 +561,7 @@ function labelledParagraph(label, value, className) {
   paragraph.className = className;
   const lead = document.createElement("strong");
   lead.textContent = `${label}. `;
-  paragraph.append(lead, document.createTextNode(value));
+  paragraph.append(lead, document.createTextNode(plainProse(value)));
   return paragraph;
 }
 
@@ -585,18 +585,37 @@ function splitNarrativeIntoChunks(value) {
   return chunks;
 }
 
+function plainProse(value) {
+  return String(value || "").replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "");
+}
+
+function appendInlineProse(node, value) {
+  // Model prose always becomes text nodes, never executable HTML.
+  for (const part of String(value).split(/(\*\*[^*]+\*\*)/g)) {
+    node.append(part.startsWith("**") && part.endsWith("**")
+      ? text("strong", part.slice(2, -2)) : document.createTextNode(part));
+  }
+}
+
 function renderNarrative(value, className = "") {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
-  for (const sentences of splitNarrativeIntoChunks(value)) {
-    const paragraph = document.createElement("p");
-    paragraph.className = className ? "narrative-chunk " + className : "narrative-chunk";
-    const activeSentence = text("strong", sentences[0]);
-    const remainingSentences = sentences.slice(1).join(" ");
-    paragraph.append(
-      activeSentence,
-      document.createTextNode(remainingSentences ? " " + remainingSentences : ""),
-    );
-    fragment.append(paragraph);
+  for (const block of String(value || "").trim().split(/\n\s*\n/).filter(Boolean)) {
+    const lines = block.split(/\n/);
+    if (lines.every(line => /^\s*(?:[-*]|\d+[.)])\s+/.test(line))) {
+      const container = document.createElement(/^\s*\d/.test(lines[0]) ? "ol" : "ul");
+      for (const line of lines) {
+        const item = document.createElement("li");
+        appendInlineProse(item, line.replace(/^\s*(?:[-*]|\d+[.)])\s+/, ""));
+        container.append(item);
+      }
+      fragment.append(container);
+    } else {
+      const paragraph = document.createElement("p");
+      paragraph.className = className ? "narrative-chunk " + className : "narrative-chunk";
+      appendInlineProse(paragraph, block.replace(/^#{1,6}\s+/, ""));
+      fragment.append(paragraph);
+    }
   }
   return fragment;
 }
@@ -618,12 +637,12 @@ function renderReadoutPanel(title, value, className) {
 
 function locatorLabel(locator) {
   if (!locator) return "";
-  return [
+  return [...new Set([
     locator.document_title,
     locator.page ? `page ${locator.page}` : "",
     locator.heading || "",
     locator.element || "",
-  ].filter(Boolean).join(" | ");
+  ].filter(Boolean))].join(" | ");
 }
 
 function evidenceTypeLabel(evidenceType) {
@@ -865,10 +884,10 @@ function renderRevisionSummary(result, anchorIds) {
     card.className = "priority-area";
     card.append(
       text("h3", item.title),
-      text("p", [
+      ...(result.core_findings?.length ? [] : [text("p", [
         ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
         ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
-      ].join(" "), "priority-assessment"),
+      ].join(" "), "priority-assessment")]),
       labelledParagraph(
         "Recommended response",
         area?.recommended_action || "",
@@ -989,6 +1008,7 @@ function renderFiveMinuteReadout(result) {
       result.strategy_readout,
       "readout-panel-strategy",
     ),
+    ...(result.core_findings?.length ? [renderCoreFindings(result, true)] : []),
     text("h2", "Priority measures to strengthen the CPF / CEN"),
     renderRevisionSummary(result, anchorIds),
   );
@@ -1057,6 +1077,7 @@ function inferDocumentType(primaryDocumentName) {
 }
 
 function setResultView(view) {
+  if (view === "email") setTimeout(resizeEmailEditor, 0);
   const panels = {summary: summaryPanel, detailed: detailedPanel, email: emailPanel};
   for (const tab of resultTabs) {
     const isSelected = tab.dataset.resultView === view;
@@ -1153,24 +1174,13 @@ function setAssistantStatus(message) {
   assistantStatus.hidden = !message;
 }
 
-function prefillAssistant(event) {
-  const suggestion = event.currentTarget || event.target;
-  const prompt = suggestion?.value || suggestion?.dataset?.assistantPrompt
-    || suggestion?.getAttribute?.("data-assistant-prompt")
-    || "";
-  assistantInput.value = prompt;
-  assistantInput.focus();
-}
-
 function renderAssistantHistory(history) {
   assistantConversation.replaceChildren();
-  for (const item of history) {
-    if (
-      item && (item.role === "user" || item.role === "assistant")
-      && typeof item.content === "string" && item.content.trim()
-    ) {
-      renderAssistantMessage(item.role, item.content);
-    }
+  const item = [...history].reverse().find(item => item?.role === "assistant" && item.content?.trim());
+  if (item && plainProse(item.content).trim() !== plainProse(emailEditor.value).trim()
+      && !/^Dear colleagues[,\s]/i.test(item.content.trim())) {
+    const answer = renderAssistantMessage("assistant", "");
+    answer.replaceChildren(renderNarrative(item.content));
   }
 }
 
@@ -1261,7 +1271,7 @@ async function sendAssistantMessage(event) {
   assistantSend.disabled = true;
   assistantConversation.setAttribute("aria-busy", "true");
   setAssistantStatus("");
-  renderAssistantMessage("user", message);
+  assistantConversation.replaceChildren();
   const assistantMessage = renderAssistantMessage("assistant", "");
   let responseText = "";
   let completed = false;
@@ -1290,6 +1300,7 @@ async function sendAssistantMessage(event) {
       ) return;
       if (eventName === "action" && typeof data?.action === "string") {
         responseAction = data.action;
+        assistantMessage.hidden = responseAction !== "answer";
       } else if (eventName === "chunk" && typeof data?.text === "string") {
         responseText += data.text;
         assistantMessage.textContent = `Response: ${responseText}`;
@@ -1304,10 +1315,13 @@ async function sendAssistantMessage(event) {
     if (!completed || !responseText) throw new Error("Assistant response incomplete.");
     if (requestAssessmentId === assessmentId && requestEpoch === assistantRequestEpoch) {
       assistantInput.value = "";
+      if (responseAction === "answer") assistantMessage.replaceChildren(renderNarrative(responseText));
+      else assistantConversation.replaceChildren();
       if (responseAction === "tailor_email") {
-        emailEditor.value = responseText;
-        displayedEmailText = responseText;
-        currentReviewResult.email_text = responseText;
+        emailEditor.value = plainProse(responseText);
+        resizeEmailEditor();
+        displayedEmailText = emailEditor.value;
+        currentReviewResult.email_text = emailEditor.value;
         currentReviewResult.email_edited = true;
         currentReviewResult.email_stale = false;
         emailWarning.hidden = true;
@@ -1343,9 +1357,6 @@ async function sendAssistantMessage(event) {
   }
 }
 
-document.querySelectorAll?.("[data-assistant-prompt]")?.forEach((button) => {
-  button.addEventListener("click", prefillAssistant);
-});
 assistantForm.addEventListener("submit", sendAssistantMessage);
 
 function isActiveSource(source) {
@@ -1741,8 +1752,8 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     renderFiveMinuteReadout,
     renderDetailedAnalysis,
     splitNarrativeIntoChunks,
+    renderNarrative,
     loadAssistantHistory,
-    prefillAssistant,
     sendAssistantMessage,
     updateAssessment,
     renderAssistantMessage,
@@ -1751,10 +1762,10 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
 }
 
 
-function renderCoreFindings(result) {
+function renderCoreFindings(result, summary = false) {
   const section = document.createElement("section");
   section.className = "core-findings";
-  section.append(text("h2", "Four analytical findings"));
+  section.append(text("h2", "Assessment against the four review questions"));
   const labels = {
     drivers_priorities: "Drivers and priorities",
     actions_commitment: "Critical actions and commitment",
@@ -1765,9 +1776,8 @@ function renderCoreFindings(result) {
     const item = document.createElement("section");
     item.className = "core-finding";
     item.append(text("h3", labels[finding.question] || finding.question),
-      renderNarrative(finding.assessment));
-    if (finding.basis === "limited") item.append(text("p", "Evidence limits this finding.", "helper"));
-    item.append(renderEvidenceGroup(result, finding.evidence_ids));
+      renderNarrative(summary ? (finding.summary || finding.assessment) : finding.assessment));
+    if (!summary) item.append(renderEvidenceGroup(result, finding.evidence_ids));
     section.append(item);
   }
   return section;
@@ -1792,9 +1802,16 @@ function renderPriorComments(result) {
   return section;
 }
 
+function resizeEmailEditor() {
+  if (!emailEditor?.style || !emailEditor.scrollHeight) return;
+  emailEditor.style.height = "auto";
+  emailEditor.style.height = `${emailEditor.scrollHeight + 4}px`;
+}
+
 function renderEmailState(result) {
-  displayedEmailText = result.email_text || "";
+  displayedEmailText = plainProse(result.email_text || "");
   emailEditor.value = displayedEmailText;
+  resizeEmailEditor();
   emailEditor.readOnly = false;
   emailStatus.textContent = result.email_edited ? "Retained draft review comments." : "";
   emailWarning.textContent = result.email_stale
@@ -1858,3 +1875,5 @@ window.addEventListener?.("beforeunload", (event) => {
     event.returnValue = "";
   }
 });
+
+emailEditor?.addEventListener("input", resizeEmailEditor);

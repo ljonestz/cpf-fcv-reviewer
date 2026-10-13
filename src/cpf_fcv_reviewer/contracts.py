@@ -332,7 +332,8 @@ class CoreQuestion(StrEnum):
 
 class CoreFinding(FrozenModel):
     question: CoreQuestion
-    assessment: ReviewNarrative = Field(max_length=1800)
+    assessment: ReviewNarrative = Field(max_length=5000)
+    summary: str = Field(default="", max_length=900)
     basis: Literal["assessed", "limited"]
     evidence_ids: tuple[ReviewNarrative, ...] = ()
     priority_area_ids: tuple[ReviewNarrative, ...] = ()

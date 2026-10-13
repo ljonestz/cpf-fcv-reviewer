@@ -307,7 +307,7 @@ def target_text(locator: EvidenceLocator) -> str:
         parts.append(locator.heading)
     if locator.element:
         parts.append(locator.element)
-    return " | ".join(parts)
+    return " | ".join(dict.fromkeys(parts))
 
 
 def _evidence_type_label(item: EvidenceItem) -> str:
@@ -425,22 +425,21 @@ def _sentence_parts(text: str) -> tuple[str, ...]:
     return tuple(parts)
 
 
-def _readable_chunks(text: str, *, max_sentences: int = 4) -> tuple[str, ...]:
-    sentences = _sentence_parts(text)
-    return tuple(
-        " ".join(sentences[index : index + max_sentences])
-        for index in range(0, len(sentences), max_sentences)
-    )
+def _readable_chunks(text: str) -> tuple[str, ...]:
+    # Preserve authored arguments; sentence counts do not define paragraphs.
+    return tuple(block.strip() for block in re.split(r"\n\s*\n", str(text)) if block.strip())
 
 
-def _append_bold_lead_sentence(paragraph, text: str) -> None:
-    sentences = _sentence_parts(text)
-    if not sentences:
-        return
-    lead = paragraph.add_run(sentences[0])
-    lead.bold = True
-    if len(sentences) > 1:
-        paragraph.add_run(" " + " ".join(sentences[1:]))
+def _append_inline_prose(paragraph, text: str) -> None:
+    # Only intentional emphasis is bold, never an arbitrary first sentence.
+    text = re.sub(r"^#{1,6}\s+", "", text)
+    for part in re.split(r"(\*\*[^*]+\*\*)", text):
+        if not part:
+            continue
+        if part.startswith("**") and part.endswith("**"):
+            paragraph.add_run(part[2:-2]).bold = True
+        else:
+            paragraph.add_run(part)
 
 
 def _add_readable_paragraph(
@@ -460,7 +459,7 @@ def _add_readable_paragraph(
         )
         if num_id is not None:
             _apply_num_id(paragraph, num_id)
-        _append_bold_lead_sentence(paragraph, chunk)
+        _append_inline_prose(paragraph, chunk)
         paragraphs.append(paragraph)
     return tuple(paragraphs)
 
@@ -471,7 +470,7 @@ def _add_labelled_paragraph(document: Document, label: str, value: str) -> None:
         paragraph = document.add_paragraph()
         if index == 0:
             paragraph.add_run(f"{label}: ").bold = True
-        _append_bold_lead_sentence(paragraph, chunk)
+        _append_inline_prose(paragraph, chunk)
 
 
 def _add_readable_list_paragraph(
@@ -484,7 +483,7 @@ def _add_readable_list_paragraph(
     for chunk in _readable_chunks(text) or ("",):
         paragraph = document.add_paragraph(style=style_name)
         _apply_num_id(paragraph, num_id)
-        _append_bold_lead_sentence(paragraph, chunk)
+        _append_inline_prose(paragraph, chunk)
 
 
 
@@ -775,20 +774,22 @@ def build_docx(
     _add_readable_paragraph(document, result.strategy_readout)
     if not summary and not result.core_findings:
         _add_strategy_assessments(document, result)
-    if not summary and result.core_findings:
-        document.add_heading("Four analytical findings", level=1)
+    if result.core_findings:
+        document.add_heading("Assessment against the four review questions", level=1)
         for finding in result.core_findings:
             document.add_heading(CORE_QUESTION_LABELS[finding.question], level=2)
-            paragraphs = _add_readable_paragraph(document, finding.assessment)
+            paragraphs = _add_readable_paragraph(
+                document,
+                (finding.summary or finding.assessment) if summary else finding.assessment,
+            )
             sources = tuple(dict.fromkeys(
                 locator_text(evidence[key]) for key in finding.evidence_ids
                 if evidence[key].locator is not None or evidence[key].source_url is not None
             ))
-            if sources:
+            if sources and not summary:
                 paragraphs[-1].paragraph_format.keep_with_next = True
                 _add_labelled_paragraph(document, "Sources", "; ".join(sources))
-            if finding.basis == "limited":
-                document.add_paragraph("Evidence limits this finding.")
+
 
     if summary:
         document.add_heading("Priority measures to strengthen the CPF / CEN", level=1)
@@ -803,10 +804,11 @@ def build_docx(
                 *_sentence_parts(area.assessment)[:2],
                 *_sentence_parts(area.why_it_matters)[:1],
             )
-            document.add_paragraph(" ".join(overview))
+            if not result.core_findings:
+                document.add_paragraph(" ".join(overview))
             response = document.add_paragraph()
             response.add_run("Recommended response: ").bold = True
-            response.add_run(area.recommended_action)
+            _append_inline_prose(response, area.recommended_action)
         if not items:
             document.add_paragraph("No revision summary was returned for this review.")
     else:
@@ -822,6 +824,12 @@ def build_docx(
                     _add_labelled_paragraph(
                         document, "Where to act", DESTINATION_LABELS[area.destination],
                     )
+                    sources = tuple(dict.fromkeys(
+                        locator_text(evidence[key]) for key in area.evidence_ids
+                        if evidence[key].locator is not None or evidence[key].source_url is not None
+                    ))
+                    if sources:
+                        _add_labelled_paragraph(document, "Sources", "; ".join(sources))
                 if area.comment_reference:
                     _add_labelled_paragraph(document, "Comment addressed", area.comment_reference)
         else:

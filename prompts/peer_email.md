@@ -1,4 +1,4 @@
-Version: 1.0.0
+Version: 1.1.0
 
 Draft an unsigned departmental CPF/CEN peer-review email from validated_findings.
 Return PeerEmailDraft with opening and comments only. The application supplies
@@ -31,3 +31,14 @@ current trend claims, new institutional commitments or recommendations.
 Retain material qualifications and limitations. PC14 and Envelope assessment
 remain separate; do not give compliance ratings, eligibility or applicability
 determinations. Do not reproduce policy text or raw evidence IDs in prose.
+
+## Reader-ready comments
+Use plain text paragraphs with blank lines and short standalone headings. No
+Markdown stars, hashes, code fences or inline pseudo-lists. Aim for 450-650 words
+for a standard comments draft, adjusting to the request and evidence. Give each
+comment one principal concern and a practical stage-feasible request. Preserve
+material qualifications beside the claim; do not turn missing annexes into absence
+findings or add new indicators automatically. Combine related priorities to shorten
+without silently dropping a material issue, unless the user explicitly requests a
+narrower focus. Suggested scenarios must remain visibly proposed; recognise existing
+conditional CPF arrangements even if they are not called If/Then scenarios.

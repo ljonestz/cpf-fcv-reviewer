@@ -18,8 +18,8 @@ def test_results_offer_copy_and_one_shared_assistant():
     assert 'id="assistant-mode"' not in html
     assert 'id="assistant-suggestion"' not in html
     assert "FOLLOW-ON REVIEW ASSISTANT" not in html
-    for choice in ("tone", "focus", "Condense", "Explain"):
-        assert choice in html
+    assert "data-assistant-prompt" not in html
+    assert "Ask a question or request changes" in html
 
 
 def test_feedback_collection_is_removed(completed_coordinator_review):

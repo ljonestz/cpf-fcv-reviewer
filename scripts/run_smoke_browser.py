@@ -136,7 +136,7 @@ def main(
         assert page.locator("#detailed-panel:not([hidden])").is_visible()
         capture(page, 4, "smoke-detailed-desktop")
         if not cpf:
-            assert page.get_by_role("heading", name="Four analytical findings").is_visible()
+            assert page.get_by_role("heading", name="Assessment against the four review questions").is_visible()
             assert page.get_by_role("heading", name="Earlier comments: follow-through").is_visible()
         page.locator("#result-tab-email").click()
         editor = page.locator("#peer-email-editor")
@@ -155,11 +155,11 @@ def main(
         capture(page, 10, "smoke-review-comments-desktop")
 
         assert page.locator("#assistant-card select").count() == 0
-        page.get_by_role("button", name="Condense the comments").click()
+        page.locator("#assistant-input").fill("Condense the review comments to the few most consequential points.")
         assert "Condense" in page.locator("#assistant-input").input_value()
         page.locator("#assistant-send").click()
         page.wait_for_function(
-            "document.querySelectorAll('#assistant-conversation article').length === 2 && "
+            "document.querySelectorAll('#assistant-conversation article').length === 0 && "
             "!document.querySelector('#assistant-send').disabled"
         )
         assert editor.input_value().strip()
@@ -169,7 +169,7 @@ def main(
         page.reload(wait_until="networkidle")
         wait_for_results(page)
         page.wait_for_function(
-            "document.querySelectorAll('#assistant-conversation article').length === 2"
+            "document.querySelectorAll('#assistant-conversation article').length === 0"
         )
         title = page.locator("#result-title").inner_text().strip()
         assert re.fullmatch(rf"{re.escape(country)} (?:CPF|CEN|CPF / CEN) FCV review", title), title
@@ -230,7 +230,7 @@ def main(
 
         assert not console_errors, console_errors
         assert not page_errors, page_errors
-        print(f"BROWSER_QA_PASS mode={mode} assistant_messages_restored=2 "
+        print(f"BROWSER_QA_PASS mode={mode} duplicate_comments=0 "
               "docx=2 comments_tailored=true", flush=True)
         context.close()
         browser.close()

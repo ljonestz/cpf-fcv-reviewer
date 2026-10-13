@@ -187,18 +187,13 @@
 
       <section id="assistant-card" class="assistant-card" hidden aria-labelledby="assistant-heading">
         <h2 id="assistant-heading">What would you like to do next?</h2>
-        <p class="helper">Write a question or request in your own words. Adjust the comments' tone, focus or length, explain an issue, or provide a correction. Asking to update the assessment reruns the note and summary; wording changes revise only the comments.</p>
-        <div id="assistant-conversation" role="log" aria-live="polite" class="assistant-conversation" aria-relevant="additions text"></div>
+        <p class="helper">Ask a question or request changes to the review comments.</p>
         <form id="assistant-form" class="assistant-form">
           <label for="assistant-input">Your request</label>
           <textarea id="assistant-input" maxlength="10000" placeholder="For example: make the comments more diplomatic and focus on implementation."></textarea>
           <button id="assistant-send" type="submit">Send</button>
         </form>
-        <p class="query-examples helper">Try an example:
-          <button type="button" class="query-example" data-assistant-prompt="Condense the review comments to the few most consequential points.">Condense the comments</button>
-          <button type="button" class="query-example" data-assistant-prompt="Make the review comments more diplomatic while keeping the main concerns clear.">Adjust the tone</button>
-          <button type="button" class="query-example" data-assistant-prompt="Explain how the RRA informed the program choices, using the available evidence.">Explain an issue</button>
-        </p>
+        <div id="assistant-conversation" role="log" aria-live="polite" class="assistant-conversation" aria-relevant="additions text"></div>
         <p id="assistant-status" class="assistant-status" role="status" aria-live="polite" hidden></p>
       </section>
 

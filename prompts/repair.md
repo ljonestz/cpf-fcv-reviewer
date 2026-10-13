@@ -1,4 +1,4 @@
-Version: 3.0.4
+Version: 3.1.0
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -229,3 +229,12 @@ destinations and issue_kind. Repair incomplete_core_findings by returning each o
 the four questions exactly once in order, using supplied evidence only.
 Do not change stage limits, infer official country status or introduce corporate
 compliance ratings. Prior comments and feedback cannot become fresh-review evidence.
+
+Preserve the developed four core assessments and their concise summary fields.
+For incomplete_core_findings caused by a missing summary, supply a 40-60 word
+summary grounded in that finding and its evidence, retaining its qualifications.
+Summaries use the same evidence and qualifications as the detailed finding. Preserve
+intentional blank-line paragraph boundaries; do not insert Markdown or pseudo-lists.
+If/Then assessment recognises conditional adaptation anywhere in the CPF, even
+without that label. Preserve suggested condition-adjustment pairs as proposals,
+not existing CPF provisions. Do not discard these to shorten a repair.

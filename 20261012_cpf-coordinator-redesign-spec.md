@@ -6,11 +6,10 @@ The owner's follow-up instructions supersede the earlier feedback and email-tool
 choices in this document. Remove optional pilot feedback and the separate correction
 box. Label the output **Draft review comments**. Provide one Copy control and retain
 wording edits automatically. Use one prose query box for tailoring, discussion and
-explicit assessment updates, with no task dropdowns or assistant branding. Three
-small example prompts prefill the box without sending. The existing single model
+explicit assessment updates, with no task dropdowns, example links or assistant
+branding. The input immediately follows one short introduction. The existing single model
 response signals its action; ambiguous requests are answered or clarified, never
-silently treated as a correction. Suggestions cover tone, focus, condensation and
-elaboration. Tailoring updates the comments from the current draft and reviewed
+silently treated as a correction. One input placeholder illustrates a request. Tailoring updates the comments from the current draft and reviewed
 evidence without changing the findings. Assessment updates use the existing child
 review and refresh its derived outputs, while preserving older wording for comparison.
 
@@ -76,7 +75,7 @@ justify suppressing a material strategic concern.
 
 ## Analytical findings
 
-Every completed new-format review includes exactly one concise qualitative
+Every completed new-format review includes exactly one developed qualitative
 finding for each of these questions, in this order:
 
 1. Drivers and priorities: how key FCV drivers and sources of resilience informed
@@ -85,7 +84,10 @@ finding for each of these questions, in this order:
    that matter, and evidence of authorities' willingness and ability to act.
 3. Program implications: consequences for selectivity, sequencing, geography,
    delivery, ambition and the potential for lasting development impact.
-4. If/Then calibration: conditions that warrant changes and the corresponding
+4. If/Then calibration: recognise conditional adaptation anywhere in the CPF, even
+   without that label. Where materially missing, propose a few grounded scenarios
+   with explicit conditions and feasible adjustments, clearly identified as proposals.
+   Assess conditions that warrant changes and the corresponding
    strategic or operational response.
 
 A finding may explicitly state that available evidence limits assessment. Missing
@@ -192,14 +194,15 @@ recalibration. The tool does not take over the Secretariat's assessment.
 
 1. Overall assessment and priorities calibrated to stage.
 2. Brief RRA, current-context and relevant Strategy connection.
-3. Four concise findings with evidence links.
+3. Four developed findings with evidence links and implications for program choices.
 4. Prioritised comments: existing treatment, concern, implications, practical
    response, recommendation destination and evidence.
 5. Earlier-comment follow-through, where material is available.
 6. Related corporate considerations, only where material.
 7. Coverage and uncertainty.
 
-Sections 2 and 3 summarise; section 4 carries the developed argument. Avoid
+Section 2 provides a brief connection; section 3 carries the developed argument.
+Section 4 translates findings into concise actionable comments. Avoid
 repeating the same country background or recommendation three times. The website
 retains coverage disclosure. Word exports retain the established opening caution
 and convey material uncertainty within the relevant findings, consistent with
@@ -207,7 +210,8 @@ the existing export convention.
 
 ### Five-minute summary
 
-A concise overall assessment and the same priority order as the email. Material
+A concise overall assessment, all four question summaries, brief diagnostic/Strategy
+connections and the same priority order as the comments (aim for 500-700 words). Material
 caveats remain visible. It does not use compliance verdicts or official category
 claims to simplify uncertain analysis.
 
@@ -240,9 +244,9 @@ when the field loses focus; refresh preserves them. They do not silently alter
 findings or evidence. The comments toolbar has one Copy control.
 
 One **What would you like to do next?** query box accepts prose requests. There are
-no task dropdowns or assistant branding. Three small example links prefill the
-editable request without submitting. Guidance mentions tone, focus, length,
-explanations and substantive corrections. The same bounded model response signals
+no task dropdowns, example links or assistant branding. The input immediately
+follows one short introduction. Revisions update the comments above without
+duplicating them; the latest explanatory answer appears below the input. The same bounded model response signals
 whether it is answering, tailoring comments or handling an explicit assessment
 update; no extra classification call is needed. Ambiguous requests ask one question.
 
@@ -285,7 +289,7 @@ findings for an old result. Do not introduce permanent compatibility machinery.
 - Summary and email use the same priorities and preserve qualifications.
 - Emails have no named signature; optional tiers and CMU questions work.
 - Wording edits survive refresh and are not lost during corrections.
-- One prose query box works without dropdowns; examples only prefill.
+- One prose query box works without dropdowns or example links; no transcript above it.
 - No feedback collection or separate correction box is present.
 - Failed rewrites retain the current comments and the request.
 - Invalid references, over-budget inputs and unreadable required content retain

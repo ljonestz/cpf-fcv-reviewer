@@ -50,17 +50,12 @@ def test_interface_has_required_review_controls_and_advisory_boundary():
     assert "Questions requiring a dedicated response" not in html
 
 
-def test_follow_on_assistant_uses_approved_shell_and_suggestion_labels():
+def test_query_uses_simple_shell_without_suggestion_links():
     html = HTML.read_text(encoding="utf-8")
     javascript = JS.read_text(encoding="utf-8")
 
     assert "What would you like to do next?" in html
-    for label in (
-        "Condense the comments",
-        "Adjust the tone",
-        "Explain an issue",
-    ):
-        assert label in html
+    assert "data-assistant-prompt" not in html
     assert 'id="assistant-conversation" role="log" aria-live="polite"' in html
     assert '<label for="assistant-input">' in html
     assert '>Send<' in html
@@ -69,7 +64,6 @@ def test_follow_on_assistant_uses_approved_shell_and_suggestion_labels():
 
     for fragment in (
         "function loadAssistantHistory()",
-        "function prefillAssistant(",
         "function sendAssistantMessage(",
         "function renderAssistantMessage(",
         "function restoreSavedReview()",
@@ -132,7 +126,7 @@ def test_guided_landing_has_three_upload_zones_and_process_dialog():
 def test_correction_prompt_uses_note_first_review_language():
     html = HTML.read_text(encoding="utf-8")
 
-    assert "Asking to update the assessment reruns the note and summary" in html
+    assert "Ask a question or request changes to the review comments." in html
     assert "Add context or correct a finding" not in html
 
 

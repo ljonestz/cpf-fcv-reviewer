@@ -352,6 +352,8 @@ class SmokeModelGateway:
                         f"{SMOKE_MARKER} Synthetic finding for {question.value}; "
                         "clarify its connection to the program within the selected review stage."
                     ),
+                    summary=(f"{SMOKE_MARKER} Brief judgment for {question.value}: "
+                             "the program connection needs clarification at this stage."),
                     basis="assessed",
                     evidence_ids=cited_ids,
                     priority_area_ids=("smoke-pa-1",),

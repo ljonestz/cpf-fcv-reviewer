@@ -101,7 +101,7 @@ def test_intake_and_email_controls_are_optional_and_accessible():
     for element in [
         'id="review-questions"', 'id="previous-comments"', 'id="framing-override"',
         'id="result-tab-email"', 'id="email-panel"', 'id="peer-email-editor"',
-        'id="copy-peer-email"', 'id="assistant-input"', 'data-assistant-prompt=',
+        'id="copy-peer-email"', 'id="assistant-input"',
     ]:
         assert element in html
     assert 'aria-controls="email-panel"' in html

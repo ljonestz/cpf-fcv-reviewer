@@ -1345,9 +1345,9 @@ def build_runtime_services(
         pack = context["evidence_pack"]
         if payload.get("coordinator_review_version") == 2:
             pack = pack.model_copy(update={"metadata": pack.metadata.model_copy(update={
-                "schema_version": "2.0.0",
-                "rubric_version": "2.0.0",
-                "prompt_bundle_version": "2.0.0",
+                "schema_version": "2.1.0",
+                "rubric_version": "2.1.0",
+                "prompt_bundle_version": "2.1.0",
                 "app_release": config.get("APP_RELEASE", "dev"),
                 "registry_versions": {"bundle": bundle.version},
             })})
