@@ -96,3 +96,30 @@ def test_email_export_identifies_email_in_subtitle(completed_coordinator_review)
     text = "\n".join(p.text for p in Document(BytesIO(download.data)).paragraphs)
     assert "DRAFT REVIEW COMMENTS" in text
     assert "FULL ASSESSMENT" not in text
+
+
+def test_failed_comments_offer_labelled_validated_fallback(completed_coordinator_review):
+    app, client, assessment_id = completed_coordinator_review
+    store = app.extensions["session_store"]
+    before = store.get(assessment_id).payload["result"]
+    store.update(assessment_id, peer_email=None, email_error="email_draft_unavailable")
+    restored = client.get(f"/api/reviews/{assessment_id}/result").json
+    assert restored["email_fallback"] is True
+    assert restored["peer_email"] is None
+    assert restored["email_text"].startswith("Dear colleagues,")
+    for area in before["priority_areas"]:
+        assert area["recommended_action"] in restored["email_text"]
+        assert area["why_it_matters"] in restored["email_text"]
+    assert restored["overall_read"] == before["overall_read"]
+    download = client.get(f"/api/reviews/{assessment_id}/export.docx?view=email")
+    assert download.status_code == 200
+    paragraphs = "\n".join(p.text for p in Document(BytesIO(download.data)).paragraphs)
+    assert "assembled from the validated recommendations" in paragraphs
+    assert before["priority_areas"][0]["recommended_action"] in paragraphs
+    assert client.put(f"/api/reviews/{assessment_id}/email", json={
+        "text": "Coordinator's replacement draft.",
+        "base_run_id": before["metadata"]["run_id"],
+    }).status_code == 200
+    edited = client.get(f"/api/reviews/{assessment_id}/result").json
+    assert edited["email_text"] == "Coordinator's replacement draft."
+    assert edited["email_fallback"] is False

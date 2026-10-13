@@ -27,7 +27,11 @@ from .country_detection import (
     COUNTRY_DETECTION_MAX_UPLOAD_BYTES,
     detect_country,
 )
-from .email_draft import render_peer_email, validate_email_refinement
+from .email_draft import (
+    fallback_review_comments,
+    render_peer_email,
+    validate_email_refinement,
+)
 from .export_docx import (
     EvidenceCompletenessError,
     build_docx,
@@ -559,7 +563,7 @@ def export_review(assessment_id):
                 return jsonify(error="An email draft is not available."), 409
             data = build_email_docx(
                 email["email_text"], created_at=result.metadata.created_at,
-                stale=email["email_stale"],
+                stale=email["email_stale"], fallback=email["email_fallback"],
             )
         else:
             data = build_docx(
@@ -589,7 +593,11 @@ def _email_state(payload, result):
     raw_draft = payload.get("peer_email")
     draft = PeerEmailDraft.model_validate(raw_draft) if raw_draft is not None else None
     overlay = payload.get("email_overlay")
-    text = render_peer_email(draft) if draft is not None else ""
+    fallback_text = (
+        fallback_review_comments(result)
+        if draft is None and payload.get("email_error") else ""
+    )
+    text = render_peer_email(draft) if draft is not None else fallback_text
     stale = False
     if overlay is not None:
         if not isinstance(overlay, dict) or not isinstance(overlay.get("text"), str):
@@ -602,6 +610,7 @@ def _email_state(payload, result):
         "peer_email": draft.model_dump(mode="json") if draft is not None else None,
         "email_text": text, "email_edited": overlay is not None,
         "email_stale": stale, "email_error": payload.get("email_error"),
+        "email_fallback": bool(fallback_text) and text == fallback_text,
     }
 
 

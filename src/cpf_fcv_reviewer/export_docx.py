@@ -23,6 +23,7 @@ from .contracts import (
     FCVStrategicShift,
     ReviewResult,
 )
+from .email_draft import FALLBACK_NOTICE
 from .prior_comments import PriorCommentReport
 from .review_profiles import (
     CORE_QUESTION_EXPLANATIONS,
@@ -862,11 +863,15 @@ def build_docx(
     return stream.getvalue()
 
 
-def build_email_docx(text: str, *, created_at: datetime, stale: bool = False) -> bytes:
+def build_email_docx(
+    text: str, *, created_at: datetime, stale: bool = False, fallback: bool = False,
+) -> bytes:
     """Export the displayed coordinator wording as editable native paragraphs."""
     document = Document()
     _configure_document(document, created_at=created_at)
     document.add_heading("Draft review comments", level=0)
+    if fallback:
+        document.add_paragraph(FALLBACK_NOTICE)
     document.add_paragraph(ADVISORY_NOTE)
     document.add_paragraph(RECOMMENDATION_NOTE)
     if stale:

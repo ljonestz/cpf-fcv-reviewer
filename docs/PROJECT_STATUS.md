@@ -1,5 +1,22 @@
 # Project status
 
+## 2026-10-13 Comments fallback verified
+
+The owner approved a labelled fallback when optional comments synthesis fails.
+The API now assembles an editable draft from the validated priority rationale and
+actions, retaining all qualifications and the selected order, with no extra model
+call. The browser and comments export label its origin. Saved coordinator wording
+takes precedence; the assessment and original safe failure diagnostic are unchanged.
+Empty or oversized fallback content is not silently truncated.
+
+Verification: 95 focused tests plus the text-budget edge test passed; targeted Ruff
+and diff checks passed. A deliberately failing provider-free Edge flow verified
+label, export, refresh and replacement wording. Screenshots inspected under
+`output/playwright/20261013-fallback-qa/` (ignored). This mitigates unavailable
+comments; it does not recover the earlier discarded rejection reason. Word
+rendering QA is in progress using a checksum-verified isolated tool; no deployment
+or additional paid run has occurred.
+
 ## 2026-10-13 Fresh output accepted for supervised pilot review
 
 One newly authorized assessment on b75719c completed its note and default comments.

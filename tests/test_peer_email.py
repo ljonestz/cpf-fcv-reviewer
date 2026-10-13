@@ -172,3 +172,12 @@ def test_single_run_drafts_email_and_keeps_note_on_draft_failure(monkeypatch, fa
 ])
 def test_draft_failure_reason_is_allowlisted(error, expected):
     assert module().email_failure_reason(error) == expected
+
+
+def test_fallback_does_not_truncate_qualifications_to_fit(make_valid_result):
+    result, _ = make_valid_result
+    area = result.priority_areas[0].model_copy(update={
+        "recommended_action": "Check the missing annex first. " + "x" * 12_000,
+    })
+    result = result.model_copy(update={"priority_areas": (area,)})
+    assert module().fallback_review_comments(result) == ""

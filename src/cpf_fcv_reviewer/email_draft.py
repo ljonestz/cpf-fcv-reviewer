@@ -17,6 +17,10 @@ from .validators import (
 )
 
 _CLOSING = "We hope these comments are useful and look forward to the discussion."
+FALLBACK_NOTICE = (
+    "This draft was assembled from the validated recommendations because comments drafting "
+    "was unavailable. Review or tailor it using the query box."
+)
 _SIGNATURE = re.compile(
     r"(?:\n\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\s*$)|"
     r"(?im:^\s*(?:signature|signed by|kind regards|best regards|sincerely)\b)|"
@@ -45,6 +49,23 @@ def email_failure_reason(error: Exception) -> str:
 def _prose_units(text: str) -> tuple[str, ...]:
     # A salutation or introductory sentence must not hide prescriptive advice.
     return (text, *re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", text))
+
+
+def fallback_review_comments(result: ReviewResult) -> str:
+    """Project validated recommendations into an editable draft without a model call."""
+    if not result.priority_areas:
+        return ""
+    parts = [
+        "Dear colleagues,",
+        "Thank you for the opportunity to review the draft. The comments below draw "
+        "on the assessment's priority recommendations for this review stage.",
+    ]
+    for area in result.priority_areas:
+        parts.extend((area.heading, area.why_it_matters, area.recommended_action))
+    parts.append(_CLOSING)
+    text = "\n\n".join(parts)
+    # Preserve qualifications intact; never truncate to fit the editable text budget.
+    return text if len(text) <= 12_000 else ""
 
 
 def render_peer_email(draft: PeerEmailDraft) -> str:

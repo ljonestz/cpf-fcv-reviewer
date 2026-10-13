@@ -1823,9 +1823,11 @@ function renderEmailState(result) {
   emailStatus.textContent = result.email_edited ? "Retained draft review comments." : "";
   emailWarning.textContent = result.email_stale
     ? "These comments belong to an earlier assessment. Use the query box to update them against the new findings before copying."
-    : result.email_error
-      ? "The draft review comments could not be generated. The validated note is available; you can draft comments here or use the query box."
-      : "";
+    : result.email_fallback
+      ? "This draft was assembled from the validated recommendations because comments drafting was unavailable. Review or tailor it using the query box."
+      : result.email_error && !displayedEmailText.trim()
+        ? "The draft review comments could not be generated. The validated note is available; you can draft comments here or use the query box."
+        : "";
   emailWarning.hidden = !emailWarning.textContent;
 }
 
