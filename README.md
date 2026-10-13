@@ -18,9 +18,12 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 Latest acceptance: the fresh output is usable for a supervised coordinator pilot,
 with four developed findings, locally qualified annex recommendations and 653-word
-default comments. Word pagination and the earlier intermittent comments failure
-still limit full production sign-off. PR 55 stays draft; nothing is deployed. See
-the [fresh output review](docs/validation/2026-10-13-final-output-review.md).
+default comments. A labelled, editable fallback now preserves validated
+recommendations when comments drafting fails, with no extra model call. All 1,813
+provider-free CI tests passed. Word pagination remains unverified, so PR 55 stays
+draft and nothing is deployed. See the
+[fresh output review](docs/validation/2026-10-13-final-output-review.md) and
+[fallback acceptance record](docs/validation/2026-10-13-comments-fallback-acceptance.md).
 
 - Development candidate: [PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55)
   adds the agreed coordinator review structure, four qualitative findings,
@@ -29,11 +32,11 @@ the [fresh output review](docs/validation/2026-10-13-final-output-review.md).
   and previous comments are optional. PC14 and Envelope observations stay
   high-level. See the [design](20261012_cpf-coordinator-redesign-spec.md) and
   [validation record](docs/validation/2026-10-12-coordinator-review-redesign.md).
-  One public Guinea quality run completed, including prose comments refinement,
-  refresh and exports. The second authorized paid run was unused. The user
-  rejected its narrative quality on 13 October; it is not rollout-ready and has not
-  been deployed. A subsequent output-quality revision is undergoing validation. See the
-  [quality record](docs/validation/2026-10-13-coordinator-quality-acceptance.md).
+  The output-quality revision now has a fresh public Guinea assessment accepted
+  as a supervised first draft, with readable four-question findings, practical
+  conditional recommendations, refresh restoration and checked export structure.
+  The approved comments fallback also passed a deliberate synthetic failure flow.
+  Native Word pagination acceptance remains outstanding; it has not been deployed.
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Historical application release: `27ef3aa` (PR30), 2026-09-08. Render and `/health`

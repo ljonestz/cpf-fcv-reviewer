@@ -13,9 +13,11 @@ Verification: 95 focused tests plus the text-budget edge test passed; targeted R
 and diff checks passed. A deliberately failing provider-free Edge flow verified
 label, export, refresh and replacement wording. Screenshots inspected under
 `output/playwright/20261013-fallback-qa/` (ignored). This mitigates unavailable
-comments; it does not recover the earlier discarded rejection reason. Word
-rendering QA is in progress using a checksum-verified isolated tool; no deployment
-or additional paid run has occurred.
+comments; it does not recover the earlier discarded rejection reason. Application
+commit 988db71 passed all 1,813 Linux CI tests. Word rendering attempts did not yield
+a complete runnable renderer; no page images were produced, so pagination remains
+unverified. No deployment or additional paid run occurred. PR 55 stays draft.
+See the [fallback acceptance record](validation/2026-10-13-comments-fallback-acceptance.md).
 
 ## 2026-10-13 Fresh output accepted for supervised pilot review
 

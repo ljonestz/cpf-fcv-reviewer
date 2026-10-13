@@ -6,9 +6,14 @@ The fresh b75719c Guinea output is suitable for a supervised coordinator pilot:
 all four findings are readable, missing-annex recommendations are conditional, and
 default comments completed at 653 words. No further structural redesign is needed.
 This supersedes the editorial rejection below, but is not full production sign-off.
-Native Word pagination remains unchecked; the earlier intermittent comments failure
-is not explained by this successful run; current-country evidence is limited.
-Nothing is deployed. See the [fresh output review](validation/2026-10-13-final-output-review.md)
+Application 988db71 adds the approved, labelled comments fallback assembled from
+validated recommendations without another model call. All 1,813 provider-free
+Linux CI tests and the synthetic failure/retention/export browser flow passed.
+This mitigates unavailable comments without claiming to explain the original failure.
+Word pagination remains unchecked after bounded renderer attempts produced no page
+images; current-country evidence is limited. PR 55 stays draft and nothing is deployed.
+See the [fresh output review](validation/2026-10-13-final-output-review.md) and
+[fallback acceptance record](validation/2026-10-13-comments-fallback-acceptance.md)
 for evidence and release gates. Historical run allowances below are superseded by
 the documented subsequent authorizations and cost accounting.
 
