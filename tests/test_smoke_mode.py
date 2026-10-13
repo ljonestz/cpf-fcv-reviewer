@@ -482,7 +482,8 @@ def test_smoke_routes_complete_with_schema_for_every_review_stage(review_stage):
     result = ReviewResult.model_validate({
         key: value for key, value in payload.items() if key in ReviewResult.model_fields
     })
-    assert result.metadata.schema_version == "2.0.0"
+    assert result.metadata.schema_version == "2.1.0"
+    assert all(f.summary.strip() for f in result.core_findings)
     assert len(result.core_findings) == 4
     assert payload["peer_email"]["comments"]
     assert evidence_by_id

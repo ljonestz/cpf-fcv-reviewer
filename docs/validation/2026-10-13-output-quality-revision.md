@@ -34,7 +34,9 @@ outdated presentation/prompt assertions and an inherited invalid SSL_CERT_FILE;
 were updated to the approved behavior, not weakened safety rules. Rechecking the
 seven affected test modules with a valid certificate bundle for that process passed
 378 tests. Subsequent targeted schema/presentation checks and exact-head CI are
-recorded in the PR. No TLS verification was disabled or deployment configuration changed.
+recorded in the PR. The final schema/coordinator checks passed 26 tests. The first
+Linux CI run passed 1799 tests and caught seven old schema-version assertions in
+two integration tests; these now check version 2.1 and nonblank summaries. No TLS verification was disabled or deployment configuration changed.
 
 Provider-free Edge browser QA passed intake, all output tabs, comments refinement,
 refresh restoration, explicit corrections/stale wording, mobile overflow checks

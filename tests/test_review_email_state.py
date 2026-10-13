@@ -9,7 +9,8 @@ from cpf_fcv_reviewer.routes import run_assessment
 def test_new_intake_uses_coordinator_schema(completed_coordinator_review):
     app, _, assessment_id = completed_coordinator_review
     payload = app.extensions["session_store"].get(assessment_id).payload
-    assert payload["result"]["metadata"]["schema_version"] == "2.0.0"
+    assert payload["result"]["metadata"]["schema_version"] == "2.1.0"
+    assert all(f["summary"].strip() for f in payload["result"]["core_findings"])
     assert payload["peer_email"]["comments"]
 
 
