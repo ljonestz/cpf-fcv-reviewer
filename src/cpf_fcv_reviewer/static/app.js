@@ -887,12 +887,12 @@ function renderRevisionSummary(result, anchorIds) {
     card.className = "priority-area";
     card.append(
       text("h3", result.core_findings?.length ? area.heading : item.title),
-      renderNarrative(result.core_findings?.length
-        ? `${area.assessment} ${area.why_it_matters}`
-        : [
+      ...(result.core_findings?.length
+        ? [renderNarrative(`${area.assessment} ${area.why_it_matters}`, "priority-assessment")]
+        : [text("p", [
           ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
           ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
-        ].join(" "), "priority-assessment"),
+        ].join(" "), "priority-assessment")]),
       labelledParagraph(
         "Recommended response",
         result.core_findings?.length ? item.title.replace(/[.!?]+$/, "") + "." : area.recommended_action,
