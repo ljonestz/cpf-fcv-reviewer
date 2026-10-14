@@ -20,8 +20,10 @@ Latest acceptance: the fresh output is usable for a supervised coordinator pilot
 with four developed findings, locally qualified annex recommendations and 653-word
 default comments. A labelled, editable fallback now preserves validated
 recommendations when comments drafting fails, with no extra model call. All 1,813
-provider-free CI tests passed. Word pagination remains unverified, so PR 55 stays
-draft and nothing is deployed. See the
+provider-free CI tests passed at that checkpoint. The revised presentation now
+passes all 1,821 provider-free CI tests, and the two colleague-review Word copies
+have inspected page renders. PR 55 stays draft and nothing is deployed. See the
+[reviewed-brief update](docs/validation/2026-10-14-reviewed-brief-layout.md). See the
 [fresh output review](docs/validation/2026-10-13-final-output-review.md) and
 [fallback acceptance record](docs/validation/2026-10-13-comments-fallback-acceptance.md).
 
@@ -36,7 +38,9 @@ draft and nothing is deployed. See the
   as a supervised first draft, with readable four-question findings, practical
   conditional recommendations, refresh restoration and checked export structure.
   The approved comments fallback also passed a deliberate synthetic failure flow.
-  Native Word pagination acceptance remains outstanding; it has not been deployed.
+  The revised colleague-review Word copies have inspected pagination. The new
+  presentation passed provider-free browser acceptance; no fresh model run or
+  deployment occurred in this follow-up.
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Historical application release: `27ef3aa` (PR30), 2026-09-08. Render and `/health`

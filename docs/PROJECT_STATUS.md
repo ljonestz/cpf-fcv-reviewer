@@ -1,5 +1,22 @@
 # Project status
 
+## 2026-10-14 Reviewed brief presentation
+
+Application 9a049c0 reflects the owner's edited brief: priority explanations precede
+short summary responses, full recommendations remain in the detailed view, and
+traceability is grouped below draft comments. Both note downloads now include the
+current comments before their annex, preserving edited/fallback/stale state.
+Section-based references are preferred in the review/comments prompts.
+
+All 1,821 provider-free Linux CI tests passed after correcting a legacy rendering
+regression and a stale prompt-version expectation. Fresh Edge smoke verified
+summary/detail links, comments, annex order, refresh, mobile fit and downloads.
+The revised colleague Word copies were paginated and inspected: 8 summary pages
+and 11 detailed pages. Original files and non-body Word package parts were
+preserved. The saved assessment expired during this task; no model call occurred.
+PR 55 remains draft, with no merge or deployment. See the
+[reviewed-brief record](validation/2026-10-14-reviewed-brief-layout.md).
+
 ## 2026-10-13 Colleague feedback Word copies
 
 The owner accepted the generated narrative/layout and requested small changes for
