@@ -1,5 +1,19 @@
 # Project status
 
+## 2026-10-14 ITS handover brief
+
+Prepared a dated point-by-point handover in the style of the owner's Project
+Screener handover. It documents the four findings, stage-sensitive advice,
+prose-led summaries, comments and query simplification, section references,
+comments-before-annex exports and labelled fallback. It separates application
+changes from edited example wording and records the remaining hosted model,
+access/storage and coordinator acceptance work. Application code is unchanged;
+PR 55 remains draft and nothing was deployed. See the
+[handover source](handover/20261014_ITS-handover.md). The new local Word copy,
+20261014_CPF-ITS-handover.docx, follows the Project Screener brief style; all four
+rendered pages and its native heading/link structure were inspected. No model call
+was made, and the reference document was preserved.
+
 ## 2026-10-14 Reviewed brief presentation
 
 Application 9a049c0 reflects the owner's edited brief: priority explanations precede

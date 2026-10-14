@@ -1,5 +1,18 @@
 # Production readiness
 
+## ITS handover status - 2026-10-14
+
+Application 9a049c0 passed all 1,821 provider-free Linux CI tests. The revised
+summary, comments/annex order, mobile presentation, refresh and downloads passed
+a synthetic Edge check. The two revised colleague-review Word copies were
+rendered and visually inspected on every page, superseding the pagination gap
+recorded below for those copies. Their editorial changes are distinguished from
+new model output; the latest descriptive-reference prompts have not had a fresh
+paid run. PR 55 remains draft, with no merge or deployment. The candidate is ready
+for ITS integration and supervised acceptance testing, not an observed internal
+production release. See the [ITS handover](handover/20261014_ITS-handover.md) and
+[reviewed-brief validation](validation/2026-10-14-reviewed-brief-layout.md).
+
 ## Latest judgment - 2026-10-13
 
 The fresh b75719c Guinea output is suitable for a supervised coordinator pilot:
