@@ -11,7 +11,13 @@ from uuid import uuid4
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, stream_with_context
 
-from .contracts import DetailLevel, EvidenceItem, ReviewResult
+from .contracts import (
+    ContextFraming,
+    DetailLevel,
+    EvidenceItem,
+    PeerEmailDraft,
+    ReviewResult,
+)
 from .country_detection import (
     COUNTRY_DETECTION_MAX_ARCHIVE_MEMBERS,
     COUNTRY_DETECTION_MAX_CHARACTERS,
@@ -21,13 +27,20 @@ from .country_detection import (
     COUNTRY_DETECTION_MAX_UPLOAD_BYTES,
     detect_country,
 )
+from .email_draft import (
+    fallback_review_comments,
+    render_peer_email,
+    validate_email_refinement,
+)
 from .export_docx import (
     EvidenceCompletenessError,
     build_docx,
+    build_email_docx,
     validate_evidence_completeness,
 )
 from .extraction import extract_document, require_readable_primary
 from .orchestrator import safe_failure_code, safe_failure_data
+from .prior_comments import PriorCommentReport
 from .session_store import SessionExpired
 from .validators import validate_reproducibility_metadata
 
@@ -48,7 +61,7 @@ LEGACY_REVIEW_RESULT_ERROR = (
 EVENT_STREAM_KEEPALIVE_SECONDS = 5
 ASSISTANT_MESSAGE_MAX_LENGTH = 10_000
 ASSISTANT_HISTORY_MAX_MESSAGES = 20
-ASSISTANT_RETRY_MESSAGE = "The assistant could not complete that response. Please try again."
+ASSISTANT_RETRY_MESSAGE = "The request could not be completed. Please try again."
 ASSISTANT_PROCESS_OWNER = uuid4().hex
 _ASSISTANT_REQUEST_LOCK = RLock()
 
@@ -97,9 +110,17 @@ def _assistant_context(payload: dict):
             *result.priority_areas,
             *result.rra_driver_assessments,
             *result.fcv_strategy_assessments,
+            *result.core_findings,
         )
         for evidence_id in assessment.evidence_ids
     }
+    if result.proposed_context_framing is not None:
+        referenced_ids.update(result.proposed_context_framing.evidence_ids)
+    report = payload.get("prior_comment_report")
+    if report is not None:
+        report = PriorCommentReport.model_validate(report)
+        for check in report.checks:
+            referenced_ids.update((*check.prior_evidence_ids, *check.current_evidence_ids))
     if not referenced_ids <= set(evidence):
         raise ValueError("Traceable evidence is incomplete.")
 
@@ -120,8 +141,11 @@ def _assistant_context(payload: dict):
         evidence_id: evidence[evidence_id].model_dump(mode="json")
         for evidence_id in sorted(referenced_ids)
     }
+    review = result.model_dump(mode="json")
+    if report is not None:
+        review["prior_comment_report"] = report.model_dump(mode="json")
     return (
-        result.model_dump(mode="json"),
+        review,
         relevant_evidence,
         tuple(history),
     )
@@ -151,10 +175,26 @@ def assistant_response(assessment_id):
     if len(message) > ASSISTANT_MESSAGE_MAX_LENGTH:
         return jsonify(error="Assistant message is too long."), 400
 
+    mode = body.get("mode", "discuss")
+    if mode not in ("discuss", "tailor_email", "query"):
+        return jsonify(error="Unsupported follow-on request."), 400
+    email_text = body.get("email_text")
+    if email_text is not None and (not isinstance(email_text, str) or len(email_text) > 12_000):
+        return jsonify(error="Review comments must be text within 12,000 characters."), 400
+
     with _ASSISTANT_REQUEST_LOCK:
         try:
             state = store().get(assessment_id)
             review, evidence, history = _assistant_context(state.payload)
+            if mode in ("tailor_email", "query"):
+                review["current_email"] = (
+                    email_text if email_text is not None
+                    else _email_state(
+                        state.payload, ReviewResult.model_validate(state.payload["result"]),
+                    )["email_text"]
+                )
+                review["follow_on_task"] = mode
+
         except SessionExpired:
             return jsonify(error="Assessment expired."), 410
         except ValueError:
@@ -177,6 +217,9 @@ def assistant_response(assessment_id):
 
     def generate():
         chunks = []
+        action = "tailor_email" if mode == "tailor_email" else "answer"
+        pending_header = mode == "query"
+        header = ""
         try:
             for chunk in gateway.stream(
                 review=review,
@@ -186,18 +229,46 @@ def assistant_response(assessment_id):
             ):
                 if not isinstance(chunk, str) or not chunk:
                     continue
+                if pending_header:
+                    header += chunk
+                    if "\n" not in header:
+                        if len(header) > 128:
+                            raise ValueError("Invalid query action.")
+                        continue
+                    first_line, chunk = header.split("\n", 1)
+                    actions = {f"ACTION: {value}": value for value in (
+                        "answer", "tailor_email", "correct_review",
+                    )}
+                    action = actions.get(first_line.strip())
+                    if action is None:
+                        raise ValueError("Invalid query action.")
+                    pending_header = False
+                    yield f"event: action\ndata: {json.dumps({'action': action})}\n\n"
+                    if not chunk:
+                        continue
                 chunks.append(chunk)
                 yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
             response_text = "".join(chunks)
-            if not response_text:
+            if pending_header or not response_text.strip():
                 raise RuntimeError("Assistant returned an empty response.")
+            if action == "tailor_email":
+                result = ReviewResult.model_validate(state.payload["result"])
+                validate_email_refinement(
+                    result, response_text,
+                    evidence={key: EvidenceItem.model_validate(item)
+                              for key, item in evidence.items()},
+                )
+                store().update(assessment_id, email_overlay={
+                    "text": response_text, "base_run_id": result.metadata.run_id,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                })
             updated_history = [
                 *history,
                 {"role": "user", "content": message},
                 {"role": "assistant", "content": response_text},
             ][-ASSISTANT_HISTORY_MAX_MESSAGES:]
             store().update(assessment_id, assistant_history=updated_history)
-            yield "event: done\ndata: {}\n\n"
+            yield f"event: done\ndata: {json.dumps({'action': action})}\n\n"
         except SessionExpired:
             expired_payload = {
                 "error": "This review expired before the response was saved.",
@@ -287,6 +358,20 @@ def create_review():
     if cpf is None:
         return jsonify(error="A primary CPF/CEN is required."), 400
     country = request.form.get("country", "").strip()
+    framing_override = request.form.get("framing_override", "").strip()
+    if framing_override:
+        try:
+            ContextFraming(
+                category=framing_override, rationale="Coordinator-selected framing.",
+                confidence="low", origin="coordinator_override",
+            )
+        except ValueError:
+            return jsonify(error="Unsupported context framing."), 400
+    if len(request.files.getlist("previous_comments")) > 10:
+        return jsonify(error="Upload at most ten previous-comment documents."), 400
+    review_questions = request.form.get("review_questions", "").strip()
+    if len(review_questions) > 4000:
+        return jsonify(error="Review questions are too long."), 400
     if not country:
         return jsonify(error="Country is required."), 400
     if len(country) > 100 or any(
@@ -316,6 +401,10 @@ def create_review():
         "package_documents": uploaded_files("package_documents"),
         "context_documents": uploaded_files("context_documents"),
         "review_focus": request.form.get("review_focus", "").strip()[:4000],
+        "review_questions": review_questions,
+        "framing_override": framing_override,
+        "previous_comments": uploaded_files("previous_comments"),
+        "coordinator_review_version": 2,
         "corrections": [],
         "status": "created",
     }
@@ -400,6 +489,10 @@ def review_result(assessment_id):
             evidence_id: EvidenceItem.model_validate(item).model_dump(mode="json")
             for evidence_id, item in evidence_payload.items()
         }
+        validate_evidence_completeness(
+            validated_result,
+            {key: EvidenceItem.model_validate(item) for key, item in validated_evidence.items()},
+        )
     except ValueError:
         return jsonify(error="Traceable evidence is invalid."), 409
     if any(
@@ -417,13 +510,23 @@ def review_result(assessment_id):
 
     response_payload = validated_result.model_dump(mode="json")
     response_payload["evidence_by_id"] = validated_evidence
+    try:
+        email = _email_state(state.payload, validated_result)
+        report = state.payload.get("prior_comment_report")
+        if report is not None:
+            report = PriorCommentReport.model_validate(report).model_dump(mode="json")
+    except ValueError:
+        return jsonify(error="Review drafting state is invalid."), 409
+    response_payload.update(email)
+    response_payload["prior_comment_report"] = report
+    response_payload["prior_comment_error"] = state.payload.get("prior_comment_error")
     return jsonify(response_payload)
 
 
 @bp.get("/api/reviews/<assessment_id>/export.docx")
 def export_review(assessment_id):
     view = request.args.get("view", "detailed")
-    if view not in {"detailed", "summary"}:
+    if view not in {"detailed", "summary", "email"}:
         return jsonify(error="Unknown export view."), 400
     try:
         state = store().get(assessment_id)
@@ -454,12 +557,29 @@ def export_review(assessment_id):
     except ValueError:
         return jsonify(error="Traceable evidence is invalid."), 409
     try:
-        data = build_docx(
-            result,
-            evidence=evidence,
-            hydrated_referrals=(),
-            summary=view == "summary",
-        )
+        if view == "email":
+            email = _email_state(state.payload, result)
+            if not email["email_text"]:
+                return jsonify(error="An email draft is not available."), 409
+            data = build_email_docx(
+                email["email_text"], created_at=result.metadata.created_at,
+                stale=email["email_stale"], fallback=email["email_fallback"],
+            )
+        else:
+            email = _email_state(state.payload, result)
+            data = build_docx(
+                result, evidence=evidence, hydrated_referrals=(), summary=view == "summary",
+                review_comments=email["email_text"], comments_stale=email["email_stale"],
+                review_comment_headings=tuple(
+                    comment["heading"]
+                    for comment in (email["peer_email"] or {}).get("comments", ())
+                ),
+                comments_fallback=email["email_fallback"],
+                prior_comment_report=(
+                    PriorCommentReport.model_validate(state.payload["prior_comment_report"])
+                    if state.payload.get("prior_comment_report") is not None else None
+                ),
+            )
     except EvidenceCompletenessError:
         return jsonify(error="Traceable evidence is invalid."), 409
     except Exception:
@@ -470,9 +590,62 @@ def export_review(assessment_id):
         mimetype=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         as_attachment=True,
         download_name=(
+            "CPF-FCV-Draft-Review-Comments.docx" if view == "email" else
             "CPF-FCV-Five-Minute-Readout.docx" if view == "summary" else "CPF-FCV-Review.docx"
         ),
     )
+
+
+def _email_state(payload, result):
+    raw_draft = payload.get("peer_email")
+    draft = PeerEmailDraft.model_validate(raw_draft) if raw_draft is not None else None
+    overlay = payload.get("email_overlay")
+    fallback_text = (
+        fallback_review_comments(result)
+        if draft is None and payload.get("email_error") else ""
+    )
+    text = render_peer_email(draft) if draft is not None else fallback_text
+    stale = False
+    if overlay is not None:
+        if not isinstance(overlay, dict) or not isinstance(overlay.get("text"), str):
+            raise ValueError("Invalid email overlay.")
+        if len(overlay["text"]) > 12_000:
+            raise ValueError("Email overlay exceeds its budget.")
+        text = overlay["text"]
+        stale = overlay.get("base_run_id") != result.metadata.run_id
+    return {
+        "peer_email": draft.model_dump(mode="json") if draft is not None else None,
+        "email_text": text, "email_edited": overlay is not None,
+        "email_stale": stale, "email_error": payload.get("email_error"),
+        "email_fallback": bool(fallback_text) and text == fallback_text,
+    }
+
+
+@bp.put("/api/reviews/<assessment_id>/email")
+def save_email_wording(assessment_id):
+    try:
+        state = store().get(assessment_id)
+    except SessionExpired:
+        return jsonify(error="Assessment expired."), 410
+    if state.payload.get("status") != "complete":
+        return jsonify(error="Complete the review before editing the email."), 409
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {"text", "base_run_id"}:
+        return jsonify(error="Email wording request is invalid."), 400
+    text = body["text"]
+    if not isinstance(text, str) or not text.strip() or len(text) > 12_000:
+        return jsonify(error="Provide email wording within the allowed length."), 400
+    try:
+        result = ReviewResult.model_validate(state.payload.get("result"))
+    except ValueError:
+        return jsonify(error="Review result is invalid."), 409
+    if body["base_run_id"] != result.metadata.run_id:
+        return jsonify(error="The email belongs to a different assessment."), 409
+    store().update(assessment_id, email_overlay={
+        "text": text, "base_run_id": result.metadata.run_id,
+        "updated_at": datetime.now(UTC).isoformat(),
+    })
+    return jsonify(saved=True)
 
 
 @bp.post("/api/reviews/<assessment_id>/corrections")
@@ -487,6 +660,17 @@ def add_correction(assessment_id):
         return jsonify(error="Correction request is invalid."), 400
     if "affected_finding_id" in body:
         return jsonify(error="Legacy correction fields are not supported."), 400
+    framing_override = body.get("framing_override", "")
+    if not isinstance(framing_override, str):
+        return jsonify(error="Unsupported context framing."), 400
+    if framing_override:
+        try:
+            ContextFraming(
+                category=framing_override, rationale="Coordinator-selected framing.",
+                confidence="low", origin="coordinator_override",
+            )
+        except ValueError:
+            return jsonify(error="Unsupported context framing."), 400
 
     text = body.get("text", "")
     if not isinstance(text, str) or not text.strip():
@@ -530,6 +714,13 @@ def add_correction(assessment_id):
     )
     child_payload["parent_assessment_id"] = assessment_id
     child_payload["status"] = "created"
+    child_payload["coordinator_review_version"] = 2
+    if framing_override:
+        child_payload["framing_override"] = framing_override
+    for key in (
+        "feedback", "peer_email", "email_error", "prior_comment_report", "prior_comment_error",
+    ):
+        child_payload.pop(key, None)
     child_payload.pop("result", None)
     child_payload.pop("evidence_by_id", None)
     child_payload.pop("assistant_history", None)
@@ -589,6 +780,12 @@ def run_assessment(app, assessment_id):
                 result=result_context["result"].model_dump(mode="json"),
                 evidence_by_id=evidence_by_id,
                 status="complete",
+                **{
+                    key: result_context[key]
+                    for key in (
+                        "prior_comment_report", "prior_comment_error", "peer_email", "email_error"
+                    ) if key in result_context
+                },
             )
             for kind, data in terminal_events:
                 if kind == "run_complete":

@@ -270,23 +270,13 @@ def test_strategy_summary_uses_single_strategy_readout_prose_panel():
     assert completed.returncode == 0, completed.stderr
 
 
-def test_follow_on_assistant_restores_history_prefills_without_sending_and_streams_in_order():
+def test_query_restores_latest_answer_and_replaces_it_on_next_request():
     harness = textwrap.dedent(
         COMMON_HARNESS
         + r'''
-        const suggestions = [
-          node("button"), node("button"), node("button"), node("button"),
-        ];
-        const labels = [
-          "Draft a peer-review email", "Expand a priority measure",
-          "Clarify the assessment", "Summarise for management",
-        ];
-        suggestions.forEach((item, index) => {
-          item.dataset.assistantPrompt = labels[index] + " prompt";
-        });
-        const originalQuerySelectorAll = document.querySelectorAll;
-        document.querySelectorAll = (selector) => selector === "[data-assistant-suggestion]"
-          ? suggestions : originalQuerySelectorAll(selector);
+        const example = node("button");
+        example.dataset.assistantPrompt = "Expand a priority measure prompt";
+        document.querySelectorAll = selector => selector === "[data-assistant-prompt]" ? [example] : [];
         let postReader;
         let releaseSecondChunk;
         const secondChunk = new Promise((resolve) => { releaseSecondChunk = resolve; });
@@ -326,7 +316,7 @@ def test_follow_on_assistant_restores_history_prefills_without_sending_and_strea
           hooks.setAssessmentId("assessment-1");
           await hooks.loadAssistantHistory();
           const conversation = nodes["#assistant-conversation"];
-          if (!conversation.textContent.includes("Restored question") ||
+          if (conversation.textContent.includes("Restored question") ||
               !conversation.textContent.includes("Restored answer")) {
             throw Error("history was not restored");
           }
@@ -334,12 +324,6 @@ def test_follow_on_assistant_restores_history_prefills_without_sending_and_strea
           if (restoredOrder.indexOf("Restored question") > restoredOrder.indexOf("Restored answer")) {
             throw Error("restored messages are out of order");
           }
-
-          await suggestions[1].trigger("click");
-          if (nodes["#assistant-input"].value !== "Expand a priority measure prompt") {
-            throw Error("suggestion did not only prefill the editable input");
-          }
-          if (postCount !== 0) throw Error("suggestion triggered a model request");
 
           nodes["#assistant-input"].value = "Please expand this.";
           const sendPromise = nodes["#assistant-form"].trigger("submit");
@@ -394,12 +378,12 @@ def test_follow_on_assistant_shows_safe_inline_error_and_reenables_send():
           await nodes["#assistant-form"].trigger("submit");
           if (nodes["#assistant-send"].disabled) throw Error("Send stayed disabled after an error");
           const status = nodes["#assistant-status"];
-          if (status.hidden || !status.textContent.includes("could not complete")) {
+          if (status.hidden || !status.textContent.includes("could not be completed")) {
             throw Error("safe inline assistant error was not shown");
           }
           if (status.textContent.includes("<script>")) throw Error("provider error was rendered unsafely");
-          if (!nodes["#assistant-conversation"].textContent.includes("Please clarify this.")) {
-            throw Error("user message was not retained in the conversation");
+          if (nodes["#assistant-input"].value !== "Please clarify this.") {
+            throw Error("failed request was not retained in the input");
           }
         })().catch((error) => { console.error(error); process.exit(1); });
         '''

@@ -1,5 +1,64 @@
 # Production readiness
 
+## ITS handover status - 2026-10-14
+
+Application 9a049c0 passed all 1,821 provider-free Linux CI tests. The revised
+summary, comments/annex order, mobile presentation, refresh and downloads passed
+a synthetic Edge check. The two revised colleague-review Word copies were
+rendered and visually inspected on every page, superseding the pagination gap
+recorded below for those copies. Their editorial changes are distinguished from
+new model output; the latest descriptive-reference prompts have not had a fresh
+paid run. PR 55 remains draft, with no merge or deployment. The candidate is ready
+for ITS integration and supervised acceptance testing, not an observed internal
+production release. See the [ITS handover](handover/20261014_ITS-handover.md) and
+[reviewed-brief validation](validation/2026-10-14-reviewed-brief-layout.md).
+
+## Latest judgment - 2026-10-13
+
+The fresh b75719c Guinea output is suitable for a supervised coordinator pilot:
+all four findings are readable, missing-annex recommendations are conditional, and
+default comments completed at 653 words. No further structural redesign is needed.
+This supersedes the editorial rejection below, but is not full production sign-off.
+Application 988db71 adds the approved, labelled comments fallback assembled from
+validated recommendations without another model call. All 1,813 provider-free
+Linux CI tests and the synthetic failure/retention/export browser flow passed.
+This mitigates unavailable comments without claiming to explain the original failure.
+Word pagination remains unchecked after bounded renderer attempts produced no page
+images; current-country evidence is limited. PR 55 stays draft and nothing is deployed.
+See the [fresh output review](validation/2026-10-13-final-output-review.md) and
+[fallback acceptance record](validation/2026-10-13-comments-fallback-acceptance.md)
+for evidence and release gates. Historical run allowances below are superseded by
+the documented subsequent authorizations and cost accounting.
+
+## Output acceptance is pending - 2026-10-13
+
+The owner rejected the earlier rollout candidate after reviewing the real Guinea
+outputs. Passing functional tests did not establish editorial or analytical quality.
+The revision develops the four main questions, shortens and broadens the summary,
+improves paragraph rendering and simplifies comments/query presentation. It must
+still pass a fresh generated-output review before rollout. The earlier readiness
+assessment below is historical and superseded. The remaining authorized paid
+assessment has not been used for this revision.
+
+## Coordinator candidate ready for supervised rollout review — 2026-10-13
+
+PR #55 implements the four qualitative findings, stage-calibrated recommendations,
+separate prior-comment follow-through and unsigned **Draft review comments**. One
+prose query box handles questions, tailoring and explicit assessment updates, with
+no task dropdowns or feedback form. One approved public Guinea quality assessment
+completed with a bounded referral repair; its comments were condensed and restored.
+The second authorized paid run was unused. The missing favicon and cramped header
+were fixed and checked against the retained result without further model calls.
+
+Local suite: **1,796 passed, one Windows skip**; analytical-candidate Linux CI:
+**1,797 passed**, including Gunicorn; final presentation regressions: **80 passed**.
+The code is a reviewable rollout candidate, not an observed live release. Existing
+public/approved-input and supervised-expert-use limits remain. The pilot still uses
+volatile sessions; operational hosting should use the existing durable configuration.
+Native Word pagination of the real-run exports was not verified because Word could
+not start a conversion instance; document structure/text checks passed. See the
+[quality acceptance record](validation/2026-10-13-coordinator-quality-acceptance.md).
+
 ## Large-package coverage deployed - 2026-10-09
 
 Application **e1eabcf** (PR 52) is live and health/static verified. Document-reading

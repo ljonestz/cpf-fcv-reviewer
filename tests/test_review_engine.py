@@ -5,11 +5,11 @@ from dataclasses import FrozenInstanceError
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
-from anthropic import transform_schema
 import pytest
+from anthropic import transform_schema
 from pydantic import ValidationError
 
-from cpf_fcv_reviewer import model_gateway
+from cpf_fcv_reviewer import model_gateway, review_engine
 from cpf_fcv_reviewer.contracts import (
     AssessmentConfidence,
     AssessmentStatus,
@@ -24,17 +24,16 @@ from cpf_fcv_reviewer.contracts import (
     FCVStrategyAssessment,
     GapLocus,
     PriorityArea,
-    RRADriverAssessment,
     RecommendationScale,
     ReviewDraft,
     ReviewResult,
     RevisionSummaryItem,
+    RRADriverAssessment,
     RunMetadata,
     SensitivityCategory,
 )
 from cpf_fcv_reviewer.extraction import PackageCoverageUnavailable
 from cpf_fcv_reviewer.model_gateway import AnthropicModelGateway
-from cpf_fcv_reviewer import review_engine
 from cpf_fcv_reviewer.review_engine import ReviewEngine, ReviewSchemaUnavailable
 from cpf_fcv_reviewer.review_profiles import (
     DETAIL_PROFILES,
@@ -341,7 +340,10 @@ def test_profiles_are_exact():
             140,
         ),
         "roc_oc": StageProfile(
-            "Focus on discrete management decisions and implementability refinements.",
+            "Focus on discrete management decisions, earlier-comment follow-through and "
+            "feasible adjustments before finalisation. Route sensitive implementation "
+            "responsibilities to the meeting record or annual business planning where appropriate. "
+            "Do not routinely reopen program architecture.",
             (RecommendationScale.TARGETED_EDIT,),
             100,
         ),
@@ -890,6 +892,8 @@ def test_repair_sends_exact_json_safe_runtime_context_and_content_only_draft():
         "institutional_referral_ids",
         "limitations",
         "coverage_note",
+        "core_findings",
+        "proposed_context_framing",
     }
     assert "document_coverage" not in payload["draft"]
     assert "metadata" not in payload["draft"]
@@ -1790,7 +1794,7 @@ def test_anthropic_gateway_sends_json_and_validates_model_response(monkeypatch):
     assert call["model"] == "test-model"
     assert call["max_tokens"] == 64_000
     assert call["output_config"] == {"effort": "high"}
-    assert call["system"].startswith("Version: 3.1.0")
+    assert call["system"].startswith("Version: 4.1.2")
     assert call["output_format"] is ReviewDraft
     assert json.loads(call["messages"][0]["content"]) == {"accented": "Résilience"}
 

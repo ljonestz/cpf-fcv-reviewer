@@ -71,14 +71,14 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .dialog-close:hover { background: var(--blue-soft); }
 .result-header { display: flex; align-items: start; justify-content: space-between; gap: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--rule); }
 .result-header h2, .result-header .eyebrow { margin: 0; }
-.result-context { margin: 6px 0 0; color: var(--muted); text-transform: capitalize; }
+.result-header > div:first-child { flex: 1; min-width: 0; }
+.result-context { margin: 6px 0 0; color: var(--muted); }
+.result-header #actions { flex: 0 0 240px; flex-direction: column; align-items: stretch; }
+.result-header #actions button { width: 100%; }
 .assistant-card { max-width: 860px; }
 .assistant-card h2 { margin-top: 0; }
-.assistant-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
-.assistant-suggestion { background: var(--blue-soft); color: var(--navy); border: 1px solid #b8dfe8; padding: 8px 13px; font-size: .92rem; }
-.assistant-suggestion:hover:not(:disabled) { background: #d9f0f5; }
 .assistant-conversation { display: grid; gap: 10px; min-width: 0; margin: 20px 0; }
-.assistant-message { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; box-shadow: none; overflow-wrap: anywhere; }
+.assistant-message { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 8px; box-shadow: none; overflow-wrap: anywhere; white-space: pre-wrap; }
 .assistant-message-user { border-left: 4px solid var(--blue); background: #f7fbfc; }
 .assistant-message-assistant { border-left: 4px solid var(--cyan); background: white; }
 .assistant-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
@@ -86,8 +86,6 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .assistant-form textarea { min-height: 88px; margin-top: 0; }
 .assistant-form button { align-self: end; }
 .assistant-status { margin: 12px 0 0; color: #9b1c1c; }
-.correction-details { margin-top: 18px; }
-.correction-content h2 { margin-top: 0; font-size: 1.18rem; }
 #actions { display: flex; align-items: center; gap: 10px; margin: 0; }
 .result-tabs { display: flex; gap: 4px; margin: 22px 0 8px; border-bottom: 1px solid var(--rule); }
 .result-tabs [role="tab"] { border-radius: 6px 6px 0 0; background: transparent; color: var(--muted); }
@@ -100,7 +98,7 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
 .readout-panel h2 { margin: 0 0 10px; font-size: 1.18rem; line-height: 1.35; }
 .readout-panel-rra { border-left-color: var(--blue); }
 .readout-panel-strategy { border-left-color: var(--cyan); }
-.priority-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 18px 0 8px; }
+.priority-summary-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin: 18px 0 8px; }
 .readout-prose .narrative-chunk:last-child { margin-bottom: 0; }
 .narrative-chunk { max-width: 78ch; margin: 0 0 12px; }
 .narrative-chunk > strong { color: var(--navy); }
@@ -424,3 +422,21 @@ dialog::backdrop { background: rgba(0, 34, 68, .42); }
   background: #fbebeb;
   color: #7f3030;
 }
+
+/* Coordinator views use the existing native controls and reading width. */
+#peer-email-editor { width: 100%; min-height: 24rem; font: inherit; line-height: 1.55; resize: vertical; }
+.email-controls { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+.core-finding { padding: .75rem 0; border-bottom: 1px solid #d9e2e8; }
+.context-framing { display: block; margin-top: .4rem; }
+#framing-override { max-width: 100%; }
+#email-warning:not([hidden]) { padding: .75rem; background: #fff4db; border-radius: .3rem; }
+@media (max-width: 640px) { .email-controls button { width: 100%; } #peer-email-editor { min-height: 20rem; } }
+
+.llm-caveat { margin: 1rem 0; padding: 1rem; border-left: 3px solid #b77b22; background: #fff6df; color: #4b4030; }
+.llm-caveat p { margin: 0 0 .6rem; line-height: 1.5; }
+.llm-caveat p:last-child { margin-bottom: 0; }
+
+.assistant-conversation:empty { display: none; }
+.core-finding .narrative-chunk { max-width: 78ch; }
+
+.core-question-guide { max-width: 78ch; color: #526575; font-style: italic; }

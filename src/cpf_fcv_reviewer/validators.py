@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Literal, Mapping
+from typing import Literal
 
-from .country_detection import COUNTRY_ALIASES
 from .contracts import (
     AssessmentStatus,
+    CoreQuestion,
     DiagnosticMode,
     DiagnosticProvenance,
     DocumentRole,
@@ -18,9 +18,15 @@ from .contracts import (
     ReviewResult,
     RunMetadata,
 )
+from .country_detection import COUNTRY_ALIASES
 from .review_profiles import STAGE_PROFILES
 
 DETERMINATION_PATTERNS = (
+    r"\b(?:cpf|cen|program|draft|it)\s+(?:(?:fully|partly|partially)\s+)?"
+    r"(?:meets?|does\s+not\s+meet|fails?\s+to\s+meet)\s+(?:the\s+)?pc14\b",
+    r"\bpc14\s*:\s*(?:meets|partly\s+meets|does\s+not\s+meet|compliant)\b",
+    r"\bpc14(?:\s+commitment)?\s+(?:is|was|has\s+been)\s+"
+    r"(?:(?:not|partly|partially)\s+)?(?:met|satisfied)\b",
     r"\beligible for\b",
     r"\beligibility for\b",
     r"\bis triggered\b",
@@ -29,8 +35,8 @@ DETERMINATION_PATTERNS = (
     r"\bhas cleared\b",
     r"\bconstitutes clearance\b",
     r"\bis(?:\s+not|n't)?(?:\s+listed)?\s+on\s+(?:the\s+)?"
-    r"(?:world\s+bank(?:\s+group)?\s+)?(?:fcv\s+list|list\s+of\s+"
-    r"fcv(?:-affected)?\s+countries)\b",
+    r"(?:world\s+bank(?:\s+group)?\s+)?(?:(?:fcv|fcs)\s+list|list\s+of\s+"
+    r"(?:fcv|fcs)(?:-affected)?\s+countries)\b",
 )
 LIMITED_MODE_ALIGNMENT_PATTERN = re.compile(
     r"\b(?:rra(?:[-\s]+[a-z0-9]+){0,3}[-\s]+alignment|"
@@ -230,6 +236,7 @@ ValidationIssueCode = Literal[
     "unknown_assessment_evidence",
     "missing_rra_driver_assessment",
     "incomplete_strategy_assessment",
+    "incomplete_core_findings",
     "stage_overreach",
     "stage_length_overreach",
     "withheld_drafting",
@@ -294,6 +301,10 @@ def result_text(result: ReviewResult) -> str:
             )
         )
     parts.extend(assessment.assessment for assessment in result.fcv_strategy_assessments)
+    parts.extend(finding.assessment for finding in result.core_findings)
+    parts.extend(finding.summary for finding in result.core_findings)
+    if result.proposed_context_framing is not None:
+        parts.append(result.proposed_context_framing.rationale)
     for priority_area in result.priority_areas:
         parts.extend(
             (
@@ -472,6 +483,43 @@ def validate_review(
 ) -> tuple[ValidationIssue, ...]:
     issues: list[ValidationIssue] = []
     text = result_text(result)
+    if result.metadata.schema_version.startswith("2.") and tuple(
+        finding.question for finding in result.core_findings
+    ) != tuple(CoreQuestion):
+        issues.append(ValidationIssue(
+            "incomplete_core_findings", "Include each of the four core questions once, in order."
+        ))
+    priority_ids = {area.priority_area_id for area in result.priority_areas}
+    for finding in result.core_findings:
+        if result.metadata.schema_version == "2.1.0" and not finding.summary.strip():
+            issues.append(ValidationIssue(
+                "incomplete_core_findings",
+                "Each core finding requires a concise evidence-grounded summary.",
+            ))
+        _append_unknown_evidence_issue(
+            issues, finding.question.value, finding.evidence_ids, evidence_ids,
+            issue_code="unknown_assessment_evidence",
+        )
+        issues.extend(validate_current_context_support(
+            label=finding.question.value, heading=finding.question.value,
+            assertion_texts=(finding.assessment, finding.summary),
+            evidence_ids=finding.evidence_ids,
+            evidence=evidence or {},
+        ))
+        for prose in (finding.assessment, finding.summary):
+            for unit in re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", prose):
+                issues.extend(issue for issue in validate_stage_behavior(
+                    result.metadata.review_stage, unit,
+                ) if issue.severity != "advisory")
+        if set(finding.priority_area_ids) - priority_ids:
+            issues.append(ValidationIssue(
+                "unknown_priority_area", "A core finding links an unknown priority."
+            ))
+    if result.proposed_context_framing is not None:
+        _append_unknown_evidence_issue(
+            issues, "context_framing", result.proposed_context_framing.evidence_ids,
+            evidence_ids, issue_code="unknown_assessment_evidence",
+        )
     _append_diagnostic_date_issue(
         issues, result, attested_diagnostic_dates(_verbatim_document_texts(evidence))
     )
@@ -629,11 +677,14 @@ def validate_review(
             priority_area.evidence_ids,
             evidence_ids,
         )
-        _append_current_context_support_issue(
-            issues,
-            priority_area,
-            evidence or {},
-        )
+        issues.extend(validate_current_context_support(
+            label=priority_area.priority_area_id, heading=priority_area.heading,
+            assertion_texts=(
+                priority_area.assessment, priority_area.why_it_matters,
+                priority_area.recommended_action,
+            ),
+            evidence_ids=priority_area.evidence_ids, evidence=evidence or {},
+        ))
         _append_missing_registry_issue(
             issues,
             priority_area.priority_area_id,
@@ -736,28 +787,29 @@ def _append_incomplete_coverage_absence_issue(
     )
 
 
-def _append_current_context_support_issue(
-    issues: list[ValidationIssue],
-    priority_area,
+def has_current_context_assertion(text: str) -> bool:
+    return any(_asserted_topic_directions(text, topic) for topic in _current_fcv_topics(text))
+
+
+def validate_current_context_support(
+    *,
+    label: str,
+    heading: str,
+    assertion_texts: tuple[str, ...],
+    evidence_ids: tuple[str, ...],
     evidence: Mapping[str, EvidenceItem],
-) -> None:
+    evidence_pool: bool = False,
+) -> tuple[ValidationIssue, ...]:
     current_items = [
         evidence[evidence_id]
-        for evidence_id in priority_area.evidence_ids
+        for evidence_id in evidence_ids
         if evidence_id in evidence
         and evidence[evidence_id].evidence_type == "current_context"
     ]
-    assertion_texts = (
-        priority_area.assessment,
-        priority_area.why_it_matters,
-        priority_area.recommended_action,
-    )
     asserted_texts = tuple(
         text
         for text in assertion_texts
-        if any(
-            _asserted_topic_directions(text, topic) for topic in _current_fcv_topics(text)
-        )
+        if has_current_context_assertion(text)
     )
     asserted_topics = {
         topic
@@ -766,15 +818,9 @@ def _append_current_context_support_issue(
         if _asserted_topic_directions(text, topic)
     }
     if not current_items and not asserted_topics:
-        return
+        return ()
 
-    priority_text = " ".join(
-        (
-            priority_area.heading,
-            priority_area.assessment,
-            priority_area.why_it_matters,
-        )
-    )
+    priority_text = " ".join((heading, *assertion_texts[:2]))
     priority_topics = asserted_topics or _current_fcv_topics(priority_text)
     assertion_scope = " ".join(asserted_texts) or priority_text
     priority_countries = _mentioned_countries(assertion_scope)
@@ -810,7 +856,10 @@ def _append_current_context_support_issue(
         supported_topics = {
             topic
             for topic in shared_topics
-            if not (priority_directions := _priority_topic_directions(priority_area, topic))
+            if not (priority_directions := {
+                direction for text in assertion_texts
+                for direction in _asserted_topic_directions(text, topic)
+            })
             or (
                 (evidence_directions := _asserted_topic_directions(evidence_text, topic))
                 and not evidence_directions.isdisjoint(priority_directions)
@@ -822,17 +871,18 @@ def _append_current_context_support_issue(
         covered_topics.update(supported_topics)
     if (
         not current_items
-        or unsupported
+        or (unsupported and not evidence_pool)
         or not priority_topics.issubset(covered_topics)
     ):
-        issues.append(
+        return (
             ValidationIssue(
                 "missing_current_context_support",
-                f"{priority_area.priority_area_id} cites current-context evidence that "
+                f"{label} cites current-context evidence that "
                 f"does not substantively support its present-day FCV claim: {unsupported}.",
                 severity="advisory",
-            )
+            ),
         )
+    return ()
 
 
 def _current_fcv_topics(text: str) -> set[str]:
@@ -867,15 +917,6 @@ def _topic_directions(text: str, topic: str) -> set[str]:
 def _asserted_topic_directions(text: str, topic: str) -> set[str]:
     unmodal = MODAL_CLAUSE_PATTERN.sub("", text)
     return _topic_directions(unmodal, topic)
-
-
-def _priority_topic_directions(priority_area, topic: str) -> set[str]:
-    return {
-        direction
-        for text in (priority_area.assessment, priority_area.why_it_matters, priority_area.recommended_action)
-        for direction in _asserted_topic_directions(text, topic)
-    }
-
 
 
 def _has_countrywide_scope(text: str) -> bool:

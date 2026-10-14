@@ -61,7 +61,7 @@ def test_corrections_remain_outside_both_tabpanels():
     assert 'id="detailed-panel"' in html
     summary_end = html.index("</section>", html.index('id="summary-panel"'))
     detailed_end = html.index("</section>", html.index('id="detailed-panel"'))
-    corrections = html.index('id="corrections"')
+    corrections = html.index('id="assistant-card"')
 
     assert corrections > summary_end
     assert corrections > detailed_end
@@ -76,8 +76,8 @@ def test_follow_on_assistant_has_live_conversation_and_collapsed_correction_acti
     assert 'id="assistant-form"' in html
     assert 'id="assistant-input"' in html
     assert 'id="assistant-send" type="submit"' in html
-    assert '<details id="corrections"' in html
-    assert '<summary>Correct source information and rerun</summary>' in html
+    assert 'id="corrections"' not in html
+    assert 'id="assistant-mode"' not in html
     assert "assistant-message" in javascript
     assert ".assistant-conversation" in css
     assert ".assistant-form" in css

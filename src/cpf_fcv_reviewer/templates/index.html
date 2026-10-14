@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CPF FCV Reviewer</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -11,7 +12,7 @@
     <section class="hero" aria-labelledby="hero-title">
       <p class="eyebrow">FCV REVIEW PROTOTYPE</p>
       <h1 id="hero-title">Strengthen the FCV framing of a CPF or CEN</h1>
-      <p class="purpose">Get a concise, evidence-linked note with practical options to strengthen the draft.</p>
+      <p class="purpose">Prepare an evidence-linked note, five-minute summary and draft review comments.</p>
       <p class="advisory"><strong>Public version.</strong> Advisory first pass only. No clearance, policy determination, eligibility finding, or official classification. Use public or non-sensitive material only. A separate internal ITS version can support more detailed consideration of OPCS-specific policies and processes.</p>
       <ol class="steps" aria-label="How the review works">
         <li>Add the draft</li>
@@ -62,6 +63,7 @@
         <div class="field-grid field-grid-single">
           <label for="review-stage">Review stage <span aria-hidden="true">*</span>
             <select id="review-stage" name="review_stage" required>
+              <option value="" disabled selected>Select review stage</option>
               <option value="early_drafting">Early drafting / PCN</option>
               <option value="concept_review">Concept review</option>
               <option value="decision_review">Decision review</option>
@@ -76,6 +78,21 @@
           <summary>Additional guidance</summary>
           <label for="review-focus">What should the review pay particular attention to?</label>
           <textarea id="review-focus" name="review_focus" maxlength="4000" placeholder="Optional: identify a theme, section, or concern for the reviewer."></textarea>
+          <label for="review-questions">CMU review questions (optional)</label>
+          <textarea id="review-questions" name="review_questions" maxlength="4000" placeholder="Paste questions from the review invitation."></textarea>
+          <label for="previous-comments">Earlier FCV comments or decision notes (optional)</label>
+          <input id="previous-comments" name="previous_comments" type="file" accept=".pdf,.docx,.txt,.md" multiple>
+          <p class="helper">Checked after the independent review. Clearly labelled comments in the package are also recognised.</p>
+          <label for="framing-override">Country-context framing (optional)</label>
+          <select id="framing-override" name="framing_override">
+            <option value="">Use the tool's proposed framing</option>
+            <option value="in_crisis">In crisis</option>
+            <option value="in_transition">In transition</option>
+            <option value="conflict_affected">Conflict-affected</option>
+            <option value="at_risk">At risk / prevention</option>
+            <option value="undetermined">Mixed or undetermined</option>
+          </select>
+          <p class="helper">An analytical framing, separate from official list or Envelope status.</p>
         </details>
 
         <button id="submit-review" type="submit" disabled>Generate CPF review note</button>
@@ -143,43 +160,45 @@
             <button id="reset-review" class="button-secondary" type="button">Start a new review</button>
           </nav>
         </header>
+        <aside class="llm-caveat" role="note" aria-label="Important caveat about this output">
+          <p><strong>{{ advisory_note.split('. ', 1)[0] }}.</strong> {{ advisory_note.split('. ', 1)[1] }}</p>
+          <p>{{ recommendation_note }}</p>
+        </aside>
         <div class="result-tabs" role="tablist" aria-label="Review result views">
           <button id="result-tab-summary" role="tab" aria-selected="true" aria-controls="summary-panel" tabindex="0" data-result-view="summary" type="button">Five-minute readout</button>
           <button id="result-tab-detailed" role="tab" aria-selected="false" aria-controls="detailed-panel" tabindex="-1" data-result-view="detailed" type="button">Detailed analysis</button>
+          <button id="result-tab-email" role="tab" aria-selected="false" aria-controls="email-panel" tabindex="-1" data-result-view="email" type="button">Draft review comments</button>
         </div>
         <section id="summary-panel" role="tabpanel" aria-labelledby="result-tab-summary" tabindex="0"></section>
         <section id="detailed-panel" role="tabpanel" aria-labelledby="result-tab-detailed" tabindex="0" hidden></section>
+        <section id="email-panel" role="tabpanel" aria-labelledby="result-tab-email" tabindex="0" hidden>
+          <h2>Draft review comments</h2>
+          <p class="helper">Tailor this unsigned draft using the query box below, or edit the comments directly.</p>
+          <p id="email-warning" class="helper" role="status" hidden></p>
+          <label for="peer-email-editor">Review comments</label>
+          <textarea id="peer-email-editor" maxlength="12000" rows="18"></textarea>
+          <p class="helper">Edits are retained when you leave this field.</p>
+          <div class="email-controls">
+            <button id="copy-peer-email" type="button" class="button-secondary">Copy comments</button>
+          </div>
+          <p id="email-status" class="helper" role="status" aria-live="polite"></p>
+        </section>
+        <div id="evidence-annex"></div>
       </section>
 
       <section id="assistant-card" class="assistant-card" hidden aria-labelledby="assistant-heading">
-        <p class="eyebrow">FOLLOW-ON REVIEW ASSISTANT</p>
         <h2 id="assistant-heading">What would you like to do next?</h2>
-        <p class="helper">Use the completed review as a starting point for a practical follow-on request. Suggestions prefill the message and do not send it.</p>
-        <div id="assistant-suggestions" class="assistant-suggestions" aria-label="Suggested follow-on requests">
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Draft a peer-review email based on the review.">Draft a peer-review email</button>
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Expand a priority measure from the review.">Expand a priority measure</button>
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Clarify the assessment and its practical implications.">Clarify the assessment</button>
-          <button class="assistant-suggestion" type="button" data-assistant-suggestion data-assistant-prompt="Summarise the review for management.">Summarise for management</button>
-        </div>
-        <div id="assistant-conversation" role="log" aria-live="polite" class="assistant-conversation" aria-relevant="additions text"></div>
+        <p class="helper">Ask a question or request changes to the review comments.</p>
         <form id="assistant-form" class="assistant-form">
-          <label for="assistant-input">Follow-on request</label>
-          <textarea id="assistant-input" maxlength="10000" placeholder="Ask a follow-on question or edit a suggestion."></textarea>
+          <label for="assistant-input">Your request</label>
+          <textarea id="assistant-input" maxlength="10000" placeholder="For example: make the comments more diplomatic and focus on implementation."></textarea>
           <button id="assistant-send" type="submit">Send</button>
         </form>
+        <div id="assistant-conversation" role="log" aria-live="polite" class="assistant-conversation" aria-relevant="additions text"></div>
         <p id="assistant-status" class="assistant-status" role="status" aria-live="polite" hidden></p>
       </section>
 
-      <details id="corrections" hidden class="correction-details">
-        <summary>Correct source information and rerun</summary>
-        <div class="correction-content">
-          <h2>Add context or correct the review</h2>
-          <p>Corrections remain labelled as user-provided unless independently supported by evidence.</p>
-          <label for="correction-text">Correction or additional context</label>
-          <textarea id="correction-text"></textarea>
-          <button id="submit-correction" type="button">Add correction and rerun</button>
-        </div>
-      </details>
+
 
     </section>
   </main>

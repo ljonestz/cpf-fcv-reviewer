@@ -22,15 +22,21 @@ const resultTitle = document.querySelector("#result-title") || document.createEl
 const resultContext = document.querySelector("#result-context") || document.createElement("p");
 const summaryPanel = document.querySelector("#summary-panel") || results;
 const detailedPanel = document.querySelector("#detailed-panel") || results;
+const evidenceAnnex = document.querySelector("#evidence-annex");
+const emailPanel = document.querySelector("#email-panel") || document.createElement("section");
+const emailEditor = document.querySelector("#peer-email-editor") || document.createElement("textarea");
+const emailStatus = document.querySelector("#email-status") || document.createElement("p");
+const emailWarning = document.querySelector("#email-warning") || document.createElement("p");
+let currentReviewResult = null;
+let displayedEmailText = "";
+let emailSavePromise = Promise.resolve(true);
 const resultTabs = Array.from(document.querySelectorAll?.('[role="tab"][data-result-view]') || []);
-const corrections = document.querySelector("#corrections");
 const assistantCard = document.querySelector("#assistant-card") || document.createElement("section");
 const assistantConversation = document.querySelector("#assistant-conversation") || document.createElement("div");
 const assistantForm = document.querySelector("#assistant-form") || document.createElement("form");
 const assistantInput = document.querySelector("#assistant-input") || document.createElement("textarea");
 const assistantSend = document.querySelector("#assistant-send") || document.createElement("button");
 const assistantStatus = document.querySelector("#assistant-status") || document.createElement("p");
-const assistantSuggestions = Array.from(document.querySelectorAll?.("[data-assistant-suggestion]") || []);
 const actions = document.querySelector("#actions");
 const returnToIntake = document.querySelector("#return-to-intake");
 const researchRecovery = document.querySelector("#research-recovery") || document.createElement("section");
@@ -40,6 +46,7 @@ const retryResearchButton = document.querySelector("#retry-research") || documen
 const primaryFileInput = document.querySelector("#cpf");
 const packageFileInput = document.querySelector("#package-documents");
 const contextFileInput = document.querySelector("#context-documents");
+const previousCommentsInput = document.querySelector("#previous-comments");
 const uploadSummary = document.querySelector("#upload-summary");
 const countryInput = document.querySelector("#country");
 const countryDetection = document.querySelector("#country-detection");
@@ -47,7 +54,6 @@ const submitButton = document.querySelector("#submit-review");
 const processDialog = document.querySelector("#process-dialog");
 const openProcessDialog = document.querySelector("#open-process-dialog");
 const closeProcessDialog = document.querySelector("#close-process-dialog");
-const submitCorrection = document.querySelector("#submit-correction");
 const resetReviewButton = document.querySelector("#reset-review");
 const evidenceStatus = document.querySelector("#evidence-status") || document.createElement("aside");
 const evidenceStatusLabel = document.querySelector("#evidence-status-label") || document.createElement("strong");
@@ -325,7 +331,6 @@ function showProgress() {
   progressTitle.focus({preventScroll: true});
   results.hidden = true;
   assistantCard.hidden = true;
-  corrections.hidden = true;
   actions.hidden = true;
   returnToIntake.hidden = true;
   researchRecovery.hidden = true;
@@ -344,12 +349,10 @@ function showResults() {
   progress.hidden = true;
   results.hidden = false;
   assistantCard.hidden = false;
-  corrections.hidden = false;
   actions.hidden = false;
   returnToIntake.hidden = true;
   researchRecovery.hidden = true;
   retryResearchButton.hidden = true;
-  submitCorrection.disabled = false;
   assistantSend.disabled = assistantStreaming;
 }
 
@@ -408,9 +411,13 @@ function updateUploadSummary() {
     ...selectedFiles(primaryFileInput),
     ...packageFiles,
     ...selectedFiles(contextFileInput),
+    ...selectedFiles(previousCommentsInput),
   ];
   const totalBytes = allFiles.reduce((sum, file) => sum + (file.size || 0), 0);
   const problems = [];
+  if (selectedFiles(previousCommentsInput).length > 10) {
+    problems.push("Upload at most ten previous-comment documents.");
+  }
   if (packageFiles.length > PACKAGE_MAX_DOCUMENTS) {
     problems.push(`Remove ${packageFiles.length - PACKAGE_MAX_DOCUMENTS} package documents: the limit is ${PACKAGE_MAX_DOCUMENTS}.`);
   }
@@ -528,7 +535,7 @@ async function detectCountry() {
 }
 
 primaryFileInput.addEventListener("change", detectCountry);
-for (const input of [primaryFileInput, packageFileInput, contextFileInput]) {
+for (const input of [primaryFileInput, packageFileInput, contextFileInput, previousCommentsInput]) {
   input?.addEventListener("change", updateUploadSummary);
 }
 
@@ -555,7 +562,7 @@ function labelledParagraph(label, value, className) {
   paragraph.className = className;
   const lead = document.createElement("strong");
   lead.textContent = `${label}. `;
-  paragraph.append(lead, document.createTextNode(value));
+  paragraph.append(lead, document.createTextNode(plainProse(value)));
   return paragraph;
 }
 
@@ -579,18 +586,37 @@ function splitNarrativeIntoChunks(value) {
   return chunks;
 }
 
+function plainProse(value) {
+  return String(value || "").replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "");
+}
+
+function appendInlineProse(node, value) {
+  // Model prose always becomes text nodes, never executable HTML.
+  for (const part of String(value).split(/(\*\*[^*]+\*\*)/g)) {
+    node.append(part.startsWith("**") && part.endsWith("**")
+      ? text("strong", part.slice(2, -2)) : document.createTextNode(part));
+  }
+}
+
 function renderNarrative(value, className = "") {
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
-  for (const sentences of splitNarrativeIntoChunks(value)) {
-    const paragraph = document.createElement("p");
-    paragraph.className = className ? "narrative-chunk " + className : "narrative-chunk";
-    const activeSentence = text("strong", sentences[0]);
-    const remainingSentences = sentences.slice(1).join(" ");
-    paragraph.append(
-      activeSentence,
-      document.createTextNode(remainingSentences ? " " + remainingSentences : ""),
-    );
-    fragment.append(paragraph);
+  for (const block of String(value || "").trim().split(/\n\s*\n/).filter(Boolean)) {
+    const lines = block.split(/\n/);
+    if (lines.every(line => /^\s*(?:[-*]|\d+[.)])\s+/.test(line))) {
+      const container = document.createElement(/^\s*\d/.test(lines[0]) ? "ol" : "ul");
+      for (const line of lines) {
+        const item = document.createElement("li");
+        appendInlineProse(item, line.replace(/^\s*(?:[-*]|\d+[.)])\s+/, ""));
+        container.append(item);
+      }
+      fragment.append(container);
+    } else {
+      const paragraph = document.createElement("p");
+      paragraph.className = className ? "narrative-chunk " + className : "narrative-chunk";
+      appendInlineProse(paragraph, block.replace(/^#{1,6}\s+/, ""));
+      fragment.append(paragraph);
+    }
   }
   return fragment;
 }
@@ -612,12 +638,12 @@ function renderReadoutPanel(title, value, className) {
 
 function locatorLabel(locator) {
   if (!locator) return "";
-  return [
+  return [...new Set([
     locator.document_title,
     locator.page ? `page ${locator.page}` : "",
     locator.heading || "",
     locator.element || "",
-  ].filter(Boolean).join(" | ");
+  ].filter(Boolean))].join(" | ");
 }
 
 function evidenceTypeLabel(evidenceType) {
@@ -664,7 +690,7 @@ function renderTraceability(result) {
   return renderTraceabilityForEvidence(result, arguments[1]);
 }
 
-function renderTraceabilityForEvidence(result, evidenceIds) {
+function renderTraceabilityForEvidence(result, evidenceIds, collapsible = true) {
   const resolvedItems = (evidenceIds || [])
     .map((evidenceId) => result.evidence_by_id?.[evidenceId])
     .filter(Boolean);
@@ -675,8 +701,10 @@ function renderTraceabilityForEvidence(result, evidenceIds) {
   const traceabilityLabel = text("summary", "Traceability");
   summary.textContent = traceabilityLabel.textContent;
   summary.setAttribute?.("aria-label", "Traceability - Evidence and document locations");
-  const details = renderDisclosure("Traceability", "evidence-group traceability-panel");
-  details.replaceChildren(summary, text("p", "Evidence and document locations", "traceability-caption"));
+  const details = collapsible
+    ? renderDisclosure("Traceability", "evidence-group traceability-panel")
+    : document.createElement("section");
+  if (collapsible) details.replaceChildren(summary, text("p", "Evidence and document locations", "traceability-caption"));
   const hasCurrentContext = resolvedItems.some((item) => item.evidence_type === "current_context");
   if (hasCurrentContext) {
     const banner = text("p", "AI-generated from trusted sources — verify before use");
@@ -844,7 +872,7 @@ function renderRevisionSummary(result, anchorIds) {
   summary.className = "priority-summary-grid";
   const summaryItems = result.revision_summary
     .filter((item) => result.priority_areas.some((area) => area.priority_area_id === item.priority_area_id))
-    .slice(0, 3);
+    .slice(0, result.core_findings?.length ? undefined : 3);
   if (!summaryItems.length) {
     summary.append(text("p", "No revision summary was returned for this review.", "empty-state"));
     return summary;
@@ -858,14 +886,16 @@ function renderRevisionSummary(result, anchorIds) {
     const card = document.createElement("section");
     card.className = "priority-area";
     card.append(
-      text("h3", item.title),
-      text("p", [
-        ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
-        ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
-      ].join(" "), "priority-assessment"),
+      text("h3", result.core_findings?.length ? area.heading : item.title),
+      ...(result.core_findings?.length
+        ? [renderNarrative(`${area.assessment} ${area.why_it_matters}`, "priority-assessment")]
+        : [text("p", [
+          ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
+          ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
+        ].join(" "), "priority-assessment")]),
       labelledParagraph(
         "Recommended response",
-        area?.recommended_action || "",
+        result.core_findings?.length ? item.title.replace(/[.!?]+$/, "") + "." : area.recommended_action,
         "recommended-action",
       ),
     );
@@ -898,11 +928,22 @@ function renderPriorityAreas(result, anchorIds) {
       renderNarrative(area.assessment, "priority-assessment"),
       renderNarrative(area.why_it_matters, "priority-why-it-matters"),
       labelledNarrative("Recommended action", area.recommended_action, "recommended-action"),
-      labelledParagraph("Target", locatorLabel(area.target_locator), "target-location"),
+      ...(result.core_findings?.length ? [] : [labelledParagraph("Target", locatorLabel(area.target_locator), "target-location")]),
     );
     if (area.comment_reference) {
       section.append(
         labelledParagraph("Comment addressed", area.comment_reference, "comment-reference"),
+      );
+    }
+    if (result.core_findings?.length) {
+      const destinations = {
+        cpf_text: "CPF text or annex",
+        results_framework: "Results framework",
+        meeting_record: "Meeting minutes or decision note",
+        annual_business_planning: "Annual business planning or implementation",
+      };
+      section.append(
+        labelledParagraph("Where to act", destinations[area.destination] || "CPF text or annex", "target-location"),
       );
     }
     fragment.append(section);
@@ -971,7 +1012,9 @@ function renderFiveMinuteReadout(result) {
       result.strategy_readout,
       "readout-panel-strategy",
     ),
+    ...(result.core_findings?.length ? [renderCoreFindings(result, true)] : []),
     text("h2", "Priority measures to strengthen the CPF / CEN"),
+    text("p", "See the detailed readout for full recommendations, qualifications and suggested wording.", "helper"),
     renderRevisionSummary(result, anchorIds),
   );
   return fragment;
@@ -997,6 +1040,19 @@ function renderDetailedAnalysis(result) {
 function renderDetailedAnalysisView(result, includeDisclosurePanels = true) {
   const anchorIds = priorityAreaAnchorIds(result);
   const fragment = document.createDocumentFragment?.() || document.createElement("div");
+  if (result.core_findings?.length) {
+    fragment.append(
+      text("h2", "Overall assessment"),
+      renderNarrative(result.overall_read, "overall-read"),
+      renderReadoutPanel("RRA and current-context connection", result.alignment_readout, "readout-panel-rra"),
+      renderReadoutPanel("FCV Strategy connection", result.strategy_readout, "readout-panel-strategy"),
+      renderCoreFindings(result),
+      renderPriorityAreas(result, anchorIds),
+      renderPriorComments(result),
+    );
+    if (includeDisclosurePanels) fragment.append(renderBasisAndLimitations(result));
+    return fragment;
+  }
   fragment.append(
     text("h2", "Overall assessment"),
     renderNarrative(result.overall_read, "overall-read"),
@@ -1026,7 +1082,8 @@ function inferDocumentType(primaryDocumentName) {
 }
 
 function setResultView(view) {
-  const panels = {summary: summaryPanel, detailed: detailedPanel};
+  if (view === "email") setTimeout(resizeEmailEditor, 0);
+  const panels = {summary: summaryPanel, detailed: detailedPanel, email: emailPanel};
   for (const tab of resultTabs) {
     const isSelected = tab.dataset.resultView === view;
     const panel = panels[tab.dataset.resultView];
@@ -1077,6 +1134,7 @@ function renderEvidenceStatus(result) {
 }
 
 function renderResult(result) {
+  currentReviewResult = result;
   if (summaryPanel === detailedPanel) {
     results.replaceChildren(renderFiveMinuteReadout(result), renderDetailedAnalysisView(result, true));
   } else {
@@ -1089,6 +1147,19 @@ function renderResult(result) {
   const stage = reviewStage ? " - " + reviewStage.replaceAll("_", " ") : "";
   resultTitle.textContent = [country, documentType, "FCV review"].filter(Boolean).join(" ");
   resultContext.textContent = `${result.document_coverage.primary_document}${stage}`;
+  const framing = result.proposed_context_framing;
+  if (framing) {
+    const labels = {
+      in_crisis: "In crisis", in_transition: "In transition",
+      conflict_affected: "Conflict-affected", at_risk: "At risk / prevention",
+      undetermined: "Mixed or undetermined",
+    };
+    resultContext.append(text("span",
+      ` ${framing.origin === "coordinator_override" ? "Coordinator FCV Strategy category used for the framing" : "Proposed FCV Strategy category used for the framing"}: ${labels[framing.category] || "Undetermined"}. ${framing.rationale}`,
+      "context-framing"));
+  }
+  renderEmailState(result);
+  evidenceAnnex?.replaceChildren(renderEvidenceAnnex(result));
   setResultView("summary");
   showResults();
   resultTitle.focus({preventScroll: true});
@@ -1099,7 +1170,7 @@ function renderAssistantMessage(role, content) {
   const message = document.createElement("article");
   message.className = `assistant-message assistant-message-${role}`;
   message.setAttribute("data-assistant-role", role);
-  message.textContent = `${role === "user" ? "You" : "Assistant"}: ${content}`;
+  message.textContent = `${role === "user" ? "Request" : "Response"}: ${content}`;
   assistantConversation.append(message);
   return message;
 }
@@ -1109,24 +1180,13 @@ function setAssistantStatus(message) {
   assistantStatus.hidden = !message;
 }
 
-function prefillAssistant(event) {
-  const suggestion = event.currentTarget || event.target;
-  const prompt = suggestion?.dataset?.assistantPrompt
-    || suggestion?.getAttribute?.("data-assistant-prompt")
-    || "";
-  assistantInput.value = prompt;
-  assistantInput.focus();
-}
-
 function renderAssistantHistory(history) {
   assistantConversation.replaceChildren();
-  for (const item of history) {
-    if (
-      item && (item.role === "user" || item.role === "assistant")
-      && typeof item.content === "string" && item.content.trim()
-    ) {
-      renderAssistantMessage(item.role, item.content);
-    }
+  const item = [...history].reverse().find(item => item?.role === "assistant" && item.content?.trim());
+  if (item && plainProse(item.content).trim() !== plainProse(emailEditor.value).trim()
+      && !/^Dear colleagues[,\s]/i.test(item.content.trim())) {
+    const answer = renderAssistantMessage("assistant", "");
+    answer.replaceChildren(renderNarrative(item.content));
   }
 }
 
@@ -1153,7 +1213,7 @@ async function loadAssistantHistory() {
     setAssistantStatus("");
   } catch (_error) {
     if (requestedAssessmentId === assessmentId && historyEpoch === assistantHistoryEpoch) {
-      setAssistantStatus("The follow-on assistant is unavailable right now. Try again in a moment.");
+      setAssistantStatus("Previous responses are unavailable right now. Try again in a moment.");
     }
   } finally {
     if (
@@ -1208,22 +1268,34 @@ async function sendAssistantMessage(event) {
     || assistantStreaming || assistantSend.disabled
   ) return;
 
+  const requestEmailText = emailEditor.value;
+  emailEditor.readOnly = true;
+
   const requestEpoch = ++assistantRequestEpoch;
   assistantHistoryEpoch += 1;
   assistantStreaming = true;
   assistantSend.disabled = true;
   assistantConversation.setAttribute("aria-busy", "true");
   setAssistantStatus("");
-  renderAssistantMessage("user", message);
+  assistantConversation.replaceChildren();
   const assistantMessage = renderAssistantMessage("assistant", "");
   let responseText = "";
   let completed = false;
   let failed = false;
+  let responseAction = "answer";
   try {
+    await emailSavePromise;
+    if (emailEditor.value.trim() && emailEditor.value !== displayedEmailText && !(await retainEmailWording())) {
+      failed = true;
+      assistantMessage.remove();
+      setAssistantStatus("Your edited comments could not be retained. Try again before sending this request.");
+      return;
+    }
+    if (requestAssessmentId !== assessmentId || requestEpoch !== assistantRequestEpoch) return;
     const response = await fetch(`/api/reviews/${requestAssessmentId}/assistant`, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({message}),
+      body: JSON.stringify({message, mode: "query", email_text: requestEmailText}),
     });
     if (!response.ok) throw new Error("Assistant request failed.");
     await consumeAssistantStream(response, (eventName, data) => {
@@ -1232,13 +1304,16 @@ async function sendAssistantMessage(event) {
         || requestEpoch !== assistantRequestEpoch
         || failed
       ) return;
-      if (eventName === "chunk" && typeof data?.text === "string") {
+      if (eventName === "action" && typeof data?.action === "string") {
+        responseAction = data.action;
+        assistantMessage.hidden = responseAction !== "answer";
+      } else if (eventName === "chunk" && typeof data?.text === "string") {
         responseText += data.text;
-        assistantMessage.textContent = `Assistant: ${responseText}`;
+        assistantMessage.textContent = `Response: ${responseText}`;
       } else if (eventName === "error" || eventName === "parse_error") {
         failed = true;
         assistantMessage.remove();
-        setAssistantStatus("The assistant could not complete that response. Please try again.");
+        setAssistantStatus("The request could not be completed. Please try again.");
       } else if (eventName === "done") {
         completed = true;
       }
@@ -1246,6 +1321,28 @@ async function sendAssistantMessage(event) {
     if (!completed || !responseText) throw new Error("Assistant response incomplete.");
     if (requestAssessmentId === assessmentId && requestEpoch === assistantRequestEpoch) {
       assistantInput.value = "";
+      if (responseAction === "answer") assistantMessage.replaceChildren(renderNarrative(responseText));
+      else assistantConversation.replaceChildren();
+      if (responseAction === "tailor_email") {
+        emailEditor.value = plainProse(responseText);
+        resizeEmailEditor();
+        displayedEmailText = emailEditor.value;
+        currentReviewResult.email_text = emailEditor.value;
+        currentReviewResult.email_edited = true;
+        currentReviewResult.email_stale = false;
+        emailWarning.hidden = true;
+        emailStatus.textContent = "Draft review comments updated and retained for this session.";
+        setResultView("email");
+      } else if (responseAction === "correct_review") {
+        if (message.length > 2000) {
+          assistantInput.value = message;
+          setAssistantStatus("Keep an assessment correction within 2,000 characters.");
+        } else {
+          assistantInput.value = message;
+          emailEditor.readOnly = false;
+          await updateAssessment(message);
+        }
+      }
     }
   } catch (_error) {
     if (
@@ -1254,20 +1351,18 @@ async function sendAssistantMessage(event) {
       && requestEpoch === assistantRequestEpoch
     ) {
       assistantMessage.remove();
-      setAssistantStatus("The assistant could not complete that response. Please try again.");
+      setAssistantStatus("The request could not be completed. Please try again.");
     }
   } finally {
     if (requestAssessmentId === assessmentId && requestEpoch === assistantRequestEpoch) {
       assistantStreaming = false;
+      emailEditor.readOnly = false;
       assistantSend.disabled = false;
       assistantConversation.setAttribute("aria-busy", "false");
     }
   }
 }
 
-for (const suggestion of assistantSuggestions) {
-  suggestion.addEventListener("click", prefillAssistant);
-}
 assistantForm.addEventListener("submit", sendAssistantMessage);
 
 function isActiveSource(source) {
@@ -1480,22 +1575,20 @@ async function retryResearch() {
 
 retryResearchButton.addEventListener("click", retryResearch);
 
-submitCorrection.addEventListener("click", async () => {
-  const correction = document.querySelector("#correction-text").value.trim();
-  if (!correction || !assessmentId || resetPending || submitCorrection.disabled) return;
+async function updateAssessment(correction) {
+  const requestedId = assessmentId;
   const operation = ++operationEpoch;
-  submitCorrection.disabled = true;
+  assistantSend.disabled = true;
   try {
-    const response = await fetch(`/api/reviews/${assessmentId}/corrections`, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
+    await emailSavePromise;
+    if (emailEditor.value !== displayedEmailText && !(await retainEmailWording())) return;
+    if (!isCurrentOperation(operation) || requestedId !== assessmentId) return;
+    const response = await fetch(`/api/reviews/${requestedId}/corrections`, {
+      method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({text: correction}),
     });
     if (!isCurrentOperation(operation)) return;
-    if (!response.ok) {
-      showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
-      return;
-    }
+    if (!response.ok) throw new Error("Assessment update unavailable.");
     const child = await response.json();
     if (!isCurrentOperation(operation)) return;
     assistantRequestEpoch += 1;
@@ -1503,18 +1596,20 @@ submitCorrection.addEventListener("click", async () => {
     assistantStreaming = false;
     assistantSend.disabled = true;
     assistantConversation.setAttribute("aria-busy", "false");
+    assistantInput.value = "";
     assessmentId = child.assessment_id;
     sessionStorage.setItem("cpf_fcv_assessment_id", assessmentId);
     showProgress();
-    progressMessage.textContent = "User-provided correction saved; rerun requested.";
+    progressMessage.textContent = "Context or correction saved; updating the assessment.";
     watchEvents(child.event_url, child.result_url, operation);
   } catch (_error) {
-    if (!isCurrentOperation(operation)) return;
-    showRecoverableFailure("The correction could not be applied. Return to intake and try again.");
+    if (isCurrentOperation(operation)) {
+      setAssistantStatus("The assessment could not be updated. Your request remains available.");
+    }
   } finally {
-    if (!corrections.hidden) submitCorrection.disabled = false;
+    if (requestedId === assessmentId) assistantSend.disabled = false;
   }
-});
+}
 
 function clearDownloadError() {
   if (!downloadError) return;
@@ -1551,7 +1646,10 @@ async function downloadDocx(summary = false) {
   if (!assessmentId) return;
   clearDownloadError();
   try {
-    const response = await fetch(`/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}`);
+    const email = summary === "email";
+    const response = await fetch(email
+      ? `/api/reviews/${assessmentId}/export.docx?view=email`
+      : `/api/reviews/${assessmentId}/export.docx${summary ? "?view=summary" : ""}`);
     if (!response.ok || response.status === 202) {
       showDownloadError(downloadErrorMessage(response.status));
       return;
@@ -1560,7 +1658,8 @@ async function downloadDocx(summary = false) {
     const objectUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement("a");
     downloadLink.href = objectUrl;
-    downloadLink.download = summary ? "CPF-FCV-Five-Minute-Readout.docx" : "CPF-FCV-Review.docx";
+    downloadLink.download = email ? "CPF-FCV-Peer-Review-Email.docx"
+      : summary ? "CPF-FCV-Five-Minute-Readout.docx" : "CPF-FCV-Review.docx";
     document.body.append(downloadLink);
     try {
       downloadLink.click();
@@ -1586,6 +1685,11 @@ async function resetReview() {
   sessionStorage.removeItem("cpf_fcv_assessment_id");
   sessionStorage.removeItem("cpf_fcv_country");
   assessmentId = "";
+  currentReviewResult = null;
+  displayedEmailText = "";
+  emailEditor.value = "";
+  emailEditor.readOnly = false;
+  emailStatus.textContent = "";
   if (summaryPanel === detailedPanel) {
     results.replaceChildren();
   } else {
@@ -1615,10 +1719,7 @@ async function resetReview() {
   detectionPending = false;
   countryRequiresConfirmation = false;
   updateSubmitState();
-  document.querySelector("#correction-text").value = "";
-  corrections.hidden = true;
   actions.hidden = true;
-  submitCorrection.disabled = true;
   showLanding();
   let purgeConfirmed = !assessmentToPurge;
   try {
@@ -1657,10 +1758,159 @@ if (window.__CPF_FCV_REVIEWER_TEST__) {
     renderFiveMinuteReadout,
     renderDetailedAnalysis,
     splitNarrativeIntoChunks,
+    renderNarrative,
     loadAssistantHistory,
-    prefillAssistant,
     sendAssistantMessage,
+    updateAssessment,
     renderAssistantMessage,
     restoreSavedReview,
   };
 }
+
+
+function renderCoreFindings(result, summary = false) {
+  const section = document.createElement("section");
+  section.className = "core-findings";
+  section.append(text("h2", "Assessment against the four review questions"));
+  const labels = {
+    drivers_priorities: "Drivers and priorities",
+    actions_commitment: "Critical actions and commitment",
+    program_implications: "Program implications",
+    if_then_calibration: "Adapting to changing conditions",
+  };
+  const explanations = {
+    "drivers_priorities": "Does the CPF show how the main FCV drivers and sources of resilience shaped its priorities?",
+    "actions_commitment": "Which actions matter most, and what evidence supports the authorities' commitment and capacity to deliver them?",
+    "program_implications": "What does this mean for the program's priorities, sequencing, geographic focus and delivery arrangements?",
+    "if_then_calibration": "This section assesses whether the CPF explains how engagement would change if FCV conditions improve or deteriorate, and suggests relevant scenarios where that link is missing."
+};
+  for (const finding of result.core_findings || []) {
+    const item = document.createElement("section");
+    item.className = "core-finding";
+    item.append(text("h3", labels[finding.question] || finding.question),
+      text("p", explanations[finding.question] || "", "core-question-guide"),
+      renderNarrative(summary ? (finding.summary || finding.assessment) : finding.assessment));
+    section.append(item);
+  }
+  return section;
+}
+
+function renderEvidenceAnnex(result) {
+  const annex = renderDisclosure("Evidence traceability annex", "traceability-panel");
+  annex.append(text("p", "Supporting sources and document locations for the findings and priority comments.", "helper"));
+  for (const finding of result.core_findings || []) {
+    const labels = {
+      drivers_priorities: "Drivers and priorities", actions_commitment: "Critical actions and commitment",
+      program_implications: "Program implications", if_then_calibration: "Adapting to changing conditions",
+    };
+    annex.append(text("h3", labels[finding.question] || finding.question),
+      renderTraceabilityForEvidence(result, finding.evidence_ids, false));
+  }
+  for (const area of result.priority_areas || []) {
+    annex.append(text("h3", area.heading),
+      labelledParagraph("Recommendation location", locatorLabel(area.target_locator), "target-location"),
+      renderTraceabilityForEvidence(result, area.evidence_ids, false));
+  }
+  for (const check of result.prior_comment_report?.checks || []) {
+    annex.append(text("h3", check.comment_label),
+      renderTraceabilityForEvidence(result, [...check.prior_evidence_ids, ...check.current_evidence_ids], false));
+  }
+  return annex;
+}
+
+function renderPriorComments(result) {
+  const section = document.createElement("section");
+  const report = result.prior_comment_report;
+  if (report?.checks?.length || result.prior_comment_error) {
+    section.append(text("h2", "Earlier comments: follow-through"));
+    if (result.prior_comment_error) {
+      section.append(text("p", "Some earlier comments could not be checked. The independent findings remain available.", "helper"));
+    }
+    for (const check of report?.checks || []) {
+      section.append(text("h3", check.comment_label),
+        renderNarrative(check.assessment),
+        labelledParagraph("Follow-through", assessmentValueLabel(check.status), "helper"),
+      );
+    }
+    if (report?.coverage_note) section.append(renderNarrative(report.coverage_note, "helper"));
+  }
+  return section;
+}
+
+function resizeEmailEditor() {
+  if (!emailEditor?.style || !emailEditor.scrollHeight) return;
+  emailEditor.style.height = "auto";
+  emailEditor.style.height = `${emailEditor.scrollHeight + 4}px`;
+}
+
+function renderEmailState(result) {
+  displayedEmailText = plainProse(result.email_text || "");
+  emailEditor.value = displayedEmailText;
+  resizeEmailEditor();
+  emailEditor.readOnly = false;
+  emailStatus.textContent = result.email_edited ? "Retained draft review comments." : "";
+  emailWarning.textContent = result.email_stale
+    ? "These comments belong to an earlier assessment. Use the query box to update them against the new findings before copying."
+    : result.email_fallback
+      ? "This draft was assembled from the validated recommendations because comments drafting was unavailable. Review or tailor it using the query box."
+      : result.email_error && !displayedEmailText.trim()
+        ? "The draft review comments could not be generated. The validated note is available; you can draft comments here or use the query box."
+        : "";
+  emailWarning.hidden = !emailWarning.textContent;
+}
+
+async function saveEmailWording() {
+  const requestedId = assessmentId;
+  if (!requestedId || !currentReviewResult || !emailEditor.value.trim()) return false;
+  const submittedText = emailEditor.value;
+  const submittedRunId = currentReviewResult.metadata.run_id;
+  try {
+    const response = await fetch(`/api/reviews/${requestedId}/email`, {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text: submittedText, base_run_id: submittedRunId}),
+    });
+    if (requestedId !== assessmentId) return false;
+    if (!response.ok) throw new Error("Email wording was not saved.");
+    displayedEmailText = submittedText;
+    currentReviewResult.email_text = submittedText;
+    currentReviewResult.email_edited = true;
+    currentReviewResult.email_stale = false;
+    emailWarning.hidden = true;
+    emailStatus.textContent = emailEditor.value === submittedText
+      ? "Draft review comments retained for this session." : "Your earlier wording is retained; leave the field to retain the latest edits too.";
+    return true;
+  } catch (_error) {
+    if (requestedId === assessmentId) emailStatus.textContent = "Wording was not saved. Your text remains in the editor.";
+    return false;
+  }
+}
+
+function retainEmailWording() {
+  emailSavePromise = emailSavePromise.then(saveEmailWording);
+  return emailSavePromise;
+}
+emailEditor.addEventListener("change", retainEmailWording);
+document.querySelector("#copy-peer-email")?.addEventListener("click", async () => {
+  if (!emailEditor.value.trim()) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(emailEditor.value);
+    else {
+      emailEditor.focus();
+      emailEditor.select();
+      if (!document.execCommand("copy")) throw new Error("Copy unavailable.");
+    }
+    emailStatus.textContent = "Review comments copied.";
+  } catch (_error) {
+    emailEditor.focus();
+    emailEditor.select?.();
+    emailStatus.textContent = "Select and copy the review comments manually.";
+  }
+});
+window.addEventListener?.("beforeunload", (event) => {
+  if (emailEditor.value !== displayedEmailText) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
+
+emailEditor?.addEventListener("input", resizeEmailEditor);

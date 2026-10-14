@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main(
     base_url: str, output: Path, *, cpf: Path | None = None,
-    context_document: Path | None = None, country: str = "Benin",
+    context_document: Path | None = None, country: str = "Benin", browser_channel: str = "msedge",
 ) -> None:
     output.mkdir(parents=True, exist_ok=False)
     mode = "quality" if cpf else "smoke"
@@ -41,7 +41,7 @@ def main(
         page.locator("#assistant-send:not([disabled])").wait_for(timeout=10_000)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(channel=browser_channel, headless=True)
         context = browser.new_context(
             viewport={"width": 1440, "height": 1000}, accept_downloads=True
         )
@@ -105,6 +105,15 @@ def main(
             "!document.querySelector('#submit-review').disabled"
         )
         page.locator("#review-stage").select_option("decision_review")
+        if not cpf:
+            page.locator("#additional-guidance summary").click()
+            page.locator("#review-questions").fill("How could delivery be clarified at this stage?")
+            page.locator("#previous-comments").set_input_files({
+                "name": "Previous-FCV-comments.txt", "mimeType": "text/plain",
+                "buffer": (
+                    b"[SYNTHETIC SMOKE] Earlier comment: clarify delivery arrangements.\n" * 10
+                ),
+            })
         with page.expect_response(
             lambda response: response.request.method == "POST"
             and response.url.rstrip("/").endswith("/api/reviews"),
@@ -126,26 +135,48 @@ def main(
         page.locator("#result-tab-detailed").click()
         assert page.locator("#detailed-panel:not([hidden])").is_visible()
         capture(page, 4, "smoke-detailed-desktop")
+        if not cpf:
+            assert page.get_by_role("heading", name="Assessment against the four review questions").is_visible()
+            assert page.get_by_role("heading", name="Earlier comments: follow-through").is_visible()
+        page.locator("#result-tab-email").click()
+        editor = page.locator("#peer-email-editor")
+        assert editor.input_value().startswith("Dear colleagues,")
+        if not cpf:
+            edited_email = editor.input_value() + "\n\n[SYNTHETIC SMOKE] Coordinator wording edit."
+            editor.fill(edited_email)
+            page.locator("#copy-peer-email").click()
+            page.wait_for_function(
+                "document.querySelector('#email-status').textContent.includes('retained') || "
+                "document.querySelector('#email-status').textContent.includes('copied')"
+            )
+            assert page.locator("#pilot-feedback").count() == 0
+            assert page.locator("#corrections").count() == 0
+            assert page.locator(".email-controls button").count() == 1
+        capture(page, 10, "smoke-review-comments-desktop")
 
-        page.get_by_role("button", name="Summarise for management").click()
+        assert page.locator("#assistant-card select").count() == 0
+        page.locator("#assistant-input").fill("Condense the review comments to the few most consequential points.")
+        assert "Condense" in page.locator("#assistant-input").input_value()
         page.locator("#assistant-send").click()
         page.wait_for_function(
-            "document.querySelectorAll('#assistant-conversation article').length === 2 && "
+            "document.querySelectorAll('#assistant-conversation article').length === 0 && "
             "!document.querySelector('#assistant-send').disabled"
         )
-        capture(page, 5, "smoke-assistant-streamed-desktop")
+        assert editor.input_value().strip()
+        edited_email = editor.input_value()
+        capture(page, 5, "smoke-comments-tailored-desktop")
 
         page.reload(wait_until="networkidle")
         wait_for_results(page)
         page.wait_for_function(
-            "document.querySelectorAll('#assistant-conversation article').length === 2"
+            "document.querySelectorAll('#assistant-conversation article').length === 0"
         )
         title = page.locator("#result-title").inner_text().strip()
         assert re.fullmatch(rf"{re.escape(country)} (?:CPF|CEN|CPF / CEN) FCV review", title), title
         capture(page, 6, "smoke-assistant-restored-desktop")
-
-        page.locator("#corrections summary").click()
-        capture(page, 7, "smoke-secondary-correction-desktop")
+        page.locator("#result-tab-email").click()
+        assert editor.input_value() == edited_email
+        capture(page, 7, "smoke-shared-assistant-desktop")
         docx = output / f"08-{mode}-full-detailed-note.docx"
         with page.expect_download(timeout=30_000) as download_info:
             page.locator("#export-docx").click()
@@ -164,18 +195,46 @@ def main(
             assert archive.testzip() is None
             assert "word/document.xml" in archive.namelist()
 
+        page.locator("#result-tab-email").click()
+        if not cpf:
+            (output / "08-smoke-draft-review-comments.txt").write_text(
+                editor.input_value(), encoding="utf-8",
+            )
+        if not cpf:
+            edited_email += "\n\n[SYNTHETIC SMOKE] Unsaved wording before correction."
+            editor.fill(edited_email)
+            page.locator("#assistant-input").fill(
+                "Update the assessment: qualify the finding using this additional context."
+            )
+            page.locator("#assistant-send").click()
+            page.locator("#progress:not([hidden])").wait_for(timeout=5_000)
+            wait_for_results(page)
+            page.locator("#result-tab-email").click()
+            assert editor.input_value() == edited_email
+            assert "earlier assessment" in page.locator("#email-warning").inner_text()
+            capture(page, 11, "smoke-stale-comments-desktop")
+            page.locator("#assistant-input").fill(
+                "Update the comments against the revised findings."
+            )
+            page.locator("#assistant-send").click()
+            page.wait_for_function(
+                "!document.querySelector('#assistant-send').disabled && "
+                "document.querySelector('#email-warning').hidden"
+            )
+            assert "Comments tailored to the request." in editor.input_value()
+
         page.set_viewport_size({"width": 390, "height": 844})
-        page.locator("#corrections summary").click()
         page.locator("#result-tab-summary").click()
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         capture(page, 9, "smoke-summary-mobile")
 
         assert not console_errors, console_errors
         assert not page_errors, page_errors
+        print(f"BROWSER_QA_PASS mode={mode} duplicate_comments=0 "
+              "docx=2 comments_tailored=true", flush=True)
         context.close()
         browser.close()
-
-    print(f"BROWSER_QA_PASS mode={mode} screenshots=8 assistant_messages_restored=2 docx=2")
+    print("BROWSER_CLEANUP_COMPLETE", flush=True)
 
 
 if __name__ == "__main__":
@@ -185,6 +244,8 @@ if __name__ == "__main__":
     parser.add_argument("--cpf", type=Path)
     parser.add_argument("--context-document", type=Path)
     parser.add_argument("--country", default="Benin")
+    parser.add_argument("--browser", choices=("msedge", "chrome"), default="msedge")
     args = parser.parse_args()
     main(args.base_url.rstrip("/") + "/", args.output.resolve(),
-         cpf=args.cpf, context_document=args.context_document, country=args.country)
+          cpf=args.cpf, context_document=args.context_document, country=args.country,
+          browser_channel=args.browser)

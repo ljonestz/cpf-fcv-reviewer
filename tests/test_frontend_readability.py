@@ -320,7 +320,7 @@ def test_detailed_readout_chunks_narrative_and_uses_native_disclosures():
         if (chunksInView.length < 6) throw Error("long narrative fields were not chunked");
         for (const chunk of chunksInView) {
           const strong = findAll(chunk, (item) => item?.tagName === "strong");
-          if (strong.length !== 1) throw Error("narrative chunk lacked one bold active sentence");
+          if (strong.length !== 0) throw Error("plain prose acquired arbitrary emphasis");
         }
         '''
     )

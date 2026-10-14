@@ -1,5 +1,185 @@
 # Project status
 
+## 2026-10-14 ITS handover brief
+
+Prepared a dated point-by-point handover in the style of the owner's Project
+Screener handover. It documents the four findings, stage-sensitive advice,
+prose-led summaries, comments and query simplification, section references,
+comments-before-annex exports and labelled fallback. It separates application
+changes from edited example wording and records the remaining hosted model,
+access/storage and coordinator acceptance work. Application code is unchanged;
+PR 55 remains draft and nothing was deployed. See the
+[handover source](handover/20261014_ITS-handover.md). The new local Word copy,
+20261014_CPF-ITS-handover.docx, follows the Project Screener brief style; all four
+rendered pages and its native heading/link structure were inspected. No model call
+was made, and the reference document was preserved.
+
+## 2026-10-14 Reviewed brief presentation
+
+Application 9a049c0 reflects the owner's edited brief: priority explanations precede
+short summary responses, full recommendations remain in the detailed view, and
+traceability is grouped below draft comments. Both note downloads now include the
+current comments before their annex, preserving edited/fallback/stale state.
+Section-based references are preferred in the review/comments prompts.
+
+All 1,821 provider-free Linux CI tests passed after correcting a legacy rendering
+regression and a stale prompt-version expectation. Fresh Edge smoke verified
+summary/detail links, comments, annex order, refresh, mobile fit and downloads.
+The revised colleague Word copies were paginated and inspected: 8 summary pages
+and 11 detailed pages. Original files and non-body Word package parts were
+preserved. The saved assessment expired during this task; no model call occurred.
+PR 55 remains draft, with no merge or deployment. See the
+[reviewed-brief record](validation/2026-10-14-reviewed-brief-layout.md).
+
+## 2026-10-13 Colleague feedback Word copies
+
+The owner accepted the generated narrative/layout and requested small changes for
+colleague feedback. Two dated Word copies now use descriptive section references,
+move traceability into an end annex and append the same unsigned review comments.
+All 19 rendered pages were inspected; structure/reference checks passed. The files
+are local, ignored copies in the main repository folder. Application exports and
+prompts are unchanged; there was no new model call or deployment. See the
+[Word-copy record](validation/2026-10-13-colleague-word-copies.md).
+
+## 2026-10-13 Comments fallback verified
+
+The owner approved a labelled fallback when optional comments synthesis fails.
+The API now assembles an editable draft from the validated priority rationale and
+actions, retaining all qualifications and the selected order, with no extra model
+call. The browser and comments export label its origin. Saved coordinator wording
+takes precedence; the assessment and original safe failure diagnostic are unchanged.
+Empty or oversized fallback content is not silently truncated.
+
+Verification: 95 focused tests plus the text-budget edge test passed; targeted Ruff
+and diff checks passed. A deliberately failing provider-free Edge flow verified
+label, export, refresh and replacement wording. Screenshots inspected under
+`output/playwright/20261013-fallback-qa/` (ignored). This mitigates unavailable
+comments; it does not recover the earlier discarded rejection reason. Application
+commit 988db71 passed all 1,813 Linux CI tests. Word rendering attempts did not yield
+a complete runnable renderer; no page images were produced, so pagination remains
+unverified. No deployment or additional paid run occurred. PR 55 stays draft.
+See the [fallback acceptance record](validation/2026-10-13-comments-fallback-acceptance.md).
+
+## 2026-10-13 Fresh output accepted for supervised pilot review
+
+One newly authorized assessment on b75719c completed its note and default comments.
+The four findings are developed and readable, annex-dependent actions are locally
+qualified, and the unsigned comments are 653 words without tailoring. Screenshots,
+refresh, mobile layout and Word structure passed inspection. The output is usable
+as a coordinator first draft; no more structural redesign is recommended. Full
+production sign-off still requires Word pagination acceptance and a decision on
+the earlier unexplained intermittent comments failure. Current evidence remains
+limited. No merge/deployment or application change in this check. See the
+[fresh output review](validation/2026-10-13-final-output-review.md).
+
+## 2026-10-13 Section explanations
+
+Added the approved short explanations beneath all four review-question headings
+in both browser views and both Word note exports. The If/Then heading now reads
+"Adapting to changing conditions"; internal question IDs and generated findings
+are unchanged. Explanations are fixed presentation text, not another model call.
+
+Verification: 51 focused presentation/export tests passed, targeted Ruff and diff
+checks passed. A read-only Edge check of the retained Guinea assessment confirmed
+four explanations in both views; summary/detail screenshots were inspected. Saved
+previews are `output/playwright/20261013-explanations-summary.png` and
+`output/playwright/20261013-explanations-detailed.png` (ignored). No paid calls or
+deployment. Existing comments reliability/content acceptance and Word pagination
+limits below remain open; native rendering was not retried without a changed setup.
+
+## 2026-10-13 Generated output acceptance remains blocked
+
+Two local assessments on cfe48fa produced clearer four-question notes. One produced
+829-word default comments; the other failed its comments step while retaining the
+validated note. Annex caveats were not consistently attached to recommendations.
+The extra submission exceeded the remaining one-run allowance; the owner was told,
+and all further paid calls stopped. Prompt follow-up and safe failure diagnostics
+passed 75 focused tests but have not had another generated-output check. Word
+pagination remains unverified. PR 55 stays draft; nothing is deployed. See the
+[acceptance record](validation/2026-10-13-generated-output-acceptance.md).
+
+## 2026-10-13 Output quality revision in validation
+
+The owner rejected the earlier Guinea output as insufficiently readable and
+analytically developed. Earlier rollout-readiness language below is superseded.
+The four questions now carry the detailed assessment and have separate concise
+summary fields. Conditional adaptation is assessed wherever it appears in the CPF;
+when materially missing, the prompt asks for grounded proposed scenarios and
+corresponding adjustments. Browser/Word paragraphs preserve authored arguments,
+recommendations use full-width sections, and the query has no example links or
+duplicated comments above its input. Generated-content acceptance remains pending.
+No additional paid assessment or deployment has been performed.
+
+## 2026-10-13 Rollout candidate: coordinator review comments
+
+[PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55) now has the final light
+workflow: **Draft review comments**, Copy only, automatic edit retention and a single
+prose query box with three small example prompts. There are no query dropdowns,
+assistant branding, optional feedback or separate correction box. The four findings,
+RRA/Strategy connection, central stage calibration and separate corporate processes
+remain. The specification was reconciled with these superseding choices.
+
+Analytical code `9e84d06` passed **1,796 local tests** (one Windows Gunicorn skip)
+and **1,797 Linux CI tests**. One paid public Guinea assessment completed after
+a bounded referral repair. One prose query condensed the comments from 1,358 to
+648 words and preserved evidence caveats; refresh and Word downloads worked. The
+second authorized paid assessment was not used. Final favicon/header fixes passed
+**80 focused tests** and GET-only restoration with no errors or new model calls.
+
+The candidate is not merged or deployed. Internal hosting/reference integration
+remains separate; public volatile-storage and reduced-research limits remain. Real-run
+Word pagination was not visually verified because local Word conversion could not
+start, although the exports passed structure/text checks. See the
+[quality record](validation/2026-10-13-coordinator-quality-acceptance.md).
+
+## 2026-10-12 Follow-up: simplified draft review comments
+
+The owner removed optional feedback and the separate correction box from the design.
+The output is now **Draft review comments**, with one Copy control and automatic
+wording retention. One prose query box is the shared entry point for comments tailoring, questions
+and explicit assessment updates. There are no follow-on dropdowns or assistant
+branding; three small example prompts only prefill the input. Tone, focus,
+condensation and elaboration suggestions prefill an editable request. Tailoring uses
+the latest draft, preserves the underlying findings, and retains completed responses;
+failed revisions leave the previous draft intact. Full assessment updates remain
+explicit and refresh the note and summary through the existing child-review pipeline.
+
+The website and Word notes share a CPF-specific adaptation of the Project Screener's
+"LLMs are not magic" caveat, including review-stage feasibility and OPCS/human checks.
+The Project Screener was read only. No deployment or paid model run was performed.
+See the [revision validation record](validation/2026-10-12-review-comments-simplification.md).
+
+
+## 2026-10-12 Candidate: coordinator review redesign
+
+The agreed [specification](../20261012_cpf-coordinator-redesign-spec.md) and
+[implementation plan](../20261012_cpf-coordinator-redesign-plan.md) are saved on
+`feat/coordinator-review-redesign`, based on refreshed `origin/main` at `a210b29`.
+The design adds four concise qualitative findings, stage-calibrated priorities,
+independent prior-comment follow-through, unsigned email drafting and optional
+feedback. PC14 and Envelope observations remain advisory and limited.
+Implementation is committed on the feature branch and tracked in
+[draft PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55). New reviews use
+schema/rubric version 2 and the four concise findings, compact RRA/Strategy links,
+stage-specific recommendation destinations and proposed/overridden contextual framing.
+The generated email is unsigned and can be saved, copied or downloaded. Correction
+reruns preserve wording and mark stale edits. Optional feedback shares the existing
+review lifetime and stays out of analytical evidence.
+
+The full provider-free suite passed **1,777 tests**, with one Windows Gunicorn skip.
+The final layout-only change passed **35 export/presentation tests**. Synthetic Edge
+QA passed email save/refresh, unsaved-edit preservation, correction/stale handling,
+optional feedback, mobile layout and all three Word downloads. Native Word rendering
+and inspection covered all four pages of the final synthetic exports, including
+actual earlier-comment follow-through. Independent review issues were reproduced and
+fixed. No new Ruff issues were introduced; six existing findings remain in touched
+Python files. See the [validation record](validation/2026-10-12-coordinator-review-redesign.md).
+
+The candidate is not merged or deployed. No paid model calls, internal hosting or
+provider changes were made. Real-country drafting quality and approved internal
+style/reference integration still require acceptance. The live October 9 release
+and the separate Project Screener remain unchanged.
+
 ## 2026-10-09 Deployed: large-package coverage
 
 PR #52 merged as `e1eabcf` and live on Render (deploy `dep-db4f2t6q1p3s73a15o4g`). No-cost checks passed: `/health` reports release `e1eabcf`; the intake upload summary and the 40-document and package failure labels are served. No live paid assessment was run after deployment; the fourth local Guinea run is the quality evidence.

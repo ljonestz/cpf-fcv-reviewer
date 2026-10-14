@@ -45,9 +45,9 @@ def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
 
     for phrase in (
         "connected technical review note",
-        "Overall read",
-        "What to revise",
-        "Priority areas for strengthening",
+        "overall_read: 100-140 words",
+        "revision_summary: short action-led titles",
+        "priority_areas: actionable comments",
         "Do not create a Questions for confirmation section",
         "primary document is the principal lens",
         "primary CPF/CEN is the principal analytical lens",
@@ -55,14 +55,14 @@ def test_review_prompt_requires_note_first_synthesis_and_profile_controls():
         "RRA and contextual evidence are thematic supporting lenses",
         "max_immediate_insertion_words",
         "Do not report pathway by pathway",
-        "Limitations/document coverage",
+        "limitations/document coverage",
         "stage_profile.allowed_scales",
         "detail_profile.priority_area_range",
         "every revision_summary priority_area_id resolves to exactly one area",
         "response_to_comments requires comment_reference",
         "model authors coverage_note",
         "Direct evidence_ids are required on every priority area",
-        "overall_read synthesizes the evidenced priority areas",
+        "judgment, evidenced strengths",
         "revision_summary inherits support through priority_area_id",
         "must not put raw evidence IDs in action prose",
     ):
@@ -78,7 +78,7 @@ def test_review_prompt_requires_concise_readouts_and_integrated_delivery_respons
     for phrase in (
         "alignment_readout",
         "strategy_readout",
-        "no more than two short paragraphs",
+        "each 40-60 words",
         "cpf_response to naturally incorporate the material delivery mechanism",
         "result/indicator content",
         "delivery_mechanism and result_or_indicator",
@@ -105,10 +105,10 @@ def test_review_prompt_requires_integrated_priority_led_contract():
 
     for phrase in (
         "How the draft responds to the RRA, current FCV dynamics, and the FCV Strategy",
-        "substantive detailed opening",
-        "balanced five-minute synthesis",
-        "3–5 ordered linked measures",
-        "full integrated note",
+        "two coherent paragraphs",
+        "500-700 word readout",
+        "linked exactly in priority_areas order",
+        "Findings carry the argument; priorities translate it into action",
         "corroborates, qualifies, contradicts, supersedes, or establishes",
         "source-supported fact",
         "interpretation",
@@ -317,7 +317,7 @@ def test_repair_prompt_preserves_complete_structured_assessment_schema():
     prompt = normalize_whitespace(load_prompt("repair"))
 
     for phrase in (
-        "Version: 3.0.4",
+        "Version: 3.1.0",
         "rra_driver_assessments",
         "fcv_strategy_assessments",
         "status",
@@ -421,8 +421,8 @@ def test_repair_prompt_detector_rejects_realistic_addition_permissions(contradic
     [
         ("diagnostic_map", "1.2.0"),
         ("document_digest", "1.0.0"),
-        ("review", "3.1.0"),
-        ("repair", "3.0.4"),
+        ("review", "4.1.2"),
+        ("repair", "3.1.0"),
     ],
 )
 def test_prompts_are_versioned_and_hash_matches_loaded_content(name, version):

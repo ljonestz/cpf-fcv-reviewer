@@ -8,6 +8,7 @@ from flask import Flask, jsonify, render_template
 
 from .background import InProcessAssessmentQueue, PersistentAssessmentWorker
 from .config import MAX_UPLOAD_BYTES, build_config
+from .export_docx import ADVISORY_NOTE, RECOMMENDATION_NOTE
 from .persistent_store import SQLiteSessionStore
 from .routes import bp as review_blueprint
 from .runtime import build_runtime_services
@@ -77,7 +78,9 @@ def create_app(
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template(
+            "index.html", advisory_note=ADVISORY_NOTE, recommendation_note=RECOMMENDATION_NOTE,
+        )
 
     @app.get("/health")
     def health():

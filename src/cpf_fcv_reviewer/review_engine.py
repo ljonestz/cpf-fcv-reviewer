@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from .contracts import (
     AssessmentConfidence,
     AssessmentStatus,
+    ContextFraming,
     DiagnosticMode,
     DocumentCoverage,
     DocumentRole,
@@ -40,6 +41,7 @@ REPAIRABLE_ISSUE_CODES: frozenset[str] = frozenset(
         "unknown_assessment_evidence",
         "missing_rra_driver_assessment",
         "incomplete_strategy_assessment",
+        "incomplete_core_findings",
         "missing_registry_support",
         "stage_overreach",
         "stage_length_overreach",
@@ -203,6 +205,15 @@ def _scrub_raw_evidence_ids_from_narrative(
             "overall_read": scrub(draft.overall_read),
             "alignment_readout": scrub(draft.alignment_readout),
             "strategy_readout": scrub(draft.strategy_readout),
+            "core_findings": tuple(
+                item.model_copy(update={"assessment": scrub(item.assessment)})
+                for item in draft.core_findings
+            ),
+            "proposed_context_framing": (
+                draft.proposed_context_framing.model_copy(update={
+                    "rationale": scrub(draft.proposed_context_framing.rationale)
+                }) if draft.proposed_context_framing is not None else None
+            ),
             "revision_summary": tuple(
                 item.model_copy(update={"title": scrub(item.title)})
                 for item in draft.revision_summary
@@ -646,6 +657,8 @@ def _preserve_priority_coverage(original, draft, issue_codes, available_evidence
             "target_locator": area.target_locator,
             "gap_locus": area.gap_locus,
             "sensitivity": area.sensitivity,
+            "destination": area.destination,
+            "issue_kind": area.issue_kind,
         }
         if "stage_overreach" not in issue_codes:
             updates["recommendation_scale"] = area.recommendation_scale
@@ -684,6 +697,8 @@ class ReviewEngine:
         *,
         review_focus: str = "",
         current_context_readout: dict | None = None,
+        review_questions: str = "",
+        framing_override: str = "",
     ) -> ReviewResult:
         stage = evidence_pack.metadata.review_stage
         if stage not in STAGE_PROFILES:
@@ -705,6 +720,10 @@ class ReviewEngine:
             payload["diagnostic_provenance"] = provenance.model_dump(mode="json")
         if current_context_readout is not None:
             payload["current_context_readout"] = current_context_readout
+        if review_questions:
+            payload["review_questions"] = review_questions[:4000]
+        if framing_override:
+            payload["framing_override"] = framing_override
         if _estimated_input_tokens(payload) > REVIEW_MAX_ESTIMATED_INPUT_TOKENS:
             raise PackageCoverageUnavailable(
                 "Complete review request exceeds the safe request budget."
@@ -739,6 +758,26 @@ class ReviewEngine:
             coverage_note=draft.coverage_note,
         )
         content = draft.model_dump(exclude={"coverage_note"})
+        framing = draft.proposed_context_framing
+        if framing is not None:
+            framing = framing.model_copy(update={"origin": "model_proposed"})
+        if framing_override:
+            framing = ContextFraming(
+                category=framing_override,
+                rationale=(
+                    "Coordinator-selected analytical framing; interpret with country evidence."
+                ),
+                confidence=AssessmentConfidence.LOW,
+                evidence_ids=framing.evidence_ids if framing is not None else (),
+                origin="coordinator_override",
+            )
+        elif framing is None and evidence_pack.metadata.schema_version.startswith("2."):
+            framing = ContextFraming(
+                category="undetermined",
+                rationale="Available evidence did not establish a proposed context framing.",
+                confidence=AssessmentConfidence.LOW,
+            )
+        content["proposed_context_framing"] = framing
         return ReviewResult(
             metadata=evidence_pack.metadata,
             document_coverage=coverage,
@@ -902,6 +941,39 @@ class ReviewEngine:
                 if "diagnostic_date_conflict" in issue_codes else None,
                 repair_limited_mode=repair_limited_mode,
             )
+        if "incomplete_core_findings" not in issue_codes:
+            candidates = {row.question: row for row in draft.core_findings}
+            valid_priority_ids = {area.priority_area_id for area in draft.priority_areas}
+            rows = []
+            for row in result.core_findings:
+                candidate = candidates.get(row.question)
+                if candidate is not None and (
+                    ("unknown_assessment_evidence" in issue_codes
+                     and not set(row.evidence_ids) <= available_evidence_ids)
+                    or ("unknown_priority_area" in issue_codes
+                        and not set(row.priority_area_ids) <= valid_priority_ids)
+                ):
+                    rows.append(candidate)
+                elif candidate is not None:
+                    rows.append(_clean_guardrail_fields(
+                        row, candidate, ("assessment",), forbidden_phrases,
+                        result.metadata.diagnostic_provenance
+                        if "diagnostic_date_conflict" in issue_codes else None,
+                        repair_limited_mode=repair_limited_mode,
+                    ))
+                else:
+                    rows.append(row)
+            draft = draft.model_copy(update={"core_findings": tuple(rows)})
+        framing = result.proposed_context_framing
+        if framing is not None:
+            candidate = draft.proposed_context_framing
+            if candidate is not None and set(framing.evidence_ids) <= available_evidence_ids:
+                framing = _clean_guardrail_fields(
+                    framing, candidate, ("rationale",), forbidden_phrases,
+                )
+            elif candidate is not None and "unknown_assessment_evidence" in issue_codes:
+                framing = candidate.model_copy(update={"origin": framing.origin})
+        draft = draft.model_copy(update={"proposed_context_framing": framing})
         if any(issue["code"] == "raw_evidence_id_in_narrative" for issue in issues):
             draft = _scrub_raw_evidence_ids_from_narrative(draft, available_evidence_ids)
         if "unknown_institutional_referral" in issue_codes and registry_entry_ids is not None:

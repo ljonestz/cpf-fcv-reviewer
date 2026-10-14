@@ -14,9 +14,9 @@ from cpf_fcv_reviewer.contracts import (
     GapLocus,
     PriorityArea,
     RecommendationScale,
-    RRADriverAssessment,
     ReviewResult,
     RevisionSummaryItem,
+    RRADriverAssessment,
     RunMetadata,
     SensitivityCategory,
 )
@@ -147,3 +147,26 @@ def make_valid_result():
         )
     }
     return result, evidence
+
+
+@pytest.fixture
+def completed_coordinator_review():
+    from io import BytesIO
+    from pathlib import Path
+
+    from cpf_fcv_reviewer.app import create_smoke_app
+    from cpf_fcv_reviewer.routes import run_assessment
+
+    app = create_smoke_app(start_background_runs=False)
+    client = app.test_client()
+    primary = (Path(__file__).parent / "fixtures" / "synthetic_en.txt").read_bytes()
+    created = client.post("/api/reviews", data={
+        "cpf": (BytesIO(primary), "Benin CPF.txt"),
+        "country": "Benin", "review_stage": "roc_oc",
+        "review_questions": "Are the program choices clear?",
+    })
+    assert created.status_code == 201
+    assessment_id = created.json["assessment_id"]
+    run_assessment(app, assessment_id)
+    assert app.extensions["session_store"].get(assessment_id).payload["status"] == "complete"
+    return app, client, assessment_id

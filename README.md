@@ -16,6 +16,31 @@ An advisory prototype for note-first, evidence-linked FCV review of CPF and CEN 
 
 ## Current prototype
 
+Latest acceptance: the fresh output is usable for a supervised coordinator pilot,
+with four developed findings, locally qualified annex recommendations and 653-word
+default comments. A labelled, editable fallback now preserves validated
+recommendations when comments drafting fails, with no extra model call. All 1,813
+provider-free CI tests passed at that checkpoint. The revised presentation now
+passes all 1,821 provider-free CI tests, and the two colleague-review Word copies
+have inspected page renders. PR 55 stays draft and nothing is deployed. See the
+[reviewed-brief update](docs/validation/2026-10-14-reviewed-brief-layout.md). See the
+[fresh output review](docs/validation/2026-10-13-final-output-review.md) and
+[fallback acceptance record](docs/validation/2026-10-13-comments-fallback-acceptance.md).
+
+- Development candidate: [PR #55](https://github.com/ljonestz/cpf-fcv-reviewer/pull/55)
+  adds the agreed coordinator review structure, four qualitative findings,
+  stage-calibrated recommendations, separate earlier-comment follow-through and an
+  unsigned draft of review comments. Intake stays light; questions, framing overrides
+  and previous comments are optional. PC14 and Envelope observations stay
+  high-level. See the [design](20261012_cpf-coordinator-redesign-spec.md) and
+  [validation record](docs/validation/2026-10-12-coordinator-review-redesign.md).
+  The output-quality revision now has a fresh public Guinea assessment accepted
+  as a supervised first draft, with readable four-question findings, practical
+  conditional recommendations, refresh restoration and checked export structure.
+  The approved comments fallback also passed a deliberate synthetic failure flow.
+  The revised colleague-review Word copies have inspected pagination. The new
+  presentation passed provider-free browser acceptance; no fresh model run or
+  deployment occurred in this follow-up.
 - Public prototype: <https://cpf-fcv-review-prototype.onrender.com/>
 - Current application version: `0.1.0`
 - Historical application release: `27ef3aa` (PR30), 2026-09-08. Render and `/health`
@@ -68,7 +93,21 @@ the RRA, the document uploaded under RRA and supporting analytics is treated as 
 diagnostic, and earlier diagnostics dated verbatim in the documents (such as a 2017 RRA)
 may be cited.
 
-Starting an assessment opens a dedicated Project Screener-aligned holding view with a compact elapsed timer, estimate, connected three-stage ticker, and rotating guidance. Completed results open with a default **Five-minute readout** and an authoritative **Detailed analysis** view. The reader-facing HTML and DOCX keep structured evidence internally while presenting concise question-led RRA/current-dynamics and FCV Strategy sections, linked priority measures, and a bounded basis/limitations disclosure on the website. Word exports instead carry a short language-model caution at the top. A streamed follow-on assistant uses the completed review and cited evidence, retains up to 20 messages for the review's existing 24-hour lifetime, and restores the review and conversation after refresh. Correction and rerun remains available as a secondary action.
+Starting an assessment opens a dedicated holding view with a compact elapsed timer,
+estimate, connected three-stage ticker and rotating guidance. Results open with a
+**Five-minute readout**, **Detailed analysis** and **Draft review comments**. New reviews show
+four short qualitative findings, compact RRA/Strategy connections and the destination
+for each recommendation. Clearly labelled earlier comments are checked only after
+the independent review. **Draft review comments** use those validated findings,
+optional CMU questions and approved external style references, with no named signature.
+The comments have one Copy action and retain edits when the field loses focus.
+The **What would you like to do next?** query box accepts prose requests to tailor
+comments, explain an issue or explicitly update the assessment. Three example
+prompts prefill the editable box; there are no task dropdowns. Wording changes
+preserve findings. Assessment updates rerun the note and summary and retain older
+wording for reconciliation. There is no pilot-feedback form or separate correction
+box. Queries and edits share the review's existing session lifetime. Legacy results
+keep their original presentation.
 
 ## Safety boundary
 
@@ -101,7 +140,12 @@ Use Python 3.13 and install `requirements.txt` plus `requirements-dev.txt` in a 
 .\.venv\Scripts\python.exe -m flask --app cpf_fcv_reviewer.app run
 ```
 
-Use **Download five-minute readout** or **Download full detailed note** before the retained review expires or is reset. The five-minute readout combines up to two assessment sentences and one FCV-relevance sentence per priority, and retains the full recommended action. Both Word downloads carry a short caution about findings and exact dates, with advice to consult a country or FCV expert. The basis/limitations section stays on the website. Word uses standard one-inch margins, left-aligned Calibri text, navy headings, a full-width navy running-header banner that reaches the top page edge, with white text and a teal rule, and subtle shaded action paragraphs; the detailed note retains all assessment sections.
+Download the five-minute readout or full detailed note, and copy draft review comments,
+before the review expires or is reset. New summaries retain every selected priority
+and its recommended action. Both notes carry the same opening caveat as the website:
+LLMs are not magic, outputs can be wrong, and comments must fit the country and review
+stage. WBG policy/procedure references should be verified with OPCS and human experts.
+The basis/limitations disclosure stays on the website.
 
 ## Validation and API-cost control
 

@@ -39,6 +39,7 @@ from .document_digest import (
     plan_digests,
     segment_evidence,
 )
+from .email_draft import email_failure_reason, generate_peer_email
 from .evidence_builder import build_evidence_pack, build_reproducible_evidence_pack
 from .extraction import (
     PDF_SAMPLING_WARNING_SUFFIX,
@@ -60,6 +61,7 @@ from .fcv_readout import (
 from .follow_on import AnthropicFollowOnGateway
 from .model_gateway import AnthropicModelGateway
 from .orchestrator import ReviewOrchestrator
+from .prior_comments import check_prior_comments, partition_document
 from .prompts import load_prompt
 from .public_research import AnthropicPublicResearchGateway, load_research_prompt
 from .registry import RegistryUnavailable, load_registry_bundle
@@ -312,6 +314,7 @@ def _incomplete_document_roles(context: dict) -> frozenset[DocumentRole]:
             incomplete_roles.add(role)
     # A digest is a summary: silence in it is not evidence of absence.
     incomplete_roles.update(context.get("digested_document_roles", ()))
+    incomplete_roles.update(context.get("prior_partitioned_roles", ()))
     return frozenset(incomplete_roles)
 
 
@@ -1007,6 +1010,46 @@ def build_runtime_services(
     prohibited_terms = {term for entry in bundle.entries for term in entry.prohibited_terms}
     registry_entry_ids = {entry.entry_id for entry in bundle.entries}
 
+    def partition_supporting_sources(context, *, full=False):
+        prior_sources = context.setdefault("prior_sources", {})
+        for prefix, role in (("package", DocumentRole.PACKAGE), ("context", DocumentRole.CONTEXT)):
+            documents = context.get(f"{prefix}_documents", ())
+            uploads = context.get(f"{prefix}_document_uploads", ())
+            pairs = uploads or tuple((index, None) for index in range(1, len(documents) + 1))
+            kept_documents, kept_uploads = [], []
+            diagnostic_position = (
+                context.get("diagnostic_document_position")
+                if context.get("diagnostic_document_role") is role else None
+            )
+            for position, (document, upload_pair) in enumerate(
+                zip(documents, pairs, strict=True)
+            ):
+                current, prior = partition_document(document)
+                if prior is not None and not full and upload_pair[1] is not None:
+                    document = _extract_full_optional_document(upload_pair[1])
+                    current, prior = partition_document(document)
+                if prior is not None:
+                    prior_sources[(prefix, upload_pair[0])] = prior
+                    if current is not None:
+                        context.setdefault("prior_partitioned_roles", set()).add(role)
+                    notice = (
+                        f"{document.name}: earlier review comments were separated "
+                        "from the independent assessment."
+                    )
+                    context["extraction_warnings"] = _append_limitation_once(
+                        tuple(context.get("extraction_warnings", ())), notice,
+                    )
+                if current is not None:
+                    if position == diagnostic_position:
+                        context["diagnostic_document_position"] = len(kept_documents)
+                        if full:
+                            context["full_diagnostic_document"] = current
+                    kept_documents.append(current)
+                    kept_uploads.append(upload_pair)
+            context[f"{prefix}_documents"] = tuple(kept_documents)
+            if uploads:
+                context[f"{prefix}_document_uploads"] = tuple(kept_uploads)
+
     def extract_uploaded_documents(context):
         payload = context.get("payload")
         if not payload or "cpf" not in payload:
@@ -1031,6 +1074,14 @@ def build_runtime_services(
             *package_warnings,
             *context_warnings,
         )
+        partition_supporting_sources(context)
+        for index, upload in enumerate(payload.get("previous_comments", ()), 1):
+            try:
+                document = _extract_full_optional_document(upload)
+                require_readable_primary(document)
+                context["prior_sources"][("previous", index)] = document
+            except (ValueError, *EXPECTED_OPTIONAL_EXTRACTION_ERRORS):
+                context["prior_comment_error"] = "followup_coverage_unavailable"
         return context
 
     def _supporting_document_evidence(context, package_documents, context_documents):
@@ -1207,6 +1258,7 @@ def build_runtime_services(
                 confidence="high",
             )
             for entry in bundle.entries
+            if not entry.entry_id.startswith("STYLE-CPF-")
         )
         if used_evidence_ids.intersection(
             item.evidence_id for item in registry_evidence
@@ -1246,6 +1298,10 @@ def build_runtime_services(
             "review": load_prompt("review").encode("utf-8"),
             "repair": load_prompt("repair").encode("utf-8"),
         }
+        if context.get("prior_sources"):
+            prompt_bytes["prior_comments"] = load_prompt("prior_comments").encode("utf-8")
+        if payload.get("coordinator_review_version") == 2:
+            prompt_bytes["peer_email"] = load_prompt("peer_email").encode("utf-8")
         context["evidence_pack"] = build_reproducible_evidence_pack(
             run_id=context["assessment_id"],
             created_at=datetime.now(UTC),
@@ -1262,7 +1318,15 @@ def build_runtime_services(
             current_evidence_limitation=_normalize_limitation(
                 context["research_result"].limitation
             ),
-            guidance=review_focus,
+            guidance=(
+                json.dumps({
+                    "review_focus": review_focus,
+                    "review_questions": payload.get("review_questions", ""),
+                    "framing_override": payload.get("framing_override", ""),
+                }, sort_keys=True)
+                if payload.get("review_questions") or payload.get("framing_override")
+                else review_focus
+            ),
             prompt_bytes=prompt_bytes,
             model_id=review_model_id,
             source_scan_at=datetime.now(UTC),
@@ -1279,6 +1343,14 @@ def build_runtime_services(
             parent_run_id=payload.get("parent_assessment_id"),
         )
         pack = context["evidence_pack"]
+        if payload.get("coordinator_review_version") == 2:
+            pack = pack.model_copy(update={"metadata": pack.metadata.model_copy(update={
+                "schema_version": "2.1.0",
+                "rubric_version": "2.1.0",
+                "prompt_bundle_version": "2.1.0",
+                "app_release": config.get("APP_RELEASE", "dev"),
+                "registry_versions": {"bundle": bundle.version},
+            })})
         context["evidence_pack"] = pack.model_copy(update={
             "metadata": pack.metadata.model_copy(update={
                 "diagnostic_provenance": context.get("diagnostic_provenance"),
@@ -1443,6 +1515,8 @@ def build_runtime_services(
                     current_context_readout=(
                         readout_payload(readout) if readout is not None else None
                     ),
+                    review_questions=context.get("payload", {}).get("review_questions", "")[:4000],
+                    framing_override=context.get("payload", {}).get("framing_override", ""),
                 )
                 context["result"] = _preserve_research_limitation(context)
             if name == "research":
@@ -1509,6 +1583,7 @@ def build_runtime_services(
                     )
                 _reextract_full_package_documents(context)
                 _reextract_full_context_documents(context)
+                partition_supporting_sources(context, full=True)
                 review_date = review_date_provider()
                 dated_diagnostic = (
                     uploaded_diagnostic
@@ -1597,6 +1672,52 @@ def build_runtime_services(
                 context["validation_issues"] = review_validation_issues(context)
             if name == "render" and "result" not in context:
                 raise RuntimeError("Review result is unavailable.")
+            if name == "render" and context.get("prior_sources"):
+                evidence = {
+                    item.evidence_id: item for item in context["evidence_pack"].evidence
+                }
+                try:
+                    report, prior_evidence = check_prior_comments(
+                        context["result"], evidence, tuple(context["prior_sources"].values()),
+                        model_gateway, prohibited_terms=prohibited_terms,
+                        incomplete_document_roles=_incomplete_document_roles(context),
+                    )
+                    context["prior_comment_report"] = report.model_dump(mode="json")
+                    context["evidence_by_id"] = {
+                        item.evidence_id: item.model_dump(mode="json")
+                        for item in (*evidence.values(), *prior_evidence)
+                    }
+                except Exception:
+                    # This optional pass must not discard the independently validated note.
+                    context["prior_comment_error"] = "followup_unavailable"
+                    context["_emit"]("prior_comment_unavailable", {"error": "followup_unavailable"})
+            if name == "render" and context["result"].metadata.schema_version.startswith("2."):
+                context["peer_email"] = None
+                context["_emit"]("email_draft_start", {})
+                try:
+                    email = generate_peer_email(
+                        context["result"], model_gateway,
+                        review_questions=context.get("payload", {}).get("review_questions", ""),
+                        follow_through=context.get("prior_comment_report"),
+                        style_entries=tuple(
+                            entry for entry in bundle.entries
+                            if entry.entry_id.startswith("STYLE-CPF-")
+                        ),
+                        prohibited_terms=prohibited_terms,
+                        evidence={
+                            item.evidence_id: item for item in context["evidence_pack"].evidence
+                        },
+                    )
+                    context["peer_email"] = email.model_dump(mode="json")
+                    context["_emit"]("email_draft_ready", {})
+                except Exception as exc:
+                    context["email_error"] = "email_draft_unavailable"
+                    context["_emit"](
+                        "email_draft_unavailable", {
+                            "error": "email_draft_unavailable",
+                            "reason": email_failure_reason(exc),
+                        },
+                    )
             return context
 
         return step
