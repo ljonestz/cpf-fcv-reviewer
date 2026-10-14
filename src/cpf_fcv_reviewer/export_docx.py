@@ -748,8 +748,17 @@ def build_docx(
     hydrated_referrals: tuple[dict, ...],
     summary: bool = False,
     prior_comment_report: PriorCommentReport | None = None,
+    review_comments: str = "",
+    review_comment_headings: tuple[str, ...] = (),
+    comments_stale: bool = False,
+    comments_fallback: bool = False,
 ) -> bytes:
     validate_evidence_completeness(result, evidence)
+    if prior_comment_report is not None:
+        for check in prior_comment_report.checks:
+            refs = set((*check.prior_evidence_ids, *check.current_evidence_ids))
+            if not refs <= evidence.keys():
+                raise EvidenceCompletenessError("Follow-through citations are unavailable.")
     document = Document()
     del hydrated_referrals
     _configure_document(
@@ -767,8 +776,9 @@ def build_docx(
     if framing is not None:
         _add_labelled_paragraph(
             document,
-            ("Coordinator framing" if framing.origin == "coordinator_override"
-             else "Proposed framing"),
+            ("Coordinator FCV Strategy category used for the framing"
+             if framing.origin == "coordinator_override"
+             else "Proposed FCV Strategy category used for the framing"),
             framing.category.replace("_", " ").capitalize() + ": " + framing.rationale,
         )
     document.add_heading(RRA_ALIGNMENT_QUESTION, level=2)
@@ -786,18 +796,10 @@ def build_docx(
             guide = document.add_paragraph(CORE_QUESTION_EXPLANATIONS[finding.question])
             guide.runs[0].italic = True
             guide.paragraph_format.keep_with_next = True
-            paragraphs = _add_readable_paragraph(
+            _add_readable_paragraph(
                 document,
                 (finding.summary or finding.assessment) if summary else finding.assessment,
             )
-            sources = tuple(dict.fromkeys(
-                locator_text(evidence[key]) for key in finding.evidence_ids
-                if evidence[key].locator is not None or evidence[key].source_url is not None
-            ))
-            if sources and not summary:
-                paragraphs[-1].paragraph_format.keep_with_next = True
-                _add_labelled_paragraph(document, "Sources", "; ".join(sources))
-
 
     if summary:
         document.add_heading("Priority measures to strengthen the CPF / CEN", level=1)
@@ -805,18 +807,29 @@ def build_docx(
         items = [item for item in result.revision_summary if item.priority_area_id in areas]
         if not result.core_findings:
             items = items[:3]
+        if result.core_findings:
+            pointer = document.add_paragraph(
+                "See the detailed readout for full recommendations, qualifications "
+                "and suggested wording."
+            )
+            pointer.paragraph_format.keep_with_next = True
         for item in items:
             area = areas[item.priority_area_id]
-            document.add_heading(item.title, level=2)
+            document.add_heading(area.heading if result.core_findings else item.title, level=2)
             overview = (
                 *_sentence_parts(area.assessment)[:2],
                 *_sentence_parts(area.why_it_matters)[:1],
             )
-            if not result.core_findings:
+            if result.core_findings:
+                _add_readable_paragraph(document, f"{area.assessment} {area.why_it_matters}")
+            else:
                 document.add_paragraph(" ".join(overview))
             response = document.add_paragraph()
             response.add_run("Recommended response: ").bold = True
-            _append_inline_prose(response, area.recommended_action)
+            _append_inline_prose(
+                response, (item.title.rstrip(".!?") + "."
+                           if result.core_findings else area.recommended_action),
+            )
         if not items:
             document.add_paragraph("No revision summary was returned for this review.")
     else:
@@ -827,26 +840,17 @@ def build_docx(
                 _add_readable_paragraph(document, area.assessment)
                 _add_readable_paragraph(document, area.why_it_matters)
                 _add_labelled_paragraph(document, "Recommended action", area.recommended_action)
-                _add_labelled_paragraph(document, "Target", target_text(area.target_locator))
+                if not result.core_findings:
+                    _add_labelled_paragraph(document, "Target", target_text(area.target_locator))
                 if result.core_findings:
                     _add_labelled_paragraph(
                         document, "Where to act", DESTINATION_LABELS[area.destination],
                     )
-                    sources = tuple(dict.fromkeys(
-                        locator_text(evidence[key]) for key in area.evidence_ids
-                        if evidence[key].locator is not None or evidence[key].source_url is not None
-                    ))
-                    if sources:
-                        _add_labelled_paragraph(document, "Sources", "; ".join(sources))
                 if area.comment_reference:
                     _add_labelled_paragraph(document, "Comment addressed", area.comment_reference)
         else:
             document.add_paragraph("No priority areas were returned for this review.")
         if prior_comment_report is not None:
-            for check in prior_comment_report.checks:
-                refs = set((*check.prior_evidence_ids, *check.current_evidence_ids))
-                if not refs <= evidence.keys():
-                    raise EvidenceCompletenessError("Follow-through citations are unavailable.")
             document.add_heading("Earlier comments: follow-through", level=1)
             for check in prior_comment_report.checks:
                 document.add_heading(check.comment_label, level=2)
@@ -855,6 +859,47 @@ def build_docx(
                     document, "Follow-through", check.status.replace("_", " ").capitalize(),
                 )
             _add_readable_paragraph(document, prior_comment_report.coverage_note)
+
+    if result.core_findings or review_comments:
+        document.add_heading("Draft review comments", level=1)
+        if comments_fallback:
+            document.add_paragraph(FALLBACK_NOTICE)
+        if comments_stale:
+            document.add_paragraph(
+                "These wording edits were made for an earlier assessment. "
+                "Compare them with the updated findings before use."
+            )
+        if review_comments.strip():
+            for block in review_comments.split("\n\n"):
+                if block.strip() in review_comment_headings:
+                    document.add_heading(block.strip(), level=2)
+                else:
+                    _add_readable_paragraph(document, block)
+        else:
+            document.add_paragraph("Draft review comments are not available for this assessment.")
+    if result.core_findings:
+        document.add_heading("Evidence traceability annex", level=1)
+        document.add_paragraph(
+            "Supporting sources and document locations for the findings and priority comments."
+        )
+        groups = [(CORE_QUESTION_LABELS[f.question], f.evidence_ids, None)
+                  for f in result.core_findings]
+        groups.extend((a.heading, a.evidence_ids, a.target_locator) for a in result.priority_areas)
+        if prior_comment_report is not None:
+            groups.extend((c.comment_label, (*c.prior_evidence_ids, *c.current_evidence_ids), None)
+                          for c in prior_comment_report.checks)
+        for heading, evidence_ids, target in groups:
+            document.add_heading(heading, level=2)
+            sources = tuple(dict.fromkeys(locator_text(evidence[key]) for key in evidence_ids))
+            _add_labelled_paragraph(document, "Sources", "; ".join(sources) or "None recorded")
+            if target is not None:
+                _add_labelled_paragraph(document, "Recommendation location", target_text(target))
+            for key in dict.fromkeys(evidence_ids):
+                item = evidence[key]
+                if item.evidence_type == "current_context":
+                    _add_labelled_paragraph(
+                        document, "Current evidence", current_context_banner_text(),
+                    )
 
     _apply_report_layout(document, summary=summary, created_at=result.metadata.created_at)
 

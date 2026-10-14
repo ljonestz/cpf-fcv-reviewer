@@ -22,6 +22,7 @@ const resultTitle = document.querySelector("#result-title") || document.createEl
 const resultContext = document.querySelector("#result-context") || document.createElement("p");
 const summaryPanel = document.querySelector("#summary-panel") || results;
 const detailedPanel = document.querySelector("#detailed-panel") || results;
+const evidenceAnnex = document.querySelector("#evidence-annex");
 const emailPanel = document.querySelector("#email-panel") || document.createElement("section");
 const emailEditor = document.querySelector("#peer-email-editor") || document.createElement("textarea");
 const emailStatus = document.querySelector("#email-status") || document.createElement("p");
@@ -689,7 +690,7 @@ function renderTraceability(result) {
   return renderTraceabilityForEvidence(result, arguments[1]);
 }
 
-function renderTraceabilityForEvidence(result, evidenceIds) {
+function renderTraceabilityForEvidence(result, evidenceIds, collapsible = true) {
   const resolvedItems = (evidenceIds || [])
     .map((evidenceId) => result.evidence_by_id?.[evidenceId])
     .filter(Boolean);
@@ -700,8 +701,10 @@ function renderTraceabilityForEvidence(result, evidenceIds) {
   const traceabilityLabel = text("summary", "Traceability");
   summary.textContent = traceabilityLabel.textContent;
   summary.setAttribute?.("aria-label", "Traceability - Evidence and document locations");
-  const details = renderDisclosure("Traceability", "evidence-group traceability-panel");
-  details.replaceChildren(summary, text("p", "Evidence and document locations", "traceability-caption"));
+  const details = collapsible
+    ? renderDisclosure("Traceability", "evidence-group traceability-panel")
+    : document.createElement("section");
+  if (collapsible) details.replaceChildren(summary, text("p", "Evidence and document locations", "traceability-caption"));
   const hasCurrentContext = resolvedItems.some((item) => item.evidence_type === "current_context");
   if (hasCurrentContext) {
     const banner = text("p", "AI-generated from trusted sources — verify before use");
@@ -883,14 +886,16 @@ function renderRevisionSummary(result, anchorIds) {
     const card = document.createElement("section");
     card.className = "priority-area";
     card.append(
-      text("h3", item.title),
-      ...(result.core_findings?.length ? [] : [text("p", [
-        ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
-        ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
-      ].join(" "), "priority-assessment")]),
+      text("h3", result.core_findings?.length ? area.heading : item.title),
+      renderNarrative(result.core_findings?.length
+        ? `${area.assessment} ${area.why_it_matters}`
+        : [
+          ...splitNarrativeIntoChunks(area?.assessment).flat().slice(0, 2),
+          ...splitNarrativeIntoChunks(area?.why_it_matters).flat().slice(0, 1),
+        ].join(" "), "priority-assessment"),
       labelledParagraph(
         "Recommended response",
-        area?.recommended_action || "",
+        result.core_findings?.length ? item.title.replace(/[.!?]+$/, "") + "." : area.recommended_action,
         "recommended-action",
       ),
     );
@@ -923,7 +928,7 @@ function renderPriorityAreas(result, anchorIds) {
       renderNarrative(area.assessment, "priority-assessment"),
       renderNarrative(area.why_it_matters, "priority-why-it-matters"),
       labelledNarrative("Recommended action", area.recommended_action, "recommended-action"),
-      labelledParagraph("Target", locatorLabel(area.target_locator), "target-location"),
+      ...(result.core_findings?.length ? [] : [labelledParagraph("Target", locatorLabel(area.target_locator), "target-location")]),
     );
     if (area.comment_reference) {
       section.append(
@@ -939,7 +944,6 @@ function renderPriorityAreas(result, anchorIds) {
       };
       section.append(
         labelledParagraph("Where to act", destinations[area.destination] || "CPF text or annex", "target-location"),
-        renderEvidenceGroup(result, area.evidence_ids),
       );
     }
     fragment.append(section);
@@ -1010,6 +1014,7 @@ function renderFiveMinuteReadout(result) {
     ),
     ...(result.core_findings?.length ? [renderCoreFindings(result, true)] : []),
     text("h2", "Priority measures to strengthen the CPF / CEN"),
+    text("p", "See the detailed readout for full recommendations, qualifications and suggested wording.", "helper"),
     renderRevisionSummary(result, anchorIds),
   );
   return fragment;
@@ -1150,10 +1155,11 @@ function renderResult(result) {
       undetermined: "Mixed or undetermined",
     };
     resultContext.append(text("span",
-      ` ${framing.origin === "coordinator_override" ? "Coordinator framing" : "Proposed framing"}: ${labels[framing.category] || "Undetermined"}. ${framing.rationale}`,
+      ` ${framing.origin === "coordinator_override" ? "Coordinator FCV Strategy category used for the framing" : "Proposed FCV Strategy category used for the framing"}: ${labels[framing.category] || "Undetermined"}. ${framing.rationale}`,
       "context-framing"));
   }
   renderEmailState(result);
+  evidenceAnnex?.replaceChildren(renderEvidenceAnnex(result));
   setResultView("summary");
   showResults();
   resultTitle.focus({preventScroll: true});
@@ -1784,10 +1790,32 @@ function renderCoreFindings(result, summary = false) {
     item.append(text("h3", labels[finding.question] || finding.question),
       text("p", explanations[finding.question] || "", "core-question-guide"),
       renderNarrative(summary ? (finding.summary || finding.assessment) : finding.assessment));
-    if (!summary) item.append(renderEvidenceGroup(result, finding.evidence_ids));
     section.append(item);
   }
   return section;
+}
+
+function renderEvidenceAnnex(result) {
+  const annex = renderDisclosure("Evidence traceability annex", "traceability-panel");
+  annex.append(text("p", "Supporting sources and document locations for the findings and priority comments.", "helper"));
+  for (const finding of result.core_findings || []) {
+    const labels = {
+      drivers_priorities: "Drivers and priorities", actions_commitment: "Critical actions and commitment",
+      program_implications: "Program implications", if_then_calibration: "Adapting to changing conditions",
+    };
+    annex.append(text("h3", labels[finding.question] || finding.question),
+      renderTraceabilityForEvidence(result, finding.evidence_ids, false));
+  }
+  for (const area of result.priority_areas || []) {
+    annex.append(text("h3", area.heading),
+      labelledParagraph("Recommendation location", locatorLabel(area.target_locator), "target-location"),
+      renderTraceabilityForEvidence(result, area.evidence_ids, false));
+  }
+  for (const check of result.prior_comment_report?.checks || []) {
+    annex.append(text("h3", check.comment_label),
+      renderTraceabilityForEvidence(result, [...check.prior_evidence_ids, ...check.current_evidence_ids], false));
+  }
+  return annex;
 }
 
 function renderPriorComments(result) {
@@ -1802,7 +1830,7 @@ function renderPriorComments(result) {
       section.append(text("h3", check.comment_label),
         renderNarrative(check.assessment),
         labelledParagraph("Follow-through", assessmentValueLabel(check.status), "helper"),
-        renderEvidenceGroup(result, [...check.prior_evidence_ids, ...check.current_evidence_ids]));
+      );
     }
     if (report?.coverage_note) section.append(renderNarrative(report.coverage_note, "helper"));
   }

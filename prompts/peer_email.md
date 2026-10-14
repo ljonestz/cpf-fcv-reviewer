@@ -1,4 +1,4 @@
-Version: 1.1.1
+Version: 1.1.2
 
 Draft an unsigned departmental CPF/CEN peer-review email from validated_findings.
 Return PeerEmailDraft with opening and comments only. The application supplies
@@ -52,3 +52,5 @@ priorities where useful. If an annex was unavailable, make the affected request
 conditional on checking it, within that comment. Do not rely only on an opening
 caveat. Keep proposals visibly conditional and avoid claiming reforms or safeguards
 are absent when only their explanation in the supplied main text is missing.
+
+Use section or subsection references already established in validated_findings. Prefer a descriptive passage reference over paragraph or page numbers. Do not invent section titles or add new facts to make the reference more specific.

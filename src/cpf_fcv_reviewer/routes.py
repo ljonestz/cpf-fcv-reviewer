@@ -566,8 +566,15 @@ def export_review(assessment_id):
                 stale=email["email_stale"], fallback=email["email_fallback"],
             )
         else:
+            email = _email_state(state.payload, result)
             data = build_docx(
                 result, evidence=evidence, hydrated_referrals=(), summary=view == "summary",
+                review_comments=email["email_text"], comments_stale=email["email_stale"],
+                review_comment_headings=tuple(
+                    comment["heading"]
+                    for comment in (email["peer_email"] or {}).get("comments", ())
+                ),
+                comments_fallback=email["email_fallback"],
                 prior_comment_report=(
                     PriorCommentReport.model_validate(state.payload["prior_comment_report"])
                     if state.payload.get("prior_comment_report") is not None else None

@@ -1,4 +1,4 @@
-Version: 4.1.1
+Version: 4.1.2
 
 Keep evidence IDs in structured evidence_ids fields only; never put raw evidence IDs
 in prose or any other user-facing narrative. Do not state that a country is or is
@@ -462,3 +462,5 @@ rationale to one or two short sentences; detailed country analysis belongs in th
 findings. Avoid repeating undated, unverified reporting across sections: state the
 current-evidence limit once and use conditional reasoning, not uncertain events,
 as the basis for scenarios.
+
+In reader-facing prose, refer to verified section or subsection titles and a brief description of the relevant passage, rather than paragraph or page numbers. If a heading is not established, describe the evidenced passage without inventing a title. Keep the original canonical locators in structured evidence and target_locator fields.
